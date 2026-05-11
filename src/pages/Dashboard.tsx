@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ShoppingBag, Package, CalendarRange, Scissors, TrendingUp, Clock } from 'lucide-react'
+import { ShoppingBag, Package, CalendarRange, Scissors, TrendingUp, Clock, Euro } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Quarter, Order } from '../lib/types'
@@ -11,6 +11,8 @@ interface Stats {
   activeQuarter: Quarter | null
   openTailorJobs: number
   myRecentOrders: Order[]
+  committedBudget: number
+  draftBudget: number
 }
 
 export default function Dashboard() {
@@ -21,16 +23,20 @@ export default function Dashboard() {
     activeQuarter: null,
     openTailorJobs: 0,
     myRecentOrders: [],
+    committedBudget: 0,
+    draftBudget: 0,
   })
 
   useEffect(() => {
     async function load() {
-      const [ordersRes, productsRes, quarterRes, tailorRes, myOrdersRes] = await Promise.all([
+      const quarterRes = await supabase.from('quarters').select('*').eq('status', 'active').single()
+      const activeQuarter: Quarter | null = quarterRes.data ?? null
+
+      const [ordersRes, productsRes, tailorRes, myOrdersRes, budgetRes] = await Promise.all([
         isAdmin
-          ? supabase.from('orders').select('id', { count: 'exact' }).not('status', 'in', '(issued,cancelled)')
-          : supabase.from('orders').select('id', { count: 'exact' }).eq('user_id', profile!.id).not('status', 'in', '(issued,cancelled)'),
+          ? supabase.from('orders').select('id', { count: 'exact' }).not('status', 'in', '(pending,issued,cancelled)')
+          : supabase.from('orders').select('id', { count: 'exact' }).eq('user_id', profile!.id).not('status', 'in', '(pending,issued,cancelled)'),
         supabase.from('products').select('id', { count: 'exact' }).eq('active', true),
-        supabase.from('quarters').select('*').eq('status', 'active').single(),
         supabase.from('tailor_jobs').select('id', { count: 'exact' }).eq('status', 'open'),
         supabase
           .from('orders')
@@ -38,14 +44,29 @@ export default function Dashboard() {
           .eq('user_id', profile!.id)
           .order('created_at', { ascending: false })
           .limit(5),
+        activeQuarter
+          ? supabase.from('orders').select('status, quantity, products(price)').eq('quarter_id', activeQuarter.id).not('status', 'in', '(cancelled)')
+          : Promise.resolve({ data: [] as any[] }),
       ])
+
+      // pending = Entwurf (noch nicht eingereicht, bindet kein Budget)
+      // pending_approval+ = eingereicht, Budget gebunden – wird nur einmal gezählt
+      const budgetOrders = (budgetRes.data ?? []) as any[]
+      const committedBudget = budgetOrders
+        .filter(o => o.status !== 'pending' && o.status !== 'issued')
+        .reduce((sum: number, o: any) => sum + (o.products?.price ?? 0) * o.quantity, 0)
+      const draftBudget = budgetOrders
+        .filter(o => o.status === 'pending')
+        .reduce((sum: number, o: any) => sum + (o.products?.price ?? 0) * o.quantity, 0)
 
       setStats({
         openOrders: ordersRes.count ?? 0,
         totalProducts: productsRes.count ?? 0,
-        activeQuarter: quarterRes.data ?? null,
+        activeQuarter,
         openTailorJobs: tailorRes.count ?? 0,
         myRecentOrders: myOrdersRes.data ?? [],
+        committedBudget,
+        draftBudget,
       })
     }
     if (profile) load()
@@ -53,7 +74,7 @@ export default function Dashboard() {
 
   const cards = [
     {
-      label: isAdmin ? 'Offene Bestellungen' : 'Meine Bestellungen',
+      label: isAdmin ? 'Eingereichte Bestellungen' : 'Meine Bestellungen',
       value: stats.openOrders,
       icon: ShoppingBag,
       color: 'bg-blue-50 text-blue-700',
@@ -74,13 +95,22 @@ export default function Dashboard() {
       iconBg: 'bg-purple-100',
     },
     ...(isAdmin
-      ? [{
-          label: 'Offene Schneiderjobs',
-          value: stats.openTailorJobs,
-          icon: Scissors,
-          color: 'bg-orange-50 text-orange-700',
-          iconBg: 'bg-orange-100',
-        }]
+      ? [
+          {
+            label: 'Offene Schneiderjobs',
+            value: stats.openTailorJobs,
+            icon: Scissors,
+            color: 'bg-orange-50 text-orange-700',
+            iconBg: 'bg-orange-100',
+          },
+          {
+            label: 'Budget gebunden (Quartal)',
+            value: `€ ${stats.committedBudget.toFixed(2)}`,
+            icon: Euro,
+            color: 'bg-red-50 text-red-700',
+            iconBg: 'bg-red-100',
+          },
+        ]
       : []),
   ]
 

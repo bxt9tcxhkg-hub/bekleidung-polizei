@@ -67,6 +67,8 @@ export default function Orders() {
   async function createOrder() {
     setError('')
     if (!form.product_id || !form.quarter_id || !form.size) { setError('Alle Felder sind Pflicht.'); return }
+    const selectedQuarter = quarters.find(q => q.id === form.quarter_id)
+    if (selectedQuarter?.status === 'closed') { setError('Das gewählte Quartal ist gesperrt. Bestellungen sind nicht mehr möglich.'); return }
     setSaving(true)
     const { error } = await supabase.from('orders').insert({
       user_id: profile!.id,
@@ -198,7 +200,7 @@ export default function Orders() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">Quartal *</label>
                 <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.quarter_id} onChange={e => setForm(f => ({ ...f, quarter_id: e.target.value }))}>
                   <option value="">– Bitte wählen –</option>
-                  {quarters.map(q => <option key={q.id} value={q.id}>{q.name} ({q.status === 'active' ? 'Aktiv' : q.status === 'planned' ? 'Geplant' : 'Abgeschlossen'})</option>)}
+                  {quarters.filter(q => q.status !== 'closed').map(q => <option key={q.id} value={q.id}>{q.name} ({q.status === 'active' ? 'Aktiv' : 'Geplant'})</option>)}
                 </select>
               </div>
               {selectedProduct && (
