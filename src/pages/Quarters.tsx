@@ -1,68 +1,78 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, CalendarRange } from 'lucide-react'
+import { X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Quarter, QuarterStatus } from '../lib/types'
 import { QUARTER_STATUS_LABELS, QUARTER_STATUS_COLORS } from '../lib/types'
 
-const emptyForm = () => ({
-  name: '',
-  year: new Date().getFullYear(),
-  quarter_num: 1,
-  status: 'planned' as QuarterStatus,
-  start_date: '',
-  end_date: '',
-})
+const CURRENT_YEAR = new Date().getFullYear()
+
+const DEFAULT_DATES: Record<number, { start_date: string; end_date: string }> = {
+  1: { start_date: `${CURRENT_YEAR}-01-01`, end_date: `${CURRENT_YEAR}-03-31` },
+  2: { start_date: `${CURRENT_YEAR}-04-01`, end_date: `${CURRENT_YEAR}-06-30` },
+  3: { start_date: `${CURRENT_YEAR}-07-01`, end_date: `${CURRENT_YEAR}-09-30` },
+  4: { start_date: `${CURRENT_YEAR}-10-01`, end_date: `${CURRENT_YEAR}-12-31` },
+}
 
 export default function Quarters() {
   const [quarters, setQuarters] = useState<Quarter[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState(emptyForm())
+  const [form, setForm] = useState({ start_date: '', end_date: '', status: 'planned' as QuarterStatus })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('quarters').select('*').order('year', { ascending: false }).order('quarter_num', { ascending: false })
-    setQuarters(data ?? [])
+    const { data } = await supabase
+      .from('quarters')
+      .select('*')
+      .eq('year', CURRENT_YEAR)
+      .order('quarter_num')
+    const existing = data ?? []
+
+    // Auto-create missing quarters for current year
+    const missing = [1, 2, 3, 4].filter(n => !existing.find(q => q.quarter_num === n))
+    if (missing.length > 0) {
+      await Promise.all(
+        missing.map(n =>
+          supabase.from('quarters').insert({
+            name: `Q${n}/${CURRENT_YEAR}`,
+            year: CURRENT_YEAR,
+            quarter_num: n,
+            status: 'planned',
+            ...DEFAULT_DATES[n],
+          })
+        )
+      )
+      const { data: fresh } = await supabase
+        .from('quarters')
+        .select('*')
+        .eq('year', CURRENT_YEAR)
+        .order('quarter_num')
+      setQuarters(fresh ?? [])
+    } else {
+      setQuarters(existing)
+    }
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
 
-  function autoName(year: number, qNum: number) {
-    return `Q${qNum}/${year}`
-  }
-
-  function openNew() {
-    const f = emptyForm()
-    setForm({ ...f, name: autoName(f.year, f.quarter_num) })
-    setEditId(null)
-    setError('')
-    setShowForm(true)
-  }
-
   function openEdit(q: Quarter) {
-    setForm({ name: q.name, year: q.year, quarter_num: q.quarter_num, status: q.status, start_date: q.start_date, end_date: q.end_date })
+    setForm({ start_date: q.start_date, end_date: q.end_date, status: q.status })
     setEditId(q.id)
     setError('')
-    setShowForm(true)
   }
 
   async function save() {
     setError('')
-    if (!form.name || !form.start_date || !form.end_date) { setError('Name, Start- und Enddatum sind Pflicht.'); return }
+    if (!form.start_date || !form.end_date) { setError('Start- und Enddatum sind Pflicht.'); return }
+    if (form.start_date >= form.end_date) { setError('Startdatum muss vor dem Enddatum liegen.'); return }
     setSaving(true)
-    if (editId) {
-      const { error } = await supabase.from('quarters').update(form).eq('id', editId)
-      if (error) { setError(error.message); setSaving(false); return }
-    } else {
-      const { error } = await supabase.from('quarters').insert(form)
-      if (error) { setError(error.message); setSaving(false); return }
-    }
+    const { error } = await supabase.from('quarters').update(form).eq('id', editId!)
+    if (error) { setError(error.message); setSaving(false); return }
     setSaving(false)
-    setShowForm(false)
+    setEditId(null)
     load()
   }
 
@@ -73,39 +83,31 @@ export default function Quarters() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quartale</h1>
-          <p className="text-gray-500 text-sm mt-1">Verwaltung der Bestellquartale</p>
-        </div>
-        <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Neues Quartal
-        </button>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Quartale {CURRENT_YEAR}</h1>
+        <p className="text-gray-500 text-sm mt-1">Bestellzeiträume für das laufende Jahr</p>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="grid gap-4">
-          {quarters.length === 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-12 text-gray-400">
-              <CalendarRange className="w-10 h-10 mb-3" />
-              <p>Noch keine Quartale angelegt</p>
-            </div>
-          )}
           {quarters.map(q => (
             <div key={q.id} className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h2 className="font-bold text-gray-900 text-lg">{q.name}</h2>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${QUARTER_STATUS_COLORS[q.status]}`}>
-                      {QUARTER_STATUS_LABELS[q.status]}
-                    </span>
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-black text-gray-200">Q{q.quarter_num}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-bold text-gray-900">{q.name}</h2>
+                      <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${QUARTER_STATUS_COLORS[q.status]}`}>
+                        {QUARTER_STATUS_LABELS[q.status]}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-500">
-                    {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
-                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   {q.status === 'planned' && (
@@ -119,7 +121,7 @@ export default function Quarters() {
                     </button>
                   )}
                   <button onClick={() => openEdit(q)} className="text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
-                    Bearbeiten
+                    Datum anpassen
                   </button>
                 </div>
               </div>
@@ -128,50 +130,26 @@ export default function Quarters() {
         </div>
       )}
 
-      {showForm && (
+      {editId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">{editId ? 'Quartal bearbeiten' : 'Neues Quartal'}</h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+              <h2 className="font-bold text-gray-900">Datum anpassen</h2>
+              <button onClick={() => setEditId(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Jahr</label>
-                  <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.year} onChange={e => { const y = parseInt(e.target.value); setForm(f => ({ ...f, year: y, name: autoName(y, f.quarter_num) })) }} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Quartal (1–4)</label>
-                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.quarter_num} onChange={e => { const q = parseInt(e.target.value); setForm(f => ({ ...f, quarter_num: q, name: autoName(f.year, q) })) }}>
-                    {[1, 2, 3, 4].map(n => <option key={n} value={n}>Q{n}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Startdatum</label>
+                <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Startdatum *</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Enddatum *</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as QuarterStatus }))}>
-                  {(['planned', 'active', 'closed'] as QuarterStatus[]).map(s => <option key={s} value={s}>{QUARTER_STATUS_LABELS[s]}</option>)}
-                </select>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Enddatum</label>
+                <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
               </div>
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={() => setEditId(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
               </button>
