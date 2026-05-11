@@ -32,7 +32,6 @@ export default function App() {
           >
             {/* Alle Rollen */}
             <Route index element={<Dashboard />} />
-            <Route path="schuherstattungen" element={<ShoeRefunds />} />
 
             {/* Benutzer */}
             <Route path="warenkorb" element={<Cart />} />
@@ -41,6 +40,7 @@ export default function App() {
 
             {/* Genehmiger */}
             <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
+            <Route path="schuherstattungen" element={<ProtectedRoute genehmigerOnly><ShoeRefunds /></ProtectedRoute>} />
 
             {/* Sachbearbeiter */}
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />

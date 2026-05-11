@@ -34,7 +34,6 @@ export default function Layout() {
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/warenkorb', label: 'Warenkorb', icon: ShoppingCart },
         { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
-        { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
         { to: '/profil', label: 'Mein Profil', icon: UserCircle },
       ],
     },
@@ -57,6 +56,7 @@ export default function Layout() {
       color: 'text-green-300',
       items: [
         { to: '/genehmigungen', label: 'Genehmigungen', icon: CheckSquare },
+        { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
       ],
     }] : []),
   ]
