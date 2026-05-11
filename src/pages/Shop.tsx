@@ -1,0 +1,314 @@
+import { useEffect, useState } from 'react'
+import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import type { Order, Product, Quarter } from '../lib/types'
+
+type CartItem = Order & { products?: Product; quarters?: Quarter }
+
+export default function Shop() {
+  const { profile } = useAuth()
+  const [products, setProducts] = useState<Product[]>([])
+  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  const [, setQuarters] = useState<Quarter[]>([])
+  const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [cartOpen, setCartOpen] = useState(false)
+  const [selectedCategory, setSelectedCategory] = useState<string>('Alle')
+  const [adding, setAdding] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [sizeModal, setSizeModal] = useState<{ product: Product; size: string; quantity: number } | null>(null)
+
+  async function loadCart() {
+    const { data } = await supabase
+      .from('orders')
+      .select('*, products(id,name,category,sizes,price,needs_tailoring), quarters(id,name,status)')
+      .eq('user_id', profile!.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    setCartItems((data ?? []) as CartItem[])
+  }
+
+  useEffect(() => {
+    async function init() {
+      setLoading(true)
+      const [pRes, qRes] = await Promise.all([
+        supabase.from('products').select('*').eq('active', true).order('category').order('name'),
+        supabase.from('quarters').select('*').not('status', 'eq', 'closed').order('year', { ascending: false }),
+      ])
+      setProducts(pRes.data ?? [])
+      const qs = qRes.data ?? []
+      setQuarters(qs)
+      const active = qs.find(q => q.status === 'active') ?? null
+      setActiveQuarter(active)
+      await loadCart()
+      setLoading(false)
+    }
+    if (profile) init()
+  }, [profile])
+
+  const categories = ['Alle', ...Array.from(new Set(products.map(p => p.category)))]
+  const filtered = selectedCategory === 'Alle' ? products : products.filter(p => p.category === selectedCategory)
+
+  function openSizeModal(product: Product) {
+    setSizeModal({ product, size: product.sizes[0] ?? '', quantity: 1 })
+  }
+
+  async function addToCart() {
+    if (!sizeModal || !activeQuarter) return
+    setAdding(sizeModal.product.id)
+    await supabase.from('orders').insert({
+      user_id: profile!.id,
+      product_id: sizeModal.product.id,
+      quarter_id: activeQuarter.id,
+      size: sizeModal.size,
+      quantity: sizeModal.quantity,
+      status: 'pending',
+    })
+    setSizeModal(null)
+    await loadCart()
+    setCartOpen(true)
+    setAdding(null)
+  }
+
+  async function updateQty(item: CartItem, delta: number) {
+    const newQty = Math.max(1, item.quantity + delta)
+    await supabase.from('orders').update({ quantity: newQty }).eq('id', item.id)
+    loadCart()
+  }
+
+  async function removeItem(item: CartItem) {
+    await supabase.from('orders').delete().eq('id', item.id)
+    loadCart()
+  }
+
+  async function submitCart() {
+    if (cartItems.length === 0) return
+    setSubmitting(true)
+    await supabase
+      .from('orders')
+      .update({ status: 'pending_approval', updated_at: new Date().toISOString() })
+      .eq('user_id', profile!.id)
+      .eq('status', 'pending')
+    setSubmitting(false)
+    setCartOpen(false)
+    loadCart()
+  }
+
+  const cartCount = cartItems.reduce((s, o) => s + o.quantity, 0)
+  const cartTotal = cartItems.reduce((s, o) => s + (o.products?.price ?? 0) * o.quantity, 0)
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Bekleidungskatalog</h1>
+          {activeQuarter ? (
+            <p className="text-gray-500 text-sm mt-1">Aktives Quartal: <span className="font-medium text-gray-700">{activeQuarter.name}</span></p>
+          ) : (
+            <p className="text-amber-600 text-sm mt-1">Kein aktives Quartal – Bestellungen derzeit nicht möglich</p>
+          )}
+        </div>
+        <button
+          onClick={() => setCartOpen(true)}
+          className="relative flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors"
+        >
+          <ShoppingCart className="w-4 h-4" />
+          Warenkorb
+          {cartCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              {cartCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Category filter */}
+      <div className="flex gap-2 flex-wrap mb-6">
+        {categories.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              selectedCategory === cat
+                ? 'bg-blue-800 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Product grid */}
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(product => (
+            <div key={product.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+              {/* Product color block */}
+              <div className="h-32 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
+                <ShoppingBag className="w-12 h-12 text-blue-300 opacity-60" />
+              </div>
+              <div className="p-4 flex flex-col flex-1">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <h3 className="font-semibold text-gray-900 text-sm leading-snug">{product.name}</h3>
+                  <span className="text-blue-800 font-bold text-sm whitespace-nowrap">€ {Number(product.price).toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs text-gray-400 flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
+                  {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium">· Schneider</span>}
+                </div>
+                <div className="flex flex-wrap gap-1 mb-4">
+                  {product.sizes.slice(0, 6).map(s => (
+                    <span key={s} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{s}</span>
+                  ))}
+                  {product.sizes.length > 6 && <span className="text-xs px-2 py-0.5 text-gray-400">+{product.sizes.length - 6}</span>}
+                </div>
+                <button
+                  onClick={() => openSizeModal(product)}
+                  disabled={!activeQuarter || adding === product.id}
+                  className="mt-auto w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-medium py-2 rounded-xl transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  In den Warenkorb
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Size selection modal */}
+      {sizeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
+              <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Größe wählen</p>
+                <div className="flex flex-wrap gap-2">
+                  {sizeModal.product.sizes.map(s => (
+                    <button
+                      key={s}
+                      onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        sizeModal.size === s
+                          ? 'bg-blue-800 text-white border-blue-800'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Menge</p>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: Math.max(1, m.quantity - 1) } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50">
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="text-lg font-semibold w-8 text-center">{sizeModal.quantity}</span>
+                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: m.quantity + 1 } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t flex gap-3">
+              <button onClick={() => setSizeModal(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">
+                Abbrechen
+              </button>
+              <button
+                onClick={addToCart}
+                disabled={!sizeModal.size || adding === sizeModal.product.id}
+                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                Hinzufügen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cart drawer */}
+      {cartOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setCartOpen(false)} />
+          <div className="relative w-full max-w-sm bg-white shadow-2xl flex flex-col h-full">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="w-5 h-5 text-blue-800" />
+                <h2 className="font-bold text-gray-900">Warenkorb</h2>
+                {cartCount > 0 && <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full">{cartCount}</span>}
+              </div>
+              <button onClick={() => setCartOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {cartItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 px-6 text-center">
+                  <ShoppingCart className="w-12 h-12 mb-3 opacity-30" />
+                  <p className="font-medium">Warenkorb ist leer</p>
+                  <p className="text-sm mt-1">Wähle Artikel aus dem Katalog</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {cartItems.map(item => (
+                    <div key={item.id} className="flex items-start gap-3 px-5 py-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 leading-snug">{item.products?.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Gr. {item.size}</p>
+                        <p className="text-xs font-semibold text-gray-700 mt-1">€ {((item.products?.price ?? 0) * item.quantity).toFixed(2)}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30">
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="text-sm font-medium w-5 text-center">{item.quantity}</span>
+                        <button onClick={() => updateQty(item, 1)} className="p-1 rounded-md hover:bg-gray-100">
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => removeItem(item)} className="p-1 ml-1 rounded-md hover:bg-red-50 text-red-400 hover:text-red-600">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {cartItems.length > 0 && (
+              <div className="border-t px-5 py-4 space-y-3 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Gesamtwert</span>
+                  <span className="text-lg font-bold text-gray-900">€ {cartTotal.toFixed(2)}</span>
+                </div>
+                <button
+                  onClick={submitCart}
+                  disabled={submitting}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60"
+                >
+                  <Send className="w-4 h-4" />
+                  {submitting ? 'Wird eingereicht...' : 'Zur Genehmigung einreichen'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

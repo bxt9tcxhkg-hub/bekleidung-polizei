@@ -32,7 +32,7 @@ export default function Layout() {
       color: 'text-blue-300',
       items: [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/warenkorb', label: 'Warenkorb', icon: ShoppingCart },
+        { to: '/warenkorb', label: 'Bekleidung bestellen', icon: ShoppingCart },
         { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
         { to: '/profil', label: 'Mein Profil', icon: UserCircle },
       ],

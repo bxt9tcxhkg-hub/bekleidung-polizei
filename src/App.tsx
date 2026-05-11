@@ -4,7 +4,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Cart from './pages/Cart'
+import Shop from './pages/Shop'
 import MyOrders from './pages/MyOrders'
 import UserProfile from './pages/UserProfile'
 import Products from './pages/Products'
@@ -34,7 +34,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
 
             {/* Benutzer */}
-            <Route path="warenkorb" element={<Cart />} />
+            <Route path="warenkorb" element={<Shop />} />
             <Route path="meine-bestellungen" element={<MyOrders />} />
             <Route path="profil" element={<UserProfile />} />
 
