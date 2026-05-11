@@ -1,0 +1,159 @@
+import { useEffect, useState } from 'react'
+import { Plus, X, Footprints } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+import type { ShoeRefund, Profile } from '../lib/types'
+
+export default function ShoeRefunds() {
+  const { profile, isAdmin } = useAuth()
+  const [refunds, setRefunds] = useState<ShoeRefund[]>([])
+  const [users, setUsers] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function load() {
+    setLoading(true)
+    const query = supabase
+      .from('shoe_refunds')
+      .select('*, profiles!shoe_refunds_user_id_fkey(id,name,username,dienstnummer), creator:profiles!shoe_refunds_created_by_fkey(id,name)')
+      .order('created_at', { ascending: false })
+    if (!isAdmin) query.eq('user_id', profile!.id)
+    const { data } = await query
+    setRefunds(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    async function init() {
+      await load()
+      if (isAdmin) {
+        const { data } = await supabase.from('profiles').select('*').eq('active', true).order('name')
+        setUsers(data ?? [])
+      }
+    }
+    if (profile) init()
+  }, [profile, isAdmin])
+
+  async function create() {
+    setError('')
+    const uid = isAdmin ? form.user_id : profile!.id
+    if (!uid || !form.amount || !form.refund_date) { setError('Pflichtfelder fehlen.'); return }
+    setSaving(true)
+    const { error } = await supabase.from('shoe_refunds').insert({
+      user_id: uid,
+      amount: parseFloat(form.amount),
+      approved_amount: parseFloat(form.approved_amount || form.amount),
+      refund_date: form.refund_date,
+      note: form.note || null,
+      created_by: profile!.id,
+    })
+    if (error) setError(error.message)
+    else { setShowForm(false); setForm({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); load() }
+    setSaving(false)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Schuherstattungen</h1>
+          <p className="text-gray-500 text-sm mt-1">{isAdmin ? 'Alle Schuhkostenerstattungen' : 'Meine Schuhkostenerstattungen'}</p>
+        </div>
+        <button onClick={() => { setError(''); setShowForm(true) }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          <Plus className="w-4 h-4" /> Neue Erstattung
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {refunds.length === 0 ? (
+            <div className="flex flex-col items-center py-12 text-gray-400">
+              <Footprints className="w-10 h-10 mb-3" />
+              <p>Keine Erstattungen vorhanden</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  {isAdmin && <th className="text-left px-4 py-3 font-semibold text-gray-600">Benutzer</th>}
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
+                  <th className="text-right px-4 py-3 font-semibold text-gray-600">Betrag</th>
+                  <th className="text-right px-4 py-3 font-semibold text-gray-600">Genehmigt</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Notiz</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {refunds.map(r => (
+                  <tr key={r.id} className="hover:bg-gray-50">
+                    {isAdmin && (
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900">{(r as any).profiles?.name}</p>
+                        <p className="text-xs text-gray-400">{(r as any).profiles?.dienstnummer ? `DG ${(r as any).profiles.dienstnummer}` : ''}</p>
+                      </td>
+                    )}
+                    <td className="px-4 py-3 text-gray-700">{new Date(r.refund_date).toLocaleDateString('de-AT')}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">€ {Number(r.amount).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-green-700">€ {Number(r.approved_amount).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">{r.note ?? '–'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Neue Schuherstattung</h2>
+              <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {isAdmin && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Benutzer *</label>
+                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))}>
+                    <option value="">– Bitte wählen –</option>
+                    {users.map(u => <option key={u.id} value={u.id}>{u.name || u.username} {u.dienstnummer ? `(DG ${u.dienstnummer})` : ''}</option>)}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Erstattungsdatum *</label>
+                <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.refund_date} onChange={e => setForm(f => ({ ...f, refund_date: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Betrag (€) *</label>
+                  <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Genehmigt (€)</label>
+                  <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.approved_amount} onChange={e => setForm(f => ({ ...f, approved_amount: e.target.value }))} placeholder="= Betrag" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Notiz</label>
+                <textarea rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Optionale Notiz..." />
+              </div>
+              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={create} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                {saving ? 'Speichern...' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
