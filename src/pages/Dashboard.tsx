@@ -233,7 +233,7 @@ export default function Dashboard() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Guten Tag, {profile.name || profile.username}</h1>
-        <p className="text-gray-500 text-sm mt-1">Übersicht der Bekleidungsverwaltung</p>
+        <p className="text-gray-500 text-sm mt-1">Übersicht der Bekleidungsverwaltung <span className="text-xs bg-yellow-200 text-yellow-800 px-1 rounded">v2</span></p>
       </div>
 
       {tabs.length > 1 && (
