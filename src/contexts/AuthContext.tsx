@@ -10,6 +10,7 @@ interface AuthContextType {
   profile: Profile | null
   loading: boolean
   isAdmin: boolean
+  isStrictAdmin: boolean
   isSachbearbeiter: boolean
   isGenehmiger: boolean
   availableRoles: AppRole[]
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   isAdmin: false,
+  isStrictAdmin: false,
   isSachbearbeiter: false,
   isGenehmiger: false,
   availableRoles: [],
@@ -61,6 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isSachbearbeiter = roles.includes('admin') || roles.includes('sachbearbeiter')
   const isGenehmiger = roles.includes('genehmiger') || roles.includes('approver')
   const isAdmin = isSachbearbeiter
+  const isStrictAdmin = roles.includes('admin')
 
   const availableRoles: AppRole[] = [
     'user',
@@ -75,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isSachbearbeiter, isGenehmiger, availableRoles, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, availableRoles, signOut }}>
       {children}
     </AuthContext.Provider>
   )

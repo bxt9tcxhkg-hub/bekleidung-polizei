@@ -1,8 +1,30 @@
-import { useEffect, useState } from 'react'
-import { Plus, Pencil, X, Check, Search } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Pencil, X, Check, Search, Upload, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product } from '../lib/types'
+
+const CSV_TEMPLATE = `artikel_nr;name;kategorie;groessen;preis;schneider;organisation
+BP-001;Diensthemd langarm;Hemd;S|M|L|XL;45.90;nein;Stadtpolizei
+BP-002;Diensthose;Hose;44|46|48|50|52|54;89.00;ja;Stadtpolizei`
+
+function parseCsv(text: string): Omit<Product, 'id' | 'created_at'>[] {
+  const lines = text.trim().split('\n').filter(l => l.trim())
+  return lines.slice(1).map(line => {
+    const [artikel_nr, name, category, groessen, preis, schneider, organisation] = line.split(';').map(s => s.trim())
+    return {
+      article_number: artikel_nr ?? '',
+      name: name ?? '',
+      category: category ?? 'Sonstiges',
+      sizes: groessen ? groessen.split('|').map(s => s.trim()).filter(Boolean) : [],
+      price: parseFloat(preis?.replace(',', '.') ?? '0') || 0,
+      needs_tailoring: schneider?.toLowerCase() === 'ja',
+      size_guide: null,
+      organisation: organisation || 'Stadtpolizei',
+      active: true,
+    }
+  }).filter(p => p.article_number && p.name)
+}
 
 const SIZES_COMMON = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '44', '46', '48', '50', '52', '54', '56']
 const CATEGORIES = ['Hemd', 'Hose', 'Jacke', 'Pullover', 'Weste', 'Schuhe', 'Accessoire', 'Sonstiges']
@@ -28,7 +50,7 @@ const emptyProduct = (): Omit<Product, 'id' | 'created_at'> => ({
 })
 
 export default function Products() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, isStrictAdmin } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -37,6 +59,12 @@ export default function Products() {
   const [form, setForm] = useState(emptyProduct())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showImport, setShowImport] = useState(false)
+  const [importRows, setImportRows] = useState<Omit<Product, 'id' | 'created_at'>[]>([])
+  const [importError, setImportError] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importDone, setImportDone] = useState<{ ok: number; err: number } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
@@ -87,6 +115,37 @@ export default function Products() {
     load()
   }
 
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      const rows = parseCsv(text)
+      if (rows.length === 0) { setImportError('Keine gültigen Zeilen gefunden. Bitte Format prüfen.'); return }
+      setImportError('')
+      setImportRows(rows)
+      setImportDone(null)
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  async function runImport() {
+    setImporting(true)
+    let ok = 0, err = 0
+    for (const row of importRows) {
+      const { error } = await supabase
+        .from('products')
+        .upsert(row, { onConflict: 'article_number' })
+      if (error) err++; else ok++
+    }
+    setImporting(false)
+    setImportDone({ ok, err })
+    setImportRows([])
+    load()
+  }
+
   function toggleSize(size: string) {
     setForm(f => ({
       ...f,
@@ -101,11 +160,18 @@ export default function Products() {
           <h1 className="text-2xl font-bold text-gray-900">Produkte</h1>
           <p className="text-gray-500 text-sm mt-1">Bekleidungskatalog</p>
         </div>
-        {isAdmin && (
-          <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            <Plus className="w-4 h-4" /> Neues Produkt
-          </button>
-        )}
+        <div className="flex gap-2">
+          {isStrictAdmin && (
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError('') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+              <Upload className="w-4 h-4" /> Import
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              <Plus className="w-4 h-4" /> Neues Produkt
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="relative mb-4">
@@ -167,7 +233,70 @@ export default function Products() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Produkte importieren (CSV)</h2>
+              <button onClick={() => setShowImport(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+              <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 space-y-1">
+                <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Format (Semikolon-getrennt, Größen mit |):</p>
+                <p>artikel_nr;name;kategorie;groessen;preis;schneider;organisation</p>
+                <p>BP-001;Diensthemd langarm;Hemd;S|M|L|XL;45.90;nein;Stadtpolizei</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
+                  <Upload className="w-4 h-4" /> CSV-Datei wählen
+                </button>
+                <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`} download="produkte-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
+                  <Download className="w-4 h-4" /> Vorlage herunterladen
+                </a>
+                <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
+              </div>
+              {importError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{importError}</p>}
+              {importDone && (
+                <p className={`text-sm px-3 py-2 rounded-lg ${importDone.err === 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {importDone.ok} Produkte importiert{importDone.err > 0 ? `, ${importDone.err} Fehler` : ''}.
+                </p>
+              )}
+              {importRows.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Produkte erkannt – Vorschau:</p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Artikel-Nr.</th><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Kategorie</th><th className="text-left px-3 py-2">Preis</th><th className="text-left px-3 py-2">Größen</th></tr></thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {importRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-mono">{r.article_number}</td>
+                            <td className="px-3 py-2">{r.name}</td>
+                            <td className="px-3 py-2">{r.category}</td>
+                            <td className="px-3 py-2">€ {r.price.toFixed(2)}</td>
+                            <td className="px-3 py-2">{r.sizes.join(', ')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setShowImport(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Schließen</button>
+              {importRows.length > 0 && (
+                <button onClick={runImport} disabled={importing} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                  {importing ? 'Importiere...' : `${importRows.length} Produkte importieren`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit/New Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">

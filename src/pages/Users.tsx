@@ -1,11 +1,33 @@
-import { useEffect, useState } from 'react'
-import { Plus, Pencil, X, Shield, User, UserX } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Pencil, X, Shield, User, UserX, Upload, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth as _useAuth } from '../contexts/AuthContext'
 import type { Profile } from '../lib/types'
+
+const CSV_TEMPLATE = `name;benutzername;email;dienstnummer;rollen
+Max Mustermann;mmustermann;max@beispiel.at;1234;user
+Maria Muster;mmuster;maria@beispiel.at;5678;user|genehmiger`
+
+interface ImportUser { name: string; username: string; email: string; dienstnummer: string; roles: string[] }
+
+function parseCsvUsers(text: string): ImportUser[] {
+  const lines = text.trim().split('\n').filter(l => l.trim())
+  return lines.slice(1).map(line => {
+    const [name, username, email, dienstnummer, rollen] = line.split(';').map(s => s.trim())
+    return {
+      name: name ?? '',
+      username: username ?? '',
+      email: email ?? '',
+      dienstnummer: dienstnummer ?? '',
+      roles: rollen ? rollen.split('|').map(s => s.trim()).filter(Boolean) : ['user'],
+    }
+  }).filter(u => u.name && u.username)
+}
 
 const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], active: true })
 
 export default function Users() {
+  const { isStrictAdmin } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -13,6 +35,12 @@ export default function Users() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showImport, setShowImport] = useState(false)
+  const [importRows, setImportRows] = useState<ImportUser[]>([])
+  const [importError, setImportError] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number; err: number } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     setLoading(true)
@@ -81,6 +109,41 @@ export default function Users() {
     load()
   }
 
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      const rows = parseCsvUsers(text)
+      if (rows.length === 0) { setImportError('Keine gültigen Zeilen gefunden. Bitte Format prüfen.'); return }
+      setImportError('')
+      setImportRows(rows)
+      setImportProgress(null)
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  async function runImport() {
+    setImporting(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    let done = 0, err = 0
+    setImportProgress({ done: 0, total: importRows.length, err: 0 })
+    for (const row of importRows) {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ name: row.name, username: row.username, email: row.email || undefined, dienstnummer: row.dienstnummer || null, roles: row.roles }),
+      })
+      if (res.ok) done++; else err++
+      setImportProgress({ done: done + err, total: importRows.length, err })
+    }
+    setImporting(false)
+    setImportRows([])
+    load()
+  }
+
   function toggleRole(role: string) {
     setForm(f => ({
       ...f,
@@ -95,9 +158,16 @@ export default function Users() {
           <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>
           <p className="text-gray-500 text-sm mt-1">Benutzerverwaltung</p>
         </div>
-        <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Neuer Benutzer
-        </button>
+        <div className="flex gap-2">
+          {isStrictAdmin && (
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError('') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+              <Upload className="w-4 h-4" /> Import
+            </button>
+          )}
+          <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            <Plus className="w-4 h-4" /> Neuer Benutzer
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -154,6 +224,71 @@ export default function Users() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Benutzer importieren (CSV)</h2>
+              <button onClick={() => setShowImport(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+              <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 space-y-1">
+                <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Format (Semikolon-getrennt, Rollen mit |):</p>
+                <p>name;benutzername;email;dienstnummer;rollen</p>
+                <p>Max Mustermann;mmustermann;max@beispiel.at;1234;user</p>
+                <p>Maria Muster;mmuster;;5678;user|genehmiger</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
+                  <Upload className="w-4 h-4" /> CSV-Datei wählen
+                </button>
+                <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`} download="benutzer-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
+                  <Download className="w-4 h-4" /> Vorlage herunterladen
+                </a>
+                <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
+              </div>
+              {importError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{importError}</p>}
+              {importProgress && (
+                <p className={`text-sm px-3 py-2 rounded-lg ${importProgress.err === 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                  {importProgress.done}/{importProgress.total} verarbeitet{importProgress.err > 0 ? `, ${importProgress.err} Fehler` : ''}
+                  {importProgress.done === importProgress.total ? ' – abgeschlossen.' : ' …'}
+                </p>
+              )}
+              {importRows.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Benutzer erkannt – Vorschau:</p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">E-Mail</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {importRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium">{r.name}</td>
+                            <td className="px-3 py-2">{r.username}</td>
+                            <td className="px-3 py-2 text-gray-500">{r.email || '–'}</td>
+                            <td className="px-3 py-2">{r.dienstnummer || '–'}</td>
+                            <td className="px-3 py-2">{r.roles.join(', ')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setShowImport(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Schließen</button>
+              {importRows.length > 0 && (
+                <button onClick={runImport} disabled={importing} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                  {importing ? 'Importiere...' : `${importRows.length} Benutzer importieren`}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
