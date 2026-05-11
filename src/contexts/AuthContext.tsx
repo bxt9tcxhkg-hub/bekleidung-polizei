@@ -3,11 +3,16 @@ import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 
+export type AppRole = 'user' | 'sachbearbeiter' | 'genehmiger'
+
 interface AuthContextType {
   user: User | null
   profile: Profile | null
   loading: boolean
   isAdmin: boolean
+  isSachbearbeiter: boolean
+  isGenehmiger: boolean
+  availableRoles: AppRole[]
   signOut: () => Promise<void>
 }
 
@@ -16,6 +21,9 @@ const AuthContext = createContext<AuthContextType>({
   profile: null,
   loading: true,
   isAdmin: false,
+  isSachbearbeiter: false,
+  isGenehmiger: false,
+  availableRoles: [],
   signOut: async () => {},
 })
 
@@ -49,7 +57,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const isAdmin = profile?.roles?.includes('admin') ?? false
+  const roles = profile?.roles ?? []
+  const isSachbearbeiter = roles.includes('admin') || roles.includes('sachbearbeiter')
+  const isGenehmiger = roles.includes('genehmiger') || roles.includes('approver')
+  const isAdmin = isSachbearbeiter
+
+  const availableRoles: AppRole[] = [
+    'user',
+    ...(isSachbearbeiter ? ['sachbearbeiter' as AppRole] : []),
+    ...(isGenehmiger ? ['genehmiger' as AppRole] : []),
+  ]
 
   const signOut = async () => {
     await supabase.auth.signOut()
@@ -58,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isSachbearbeiter, isGenehmiger, availableRoles, signOut }}>
       {children}
     </AuthContext.Provider>
   )

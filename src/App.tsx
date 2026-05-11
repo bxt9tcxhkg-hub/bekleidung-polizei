@@ -4,6 +4,9 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Cart from './pages/Cart'
+import MyOrders from './pages/MyOrders'
+import UserProfile from './pages/UserProfile'
 import Products from './pages/Products'
 import Orders from './pages/Orders'
 import Quarters from './pages/Quarters'
@@ -11,6 +14,7 @@ import TailorJobs from './pages/TailorJobs'
 import ShoeRefunds from './pages/ShoeRefunds'
 import Users from './pages/Users'
 import AuditLog from './pages/AuditLog'
+import Approvals from './pages/Approvals'
 
 export default function App() {
   return (
@@ -26,14 +30,25 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            {/* Alle Rollen */}
             <Route index element={<Dashboard />} />
-            <Route path="bestellungen" element={<Orders />} />
-            <Route path="produkte" element={<Products />} />
-            <Route path="quartale" element={<ProtectedRoute adminOnly><Quarters /></ProtectedRoute>} />
-            <Route path="schneiderjobs" element={<ProtectedRoute adminOnly><TailorJobs /></ProtectedRoute>} />
             <Route path="schuherstattungen" element={<ShoeRefunds />} />
-            <Route path="benutzer" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
-            <Route path="auditlog" element={<ProtectedRoute adminOnly><AuditLog /></ProtectedRoute>} />
+
+            {/* Benutzer */}
+            <Route path="warenkorb" element={<Cart />} />
+            <Route path="meine-bestellungen" element={<MyOrders />} />
+            <Route path="profil" element={<UserProfile />} />
+
+            {/* Genehmiger */}
+            <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
+
+            {/* Sachbearbeiter */}
+            <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
+            <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
+            <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
+            <Route path="schneiderjobs" element={<ProtectedRoute sachbearbeiterOnly><TailorJobs /></ProtectedRoute>} />
+            <Route path="benutzer" element={<ProtectedRoute sachbearbeiterOnly><Users /></ProtectedRoute>} />
+            <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, X, Shield, User } from 'lucide-react'
+import { Plus, Pencil, X, Shield, User, UserX } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
+
+const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], active: true })
 
 export default function Users() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', username: '', dienstnummer: '', roles: ['user'] as string[], active: true })
+  const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -21,8 +23,15 @@ export default function Users() {
 
   useEffect(() => { load() }, [])
 
+  function openNew() {
+    setForm(emptyForm())
+    setEditId(null)
+    setError('')
+    setShowForm(true)
+  }
+
   function openEdit(u: Profile) {
-    setForm({ name: u.name, username: u.username, dienstnummer: u.dienstnummer ?? '', roles: u.roles, active: u.active })
+    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, active: u.active })
     setEditId(u.id)
     setError('')
     setShowForm(true)
@@ -32,11 +41,43 @@ export default function Users() {
     setError('')
     if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
     setSaving(true)
-    const payload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
-    const { error } = await supabase.from('profiles').update(payload).eq('id', editId!)
-    if (error) setError(error.message)
-    else { setShowForm(false); load() }
+    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
+
+    if (editId) {
+      const { error } = await supabase.from('profiles').update(payload).eq('id', editId)
+      if (error) { setError(error.message); setSaving(false); return }
+    } else {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
+    }
+
     setSaving(false)
+    setShowForm(false)
+    load()
+  }
+
+  async function toggleActive(u: Profile) {
+    await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
+    load()
+  }
+
+  async function deleteUser(u: Profile) {
+    if (!confirm(`Benutzer "${u.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) return
+    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
+    if (error) {
+      // Wenn FK-Constraint (Benutzer hat Bestellungen), nur deaktivieren
+      await supabase.from('profiles').update({ active: false }).eq('id', u.id)
+    }
+    load()
   }
 
   function toggleRole(role: string) {
@@ -53,6 +94,9 @@ export default function Users() {
           <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>
           <p className="text-gray-500 text-sm mt-1">Benutzerverwaltung</p>
         </div>
+        <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+          <Plus className="w-4 h-4" /> Neuer Benutzer
+        </button>
       </div>
 
       {loading ? (
@@ -72,7 +116,7 @@ export default function Users() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {users.map(u => (
-                <tr key={u.id} className="hover:bg-gray-50">
+                <tr key={u.id} className={`hover:bg-gray-50 ${!u.active ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       <div className={`p-1.5 rounded-lg ${u.roles.includes('admin') ? 'bg-blue-100' : 'bg-gray-100'}`}>
@@ -91,14 +135,19 @@ export default function Users() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <button onClick={() => toggleActive(u)} className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${u.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
                       {u.active ? 'Aktiv' : 'Inaktiv'}
-                    </span>
+                    </button>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => deleteUser(u)} className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
+                        <UserX className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -111,7 +160,7 @@ export default function Users() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Benutzer bearbeiten</h2>
+              <h2 className="font-bold text-gray-900">{editId ? 'Benutzer bearbeiten' : 'Neuer Benutzer'}</h2>
               <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
@@ -129,10 +178,17 @@ export default function Users() {
                   <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.dienstnummer} onChange={e => setForm(f => ({ ...f, dienstnummer: e.target.value }))} />
                 </div>
               </div>
+              {!editId && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">E-Mail (für Login)</label>
+                  <input type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="vorname.nachname@polizei.at" />
+                  <p className="text-xs text-gray-400 mt-1">Leer lassen = interner Platzhalter-Account</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
                 <div className="flex gap-3">
-                  {['user', 'admin'].map(role => (
+                  {['user', 'admin', 'genehmiger'].map(role => (
                     <label key={role} className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} className="rounded" />
                       <span className="text-sm text-gray-700 capitalize">{role}</span>
@@ -144,12 +200,17 @@ export default function Users() {
                 <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
                 <label htmlFor="active" className="text-sm text-gray-700">Aktiv</label>
               </div>
+              {!editId && (
+                <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
+                  Das Profil wird angelegt. Der Benutzer muss sich danach mit diesem Benutzernamen einloggen – die Authentifizierung wird über Supabase Auth verknüpft.
+                </p>
+              )}
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
-                {saving ? 'Speichern...' : 'Speichern'}
+                {saving ? 'Speichern...' : editId ? 'Speichern' : 'Anlegen'}
               </button>
             </div>
           </div>
