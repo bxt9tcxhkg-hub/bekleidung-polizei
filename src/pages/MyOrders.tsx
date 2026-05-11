@@ -56,7 +56,7 @@ export default function MyOrders() {
         .eq('user_id', profile!.id)
         .not('status', 'eq', 'pending')
         .order('created_at', { ascending: false })
-      const items = data ?? []
+      const items = (data ?? []) as Order[]
       setOrders(items)
       // Auto-expand quarters with active orders
       const activeQuarterIds = new Set(

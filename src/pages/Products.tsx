@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, X, Check, Package, Search } from 'lucide-react'
+import { Plus, Pencil, X, Check, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product } from '../lib/types'

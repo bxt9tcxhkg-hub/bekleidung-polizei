@@ -42,9 +42,10 @@ export default function Users() {
     if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
     setSaving(true)
     const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
+    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
 
     if (editId) {
-      const { error } = await supabase.from('profiles').update(payload).eq('id', editId)
+      const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
     } else {
       const { data: { session } } = await supabase.auth.getSession()

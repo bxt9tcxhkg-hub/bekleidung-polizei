@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children, adminOnly = false, sachbearbeiterOnly = false, genehmigerOnly = false }: Props) {
-  const { user, loading, isAdmin, isSachbearbeiter, isGenehmiger } = useAuth()
+  const { user, loading, isSachbearbeiter, isGenehmiger } = useAuth()
 
   if (loading) {
     return (

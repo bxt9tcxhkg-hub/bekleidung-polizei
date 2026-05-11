@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { CheckSquare, Check, X, ChevronDown } from 'lucide-react'
+import { CheckSquare, Check, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Order } from '../lib/types'
-import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS } from '../lib/types'
 
 interface RejectModal { order: Order; reason: string }
 

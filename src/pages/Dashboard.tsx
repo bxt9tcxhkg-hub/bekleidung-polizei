@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ShoppingCart, Package, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Scissors } from 'lucide-react'
+import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Scissors } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
@@ -205,7 +205,7 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
 }
 
 export default function Dashboard() {
-  const { profile, isSachbearbeiter, isGenehmiger, availableRoles } = useAuth()
+  const { profile, isSachbearbeiter, isGenehmiger } = useAuth()
   const [activeTab, setActiveTab] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const startX = useRef<number | null>(null)
