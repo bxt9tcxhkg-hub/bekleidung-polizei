@@ -3,7 +3,7 @@ import { Plus, Pencil, X, Shield, User, UserX } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 
-const emptyForm = () => ({ name: '', username: '', dienstnummer: '', roles: ['user'] as string[], active: true })
+const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], active: true })
 
 export default function Users() {
   const [users, setUsers] = useState<Profile[]>([])
@@ -31,7 +31,7 @@ export default function Users() {
   }
 
   function openEdit(u: Profile) {
-    setForm({ name: u.name, username: u.username, dienstnummer: u.dienstnummer ?? '', roles: u.roles, active: u.active })
+    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, active: u.active })
     setEditId(u.id)
     setError('')
     setShowForm(true)
@@ -41,14 +41,23 @@ export default function Users() {
     setError('')
     if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
     setSaving(true)
-    const payload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
+    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(payload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
     } else {
-      const { error } = await supabase.from('profiles').insert({ ...payload, id: crypto.randomUUID() })
-      if (error) { setError(error.message); setSaving(false); return }
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
     }
 
     setSaving(false)
@@ -169,10 +178,17 @@ export default function Users() {
                   <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.dienstnummer} onChange={e => setForm(f => ({ ...f, dienstnummer: e.target.value }))} />
                 </div>
               </div>
+              {!editId && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">E-Mail (für Login)</label>
+                  <input type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="vorname.nachname@polizei.at" />
+                  <p className="text-xs text-gray-400 mt-1">Leer lassen = interner Platzhalter-Account</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
                 <div className="flex gap-3">
-                  {['user', 'admin'].map(role => (
+                  {['user', 'admin', 'genehmiger'].map(role => (
                     <label key={role} className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} className="rounded" />
                       <span className="text-sm text-gray-700 capitalize">{role}</span>
