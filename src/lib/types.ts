@@ -1,6 +1,7 @@
 export type OrderStatus =
   | 'pending'
   | 'pending_approval'
+  | 'approved'
   | 'ordered_supplier'
   | 'at_tailor'
   | 'ready_for_issue'
@@ -123,8 +124,9 @@ export type Database = {
 }
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  pending: 'Ausstehend',
-  pending_approval: 'Wartet auf Genehmigung',
+  pending: 'Im Warenkorb',
+  pending_approval: 'Eingereicht',
+  approved: 'Genehmigt',
   ordered_supplier: 'Beim Lieferanten',
   at_tailor: 'Beim Schneider',
   ready_for_issue: 'Bereit zur Ausgabe',
@@ -136,6 +138,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
   pending: 'bg-gray-100 text-gray-700',
   pending_approval: 'bg-yellow-100 text-yellow-700',
+  approved: 'bg-teal-100 text-teal-700',
   ordered_supplier: 'bg-blue-100 text-blue-700',
   at_tailor: 'bg-purple-100 text-purple-700',
   ready_for_issue: 'bg-green-100 text-green-700',

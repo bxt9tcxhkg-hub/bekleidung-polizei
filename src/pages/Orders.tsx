@@ -10,8 +10,9 @@ import {
 } from '../lib/types'
 
 const STATUS_FLOW: Record<OrderStatus, OrderStatus | null> = {
-  pending: 'pending_approval',
-  pending_approval: 'ordered_supplier',
+  pending: null,
+  pending_approval: null,
+  approved: 'ordered_supplier',
   ordered_supplier: 'at_tailor',
   at_tailor: 'ready_for_issue',
   ready_for_issue: 'partially_issued',
@@ -50,9 +51,8 @@ export default function Orders() {
     const query = supabase
       .from('orders')
       .select('*, products(id,name,category,sizes), quarters(id,name,status), profiles(id,name,username,dienstnummer)')
+      .not('status', 'eq', 'pending')
       .order('created_at', { ascending: false })
-
-    if (!isAdmin) query.eq('user_id', profile!.id)
 
     const { data } = await query
     setOrders(data ?? [])
@@ -115,9 +115,9 @@ export default function Orders() {
     load()
   }
 
-  // Sammelbeschaffung: nur pending_approval-Bestellungen des gewählten Quartals
+  // Sammelbeschaffung: nur approved-Bestellungen des gewählten Quartals (Genehmiger hat bereits freigegeben)
   const sammelOrders = orders.filter(
-    o => o.status === 'pending_approval' && o.quarter_id === sammelQuarterId
+    o => o.status === 'approved' && o.quarter_id === sammelQuarterId
   )
 
   // Gruppierung nach Produkt + Größe
@@ -278,7 +278,7 @@ export default function Orders() {
               <option value="">– Bitte wählen –</option>
               {quarters.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
-            <span className="text-xs text-gray-400">Nur Bestellungen mit Status „Wartet auf Genehmigung"</span>
+            <span className="text-xs text-gray-400">Nur genehmigte Bestellungen (vom Genehmiger freigegeben)</span>
           </div>
 
           {loading ? (
@@ -286,7 +286,7 @@ export default function Orders() {
           ) : sammelGroups.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-12 text-gray-400">
               <ShoppingCart className="w-10 h-10 mb-3" />
-              <p>Keine genehmigungspflichtigen Bestellungen für dieses Quartal</p>
+              <p>Keine genehmigten Bestellungen für dieses Quartal</p>
             </div>
           ) : sammelGroups.map(group => (
             <div key={`${group.product_id}__${group.size}`} className="bg-white rounded-xl border border-gray-200 overflow-hidden">

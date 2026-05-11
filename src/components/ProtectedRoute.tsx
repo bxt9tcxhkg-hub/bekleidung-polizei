@@ -4,10 +4,12 @@ import { useAuth } from '../contexts/AuthContext'
 interface Props {
   children: React.ReactNode
   adminOnly?: boolean
+  sachbearbeiterOnly?: boolean
+  genehmigerOnly?: boolean
 }
 
-export default function ProtectedRoute({ children, adminOnly = false }: Props) {
-  const { user, loading, isAdmin } = useAuth()
+export default function ProtectedRoute({ children, adminOnly = false, sachbearbeiterOnly = false, genehmigerOnly = false }: Props) {
+  const { user, loading, isAdmin, isSachbearbeiter, isGenehmiger } = useAuth()
 
   if (loading) {
     return (
@@ -18,7 +20,8 @@ export default function ProtectedRoute({ children, adminOnly = false }: Props) {
   }
 
   if (!user) return <Navigate to="/login" replace />
-  if (adminOnly && !isAdmin) return <Navigate to="/" replace />
+  if ((adminOnly || sachbearbeiterOnly) && !isSachbearbeiter) return <Navigate to="/" replace />
+  if (genehmigerOnly && !isGenehmiger) return <Navigate to="/" replace />
 
   return <>{children}</>
 }
