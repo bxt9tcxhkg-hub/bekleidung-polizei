@@ -63,6 +63,7 @@ export interface Order {
   status: OrderStatus
   quantity_received: number | null
   quantity_issued: number | null
+  proc_listed: boolean | null
   cancel_reason: string | null
   shifted_from: string | null
   tailor_job_id: string | null
