@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const roles = profile?.roles ?? []
   const isSachbearbeiter = roles.includes('admin') || roles.includes('sachbearbeiter')
-  const isGenehmiger = roles.includes('genehmiger')
+  const isGenehmiger = roles.includes('genehmiger') || roles.includes('approver')
   const isAdmin = isSachbearbeiter
 
   const availableRoles: AppRole[] = [
