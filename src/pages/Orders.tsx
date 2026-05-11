@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, ChevronDown, ShoppingCart, List } from 'lucide-react'
+import { X, ChevronDown, ShoppingCart, List } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
@@ -36,14 +36,10 @@ export default function Orders() {
   const { profile, isAdmin } = useAuth()
   const [tab, setTab] = useState<'orders' | 'sammel'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
-  const [products, setProducts] = useState<Product[]>([])
+  const [, setProducts] = useState<Product[]>([])
   const [quarters, setQuarters] = useState<Quarter[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ product_id: '', quarter_id: '', size: '', quantity: 1 })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [sammelQuarterId, setSammelQuarterId] = useState<string>('')
 
   async function load() {
@@ -76,26 +72,6 @@ export default function Orders() {
   }, [profile, isAdmin])
 
   const filtered = statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter)
-  const selectedProduct = products.find(p => p.id === form.product_id)
-
-  async function createOrder() {
-    setError('')
-    if (!form.product_id || !form.quarter_id || !form.size) { setError('Alle Felder sind Pflicht.'); return }
-    const selectedQuarter = quarters.find(q => q.id === form.quarter_id)
-    if (selectedQuarter?.status === 'closed') { setError('Das gewählte Quartal ist gesperrt. Bestellungen sind nicht mehr möglich.'); return }
-    setSaving(true)
-    const { error } = await supabase.from('orders').insert({
-      user_id: profile!.id,
-      product_id: form.product_id,
-      quarter_id: form.quarter_id,
-      size: form.size,
-      quantity: form.quantity,
-      status: 'pending',
-    })
-    if (error) setError(error.message)
-    else { setShowForm(false); setForm({ product_id: '', quarter_id: '', size: '', quantity: 1 }); load() }
-    setSaving(false)
-  }
 
   async function advanceStatus(order: Order) {
     const next = STATUS_FLOW[order.status]
@@ -163,9 +139,6 @@ export default function Orders() {
           <h1 className="text-2xl font-bold text-gray-900">Bestellungen</h1>
           <p className="text-gray-500 text-sm mt-1">{isAdmin ? 'Alle Bestellungen' : 'Meine Bestellungen'}</p>
         </div>
-        <button onClick={() => { setError(''); setShowForm(true) }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Neue Bestellung
-        </button>
       </div>
 
       {/* Tab bar (admin only) */}
@@ -334,56 +307,6 @@ export default function Orders() {
         </div>
       )}
 
-      {/* New Order Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Neue Bestellung</h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Produkt *</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.product_id} onChange={e => setForm(f => ({ ...f, product_id: e.target.value, size: '' }))}>
-                  <option value="">– Bitte wählen –</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.category})</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Quartal *</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.quarter_id} onChange={e => setForm(f => ({ ...f, quarter_id: e.target.value }))}>
-                  <option value="">– Bitte wählen –</option>
-                  {quarters.filter(q => q.status !== 'closed').map(q => <option key={q.id} value={q.id}>{q.name} ({q.status === 'active' ? 'Aktiv' : 'Geplant'})</option>)}
-                </select>
-              </div>
-              {selectedProduct && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Größe *</label>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedProduct.sizes.map(s => (
-                      <button key={s} type="button" onClick={() => setForm(f => ({ ...f, size: s }))} className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${form.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Menge *</label>
-                <input type="number" min="1" max="99" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))} />
-              </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-            </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={createOrder} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
-                {saving ? 'Bestellen...' : 'Bestellen'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
