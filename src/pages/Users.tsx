@@ -43,7 +43,7 @@ function parseCsvUsers(text: string): Record<string, string>[] {
   })
 }
 
-const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', active: true })
+const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female' | 'unisex', active: true })
 
 export default function Users() {
   const { isStrictAdmin } = _useAuth()
@@ -232,8 +232,8 @@ export default function Users() {
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username}</td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : u.gender === 'unisex' ? 'bg-gray-100 text-gray-600' : 'bg-blue-100 text-blue-700'}`}>
+                      {u.gender === 'female' ? 'Weiblich' : u.gender === 'unisex' ? 'Unisex' : 'Männlich'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -355,14 +355,14 @@ export default function Users() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
                 <div className="flex gap-2">
-                  {(['male', 'female'] as const).map(g => (
+                  {(['male', 'female', 'unisex'] as const).map(g => (
                     <button key={g} type="button" onClick={() => setForm(f => ({ ...f, gender: g }))}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : 'bg-pink-600 text-white border-pink-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
-                      {g === 'male' ? 'Männlich' : 'Weiblich'}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : g === 'female' ? 'bg-pink-600 text-white border-pink-600' : 'bg-gray-600 text-white border-gray-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      {g === 'male' ? 'Männlich' : g === 'female' ? 'Weiblich' : 'Unisex'}
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel)</p>
+                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel). Unisex = alle Produkte sichtbar.</p>
               </div>
               {!editId && (
                 <div>

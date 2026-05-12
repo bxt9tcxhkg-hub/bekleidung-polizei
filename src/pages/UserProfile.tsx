@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function UserProfile() {
   const { profile } = useAuth()
-  const [form, setForm] = useState({ name: '', dienstnummer: '', gender: 'male' as 'male' | 'female' })
+  const [form, setForm] = useState({ name: '', dienstnummer: '', gender: 'male' as 'male' | 'female' | 'unisex' })
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
@@ -71,14 +71,14 @@ export default function UserProfile() {
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
               <div className="flex gap-2">
-                {(['male', 'female'] as const).map(g => (
+                {(['male', 'female', 'unisex'] as const).map(g => (
                   <button key={g} type="button" onClick={() => setForm(f => ({ ...f, gender: g }))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : 'bg-pink-600 text-white border-pink-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
-                    {g === 'male' ? 'Männlich' : 'Weiblich'}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : g === 'female' ? 'bg-pink-600 text-white border-pink-600' : 'bg-gray-600 text-white border-gray-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                    {g === 'male' ? 'Männlich' : g === 'female' ? 'Weiblich' : 'Unisex'}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel)</p>
+              <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel). Unisex = alle Produkte sichtbar.</p>
             </div>
 
             <div className="pt-1">
