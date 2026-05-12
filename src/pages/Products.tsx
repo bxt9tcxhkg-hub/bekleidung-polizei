@@ -110,6 +110,7 @@ export default function Products() {
   const [importDone, setImportDone] = useState<{ ok: number; err: number } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ mode: 'single'; product: Product } | { mode: 'all' } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
@@ -211,7 +212,7 @@ export default function Products() {
     for (const row of importRows) {
       const { error } = await supabase
         .from('products')
-        .upsert({ ...row, organisation: importOrg }, { onConflict: 'article_number' })
+        .upsert({ ...row, organisation: importOrg }, { onConflict: 'article_number,organisation' })
       if (error) err++; else ok++
     }
     setImporting(false)
@@ -313,9 +314,9 @@ export default function Products() {
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
                     <span>€ {Number(p.price).toFixed(2)}</span>
                     {p.size_guide && (
-                      <a href={p.size_guide} target="_blank" rel="noopener noreferrer" title="Größentabelle" className="ml-1.5 inline-flex text-blue-500 hover:text-blue-700">
+                      <button onClick={() => setSizeGuideModal(p.size_guide!)} title="Größentabelle anzeigen" className="ml-1.5 inline-flex text-blue-500 hover:text-blue-700">
                         <Info className="w-3.5 h-3.5" />
-                      </a>
+                      </button>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
@@ -418,6 +419,19 @@ export default function Products() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Size Guide Modal */}
+      {sizeGuideModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSizeGuideModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2"><Info className="w-4 h-4 text-blue-500" /> Größentabelle</h3>
+              <button onClick={() => setSizeGuideModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{sizeGuideModal.replace(/ \| /g, '\n')}</p>
           </div>
         </div>
       )}

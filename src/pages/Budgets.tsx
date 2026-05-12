@@ -118,15 +118,9 @@ export default function Budgets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>
-          <p className="text-gray-500 text-sm mt-1">Jahresbudget und Schuherstattung verwalten</p>
-        </div>
-        <button onClick={() => setShowBulk(true)}
-          className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-          <RefreshCw className="w-4 h-4" /> Alle anpassen
-        </button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>
+        <p className="text-gray-500 text-sm mt-1">Jahresbudget und Schuherstattung verwalten</p>
       </div>
 
       {/* Shoe refund cap card */}
@@ -167,6 +161,13 @@ export default function Budgets() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <p className="text-sm font-semibold text-gray-600">Benutzerliste</p>
+            <button onClick={() => setShowBulk(true)}
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-white transition-colors">
+              <RefreshCw className="w-3.5 h-3.5" /> Alle anpassen
+            </button>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">

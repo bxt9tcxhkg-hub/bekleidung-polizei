@@ -25,6 +25,7 @@ export default function Shop() {
   const [submitResult, setSubmitResult] = useState<'approved' | 'pending_approval' | null>(null)
   const [sizeModal, setSizeModal] = useState<{ product: Product; size: string; quantity: number } | null>(null)
   const [genderFilterActive, setGenderFilterActive] = useState(true)
+  const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
 
   async function loadBudget() {
     const [total, orders] = await Promise.all([
@@ -237,10 +238,10 @@ export default function Shop() {
                   <span className="text-xs text-gray-400 flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
                   {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium">· Wappenänderung</span>}
                   {product.size_guide && (
-                    <a href={product.size_guide} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 font-medium" title="Größentabelle öffnen">
+                    <button onClick={() => setSizeGuideModal(product.size_guide!)}
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 font-medium">
                       <Info className="w-3 h-3" /> Größentabelle
-                    </a>
+                    </button>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-1 mb-4">
@@ -271,10 +272,10 @@ export default function Shop() {
                 <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">€ {Number(sizeModal.product.price).toFixed(2)} · {sizeModal.product.category}</p>
                 {sizeModal.product.size_guide && (
-                  <a href={sizeModal.product.size_guide} target="_blank" rel="noopener noreferrer"
+                  <button onClick={() => setSizeGuideModal(sizeModal.product.size_guide!)}
                     className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-0.5 font-medium">
                     <Info className="w-3 h-3" /> Größentabelle
-                  </a>
+                  </button>
                 )}
               </div>
               <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
@@ -378,6 +379,18 @@ export default function Shop() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Size Guide Modal */}
+      {sizeGuideModal && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={() => setSizeGuideModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2"><Info className="w-4 h-4 text-blue-500" /> Größentabelle</h3>
+              <button onClick={() => setSizeGuideModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{sizeGuideModal.replace(/ \| /g, '\n')}</p>
           </div>
         </div>
       )}
