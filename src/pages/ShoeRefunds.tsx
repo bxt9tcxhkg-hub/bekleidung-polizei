@@ -84,7 +84,7 @@ export default function ShoeRefunds() {
           <h1 className="text-2xl font-bold text-gray-900">Schuherstattungen</h1>
           <p className="text-gray-500 text-sm mt-1">{isAdmin ? 'Alle Schuhkostenerstattungen' : 'Meine Schuhkostenerstattungen'}</p>
         </div>
-        <button onClick={() => { setError(''); setShowForm(true) }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+        <button onClick={() => { setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); setError(''); setShowForm(true) }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
           <Plus className="w-4 h-4" /> Neue Erstattung
         </button>
       </div>
@@ -135,7 +135,7 @@ export default function ShoeRefunds() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="font-bold text-gray-900">Neue Schuherstattung</h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+              <button onClick={() => { setShowForm(false); setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); setError('') }} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
               {isAdmin && (
@@ -194,7 +194,7 @@ export default function ShoeRefunds() {
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={() => { setShowForm(false); setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); setError('') }} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={create} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
               </button>

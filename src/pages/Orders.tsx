@@ -146,44 +146,67 @@ export default function Orders() {
     const dateLong = `${String(now.getDate()).padStart(2,'0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
     const dateShort = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`
     const userName = profile?.name ?? '–'
-    const tableRows = items.map(g => `<tr><td>${g.artNr}</td><td>${g.productName}</td><td class="bold">${g.size}</td><td class="bold center">${g.totalQty}</td></tr>`).join('\n')
+    const tableRows = items.map(g =>
+      `<tr><td>${g.artNr}</td><td>${g.productName}</td><td class="b">${g.size}</td><td class="b c">${g.totalQty}</td></tr>`
+    ).join('\n')
     const html = `<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><title>Kurzbrief</title><style>
-  @page{size:A4;margin-top:11mm;margin-left:25mm;margin-right:30mm;margin-bottom:30mm}
+  @page{size:A4;margin:20mm 25mm 20mm 25mm}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:Calibri,Arial,sans-serif;font-size:10pt;color:#000;line-height:1.4}
-  .lh{font-size:8.5pt;padding-bottom:2px}
-  .ra{font-size:6pt;border-bottom:1px solid #888;padding:2px 0;color:#444;margin-bottom:4px}
-  .ar{display:flex;justify-content:space-between;align-items:flex-start}
-  .rc{font-size:10pt;line-height:1.6}.dt{font-size:10pt;text-align:right;white-space:nowrap}
-  .kt{font-size:18pt;font-weight:bold;margin-top:16px}
-  .mt{border-collapse:collapse;margin-top:4px}.mt td{font-size:10pt;padding:1px 0;vertical-align:top}
-  .mt td:first-child{min-width:65pt;padding-right:8px}
-  .bt{font-size:10pt;margin-top:14px}.sl{font-size:10pt;font-weight:bold;margin-top:8px;margin-bottom:3px}
-  .at{width:100%;border-collapse:collapse;font-size:10pt}
-  .at th,.at td{border:1px solid #000;padding:2px 5px;vertical-align:middle}
+  body{font-family:Calibri,Arial,sans-serif;font-size:12pt;color:#000;line-height:1.4}
+  .lh{font-size:8pt;line-height:1.6;margin-bottom:5mm}
+  .lh strong{font-weight:bold}
+  .ra{font-size:8pt;border-bottom:1px solid #666;padding-bottom:1mm;margin-bottom:4mm;color:#333}
+  .ad{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6mm}
+  .rc{font-size:12pt;line-height:1.7}
+  .dt{font-size:12pt;white-space:nowrap}
+  .kt{font-size:18pt;font-weight:bold;margin-bottom:4mm}
+  .mt{border-collapse:collapse;margin-bottom:5mm}
+  .mt td{font-size:11pt;padding:1px 0;vertical-align:top}
+  .mt td:first-child{min-width:60pt;padding-right:8px}
+  .bt{font-size:12pt;margin-bottom:3mm}
+  .sl{font-size:12pt;font-weight:bold;margin-bottom:2mm}
+  .at{width:100%;border-collapse:collapse;margin-bottom:7mm}
+  .at th,.at td{border:1px solid #000;padding:2px 5px;font-size:12pt;vertical-align:middle}
   .at th{font-weight:normal;text-align:left}
-  .c1{width:22%}.c2{width:47%}.c3{width:14%}.c4{width:17%;text-align:center}
-  .bold{font-weight:bold}.center{text-align:center}
-  .tk{font-size:10pt;margin-top:16px}
-  .st{width:100%;border-collapse:collapse;margin-top:40px}
-  .sh td{font-size:11pt;border-top:1px solid #000;padding-top:3px;vertical-align:top}
-  .se td{height:22px}.sn td{font-size:11pt}
+  .c1{width:22%}.c2{width:47%}.c3{width:14%}.c4{width:17%}
+  .b{font-weight:bold}.c{text-align:center}
+  .tk{font-size:12pt;margin-bottom:10mm}
+  .st{width:100%;border-collapse:collapse}
+  .sh td{font-size:11pt;border-top:1px solid #000;padding-top:2mm;width:50%}
+  .se td{height:18mm}
+  .sn td{font-size:11pt}
   @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
-<div class="lh">STADT DORNBIRN &nbsp;/&nbsp; <strong>Polizei</strong> &nbsp;/&nbsp; Rathausplatz 2 &nbsp;A 6850 Dornbirn &nbsp;/&nbsp; ${userName} &nbsp;/&nbsp; T +43 5572 222 00 &nbsp;/&nbsp; F +43 5572 33 0 08 &nbsp;/&nbsp; polizei@dornbirn.at</div>
-<div class="ra"><div class="rc">STADT DORNBIRN Polizei, Rathausplatz 2, A-6850 Dornbirn</div></div>
-<div class="ra" style="margin-top:4px">
+<div class="lh">
+  STADT DORNBIRN &nbsp;<strong>Polizei</strong><br>
+  Rathausplatz 2 &nbsp;A 6850 Dornbirn<br>
+  ${userName}<br>
+  T +43 5572 222 00 &nbsp;&nbsp; F +43 5572 330 08 &nbsp;&nbsp; polizei@dornbirn.at
+</div>
+<div class="ra">STADT DORNBIRN Polizei, Rathausplatz 2, A-6850 Dornbirn</div>
+<div class="ad">
   <div class="rc">An<br>Bundesministerium für Inneres<br>Bekleidungswirtschaftsfonds der Exekutive<br>Liesinger Flur-Gasse 8<br>1230 Wien</div>
   <div class="dt">Dornbirn, ${dateLong}</div>
 </div>
 <div class="kt">Kurzbrief</div>
-<table class="mt"><tr><td>Betreff:</td><td>Auftrag / Bestellung</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td></tr><tr><td>Bezug:</td><td>---</td></tr></table>
+<table class="mt">
+  <tr><td>Betreff:</td><td>Auftrag / Bestellung</td></tr>
+  <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+  <tr><td>Bezug:</td><td>---</td></tr>
+</table>
 <p class="bt">Die ho. Dienststelle der Stadtpolizei Dornbirn übermittelt höflichst den Bestellauftrag vom ${dateShort} für folgende ug. Artikel:</p>
 <p class="sl">Standartmannschaft</p>
-<table class="at"><thead><tr><th class="c1">Artikelnummer</th><th class="c2">Artikel</th><th class="c3">Größe</th><th class="c4">Anzahl</th></tr></thead><tbody>${tableRows}</tbody></table>
+<table class="at">
+  <thead><tr><th class="c1">Artikelnummer</th><th class="c2">Artikel</th><th class="c3">Größe</th><th class="c4 c">Anzahl</th></tr></thead>
+  <tbody>${tableRows}</tbody>
+</table>
 <p class="tk">Vielen herzlichen Dank im Voraus</p>
-<table class="st"><tr class="sh"><td>Bearbeiter/in:</td><td>Kommandant:</td></tr><tr class="se"><td></td><td></td></tr><tr class="sn"><td>${userName}</td><td>&nbsp;</td></tr></table>
+<table class="st">
+  <tr class="sh"><td>Bearbeiter/in:</td><td>Kommandant:</td></tr>
+  <tr class="se"><td></td><td></td></tr>
+  <tr class="sn"><td>${userName}</td><td>ChefInsp Hans Peter SCHWENDINGER</td></tr>
+</table>
 </body></html>`
     const win = window.open('', '_blank')
     if (!win) { alert('Popup wurde blockiert – bitte Popup-Blocker deaktivieren.'); return }
