@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { KeyRound } from 'lucide-react'
+import { KeyRound, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function ChangePasswordModal() {
@@ -7,6 +7,9 @@ export default function ChangePasswordModal() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  if (dismissed) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -23,7 +26,13 @@ export default function ChangePasswordModal() {
 
   return (
     <div className="fixed inset-0 bg-blue-950/90 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 relative">
+        <button
+          onClick={() => setDismissed(true)}
+          className="absolute top-4 right-4 p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600"
+        >
+          <X className="w-4 h-4" />
+        </button>
         <div className="flex flex-col items-center mb-6">
           <div className="bg-blue-800 p-3 rounded-xl mb-4">
             <KeyRound className="w-8 h-8 text-white" />
