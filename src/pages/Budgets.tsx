@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints } from 'lucide-react'
+import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
@@ -25,6 +25,7 @@ export default function Budgets() {
   const [bulkForm, setBulkForm] = useState({ amount: '', valid_from: today() })
   const [showBulk, setShowBulk] = useState(false)
   const [bulkSaving, setBulkSaving] = useState(false)
+  const [search, setSearch] = useState('')
 
   // Shoe refund cap
   const [caps, setCaps] = useState<ShoeRefundCap[]>([])
@@ -161,10 +162,19 @@ export default function Budgets() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
-            <p className="text-sm font-semibold text-gray-600">Benutzerliste</p>
+          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Name oder Dienstnummer..."
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+            </div>
             <button onClick={() => setShowBulk(true)}
-              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-white transition-colors">
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-white transition-colors flex-shrink-0">
               <RefreshCw className="w-3.5 h-3.5" /> Alle anpassen
             </button>
           </div>
@@ -180,7 +190,10 @@ export default function Budgets() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map(({ profile, currentBudget, scheduledBudget, used }) => {
+              {rows.filter(({ profile }) => {
+                const q = search.toLowerCase()
+                return !q || profile.name.toLowerCase().includes(q) || (profile.dienstnummer ?? '').toLowerCase().includes(q)
+              }).map(({ profile, currentBudget, scheduledBudget, used }) => {
                 const total = currentBudget?.total_budget ?? DEFAULT_BUDGET
                 const remaining = total - used
                 const pct = Math.min(100, (used / total) * 100)
