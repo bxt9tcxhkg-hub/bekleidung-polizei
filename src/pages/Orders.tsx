@@ -42,6 +42,8 @@ export default function Orders() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sammelQuarterId, setSammelQuarterId] = useState<string>('')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkAdvancing, setBulkAdvancing] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -73,6 +75,28 @@ export default function Orders() {
   }, [profile, isAdmin])
 
   const filtered = statusFilter === 'all' ? orders : orders.filter(o => o.status === statusFilter)
+  const advanceable = filtered.filter(o => STATUS_FLOW[o.status] !== null)
+  const allSelected = advanceable.length > 0 && advanceable.every(o => selectedIds.has(o.id))
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(allSelected ? new Set() : new Set(advanceable.map(o => o.id)))
+  }
+
+  async function bulkAdvance() {
+    const toAdvance = filtered.filter(o => selectedIds.has(o.id) && STATUS_FLOW[o.status])
+    if (toAdvance.length === 0) return
+    setBulkAdvancing(true)
+    await Promise.all(toAdvance.map(o =>
+      supabase.from('orders').update({ status: STATUS_FLOW[o.status]!, updated_at: new Date().toISOString() }).eq('id', o.id)
+    ))
+    setSelectedIds(new Set())
+    setBulkAdvancing(false)
+    load()
+  }
 
   async function advanceStatus(order: Order) {
     const next = STATUS_FLOW[order.status]
@@ -205,6 +229,11 @@ export default function Orders() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
+                    {isAdmin && (
+                      <th className="px-4 py-3 w-8">
+                        <input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} />
+                      </th>
+                    )}
                     {isAdmin && <th className="text-left px-4 py-3 font-semibold text-gray-600">Benutzer</th>}
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Produkt</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Quartal</th>
@@ -215,55 +244,88 @@ export default function Orders() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-10 text-gray-400">Keine Bestellungen</td></tr>
-                  ) : filtered.map(o => (
-                    <tr key={o.id} className="hover:bg-gray-50">
-                      {isAdmin && (
+                    <tr><td colSpan={7} className="text-center py-10 text-gray-400">Keine Bestellungen</td></tr>
+                  ) : filtered.map(o => {
+                    const canAdvance = !!STATUS_FLOW[o.status]
+                    const isSelected = selectedIds.has(o.id)
+                    return (
+                      <tr key={o.id} className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                        {isAdmin && (
+                          <td className="px-4 py-3 w-8">
+                            {canAdvance && (
+                              <input type="checkbox" className="rounded" checked={isSelected} onChange={() => toggleSelect(o.id)} />
+                            )}
+                          </td>
+                        )}
+                        {isAdmin && (
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{(o as any).profiles?.name}</p>
+                            <p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p>
+                          </td>
+                        )}
                         <td className="px-4 py-3">
-                          <p className="font-medium text-gray-900">{(o as any).profiles?.name}</p>
-                          <p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p>
+                          <p className="font-medium text-gray-900">{(o as any).products?.name}</p>
+                          <p className="text-xs text-gray-400">{(o as any).products?.category}</p>
                         </td>
-                      )}
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{(o as any).products?.name}</p>
-                        <p className="text-xs text-gray-400">{(o as any).products?.category}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(o as any).quarters?.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{o.size} · {o.quantity}×</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
-                          {ORDER_STATUS_LABELS[o.status]}
-                        </span>
-                      </td>
-                      {isAdmin && (
+                        <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{(o as any).quarters?.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{o.size} · {o.quantity}×</td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1 justify-end">
-                            {o.status === 'pending_approval' && (
-                              <button
-                                onClick={() => toggleProcListed(o)}
-                                title="In Sammelbeschaffung aufnehmen"
-                                className={`text-xs px-2 py-1 rounded-md border transition-colors ${o.proc_listed ? 'bg-blue-100 text-blue-700 border-blue-200' : 'text-gray-400 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}
-                              >
-                                SB
-                              </button>
-                            )}
-                            {STATUS_FLOW[o.status] && (
-                              <button onClick={() => advanceStatus(o)} title={`→ ${ORDER_STATUS_LABELS[STATUS_FLOW[o.status]!]}`} className="flex items-center gap-1 text-xs text-blue-700 hover:bg-blue-50 px-2 py-1 rounded-md">
-                                <ChevronDown className="w-3 h-3" /> Weiter
-                              </button>
-                            )}
-                            {o.status !== 'cancelled' && o.status !== 'issued' && (
-                              <button onClick={() => cancelOrder(o)} className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
+                            {ORDER_STATUS_LABELS[o.status]}
+                          </span>
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        {isAdmin && (
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1 justify-end">
+                              {o.status === 'pending_approval' && (
+                                <button
+                                  onClick={() => toggleProcListed(o)}
+                                  title="In Sammelbeschaffung aufnehmen"
+                                  className={`text-xs px-2 py-1 rounded-md border transition-colors ${o.proc_listed ? 'bg-blue-100 text-blue-700 border-blue-200' : 'text-gray-400 border-gray-200 hover:border-blue-300 hover:text-blue-600'}`}
+                                >
+                                  SB
+                                </button>
+                              )}
+                              {STATUS_FLOW[o.status] && (
+                                <button onClick={() => advanceStatus(o)} title={`→ ${ORDER_STATUS_LABELS[STATUS_FLOW[o.status]!]}`} className="flex items-center gap-1 text-xs text-blue-700 hover:bg-blue-50 px-2 py-1 rounded-md">
+                                  <ChevronDown className="w-3 h-3" /> Weiter
+                                </button>
+                              )}
+                              {o.status !== 'cancelled' && o.status !== 'issued' && (
+                                <button onClick={() => cancelOrder(o)} className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+              <span className="text-sm font-medium">{selectedIds.size} Bestellung{selectedIds.size !== 1 ? 'en' : ''} ausgewählt</span>
+              <div className="w-px h-5 bg-white/20" />
+              <button
+                onClick={bulkAdvance}
+                disabled={bulkAdvancing}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white text-sm font-medium px-4 py-1.5 rounded-xl transition-colors"
+              >
+                <ChevronDown className="w-4 h-4" />
+                {bulkAdvancing ? 'Wird gespeichert...' : 'Nächster Status'}
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-white/60 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
         </>
