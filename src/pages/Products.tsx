@@ -95,6 +95,7 @@ export default function Products() {
   const { isAdmin, isStrictAdmin } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
+  const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -119,9 +120,10 @@ export default function Products() {
   useEffect(() => { load() }, [])
 
   const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    (orgFilter === 'all' || p.organisation === orgFilter) &&
+    (p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.article_number.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase())
+    p.category.toLowerCase().includes(search.toLowerCase()))
   )
 
   function openNew() {
@@ -228,6 +230,15 @@ export default function Products() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
+        {(['all', 'Stadtpolizei', 'Parkaufsicht'] as const).map(o => (
+          <button key={o} onClick={() => setOrgFilter(o)}
+            className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${orgFilter === o ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            {o === 'all' ? 'Alle' : o}
+          </button>
+        ))}
       </div>
 
       <div className="relative mb-4">

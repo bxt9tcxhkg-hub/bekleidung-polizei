@@ -52,6 +52,7 @@ const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', 
 export default function Users() {
   const { isStrictAdmin } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
+  const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -206,6 +207,15 @@ export default function Users() {
         </div>
       </div>
 
+      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
+        {(['all', 'Stadtpolizei', 'Parkaufsicht'] as const).map(o => (
+          <button key={o} onClick={() => setOrgFilter(o)}
+            className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${orgFilter === o ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            {o === 'all' ? 'Alle' : o}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
@@ -224,7 +234,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {users.map(u => (
+              {users.filter(u => orgFilter === 'all' || u.organisation === orgFilter).map(u => (
                 <tr key={u.id} className={`hover:bg-gray-50 ${!u.active ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
