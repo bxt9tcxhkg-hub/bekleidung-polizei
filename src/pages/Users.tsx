@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, Pencil, X, Shield, User, UserX, Upload, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
 import type { Profile } from '../lib/types'
@@ -10,18 +11,36 @@ Maria Muster;mmuster;maria@beispiel.at;5678;user|genehmiger`
 
 interface ImportUser { name: string; username: string; email: string; dienstnummer: string; roles: string[] }
 
-function parseCsvUsers(text: string): ImportUser[] {
-  const lines = text.trim().split('\n').filter(l => l.trim())
-  return lines.slice(1).map(line => {
-    const [name, username, email, dienstnummer, rollen] = line.split(';').map(s => s.trim())
-    return {
-      name: name ?? '',
-      username: username ?? '',
-      email: email ?? '',
-      dienstnummer: dienstnummer ?? '',
-      roles: rollen ? rollen.split('|').map(s => s.trim()).filter(Boolean) : ['user'],
+function rowToUser(row: Record<string, string>): ImportUser | null {
+  const get = (...keys: string[]) => {
+    for (const k of keys) {
+      const val = row[k] ?? row[k.toLowerCase()] ?? ''
+      if (val.trim()) return val.trim()
     }
-  }).filter(u => u.name && u.username)
+    return ''
+  }
+  const name = get('name', 'nachname', 'vollname')
+  const username = get('benutzername', 'username', 'benutzer', 'login')
+  if (!name || !username) return null
+  const rollen = get('rollen', 'roles', 'rolle', 'role')
+  return {
+    name,
+    username,
+    email: get('email', 'e-mail', 'mail'),
+    dienstnummer: get('dienstnummer', 'dg', 'dienst-nr', 'dienstnr'),
+    roles: rollen ? rollen.split('|').map(s => s.trim()).filter(Boolean) : ['user'],
+  }
+}
+
+function parseCsvUsers(text: string): Record<string, string>[] {
+  const lines = text.trim().split('\n').filter(l => l.trim())
+  if (lines.length < 2) return []
+  const sep = lines[0].includes(';') ? ';' : ','
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+  return lines.slice(1).map(line => {
+    const cols = line.split(sep).map(s => s.trim())
+    return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']))
+  })
 }
 
 const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], active: true })
@@ -112,16 +131,29 @@ export default function Users() {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    const isExcel = file.name.match(/\.(xlsx|xls|ods)$/i)
     const reader = new FileReader()
     reader.onload = ev => {
-      const text = ev.target?.result as string
-      const rows = parseCsvUsers(text)
-      if (rows.length === 0) { setImportError('Keine gültigen Zeilen gefunden. Bitte Format prüfen.'); return }
-      setImportError('')
-      setImportRows(rows)
-      setImportProgress(null)
+      try {
+        let rawRows: Record<string, string>[]
+        if (isExcel) {
+          const wb = XLSX.read(ev.target?.result, { type: 'array' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          rawRows = (XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[])
+            .map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.trim().toLowerCase(), String(v ?? '')])))
+        } else {
+          rawRows = parseCsvUsers(ev.target?.result as string)
+        }
+        const rows = rawRows.map(rowToUser).filter(Boolean) as ImportUser[]
+        if (rows.length === 0) { setImportError('Keine gültigen Zeilen gefunden. Spalten prüfen.'); return }
+        setImportError('')
+        setImportRows(rows)
+        setImportProgress(null)
+      } catch {
+        setImportError('Datei konnte nicht gelesen werden.')
+      }
     }
-    reader.readAsText(file, 'UTF-8')
+    isExcel ? reader.readAsArrayBuffer(file) : reader.readAsText(file, 'UTF-8')
     e.target.value = ''
   }
 
@@ -249,7 +281,7 @@ export default function Users() {
                 <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`} download="benutzer-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
                   <Download className="w-4 h-4" /> Vorlage herunterladen
                 </a>
-                <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.ods" className="hidden" onChange={handleFile} />
               </div>
               {importError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{importError}</p>}
               {importProgress && (

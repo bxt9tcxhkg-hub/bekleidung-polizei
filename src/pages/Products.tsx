@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Plus, Pencil, X, Check, Search, Upload, Download, Info } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product } from '../lib/types'
@@ -14,23 +15,48 @@ const GENDER_MAP: Record<string, 'male' | 'female' | 'unisex'> = {
   unisex: 'unisex', u: 'unisex',
 }
 
-function parseCsv(text: string): Omit<Product, 'id' | 'created_at'>[] {
-  const lines = text.trim().split('\n').filter(l => l.trim())
-  return lines.slice(1).map(line => {
-    const [artikel_nr, name, category, geschlecht, groessen, preis, schneider, organisation, grössentabelle] = line.split(';').map(s => s.trim())
-    return {
-      article_number: artikel_nr ?? '',
-      name: name ?? '',
-      category: category ?? 'Sonstiges',
-      gender: GENDER_MAP[geschlecht?.toLowerCase()] ?? 'unisex',
-      sizes: groessen ? groessen.split('|').map(s => s.trim()).filter(Boolean) : [],
-      price: parseFloat(preis?.replace(',', '.') ?? '0') || 0,
-      needs_tailoring: schneider?.toLowerCase() === 'ja',
-      size_guide: grössentabelle || null,
-      organisation: organisation || 'Stadtpolizei',
-      active: true,
+function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'created_at'> | null {
+  const get = (...keys: string[]) => {
+    for (const k of keys) {
+      const val = row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()] ?? ''
+      if (val.trim()) return val.trim()
     }
-  }).filter(p => p.article_number && p.name)
+    return ''
+  }
+  const artikel_nr = get('artikel_nr', 'artikelnr', 'article_number', 'artikelnummer')
+  const name = get('name', 'bezeichnung', 'produkt')
+  if (!artikel_nr || !name) return null
+  const groessen = get('groessen', 'größen', 'groesse', 'größe', 'sizes')
+  const preis = get('preis', 'price', 'betrag')
+  const schneider = get('schneider', 'tailoring', 'wappen', 'wappenänderung')
+  const geschlecht = get('geschlecht', 'gender', 'hr/da')
+  return {
+    article_number: artikel_nr,
+    name,
+    category: get('kategorie', 'category', 'kategory') || 'Sonstiges',
+    gender: GENDER_MAP[geschlecht.toLowerCase()] ?? 'unisex',
+    sizes: groessen ? groessen.split('|').map(s => s.trim()).filter(Boolean) : [],
+    price: parseFloat(preis.replace(',', '.')) || 0,
+    needs_tailoring: ['ja', 'yes', '1', 'true'].includes(schneider.toLowerCase()),
+    size_guide: get('grössentabelle', 'groessentabelle', 'size_guide', 'größentabelle') || null,
+    organisation: get('organisation', 'org') || 'Stadtpolizei',
+    active: true,
+  }
+}
+
+function parseFileToProducts(rows: Record<string, string>[]): Omit<Product, 'id' | 'created_at'>[] {
+  return rows.map(rowToProduct).filter(Boolean) as Omit<Product, 'id' | 'created_at'>[]
+}
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.trim().split('\n').filter(l => l.trim())
+  if (lines.length < 2) return []
+  const sep = lines[0].includes(';') ? ';' : ','
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+  return lines.slice(1).map(line => {
+    const cols = line.split(sep).map(s => s.trim())
+    return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']))
+  })
 }
 
 const SIZES_COMMON = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '44', '46', '48', '50', '52', '54', '56']
@@ -128,16 +154,29 @@ export default function Products() {
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    const isExcel = file.name.match(/\.(xlsx|xls|ods)$/i)
     const reader = new FileReader()
     reader.onload = ev => {
-      const text = ev.target?.result as string
-      const rows = parseCsv(text)
-      if (rows.length === 0) { setImportError('Keine gültigen Zeilen gefunden. Bitte Format prüfen.'); return }
-      setImportError('')
-      setImportRows(rows)
-      setImportDone(null)
+      try {
+        let rawRows: Record<string, string>[]
+        if (isExcel) {
+          const wb = XLSX.read(ev.target?.result, { type: 'array' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          rawRows = (XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, unknown>[])
+            .map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.trim().toLowerCase(), String(v ?? '')])))
+        } else {
+          rawRows = parseCsv(ev.target?.result as string)
+        }
+        const rows = parseFileToProducts(rawRows)
+        if (rows.length === 0) { setImportError('Keine gültigen Zeilen gefunden. Spalten prüfen.'); return }
+        setImportError('')
+        setImportRows(rows)
+        setImportDone(null)
+      } catch {
+        setImportError('Datei konnte nicht gelesen werden.')
+      }
     }
-    reader.readAsText(file, 'UTF-8')
+    isExcel ? reader.readAsArrayBuffer(file) : reader.readAsText(file, 'UTF-8')
     e.target.value = ''
   }
 
@@ -261,23 +300,23 @@ export default function Products() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Produkte importieren (CSV)</h2>
+              <h2 className="font-bold text-gray-900">Produkte importieren</h2>
               <button onClick={() => setShowImport(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
-              <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 space-y-1">
-                <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Format (Semikolon-getrennt, Größen mit |):</p>
-                <p>artikel_nr;name;kategorie;groessen;preis;schneider;organisation</p>
-                <p>BP-001;Diensthemd langarm;Hemd;S|M|L|XL;45.90;nein;Stadtpolizei</p>
+              <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 space-y-1">
+                <p className="font-semibold text-gray-700 text-xs mb-1">Unterstützte Formate: Excel (.xlsx, .xls) und CSV (.csv)</p>
+                <p className="font-mono">Spalten: artikel_nr · name · kategorie · geschlecht · groessen · preis · schneider · organisation · grössentabelle</p>
+                <p className="text-gray-400 mt-1">Größen mit | trennen (z.B. S|M|L|XL) · Geschlecht: hr / da / unisex</p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
-                  <Upload className="w-4 h-4" /> CSV-Datei wählen
+                  <Upload className="w-4 h-4" /> Datei wählen
                 </button>
                 <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`} download="produkte-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
                   <Download className="w-4 h-4" /> Vorlage herunterladen
                 </a>
-                <input ref={fileRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.ods" className="hidden" onChange={handleFile} />
               </div>
               {importError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{importError}</p>}
               {importDone && (
