@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import type { Order, UserBudget } from '../lib/types'
+import type { Order } from '../lib/types'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
+import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
 
 const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_BUDGET = 350
 
 type MyOrder = Order & {
   products?: { name: string; category: string; needs_tailoring: boolean }
@@ -71,7 +71,7 @@ function Timeline({ order }: { order: MyOrder }) {
 export default function MyOrders() {
   const { profile } = useAuth()
   const [orders, setOrders] = useState<MyOrder[]>([])
-  const [budget, setBudget] = useState<UserBudget | null>(null)
+  const [totalBudgetAmt, setTotalBudgetAmt] = useState(DEFAULT_BUDGET)
   const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
 
@@ -79,27 +79,27 @@ export default function MyOrders() {
     async function load() {
       if (!profile) return
       setLoading(true)
-      const [ordersRes, budgetRes, usedRes] = await Promise.all([
+      const [ordersRes, totalBud, usedRes] = await Promise.all([
         supabase.from('orders')
           .select('*, products(name,category,needs_tailoring), quarters(name)')
           .eq('user_id', profile.id)
           .not('status', 'eq', 'pending')
           .order('created_at', { ascending: false }),
-        supabase.from('user_budgets').select('*').eq('user_id', profile.id).eq('year', CURRENT_YEAR).maybeSingle(),
+        getCurrentBudget(profile.id, CURRENT_YEAR),
         supabase.from('orders').select('unit_price, quantity')
           .eq('user_id', profile.id)
           .not('status', 'in', '("pending","cancelled")')
           .gte('created_at', `${CURRENT_YEAR}-01-01`),
       ])
       setOrders((ordersRes.data ?? []) as MyOrder[])
-      setBudget(budgetRes.data)
+      setTotalBudgetAmt(totalBud)
       setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
       setLoading(false)
     }
     load()
   }, [profile])
 
-  const totalBudget = budget?.total_budget ?? DEFAULT_BUDGET
+  const totalBudget = totalBudgetAmt
   const remaining = totalBudget - usedBudget
   const budgetPct = Math.min(100, (usedBudget / totalBudget) * 100)
 

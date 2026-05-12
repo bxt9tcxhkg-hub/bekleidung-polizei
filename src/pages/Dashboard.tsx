@@ -4,9 +4,9 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
 import type { Quarter, Order } from '../lib/types'
+import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
 
 const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_BUDGET = 350
 
 function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
   const [cartCount, setCartCount] = useState(0)
@@ -18,7 +18,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
 
   useEffect(() => {
     async function load() {
-      const [cartRes, quarterRes, ordersRes, budgetRes, usedRes] = await Promise.all([
+      const [cartRes, quarterRes, ordersRes, totalBud, usedRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('user_id', profile.id).eq('status', 'pending'),
         supabase.from('quarters').select('*').eq('status', 'active').single(),
         supabase.from('orders').select('*, products(name, category), quarters(name)')
@@ -26,7 +26,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
           .not('status', 'in', '(pending,cancelled)')
           .order('created_at', { ascending: false })
           .limit(5),
-        supabase.from('user_budgets').select('total_budget').eq('user_id', profile.id).eq('year', CURRENT_YEAR).maybeSingle(),
+        getCurrentBudget(profile.id, CURRENT_YEAR),
         supabase.from('orders').select('unit_price, quantity')
           .eq('user_id', profile.id)
           .not('status', 'in', '("pending","cancelled")')
@@ -35,7 +35,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
       setCartCount(cartRes.count ?? 0)
       setActiveQuarter(quarterRes.data ?? null)
       setRecentOrders(ordersRes.data ?? [])
-      setTotalBudget(budgetRes.data?.total_budget ?? DEFAULT_BUDGET)
+      setTotalBudget(totalBud)
       setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
       setLoading(false)
     }

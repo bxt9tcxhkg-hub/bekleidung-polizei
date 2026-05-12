@@ -11,11 +11,21 @@ export type OrderStatus =
 
 export type QuarterStatus = 'planned' | 'active' | 'closed'
 
+export interface ShoeRefundCap {
+  id: string
+  cap_amount: number
+  valid_from: string
+  note: string | null
+  created_by: string | null
+  created_at: string | null
+}
+
 export interface UserBudget {
   id: string
   user_id: string
   year: number
   total_budget: number
+  valid_from: string
   created_at: string | null
   updated_at: string | null
   profiles?: Profile
@@ -127,6 +137,7 @@ type InventoryRow = Omit<Inventory, 'profiles' | 'products' | 'quarters' | 'orde
 type QuarterRow = Omit<Quarter, 'profiles' | 'products' | 'orders' | 'creator'>
 type OrderRow = Omit<Order, 'profiles' | 'products' | 'quarters' | 'creator'>
 type UserBudgetRow = Omit<UserBudget, 'profiles'>
+type ShoeRefundCapRow = Omit<ShoeRefundCap, 'profiles' | 'creator'>
 type TailorJobRow = Omit<TailorJob, 'profiles' | 'quarters' | 'orders' | 'creator'>
 type ShoeRefundRow = Omit<ShoeRefund, 'profiles' | 'creator'>
 type AuditLogRow = Omit<AuditLog, 'profiles' | 'creator'>
@@ -143,6 +154,7 @@ export type Database = {
       shoe_refunds: { Row: ShoeRefundRow; Insert: Omit<ShoeRefundRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundRow>; Relationships: [] }
       audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [] }
       user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [] }
+      shoe_refund_caps: { Row: ShoeRefundCapRow; Insert: Omit<ShoeRefundCapRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundCapRow>; Relationships: [] }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

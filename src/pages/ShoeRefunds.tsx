@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, X, Footprints } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { getCurrentShoeRefundCap } from '../lib/budget'
 import type { ShoeRefund, Profile } from '../lib/types'
 
 export default function ShoeRefunds() {
@@ -10,7 +11,7 @@ export default function ShoeRefunds() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const MAX_REFUND = 120
+  const [maxRefund, setMaxRefund] = useState(120)
   const [form, setForm] = useState({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
   const [userSearch, setUserSearch] = useState('')
   const [userDropdown, setUserDropdown] = useState(false)
@@ -31,7 +32,11 @@ export default function ShoeRefunds() {
 
   useEffect(() => {
     async function init() {
-      await load()
+      const [cap] = await Promise.all([
+        getCurrentShoeRefundCap(),
+        load(),
+      ])
+      setMaxRefund(cap)
       if (isAdmin) {
         const { data } = await supabase.from('profiles').select('*').eq('active', true).order('name')
         setUsers(data ?? [])
@@ -62,7 +67,7 @@ export default function ShoeRefunds() {
     const { error } = await supabase.from('shoe_refunds').insert({
       user_id: uid,
       amount,
-      approved_amount: Math.min(amount, MAX_REFUND),
+      approved_amount: Math.min(amount, maxRefund),
       refund_date: form.refund_date,
       note: form.note || null,
       created_by: profile!.id,
@@ -172,7 +177,7 @@ export default function ShoeRefunds() {
                 <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
                 {form.amount && !isNaN(parseFloat(form.amount)) && (() => {
                   const amt = parseFloat(form.amount)
-                  const approved = Math.min(amt, MAX_REFUND)
+                  const approved = Math.min(amt, maxRefund)
                   const selfPay = amt - approved
                   return (
                     <div className={`mt-2 px-3 py-2 rounded-lg text-xs space-y-0.5 ${selfPay > 0 ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>

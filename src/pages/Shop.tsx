@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import type { Order, Product, Quarter, UserBudget } from '../lib/types'
+import type { Order, Product, Quarter } from '../lib/types'
+import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
 
 const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_BUDGET = 350
 
 type CartItem = Order & { products?: Product; quarters?: Quarter }
 
@@ -15,7 +15,7 @@ export default function Shop() {
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [, setQuarters] = useState<Quarter[]>([])
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
-  const [budget, setBudget] = useState<UserBudget | null>(null)
+  const [totalBudgetAmt, setTotalBudgetAmt] = useState(DEFAULT_BUDGET)
   const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
   const [cartOpen, setCartOpen] = useState(false)
@@ -26,23 +26,15 @@ export default function Shop() {
   const [sizeModal, setSizeModal] = useState<{ product: Product; size: string; quantity: number } | null>(null)
 
   async function loadBudget() {
-    const { data: budgetData } = await supabase
-      .from('user_budgets')
-      .select('*')
-      .eq('user_id', profile!.id)
-      .eq('year', CURRENT_YEAR)
-      .maybeSingle()
-    setBudget(budgetData)
-
-    // Verbrauchtes Budget: alle nicht-stornierten, nicht-pending Bestellungen des laufenden Jahres
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('unit_price, quantity')
-      .eq('user_id', profile!.id)
-      .not('status', 'in', '("pending","cancelled")')
-      .gte('created_at', `${CURRENT_YEAR}-01-01`)
-    const used = (orders ?? []).reduce((s, o) => s + (o.unit_price * o.quantity), 0)
-    setUsedBudget(used)
+    const [total, orders] = await Promise.all([
+      getCurrentBudget(profile!.id, CURRENT_YEAR),
+      supabase.from('orders').select('unit_price, quantity')
+        .eq('user_id', profile!.id)
+        .not('status', 'in', '("pending","cancelled")')
+        .gte('created_at', `${CURRENT_YEAR}-01-01`),
+    ])
+    setTotalBudgetAmt(total)
+    setUsedBudget((orders.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
   }
 
   async function loadCart() {
@@ -72,7 +64,7 @@ export default function Shop() {
     if (profile) init()
   }, [profile])
 
-  const totalBudget = budget?.total_budget ?? DEFAULT_BUDGET
+  const totalBudget = totalBudgetAmt
   const remainingBudget = totalBudget - usedBudget
   const cartTotal = cartItems.reduce((s, o) => s + (o.products?.price ?? 0) * o.quantity, 0)
   const budgetAfterCart = remainingBudget - cartTotal
