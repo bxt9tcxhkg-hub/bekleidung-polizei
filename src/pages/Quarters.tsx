@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
+import { X, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Quarter, QuarterStatus } from '../lib/types'
+import type { Quarter } from '../lib/types'
 import { QUARTER_STATUS_LABELS, QUARTER_STATUS_COLORS } from '../lib/types'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -17,7 +17,7 @@ export default function Quarters() {
   const [quarters, setQuarters] = useState<Quarter[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState({ start_date: '', end_date: '', status: 'planned' as QuarterStatus })
+  const [form, setForm] = useState({ start_date: '', end_date: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -28,9 +28,9 @@ export default function Quarters() {
       .select('*')
       .eq('year', CURRENT_YEAR)
       .order('quarter_num')
-    const existing = data ?? []
+    let existing = data ?? []
 
-    // Auto-create missing quarters for current year
+    // Auto-create missing quarters
     const missing = [1, 2, 3, 4].filter(n => !existing.find(q => q.quarter_num === n))
     if (missing.length > 0) {
       await Promise.all(
@@ -49,17 +49,54 @@ export default function Quarters() {
         .select('*')
         .eq('year', CURRENT_YEAR)
         .order('quarter_num')
-      setQuarters(fresh ?? [])
-    } else {
-      setQuarters(existing)
+      existing = fresh ?? []
     }
+
+    // Auto-transition: close active quarter if end_date is in the past
+    const today = new Date().toISOString().split('T')[0]
+    const active = existing.find(q => q.status === 'active')
+    if (active && active.end_date < today) {
+      await activateNext(active, existing, /* skipReload */ true)
+      // Reload after transition
+      const { data: updated } = await supabase
+        .from('quarters')
+        .select('*')
+        .eq('year', CURRENT_YEAR)
+        .order('quarter_num')
+      setQuarters(updated ?? [])
+      setLoading(false)
+      return
+    }
+
+    setQuarters(existing)
     setLoading(false)
+  }
+
+  // Closes the given quarter and activates the next planned one.
+  // skipReload: when called from load(), we handle reload there.
+  async function activateNext(q: Quarter, allQuarters: Quarter[], skipReload = false) {
+    await supabase.from('quarters').update({ status: 'closed' }).eq('id', q.id)
+    const next = allQuarters.find(nq => nq.quarter_num === q.quarter_num + 1 && nq.status === 'planned')
+    if (next) {
+      await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
+    }
+    if (!skipReload) load()
+  }
+
+  async function handleClose(q: Quarter) {
+    if (!confirm(`${q.name} abschließen? Der nächste Quartal wird automatisch aktiviert.`)) return
+    await activateNext(q, quarters)
+  }
+
+  async function handleActivate(q: Quarter) {
+    await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id)
+    load()
   }
 
   useEffect(() => { load() }, [])
 
   function openEdit(q: Quarter) {
-    setForm({ start_date: q.start_date, end_date: q.end_date, status: q.status })
+    setForm({ start_date: q.start_date, end_date: q.end_date })
     setEditId(q.id)
     setError('')
   }
@@ -76,57 +113,70 @@ export default function Quarters() {
     load()
   }
 
-  async function setStatus(q: Quarter, status: QuarterStatus) {
-    await supabase.from('quarters').update({ status }).eq('id', q.id)
-    load()
+  // Returns a human-readable hint for auto-transition
+  function getAutoHint(q: Quarter) {
+    if (q.status !== 'active') return null
+    const today = new Date().toISOString().split('T')[0]
+    const daysLeft = Math.ceil((new Date(q.end_date).getTime() - new Date(today).getTime()) / 86400000)
+    if (daysLeft <= 0) return null // already handled by load()
+    if (daysLeft <= 7) return `Automatischer Wechsel in ${daysLeft} Tag${daysLeft === 1 ? '' : 'en'}`
+    return null
   }
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Quartale {CURRENT_YEAR}</h1>
-        <p className="text-gray-500 text-sm mt-1">Bestellzeiträume für das laufende Jahr</p>
+        <p className="text-gray-500 text-sm mt-1">Quartalswechsel erfolgt automatisch nach Fristablauf</p>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="grid gap-4">
-          {quarters.map(q => (
-            <div key={q.id} className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl font-black text-gray-200">Q{q.quarter_num}</span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-bold text-gray-900">{q.name}</h2>
-                      <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${QUARTER_STATUS_COLORS[q.status]}`}>
-                        {QUARTER_STATUS_LABELS[q.status]}
-                      </span>
+          {quarters.map(q => {
+            const autoHint = getAutoHint(q)
+            return (
+              <div key={q.id} className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl font-black text-gray-200">Q{q.quarter_num}</span>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h2 className="font-bold text-gray-900">{q.name}</h2>
+                        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${QUARTER_STATUS_COLORS[q.status]}`}>
+                          {QUARTER_STATUS_LABELS[q.status]}
+                        </span>
+                        {autoHint && (
+                          <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <RefreshCw className="w-3 h-3" /> {autoHint}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
-                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {q.status === 'planned' && (
+                      <button onClick={() => handleActivate(q)} className="text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors">
+                        Aktivieren
+                      </button>
+                    )}
+                    {q.status === 'active' && (
+                      <button onClick={() => handleClose(q)} className="text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
+                        Abschließen
+                      </button>
+                    )}
+                    <button onClick={() => openEdit(q)} className="text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
+                      Datum anpassen
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {q.status === 'planned' && (
-                    <button onClick={() => setStatus(q, 'active')} className="text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors">
-                      Aktivieren
-                    </button>
-                  )}
-                  {q.status === 'active' && (
-                    <button onClick={() => setStatus(q, 'closed')} className="text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
-                      Abschließen
-                    </button>
-                  )}
-                  <button onClick={() => openEdit(q)} className="text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
-                    Datum anpassen
-                  </button>
-                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
