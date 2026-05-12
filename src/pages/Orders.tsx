@@ -163,6 +163,96 @@ export default function Orders() {
     setTimeout(() => win.print(), 400)
   }
 
+  function generateAusgabeliste() {
+    const ausgabeOrders = orders
+      .filter(o => o.status === 'ready_for_issue')
+      .sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
+
+    if (ausgabeOrders.length === 0) return
+
+    // Group by user
+    const byUser: Record<string, { name: string; dienstnummer: string | null; orders: Order[] }> = {}
+    ausgabeOrders.forEach(o => {
+      const uid = o.user_id
+      if (!byUser[uid]) byUser[uid] = {
+        name: (o as any).profiles?.name ?? '–',
+        dienstnummer: (o as any).profiles?.dienstnummer ?? null,
+        orders: [],
+      }
+      byUser[uid].orders.push(o)
+    })
+
+    const now = new Date()
+    const DE_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
+    const dateLong = `${String(now.getDate()).padStart(2,'0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
+
+    const userBlocks = Object.values(byUser).map(u => {
+      const rows = u.orders.map(o => {
+        const avail = o.quantity_received ?? o.quantity
+        const issued = o.quantity_issued ?? 0
+        const outstanding = avail - issued
+        return `<tr>
+          <td>${(o as any).products?.name ?? '–'}</td>
+          <td>${(o as any).products?.category ?? ''}</td>
+          <td class="center">${o.size}</td>
+          <td class="center">${o.quantity}</td>
+          <td class="center">${avail}</td>
+          <td class="center highlight">${outstanding}</td>
+          <td class="sig-col"></td>
+        </tr>`
+      }).join('\n')
+      const dg = u.dienstnummer ? ` · DG ${u.dienstnummer}` : ''
+      return `<div class="user-block">
+        <div class="user-header">${u.name}${dg}</div>
+        <table class="items-table">
+          <thead><tr>
+            <th>Artikel</th>
+            <th>Kategorie</th>
+            <th class="center">Gr.</th>
+            <th class="center">Bestellt</th>
+            <th class="center">Verfügbar</th>
+            <th class="center">Auszufolgen</th>
+            <th class="center">Unterschrift</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`
+    }).join('\n')
+
+    const html = `<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><title>Ausgabeliste</title><style>
+  @page { size: A4; margin: 15mm 18mm 18mm 18mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Calibri, Arial, sans-serif; font-size: 10pt; color: #000; line-height: 1.4; }
+  .page-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 14px; }
+  .page-title { font-size: 16pt; font-weight: bold; }
+  .page-meta { font-size: 9pt; color: #444; text-align: right; }
+  .user-block { margin-bottom: 18px; break-inside: avoid; }
+  .user-header { font-size: 11pt; font-weight: bold; background: #e8edf5; padding: 4px 8px; border-left: 4px solid #1e40af; margin-bottom: 0; }
+  .items-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .items-table th { background: #f1f4f9; font-weight: semibold; padding: 3px 6px; border: 1px solid #ccc; text-align: left; }
+  .items-table td { padding: 4px 6px; border: 1px solid #ccc; }
+  .center { text-align: center; }
+  .highlight { font-weight: bold; background: #fef9c3; }
+  .sig-col { min-width: 80px; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+  <div class="page-header">
+    <div>
+      <div class="page-title">Ausgabeliste – Bereit zur Ausgabe</div>
+      <div style="font-size:9pt;color:#555;margin-top:2px">Stadtpolizei Dornbirn</div>
+    </div>
+    <div class="page-meta">Erstellt: ${dateLong}<br>Einträge: ${ausgabeOrders.length}</div>
+  </div>
+  ${userBlocks}
+</body></html>`
+
+    const win = window.open('', '_blank')
+    if (!win) { alert('Popup wurde blockiert – bitte Popup-Blocker deaktivieren.'); return }
+    win.document.write(html); win.document.close(); win.focus()
+    setTimeout(() => win.print(), 400)
+  }
+
   const thClass = 'text-left px-4 py-3 font-semibold text-gray-600'
   const thCClass = 'text-center px-4 py-3 font-semibold text-gray-600'
 
@@ -296,6 +386,15 @@ export default function Orders() {
 
           {/* ── Bereit zur Ausgabe + Teilweise ausgegeben ── */}
           {(activeTab === 'ausgabe' || activeTab === 'teilweise') && (
+            <>
+            {activeTab === 'ausgabe' && (
+              <div className="flex justify-end px-4 py-3 border-b border-gray-100">
+                <button onClick={generateAusgabeliste}
+                  className="flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+                  <FileText className="w-4 h-4" /> Ausgabeliste als PDF
+                </button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
                 <th className={thClass}>Benutzer</th>
@@ -339,6 +438,7 @@ export default function Orders() {
                 })}
               </tbody>
             </table>
+            </>
           )}
 
           {/* ── Ausgegeben ── */}
