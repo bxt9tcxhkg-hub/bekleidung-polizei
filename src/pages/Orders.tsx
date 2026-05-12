@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, ChevronDown, ShoppingCart, List, Download } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { X, ChevronDown, ShoppingCart, List, FileText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
@@ -157,34 +156,124 @@ export default function Orders() {
     load()
   }
 
-  function exportSammel() {
-    const quarterName = quarters.find(q => q.id === sammelQuarterId)?.name ?? 'Export'
+  function generateKurzbrief() {
+    const quarterName = quarters.find(q => q.id === sammelQuarterId)?.name ?? ''
+    const now = new Date()
+    const DE_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
+    const dateLong = `${String(now.getDate()).padStart(2,'0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
+    const dateShort = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`
+    const userName = profile?.name ?? '–'
 
-    // Sheet 1 – Übersicht: one row per product+size
-    const overview = sammelGroups.map(g => ({
-      'Artikelnummer': (g.orders[0] as any).products?.article_number ?? '–',
-      'Produkt': g.productName,
-      'Kategorie': g.category,
-      'Größe': g.size,
-      'Gesamtmenge': g.totalQty,
-    }))
+    const tableRows = sammelGroups.map(g => `
+      <tr>
+        <td>${(g.orders[0] as any).products?.article_number ?? '–'}</td>
+        <td>${g.productName}</td>
+        <td>${g.size}</td>
+        <td class="center">${g.totalQty}</td>
+      </tr>`).join('')
 
-    // Sheet 2 – Details: one row per order
-    const details = sammelOrders.map(o => ({
-      'Benutzer': (o as any).profiles?.name ?? '–',
-      'Dienstnummer': (o as any).profiles?.dienstnummer ?? '–',
-      'Artikelnummer': (o as any).products?.article_number ?? '–',
-      'Produkt': (o as any).products?.name ?? '–',
-      'Kategorie': (o as any).products?.category ?? '–',
-      'Größe': o.size,
-      'Menge': o.quantity,
-      'Preis': Number(o.unit_price).toFixed(2),
-    }))
+    const html = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Kurzbrief ${quarterName}</title>
+  <style>
+    @page { size: A4; margin: 15mm 20mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 10pt; color: #000; line-height: 1.45; }
+    .header-bar { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #003399; padding-bottom: 8px; margin-bottom: 14px; }
+    .header-org { font-size: 15pt; font-weight: bold; color: #003399; }
+    .header-sub { font-size: 9pt; color: #555; margin-top: 2px; }
+    .header-contact { text-align: right; font-size: 8.5pt; color: #333; line-height: 1.6; }
+    .address-block { display: flex; justify-content: space-between; margin: 18px 0 10px; }
+    .recipient { font-size: 9.5pt; line-height: 1.6; }
+    .date-right { text-align: right; font-size: 10pt; padding-top: 2px; }
+    .doc-title { font-size: 15pt; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 3px; margin: 18px 0 6px; }
+    .meta-line { font-size: 10pt; margin-bottom: 2px; }
+    .body-text { margin: 14px 0 8px; font-size: 10pt; }
+    .section-label { font-weight: bold; font-size: 10pt; margin: 6px 0 3px; }
+    table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    thead tr { background: #003399; color: #fff; }
+    thead th { padding: 5px 8px; text-align: left; font-weight: bold; }
+    thead th.center { text-align: center; }
+    tbody tr:nth-child(even) { background: #f2f4f8; }
+    tbody td { padding: 3px 8px; border-bottom: 1px solid #ddd; }
+    tbody td.center { text-align: center; }
+    .thanks { margin-top: 18px; font-size: 10pt; }
+    .signatures { display: flex; justify-content: space-between; margin-top: 38px; }
+    .sig-block { width: 44%; }
+    .sig-role { font-size: 9pt; color: #555; margin-bottom: 28px; }
+    .sig-line { border-top: 1px solid #000; padding-top: 4px; font-size: 9.5pt; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <div class="header-bar">
+    <div>
+      <div class="header-org">STADTPOLIZEI DORNBIRN</div>
+      <div class="header-sub">Rathausplatz 2 · A-6850 Dornbirn</div>
+    </div>
+    <div class="header-contact">
+      ${userName}<br>
+      T +43 5572 222 00<br>
+      F +43 5572 33 0 08<br>
+      polizei@dornbirn.at
+    </div>
+  </div>
 
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(overview), 'Übersicht')
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(details), 'Details')
-    XLSX.writeFile(wb, `Sammelbestellung_${quarterName.replace(/\s+/g, '_')}.xlsx`)
+  <div class="address-block">
+    <div class="recipient">
+      Bundesministerium für Inneres<br>
+      Bekleidungswirtschaftsfonds der Exekutive<br>
+      Liesinger Flur-Gasse 8<br>
+      1230 Wien
+    </div>
+    <div class="date-right">Dornbirn, ${dateLong}</div>
+  </div>
+
+  <div class="doc-title">Kurzbrief</div>
+  <div class="meta-line"><strong>Betreff:</strong> Auftrag / Bestellung</div>
+  <div class="meta-line"><strong>Bezug:</strong> &mdash;&mdash;&mdash;</div>
+
+  <div class="body-text">
+    Die ho. Dienststelle der Stadtpolizei Dornbirn übermittelt höflichst den Bestellauftrag
+    vom ${dateShort} für folgende ug. Artikel:
+  </div>
+
+  <div class="section-label">Standardmannschaft</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Artikelnummer</th>
+        <th>Artikel</th>
+        <th>Größe</th>
+        <th class="center">Anzahl</th>
+      </tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+
+  <div class="thanks">Vielen herzlichen Dank im Voraus</div>
+
+  <div class="signatures">
+    <div class="sig-block">
+      <div class="sig-role">Bearbeiter/in:</div>
+      <div class="sig-line">${userName}</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-role">Kommandant:</div>
+      <div class="sig-line">&nbsp;</div>
+    </div>
+  </div>
+</body>
+</html>`
+
+    const win = window.open('', '_blank')
+    if (!win) { alert('Popup wurde blockiert – bitte Popup-Blocker deaktivieren.'); return }
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => win.print(), 400)
   }
 
   return (
@@ -347,10 +436,10 @@ export default function Orders() {
             <span className="text-xs text-gray-400">Nur genehmigte Bestellungen (vom Genehmiger freigegeben)</span>
             {sammelGroups.length > 0 && (
               <button
-                onClick={exportSammel}
-                className="ml-auto flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={generateKurzbrief}
+                className="ml-auto flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
               >
-                <Download className="w-4 h-4" /> Als Excel exportieren
+                <FileText className="w-4 h-4" /> Kurzbrief als PDF
               </button>
             )}
           </div>
