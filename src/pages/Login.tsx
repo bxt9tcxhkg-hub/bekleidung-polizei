@@ -17,7 +17,8 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const email = `${username.trim().toLowerCase()}@stadtpolizei-dornbirn.local`
+    const input = username.trim()
+    const email = input.includes('@') ? input : `${input.toLowerCase()}@stadtpolizei-dornbirn.local`
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setError('Ungültiger Benutzername oder Passwort')
     setLoading(false)
@@ -44,7 +45,7 @@ export default function Login() {
               value={username}
               onChange={e => setUsername(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              placeholder="mmustermann"
+              placeholder="mmustermann oder name@beispiel.at"
             />
           </div>
           <div>
