@@ -98,6 +98,7 @@ export default function Products() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [showImport, setShowImport] = useState(false)
+  const [importOrg, setImportOrg] = useState<'Stadtpolizei' | 'Parkaufsicht'>('Stadtpolizei')
   const [importRows, setImportRows] = useState<Omit<Product, 'id' | 'created_at'>[]>([])
   const [importError, setImportError] = useState('')
   const [importing, setImporting] = useState(false)
@@ -188,7 +189,7 @@ export default function Products() {
     for (const row of importRows) {
       const { error } = await supabase
         .from('products')
-        .upsert(row, { onConflict: 'article_number' })
+        .upsert({ ...row, organisation: importOrg }, { onConflict: 'article_number' })
       if (error) err++; else ok++
     }
     setImporting(false)
@@ -213,7 +214,7 @@ export default function Products() {
         </div>
         <div className="flex gap-2">
           {isStrictAdmin && (
-            <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError('') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError(''); setImportOrg('Stadtpolizei') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <Upload className="w-4 h-4" /> Import
             </button>
           )}
@@ -246,6 +247,7 @@ export default function Products() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel-Nr.</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Kategorie</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Preis</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Schneider</th>
@@ -261,6 +263,11 @@ export default function Products() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.article_number}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{p.category}</td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {p.organisation ?? 'Stadtpolizei'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.gender === 'male' ? 'bg-blue-100 text-blue-700' : p.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-gray-100 text-gray-600'}`}>
                       {GENDER_LABELS[p.gender ?? 'unisex']}
@@ -306,10 +313,21 @@ export default function Products() {
               <button onClick={() => setShowImport(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-2">Organisation der importierten Produkte</label>
+                <div className="flex gap-2">
+                  {(['Stadtpolizei', 'Parkaufsicht'] as const).map(org => (
+                    <button key={org} type="button" onClick={() => setImportOrg(org)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${importOrg === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      {org}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 space-y-1">
                 <p className="font-semibold text-gray-700 text-xs mb-1">Unterstützte Formate: Excel (.xlsx, .xls) und CSV (.csv)</p>
-                <p className="font-mono">Spalten: artikel_nr · name · kategorie · geschlecht · groessen · preis · schneider · organisation · grössentabelle</p>
-                <p className="text-gray-400 mt-1">Größen mit | trennen (z.B. S|M|L|XL) · Geschlecht: hr / da / unisex</p>
+                <p className="font-mono">Spalten: artikel_nr · name · kategorie · groessen · preis · schneider · grössentabelle</p>
+                <p className="text-gray-400 mt-1">Größen mit | trennen (z.B. S|M|L|XL) · Geschlecht wird aus dem Namen erkannt (HR = Herren, DA = Damen)</p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
@@ -331,15 +349,19 @@ export default function Products() {
                   <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Produkte erkannt – Vorschau:</p>
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <table className="w-full text-xs">
-                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Artikel-Nr.</th><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Kategorie</th><th className="text-left px-3 py-2">Preis</th><th className="text-left px-3 py-2">Größen</th></tr></thead>
+                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Artikel-Nr.</th><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Kategorie</th><th className="text-left px-3 py-2">Geschlecht</th><th className="text-left px-3 py-2">Preis</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {importRows.map((r, i) => (
                           <tr key={i} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-mono">{r.article_number}</td>
                             <td className="px-3 py-2">{r.name}</td>
                             <td className="px-3 py-2">{r.category}</td>
+                            <td className="px-3 py-2">
+                              <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${r.gender === 'male' ? 'bg-blue-100 text-blue-700' : r.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {r.gender === 'male' ? 'HR' : r.gender === 'female' ? 'DA' : 'Unisex'}
+                              </span>
+                            </td>
                             <td className="px-3 py-2">€ {r.price.toFixed(2)}</td>
-                            <td className="px-3 py-2">{r.sizes.join(', ')}</td>
                           </tr>
                         ))}
                       </tbody>
