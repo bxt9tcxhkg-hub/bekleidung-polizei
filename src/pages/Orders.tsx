@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { X, ChevronDown, ShoppingCart, List } from 'lucide-react'
+import { X, ChevronDown, ShoppingCart, List, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
@@ -46,7 +47,7 @@ export default function Orders() {
     setLoading(true)
     const query = supabase
       .from('orders')
-      .select('*, products(id,name,category,sizes), quarters(id,name,status), profiles(id,name,username,dienstnummer)')
+      .select('*, products(id,name,category,sizes,article_number), quarters(id,name,status), profiles(id,name,username,dienstnummer)')
       .not('status', 'eq', 'pending')
       .order('created_at', { ascending: false })
 
@@ -130,6 +131,36 @@ export default function Orders() {
       )
     )
     load()
+  }
+
+  function exportSammel() {
+    const quarterName = quarters.find(q => q.id === sammelQuarterId)?.name ?? 'Export'
+
+    // Sheet 1 – Übersicht: one row per product+size
+    const overview = sammelGroups.map(g => ({
+      'Artikelnummer': (g.orders[0] as any).products?.article_number ?? '–',
+      'Produkt': g.productName,
+      'Kategorie': g.category,
+      'Größe': g.size,
+      'Gesamtmenge': g.totalQty,
+    }))
+
+    // Sheet 2 – Details: one row per order
+    const details = sammelOrders.map(o => ({
+      'Benutzer': (o as any).profiles?.name ?? '–',
+      'Dienstnummer': (o as any).profiles?.dienstnummer ?? '–',
+      'Artikelnummer': (o as any).products?.article_number ?? '–',
+      'Produkt': (o as any).products?.name ?? '–',
+      'Kategorie': (o as any).products?.category ?? '–',
+      'Größe': o.size,
+      'Menge': o.quantity,
+      'Preis': Number(o.unit_price).toFixed(2),
+    }))
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(overview), 'Übersicht')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(details), 'Details')
+    XLSX.writeFile(wb, `Sammelbestellung_${quarterName.replace(/\s+/g, '_')}.xlsx`)
   }
 
   return (
@@ -241,7 +272,7 @@ export default function Orders() {
       {tab === 'sammel' && isAdmin && (
         <div className="space-y-4">
           {/* Quartal-Auswahl */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <label className="text-sm font-medium text-gray-700">Quartal:</label>
             <select
               className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -252,6 +283,14 @@ export default function Orders() {
               {quarters.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
             <span className="text-xs text-gray-400">Nur genehmigte Bestellungen (vom Genehmiger freigegeben)</span>
+            {sammelGroups.length > 0 && (
+              <button
+                onClick={exportSammel}
+                className="ml-auto flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <Download className="w-4 h-4" /> Als Excel exportieren
+              </button>
+            )}
           </div>
 
           {loading ? (
