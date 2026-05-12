@@ -101,14 +101,18 @@ export default function Users() {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
     } else {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ ...dbPayload, initial_password: form.initialPassword }),
-      })
-      const json = await res.json()
-      if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ ...dbPayload, initial_password: form.initialPassword }),
+        })
+        const json = await res.json()
+        if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
+      } catch {
+        setError('Netzwerkfehler – bitte nochmals versuchen.'); setSaving(false); return
+      }
     }
 
     setSaving(false)
@@ -166,12 +170,16 @@ export default function Users() {
     let done = 0, err = 0
     setImportProgress({ done: 0, total: importRows.length, err: 0 })
     for (const row of importRows) {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ name: row.name, username: row.username, email: row.email || undefined, dienstnummer: row.dienstnummer || null, organisation: row.organisation, roles: row.roles }),
-      })
-      if (res.ok) done++; else err++
+      try {
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+          body: JSON.stringify({ name: row.name, username: row.username, dienstnummer: row.dienstnummer || null, organisation: row.organisation, roles: row.roles, initial_password: row.username }),
+        })
+        if (res.ok) done++; else err++
+      } catch {
+        err++
+      }
       setImportProgress({ done: done + err, total: importRows.length, err })
     }
     setImporting(false)
