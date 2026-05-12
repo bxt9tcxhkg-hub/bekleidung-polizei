@@ -33,16 +33,20 @@ export default function Quarters() {
     // Auto-create missing quarters
     const missing = [1, 2, 3, 4].filter(n => !existing.find(q => q.quarter_num === n))
     if (missing.length > 0) {
+      const today = new Date().toISOString().split('T')[0]
       await Promise.all(
-        missing.map(n =>
-          supabase.from('quarters').insert({
+        missing.map(n => {
+          const dates = DEFAULT_DATES[n]
+          // Auto-activate the quarter whose date range includes today
+          const status = today >= dates.start_date && today <= dates.end_date ? 'active' : 'planned'
+          return supabase.from('quarters').insert({
             name: `Q${n}/${CURRENT_YEAR}`,
             year: CURRENT_YEAR,
             quarter_num: n,
-            status: 'planned',
-            ...DEFAULT_DATES[n],
+            status,
+            ...dates,
           })
-        )
+        })
       )
       const { data: fresh } = await supabase
         .from('quarters')
