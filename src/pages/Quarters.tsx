@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, RefreshCw } from 'lucide-react'
+import { X, RefreshCw, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Quarter } from '../lib/types'
 import { QUARTER_STATUS_LABELS, QUARTER_STATUS_COLORS } from '../lib/types'
@@ -89,8 +89,18 @@ export default function Quarters() {
   }
 
   async function handleActivate(q: Quarter) {
+    // If another quarter is already active, close it first
+    const currentActive = quarters.find(nq => nq.status === 'active')
+    if (currentActive) {
+      await supabase.from('quarters').update({ status: 'closed' }).eq('id', currentActive.id)
+    }
     await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id)
     load()
+  }
+
+  async function handleReactivate(q: Quarter) {
+    if (!confirm(`${q.name} reaktivieren? Dieses Quartal wird wieder auf "Aktiv" gesetzt.`)) return
+    await handleActivate(q)
   }
 
   useEffect(() => { load() }, [])
@@ -130,6 +140,16 @@ export default function Quarters() {
         <p className="text-gray-500 text-sm mt-1">Quartalswechsel erfolgt automatisch nach Fristablauf</p>
       </div>
 
+      {!loading && !quarters.some(q => q.status === 'active') && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+          <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">Kein aktives Quartal</p>
+            <p className="text-xs text-red-600 mt-0.5">Benutzer können aktuell keine Bestellungen aufgeben. Bitte reaktiviere ein Quartal.</p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
@@ -167,6 +187,11 @@ export default function Quarters() {
                     {q.status === 'active' && (
                       <button onClick={() => handleClose(q)} className="text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
                         Abschließen
+                      </button>
+                    )}
+                    {q.status === 'closed' && (
+                      <button onClick={() => handleReactivate(q)} className="text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
+                        Reaktivieren
                       </button>
                     )}
                     <button onClick={() => openEdit(q)} className="text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
