@@ -77,6 +77,14 @@ export default function Orders() {
     setSelectedIds(new Set()); setSaving(false); load()
   }
 
+  async function saveReceived(order: Order) {
+    const qr = receivedInputs[order.id] !== undefined ? parseInt(receivedInputs[order.id]) : null
+    if (qr === null || isNaN(qr)) return
+    setSaving(true)
+    await supabase.from('orders').update({ quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', order.id)
+    setSaving(false); load()
+  }
+
   async function issueOrder(order: Order) {
     const qtyNow = parseInt(issuedInputs[order.id] ?? '') || 0
     if (qtyNow <= 0) { alert('Bitte Menge eingeben.'); return }
@@ -228,23 +236,34 @@ export default function Orders() {
                 <th className={thClass}>Gr.</th>
                 <th className={thCClass}>Bestellt</th>
                 <th className={thCClass}>Erhalten</th>
+                <th className="px-4 py-3" />
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => (
-                  <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                    <td className="px-4 py-3 text-gray-600">{o.size}</td>
-                    <td className="px-4 py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
-                    <td className="px-4 py-3"><div className="flex justify-center">
-                      <input type="number" min="0" max={o.quantity}
-                        className="w-16 text-center border border-gray-200 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder={String(o.quantity)} value={receivedInputs[o.id] ?? ''}
-                        onChange={e => setReceivedInputs(prev => ({ ...prev, [o.id]: e.target.value }))} />
-                    </div></td>
-                  </tr>
-                ))}
+                {sorted.map(o => {
+                  const saved = o.quantity_received != null
+                  const dirty = receivedInputs[o.id] !== undefined && receivedInputs[o.id] !== String(o.quantity_received ?? '')
+                  return (
+                    <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
+                      <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                      <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-4 py-3 text-gray-600">{o.size}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
+                      <td className="px-4 py-3"><div className="flex justify-center">
+                        <input type="number" min="0" max={o.quantity}
+                          className={`w-16 text-center border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${dirty ? 'border-amber-400 bg-amber-50' : saved ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
+                          placeholder={String(o.quantity)} value={receivedInputs[o.id] ?? ''}
+                          onChange={e => setReceivedInputs(prev => ({ ...prev, [o.id]: e.target.value }))} />
+                      </div></td>
+                      <td className="px-4 py-3">
+                        <button onClick={() => saveReceived(o)} disabled={saving || !dirty}
+                          className="text-xs font-medium bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded-lg disabled:opacity-30 whitespace-nowrap">
+                          Speichern
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}
