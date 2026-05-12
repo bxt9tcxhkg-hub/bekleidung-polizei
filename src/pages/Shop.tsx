@@ -24,6 +24,7 @@ export default function Shop() {
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState<'approved' | 'pending_approval' | null>(null)
   const [sizeModal, setSizeModal] = useState<{ product: Product; size: string; quantity: number } | null>(null)
+  const [genderFilterActive, setGenderFilterActive] = useState(true)
 
   async function loadBudget() {
     const [total, orders] = await Promise.all([
@@ -70,9 +71,10 @@ export default function Shop() {
   const budgetAfterCart = remainingBudget - cartTotal
   const needsApproval = budgetAfterCart < 0
 
-  // Filter by user gender: show matching gender + unisex
   const userGender = profile?.gender ?? 'male'
-  const genderFiltered = products.filter(p => p.gender === 'unisex' || p.gender === userGender)
+  const genderFiltered = genderFilterActive
+    ? products.filter(p => p.gender === 'unisex' || p.gender === userGender)
+    : products
 
   const categories = ['Alle', ...Array.from(new Set(genderFiltered.map(p => p.category)))]
   const filtered = selectedCategory === 'Alle' ? genderFiltered : genderFiltered.filter(p => p.category === selectedCategory)
@@ -191,8 +193,21 @@ export default function Shop() {
         </div>
       )}
 
-      {/* Category filter */}
+      {/* Filters */}
       <div className="flex gap-2 flex-wrap mb-6">
+        {genderFilterActive ? (
+          <button onClick={() => setGenderFilterActive(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors">
+            {userGender === 'female' ? 'Weiblich' : 'Männlich'}
+            <X className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <button onClick={() => setGenderFilterActive(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-white border border-dashed border-gray-300 text-gray-500 hover:border-blue-300 hover:text-blue-700 transition-colors">
+            {userGender === 'female' ? 'Weiblich' : 'Männlich'}
+          </button>
+        )}
+        <div className="w-px bg-gray-200 self-stretch mx-1" />
         {categories.map(cat => (
           <button key={cat} onClick={() => setSelectedCategory(cat)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
