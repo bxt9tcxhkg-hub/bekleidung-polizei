@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag, AlertTriangle, CheckCircle } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter, UserBudget } from '../lib/types'
@@ -78,8 +78,12 @@ export default function Shop() {
   const budgetAfterCart = remainingBudget - cartTotal
   const needsApproval = budgetAfterCart < 0
 
-  const categories = ['Alle', ...Array.from(new Set(products.map(p => p.category)))]
-  const filtered = selectedCategory === 'Alle' ? products : products.filter(p => p.category === selectedCategory)
+  // Filter by user gender: show matching gender + unisex
+  const userGender = profile?.gender ?? 'male'
+  const genderFiltered = products.filter(p => p.gender === 'unisex' || p.gender === userGender)
+
+  const categories = ['Alle', ...Array.from(new Set(genderFiltered.map(p => p.category)))]
+  const filtered = selectedCategory === 'Alle' ? genderFiltered : genderFiltered.filter(p => p.category === selectedCategory)
 
   function openSizeModal(product: Product) {
     setSizeModal({ product, size: product.sizes[0] ?? '', quantity: 1 })
@@ -220,9 +224,15 @@ export default function Shop() {
                   <h3 className="font-semibold text-gray-900 text-sm leading-snug">{product.name}</h3>
                   <span className="text-blue-800 font-bold text-sm whitespace-nowrap">€ {Number(product.price).toFixed(2)}</span>
                 </div>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <span className="text-xs text-gray-400 flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
                   {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium">· Wappenänderung</span>}
+                  {product.size_guide && (
+                    <a href={product.size_guide} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 font-medium" title="Größentabelle öffnen">
+                      <Info className="w-3 h-3" /> Größentabelle
+                    </a>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1 mb-4">
                   {product.sizes.slice(0, 6).map(s => (
@@ -251,6 +261,12 @@ export default function Shop() {
               <div>
                 <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">€ {Number(sizeModal.product.price).toFixed(2)} · {sizeModal.product.category}</p>
+                {sizeModal.product.size_guide && (
+                  <a href={sizeModal.product.size_guide} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-0.5 font-medium">
+                    <Info className="w-3 h-3" /> Größentabelle
+                  </a>
+                )}
               </div>
               <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>

@@ -1,25 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Pencil, X, Check, Search, Upload, Download } from 'lucide-react'
+import { Plus, Pencil, X, Check, Search, Upload, Download, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product } from '../lib/types'
 
-const CSV_TEMPLATE = `artikel_nr;name;kategorie;groessen;preis;schneider;organisation
-BP-001;Diensthemd langarm;Hemd;S|M|L|XL;45.90;nein;Stadtpolizei
-BP-002;Diensthose;Hose;44|46|48|50|52|54;89.00;ja;Stadtpolizei`
+const CSV_TEMPLATE = `artikel_nr;name;kategorie;geschlecht;groessen;preis;schneider;organisation;grössentabelle
+BP-001;Diensthemd langarm;Hemd;unisex;S|M|L|XL;45.90;nein;Stadtpolizei;
+BP-002;Diensthose Damen;Hose;female;34|36|38|40|42|44;89.00;ja;Stadtpolizei;https://beispiel.at/groessen`
+
+const GENDER_MAP: Record<string, 'male' | 'female' | 'unisex'> = {
+  hr: 'male', herren: 'male', male: 'male', m: 'male',
+  da: 'female', damen: 'female', female: 'female', f: 'female',
+  unisex: 'unisex', u: 'unisex',
+}
 
 function parseCsv(text: string): Omit<Product, 'id' | 'created_at'>[] {
   const lines = text.trim().split('\n').filter(l => l.trim())
   return lines.slice(1).map(line => {
-    const [artikel_nr, name, category, groessen, preis, schneider, organisation] = line.split(';').map(s => s.trim())
+    const [artikel_nr, name, category, geschlecht, groessen, preis, schneider, organisation, grössentabelle] = line.split(';').map(s => s.trim())
     return {
       article_number: artikel_nr ?? '',
       name: name ?? '',
       category: category ?? 'Sonstiges',
+      gender: GENDER_MAP[geschlecht?.toLowerCase()] ?? 'unisex',
       sizes: groessen ? groessen.split('|').map(s => s.trim()).filter(Boolean) : [],
       price: parseFloat(preis?.replace(',', '.') ?? '0') || 0,
       needs_tailoring: schneider?.toLowerCase() === 'ja',
-      size_guide: null,
+      size_guide: grössentabelle || null,
       organisation: organisation || 'Stadtpolizei',
       active: true,
     }
@@ -37,10 +44,13 @@ function Badge({ active }: { active: boolean }) {
   )
 }
 
+const GENDER_LABELS: Record<string, string> = { male: 'Herren (HR)', female: 'Damen (DA)', unisex: 'Unisex' }
+
 const emptyProduct = (): Omit<Product, 'id' | 'created_at'> => ({
   article_number: '',
   name: '',
   category: CATEGORIES[0],
+  gender: 'unisex',
   sizes: [],
   price: 0,
   needs_tailoring: false,
@@ -89,7 +99,7 @@ export default function Products() {
   }
 
   function openEdit(p: Product) {
-    setForm({ article_number: p.article_number, name: p.name, category: p.category, sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? '', organisation: p.organisation ?? 'Stadtpolizei', active: p.active })
+    setForm({ article_number: p.article_number, name: p.name, category: p.category, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? '', organisation: p.organisation ?? 'Stadtpolizei', active: p.active })
     setEditId(p.id)
     setError('')
     setShowForm(true)
@@ -195,6 +205,7 @@ export default function Products() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel-Nr.</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Kategorie</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Preis</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Schneider</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
@@ -209,7 +220,19 @@ export default function Products() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.article_number}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{p.category}</td>
-                  <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">€ {Number(p.price).toFixed(2)}</td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.gender === 'male' ? 'bg-blue-100 text-blue-700' : p.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {GENDER_LABELS[p.gender ?? 'unisex']}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
+                    <span>€ {Number(p.price).toFixed(2)}</span>
+                    {p.size_guide && (
+                      <a href={p.size_guide} target="_blank" rel="noopener noreferrer" title="Größentabelle" className="ml-1.5 inline-flex text-blue-500 hover:text-blue-700">
+                        <Info className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     {p.needs_tailoring ? <Check className="w-4 h-4 text-green-600" /> : <span className="text-gray-300">–</span>}
                   </td>
@@ -321,6 +344,17 @@ export default function Products() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
                 <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
+                <div className="flex gap-2">
+                  {(['unisex', 'male', 'female'] as const).map(g => (
+                    <button key={g} type="button" onClick={() => setForm(f => ({ ...f, gender: g }))}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : g === 'female' ? 'bg-pink-600 text-white border-pink-600' : 'bg-gray-700 text-white border-gray-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      {GENDER_LABELS[g]}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€)</label>
@@ -340,6 +374,10 @@ export default function Products() {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Größentabelle (URL, optional)</label>
+                <input type="url" placeholder="https://..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.size_guide ?? ''} onChange={e => setForm(f => ({ ...f, size_guide: e.target.value }))} />
               </div>
               <div className="flex items-center gap-3">
                 <input type="checkbox" id="tailoring" checked={form.needs_tailoring} onChange={e => setForm(f => ({ ...f, needs_tailoring: e.target.checked }))} className="rounded" />

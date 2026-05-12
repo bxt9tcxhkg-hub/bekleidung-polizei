@@ -26,6 +26,7 @@ export interface Profile {
   username: string
   name: string
   dienstnummer: string | null
+  gender: 'male' | 'female'
   roles: string[]
   active: boolean
   created_at: string | null
@@ -36,6 +37,7 @@ export interface Product {
   article_number: string
   name: string
   category: string
+  gender: 'male' | 'female' | 'unisex'
   sizes: string[]
   price: number
   needs_tailoring: boolean
