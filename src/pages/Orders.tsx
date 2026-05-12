@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, ChevronDown, ShoppingCart, List, FileText } from 'lucide-react'
+import { X, ChevronDown, ShoppingCart, List } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
@@ -140,10 +140,110 @@ export default function Orders() {
     }, {})
   )
 
+  function generateKurzbrief() {
+    const now = new Date()
+    const DE_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
+    const dateLong = `${String(now.getDate()).padStart(2,'0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
+    const dateShort = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`
+    const userName = profile?.name ?? '–'
+
+    const listedGroups = sammelGroups
+      .map(g => ({ ...g, orders: g.orders.filter(o => o.proc_listed) }))
+      .filter(g => g.orders.length > 0)
+
+    if (listedGroups.length === 0) return
+
+    const tableRows = listedGroups.map(g => {
+      const qty = g.orders.reduce((s, o) => s + o.quantity, 0)
+      const artNr = (g.orders[0] as any).products?.article_number ?? '–'
+      return `<tr><td>${artNr}</td><td>${g.productName}</td><td class="bold">${g.size}</td><td class="bold center">${qty}</td></tr>`
+    }).join('\n')
+
+    const html = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Kurzbrief</title>
+  <style>
+    @page { size: A4; margin-top: 11mm; margin-left: 25mm; margin-right: 30mm; margin-bottom: 30mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Calibri, Arial, sans-serif; font-size: 10pt; color: #000; line-height: 1.4; }
+    .letterhead { font-size: 8.5pt; padding-bottom: 2px; }
+    .return-address { font-size: 6pt; border-bottom: 1px solid #888; padding: 2px 0; color: #444; margin-bottom: 4px; }
+    .addr-row { display: flex; justify-content: space-between; align-items: flex-start; }
+    .recipient { font-size: 10pt; line-height: 1.6; }
+    .letter-date { font-size: 10pt; text-align: right; white-space: nowrap; }
+    .kurzbrief-title { font-size: 18pt; font-weight: bold; margin-top: 16px; }
+    .meta-table { border-collapse: collapse; margin-top: 4px; }
+    .meta-table td { font-size: 10pt; padding: 1px 0; vertical-align: top; }
+    .meta-table td:first-child { min-width: 65pt; padding-right: 8px; }
+    .body-text { font-size: 10pt; margin-top: 14px; }
+    .section-label { font-size: 10pt; font-weight: bold; margin-top: 8px; margin-bottom: 3px; }
+    .article-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+    .article-table th, .article-table td { border: 1px solid #000; padding: 2px 5px; vertical-align: middle; }
+    .article-table th { font-weight: normal; text-align: left; }
+    .col-artnr { width: 22%; }
+    .col-artikel { width: 47%; }
+    .col-groesse { width: 14%; }
+    .col-anzahl { width: 17%; text-align: center; }
+    .bold { font-weight: bold; }
+    .center { text-align: center; }
+    .thanks { font-size: 10pt; margin-top: 16px; }
+    .sig-table { width: 100%; border-collapse: collapse; margin-top: 40px; }
+    .sig-header td { font-size: 11pt; border-top: 1px solid #000; padding-top: 3px; vertical-align: top; }
+    .sig-empty td { height: 22px; }
+    .sig-name td { font-size: 11pt; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <div class="letterhead">STADT DORNBIRN &nbsp;/&nbsp; <strong>Polizei</strong> &nbsp;/&nbsp; Rathausplatz 2 &nbsp;A 6850 Dornbirn &nbsp;/&nbsp; ${userName} &nbsp;/&nbsp; T +43 5572 222 00 &nbsp;/&nbsp; F +43 5572 33 0 08 &nbsp;/&nbsp; polizei@dornbirn.at</div>
+  <div class="return-address">STADT DORNBIRN Polizei, Rathausplatz 2, A-6850 Dornbirn</div>
+  <div class="addr-row">
+    <div class="recipient">An<br>Bundesministerium für Inneres<br>Bekleidungswirtschaftsfonds der Exekutive<br>Liesinger Flur-Gasse 8<br>1230 Wien</div>
+    <div class="letter-date">Dornbirn, ${dateLong}</div>
+  </div>
+  <div class="kurzbrief-title">Kurzbrief</div>
+  <table class="meta-table">
+    <tr><td>Betreff:</td><td>Auftrag / Bestellung</td></tr>
+    <tr><td>&nbsp;</td><td>&nbsp;</td></tr>
+    <tr><td>Bezug:</td><td>---</td></tr>
+  </table>
+  <p class="body-text">Die ho. Dienststelle der Stadtpolizei Dornbirn übermittelt höflichst den Bestellauftrag vom ${dateShort} für folgende ug. Artikel:</p>
+  <p class="section-label">Standartmannschaft</p>
+  <table class="article-table">
+    <thead>
+      <tr>
+        <th class="col-artnr">Artikelnummer</th>
+        <th class="col-artikel">Artikel</th>
+        <th class="col-groesse">Größe</th>
+        <th class="col-anzahl">Anzahl</th>
+      </tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+  <p class="thanks">Vielen herzlichen Dank im Voraus</p>
+  <table class="sig-table">
+    <tr class="sig-header"><td>Bearbeiter/in:</td><td>Kommandant:</td></tr>
+    <tr class="sig-empty"><td></td><td></td></tr>
+    <tr class="sig-name"><td>${userName}</td><td>&nbsp;</td></tr>
+  </table>
+</body>
+</html>`
+
+    const win = window.open('', '_blank')
+    if (!win) { alert('Popup wurde blockiert – bitte Popup-Blocker deaktivieren.'); return }
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => win.print(), 400)
+  }
+
   async function submitGroup(group: SammelGroup) {
     const listed = group.orders.filter(o => o.proc_listed)
     if (listed.length === 0) { alert('Keine Bestellungen als "in Sammelbeschaffung" markiert.'); return }
     if (!confirm(`${listed.length} Bestellung(en) als "Beim Lieferanten" markieren?`)) return
+    generateKurzbrief()
     await Promise.all(
       listed.map(o =>
         supabase.from('orders').update({
@@ -154,126 +254,6 @@ export default function Orders() {
       )
     )
     load()
-  }
-
-  function generateKurzbrief() {
-    const quarterName = quarters.find(q => q.id === sammelQuarterId)?.name ?? ''
-    const now = new Date()
-    const DE_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
-    const dateLong = `${String(now.getDate()).padStart(2,'0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
-    const dateShort = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`
-    const userName = profile?.name ?? '–'
-
-    const tableRows = sammelGroups.map(g => `
-      <tr>
-        <td>${(g.orders[0] as any).products?.article_number ?? '–'}</td>
-        <td>${g.productName}</td>
-        <td>${g.size}</td>
-        <td class="center">${g.totalQty}</td>
-      </tr>`).join('')
-
-    const html = `<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <title>Kurzbrief ${quarterName}</title>
-  <style>
-    @page { size: A4; margin: 15mm 20mm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; font-size: 10pt; color: #000; line-height: 1.45; }
-    .header-bar { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #003399; padding-bottom: 8px; margin-bottom: 14px; }
-    .header-org { font-size: 15pt; font-weight: bold; color: #003399; }
-    .header-sub { font-size: 9pt; color: #555; margin-top: 2px; }
-    .header-contact { text-align: right; font-size: 8.5pt; color: #333; line-height: 1.6; }
-    .address-block { display: flex; justify-content: space-between; margin: 18px 0 10px; }
-    .recipient { font-size: 9.5pt; line-height: 1.6; }
-    .date-right { text-align: right; font-size: 10pt; padding-top: 2px; }
-    .doc-title { font-size: 15pt; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 3px; margin: 18px 0 6px; }
-    .meta-line { font-size: 10pt; margin-bottom: 2px; }
-    .body-text { margin: 14px 0 8px; font-size: 10pt; }
-    .section-label { font-weight: bold; font-size: 10pt; margin: 6px 0 3px; }
-    table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
-    thead tr { background: #003399; color: #fff; }
-    thead th { padding: 5px 8px; text-align: left; font-weight: bold; }
-    thead th.center { text-align: center; }
-    tbody tr:nth-child(even) { background: #f2f4f8; }
-    tbody td { padding: 3px 8px; border-bottom: 1px solid #ddd; }
-    tbody td.center { text-align: center; }
-    .thanks { margin-top: 18px; font-size: 10pt; }
-    .signatures { display: flex; justify-content: space-between; margin-top: 38px; }
-    .sig-block { width: 44%; }
-    .sig-role { font-size: 9pt; color: #555; margin-bottom: 28px; }
-    .sig-line { border-top: 1px solid #000; padding-top: 4px; font-size: 9.5pt; }
-    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-  </style>
-</head>
-<body>
-  <div class="header-bar">
-    <div>
-      <div class="header-org">STADTPOLIZEI DORNBIRN</div>
-      <div class="header-sub">Rathausplatz 2 · A-6850 Dornbirn</div>
-    </div>
-    <div class="header-contact">
-      ${userName}<br>
-      T +43 5572 222 00<br>
-      F +43 5572 33 0 08<br>
-      polizei@dornbirn.at
-    </div>
-  </div>
-
-  <div class="address-block">
-    <div class="recipient">
-      Bundesministerium für Inneres<br>
-      Bekleidungswirtschaftsfonds der Exekutive<br>
-      Liesinger Flur-Gasse 8<br>
-      1230 Wien
-    </div>
-    <div class="date-right">Dornbirn, ${dateLong}</div>
-  </div>
-
-  <div class="doc-title">Kurzbrief</div>
-  <div class="meta-line"><strong>Betreff:</strong> Auftrag / Bestellung</div>
-  <div class="meta-line"><strong>Bezug:</strong> &mdash;&mdash;&mdash;</div>
-
-  <div class="body-text">
-    Die ho. Dienststelle der Stadtpolizei Dornbirn übermittelt höflichst den Bestellauftrag
-    vom ${dateShort} für folgende ug. Artikel:
-  </div>
-
-  <div class="section-label">Standardmannschaft</div>
-  <table>
-    <thead>
-      <tr>
-        <th>Artikelnummer</th>
-        <th>Artikel</th>
-        <th>Größe</th>
-        <th class="center">Anzahl</th>
-      </tr>
-    </thead>
-    <tbody>${tableRows}</tbody>
-  </table>
-
-  <div class="thanks">Vielen herzlichen Dank im Voraus</div>
-
-  <div class="signatures">
-    <div class="sig-block">
-      <div class="sig-role">Bearbeiter/in:</div>
-      <div class="sig-line">${userName}</div>
-    </div>
-    <div class="sig-block">
-      <div class="sig-role">Kommandant:</div>
-      <div class="sig-line">&nbsp;</div>
-    </div>
-  </div>
-</body>
-</html>`
-
-    const win = window.open('', '_blank')
-    if (!win) { alert('Popup wurde blockiert – bitte Popup-Blocker deaktivieren.'); return }
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    setTimeout(() => win.print(), 400)
   }
 
   return (
@@ -434,14 +414,6 @@ export default function Orders() {
               {quarters.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
             </select>
             <span className="text-xs text-gray-400">Nur genehmigte Bestellungen (vom Genehmiger freigegeben)</span>
-            {sammelGroups.length > 0 && (
-              <button
-                onClick={generateKurzbrief}
-                className="ml-auto flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-              >
-                <FileText className="w-4 h-4" /> Kurzbrief als PDF
-              </button>
-            )}
           </div>
 
           {loading ? (
