@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Pencil, X, Check, Search, Upload, Download, Info } from 'lucide-react'
+import { Plus, Pencil, X, Check, Search, Upload, Download, Info, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -108,6 +108,8 @@ export default function Products() {
   const [importError, setImportError] = useState('')
   const [importing, setImporting] = useState(false)
   const [importDone, setImportDone] = useState<{ ok: number; err: number } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ mode: 'single'; product: Product } | { mode: 'all' } | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
@@ -157,6 +159,20 @@ export default function Products() {
 
   async function toggleActive(p: Product) {
     await supabase.from('products').update({ active: !p.active }).eq('id', p.id)
+    load()
+  }
+
+  async function confirmAndDelete() {
+    if (!confirmDelete) return
+    setDeleting(true)
+    if (confirmDelete.mode === 'single') {
+      await supabase.from('products').delete().eq('id', confirmDelete.product.id)
+    } else {
+      const ids = filtered.map(p => p.id)
+      await supabase.from('products').delete().in('id', ids)
+    }
+    setDeleting(false)
+    setConfirmDelete(null)
     load()
   }
 
@@ -219,6 +235,12 @@ export default function Products() {
           <p className="text-gray-500 text-sm mt-1">Bekleidungskatalog</p>
         </div>
         <div className="flex gap-2">
+          {isStrictAdmin && filtered.length > 0 && (
+            <button onClick={() => setConfirmDelete({ mode: 'all' })} className="flex items-center gap-2 border border-red-300 text-red-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
+              <Trash2 className="w-4 h-4" />
+              {orgFilter === 'all' ? 'Alle löschen' : `${orgFilter} löschen`}
+            </button>
+          )}
           {isStrictAdmin && (
             <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError(''); setImportOrg('Stadtpolizei') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <Upload className="w-4 h-4" /> Import
@@ -306,8 +328,11 @@ export default function Products() {
                         <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => toggleActive(p)} className={`p-1.5 rounded-md text-xs font-medium ${p.active ? 'hover:bg-red-50 text-red-500' : 'hover:bg-green-50 text-green-600'}`}>
+                        <button onClick={() => toggleActive(p)} className={`p-1.5 rounded-md text-xs font-medium ${p.active ? 'hover:bg-orange-50 text-orange-500' : 'hover:bg-green-50 text-green-600'}`}>
                           {p.active ? <X className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <button onClick={() => setConfirmDelete({ mode: 'single', product: p })} className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -392,6 +417,35 @@ export default function Products() {
                   {importing ? 'Importiere...' : `${importRows.length} Produkte importieren`}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Produkt{confirmDelete.mode === 'all' ? 'e' : ''} löschen</h3>
+                <p className="text-sm text-gray-500">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              {confirmDelete.mode === 'single'
+                ? <>Soll <span className="font-semibold">{confirmDelete.product.name}</span> wirklich gelöscht werden?</>
+                : <>Sollen wirklich <span className="font-semibold">alle {filtered.length} Produkte</span>{orgFilter !== 'all' ? ` (${orgFilter})` : ''} gelöscht werden?</>
+              }
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={confirmAndDelete} disabled={deleting} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                {deleting ? 'Löschen...' : 'Löschen'}
+              </button>
             </div>
           </div>
         </div>
