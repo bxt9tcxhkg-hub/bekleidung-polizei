@@ -43,7 +43,7 @@ function parseCsvUsers(text: string): Record<string, string>[] {
   })
 }
 
-const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], active: true })
+const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', active: true })
 
 export default function Users() {
   const { isStrictAdmin } = _useAuth()
@@ -78,7 +78,7 @@ export default function Users() {
   }
 
   function openEdit(u: Profile) {
-    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, active: u.active })
+    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, gender: u.gender ?? 'male', active: u.active })
     setEditId(u.id)
     setError('')
     setShowForm(true)
@@ -88,8 +88,8 @@ export default function Users() {
     setError('')
     if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
     setSaving(true)
-    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
-    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, active: form.active }
+    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, active: form.active }
+    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, active: form.active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -212,6 +212,7 @@ export default function Users() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Benutzername</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstnummer</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Rollen</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-3" />
@@ -230,6 +231,11 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username}</td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {u.gender === 'female' ? 'Dame' : 'Herr'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
                       {u.roles.map(r => (
@@ -344,6 +350,17 @@ export default function Users() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Dienstnummer</label>
                   <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.dienstnummer} onChange={e => setForm(f => ({ ...f, dienstnummer: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
+                <div className="flex gap-2">
+                  {(['male', 'female'] as const).map(g => (
+                    <button key={g} type="button" onClick={() => setForm(f => ({ ...f, gender: g }))}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : 'bg-pink-600 text-white border-pink-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      {g === 'male' ? 'Herr' : 'Dame'}
+                    </button>
+                  ))}
                 </div>
               </div>
               {!editId && (
