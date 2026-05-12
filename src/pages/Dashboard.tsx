@@ -5,15 +5,20 @@ import { useAuth } from '../contexts/AuthContext'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
 import type { Quarter, Order } from '../lib/types'
 
+const CURRENT_YEAR = new Date().getFullYear()
+const DEFAULT_BUDGET = 350
+
 function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
   const [cartCount, setCartCount] = useState(0)
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
+  const [totalBudget, setTotalBudget] = useState(DEFAULT_BUDGET)
+  const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [cartRes, quarterRes, ordersRes] = await Promise.all([
+      const [cartRes, quarterRes, ordersRes, budgetRes, usedRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('user_id', profile.id).eq('status', 'pending'),
         supabase.from('quarters').select('*').eq('status', 'active').single(),
         supabase.from('orders').select('*, products(name, category), quarters(name)')
@@ -21,10 +26,17 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
           .not('status', 'in', '(pending,cancelled)')
           .order('created_at', { ascending: false })
           .limit(5),
+        supabase.from('user_budgets').select('total_budget').eq('user_id', profile.id).eq('year', CURRENT_YEAR).maybeSingle(),
+        supabase.from('orders').select('unit_price, quantity')
+          .eq('user_id', profile.id)
+          .not('status', 'in', '("pending","cancelled")')
+          .gte('created_at', `${CURRENT_YEAR}-01-01`),
       ])
       setCartCount(cartRes.count ?? 0)
       setActiveQuarter(quarterRes.data ?? null)
       setRecentOrders(ordersRes.data ?? [])
+      setTotalBudget(budgetRes.data?.total_budget ?? DEFAULT_BUDGET)
+      setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
       setLoading(false)
     }
     load()
@@ -32,8 +44,31 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
+  const remaining = totalBudget - usedBudget
+  const budgetPct = Math.min(100, (usedBudget / totalBudget) * 100)
+
   return (
     <div className="space-y-6">
+      {/* Budget */}
+      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Euro className="w-4 h-4 text-gray-400" />
+            <p className="font-semibold text-gray-900">Jahresbudget {CURRENT_YEAR}</p>
+          </div>
+          <p className="text-sm font-bold text-gray-700">€ {usedBudget.toFixed(2)} / € {totalBudget.toFixed(2)}</p>
+        </div>
+        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
+            style={{ width: `${budgetPct}%` }} />
+        </div>
+        <p className={`text-sm mt-2 font-medium ${remaining <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
+          {remaining <= 0
+            ? 'Budget aufgebraucht – weitere Bestellungen benötigen Genehmigung'
+            : `€ ${remaining.toFixed(2)} verbleibend`}
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl p-5 bg-blue-50 text-blue-700">
           <div className="flex items-center justify-between mb-3">
@@ -41,7 +76,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
             <div className="bg-blue-100 p-2 rounded-lg"><ShoppingCart className="w-4 h-4" /></div>
           </div>
           <p className="text-2xl font-bold">{cartCount}</p>
-          <p className="text-xs mt-1 opacity-70">{cartCount === 1 ? 'Artikel' : 'Artikel'} noch nicht eingereicht</p>
+          <p className="text-xs mt-1 opacity-70">Artikel noch nicht eingereicht</p>
         </div>
         <div className="rounded-xl p-5 bg-purple-50 text-purple-700">
           <div className="flex items-center justify-between mb-3">

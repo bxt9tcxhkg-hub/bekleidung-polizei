@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package,
   CalendarRange, Scissors, Footprints, Users, ClipboardList,
-  LogOut, Shield, Menu, X, CheckSquare, UserCircle,
+  LogOut, Shield, Menu, X, CheckSquare, UserCircle, Wallet,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
@@ -55,7 +55,8 @@ export default function Layout() {
       label: 'Genehmiger',
       color: 'text-green-300',
       items: [
-        { to: '/genehmigungen', label: 'Genehmigungen', icon: CheckSquare },
+        { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
+        { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
         { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
       ],
     }] : []),

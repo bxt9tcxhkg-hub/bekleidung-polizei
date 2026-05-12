@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag, AlertTriangle, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import type { Order, Product, Quarter } from '../lib/types'
+import type { Order, Product, Quarter, UserBudget } from '../lib/types'
+
+const CURRENT_YEAR = new Date().getFullYear()
+const DEFAULT_BUDGET = 350
 
 type CartItem = Order & { products?: Product; quarters?: Quarter }
 
@@ -12,12 +15,35 @@ export default function Shop() {
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [, setQuarters] = useState<Quarter[]>([])
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
+  const [budget, setBudget] = useState<UserBudget | null>(null)
+  const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
   const [cartOpen, setCartOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>('Alle')
   const [adding, setAdding] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [submitResult, setSubmitResult] = useState<'approved' | 'pending_approval' | null>(null)
   const [sizeModal, setSizeModal] = useState<{ product: Product; size: string; quantity: number } | null>(null)
+
+  async function loadBudget() {
+    const { data: budgetData } = await supabase
+      .from('user_budgets')
+      .select('*')
+      .eq('user_id', profile!.id)
+      .eq('year', CURRENT_YEAR)
+      .maybeSingle()
+    setBudget(budgetData)
+
+    // Verbrauchtes Budget: alle nicht-stornierten, nicht-pending Bestellungen des laufenden Jahres
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('unit_price, quantity')
+      .eq('user_id', profile!.id)
+      .not('status', 'in', '("pending","cancelled")')
+      .gte('created_at', `${CURRENT_YEAR}-01-01`)
+    const used = (orders ?? []).reduce((s, o) => s + (o.unit_price * o.quantity), 0)
+    setUsedBudget(used)
+  }
 
   async function loadCart() {
     const { data } = await supabase
@@ -39,13 +65,18 @@ export default function Shop() {
       setProducts(pRes.data ?? [])
       const qs = qRes.data ?? []
       setQuarters(qs)
-      const active = qs.find(q => q.status === 'active') ?? null
-      setActiveQuarter(active)
-      await loadCart()
+      setActiveQuarter(qs.find(q => q.status === 'active') ?? null)
+      await Promise.all([loadCart(), loadBudget()])
       setLoading(false)
     }
     if (profile) init()
   }, [profile])
+
+  const totalBudget = budget?.total_budget ?? DEFAULT_BUDGET
+  const remainingBudget = totalBudget - usedBudget
+  const cartTotal = cartItems.reduce((s, o) => s + (o.products?.price ?? 0) * o.quantity, 0)
+  const budgetAfterCart = remainingBudget - cartTotal
+  const needsApproval = budgetAfterCart < 0
 
   const categories = ['Alle', ...Array.from(new Set(products.map(p => p.category)))]
   const filtered = selectedCategory === 'Alle' ? products : products.filter(p => p.category === selectedCategory)
@@ -63,6 +94,7 @@ export default function Shop() {
       quarter_id: activeQuarter.id,
       size: sizeModal.size,
       quantity: sizeModal.quantity,
+      unit_price: sizeModal.product.price,
       status: 'pending',
     })
     setSizeModal(null)
@@ -85,30 +117,50 @@ export default function Shop() {
   async function submitCart() {
     if (cartItems.length === 0) return
     setSubmitting(true)
+    const newStatus = needsApproval ? 'pending_approval' : 'approved'
     await supabase
       .from('orders')
-      .update({ status: 'pending_approval', updated_at: new Date().toISOString() })
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('user_id', profile!.id)
       .eq('status', 'pending')
     setSubmitting(false)
     setCartOpen(false)
-    loadCart()
+    setSubmitResult(newStatus)
+    await Promise.all([loadCart(), loadBudget()])
   }
 
   const cartCount = cartItems.reduce((s, o) => s + o.quantity, 0)
-  const cartTotal = cartItems.reduce((s, o) => s + (o.products?.price ?? 0) * o.quantity, 0)
+  const budgetPct = Math.min(100, (usedBudget / totalBudget) * 100)
 
   return (
     <div>
+      {/* Submit result banner */}
+      {submitResult && (
+        <div className={`mb-4 flex items-start gap-3 px-4 py-3 rounded-xl ${submitResult === 'approved' ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+          {submitResult === 'approved'
+            ? <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+            : <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />}
+          <div>
+            <p className={`font-semibold text-sm ${submitResult === 'approved' ? 'text-green-800' : 'text-amber-800'}`}>
+              {submitResult === 'approved' ? 'Bestellung eingereicht' : 'Genehmigung erforderlich'}
+            </p>
+            <p className={`text-xs mt-0.5 ${submitResult === 'approved' ? 'text-green-700' : 'text-amber-700'}`}>
+              {submitResult === 'approved'
+                ? 'Deine Bestellung wurde direkt weitergeleitet und wird vom Admin bearbeitet.'
+                : 'Dein Restbudget reicht nicht aus. Ein Genehmiger muss die Bestellung zuerst freigeben.'}
+            </p>
+          </div>
+          <button onClick={() => setSubmitResult(null)} className="ml-auto p-1 rounded-md hover:bg-black/5"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Bekleidungskatalog</h1>
-          {activeQuarter ? (
-            <p className="text-gray-500 text-sm mt-1">Aktives Quartal: <span className="font-medium text-gray-700">{activeQuarter.name}</span></p>
-          ) : (
-            <p className="text-amber-600 text-sm mt-1">Kein aktives Quartal – Bestellungen derzeit nicht möglich</p>
-          )}
+          {activeQuarter
+            ? <p className="text-gray-500 text-sm mt-1">Aktives Quartal: <span className="font-medium text-gray-700">{activeQuarter.name}</span></p>
+            : <p className="text-amber-600 text-sm mt-1">Kein aktives Quartal – Bestellungen derzeit nicht möglich</p>}
         </div>
         <button
           onClick={() => setCartOpen(true)}
@@ -124,18 +176,30 @@ export default function Shop() {
         </button>
       </div>
 
+      {/* Budget bar */}
+      {!loading && (
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-6">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-medium text-gray-600">Jahresbudget {CURRENT_YEAR}</span>
+            <span className="text-xs text-gray-500">€ {usedBudget.toFixed(2)} / € {totalBudget.toFixed(2)}</span>
+          </div>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
+              style={{ width: `${budgetPct}%` }}
+            />
+          </div>
+          <p className={`text-xs mt-1.5 font-medium ${remainingBudget <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
+            {remainingBudget <= 0 ? 'Budget aufgebraucht – Bestellungen benötigen Genehmigung' : `€ ${remainingBudget.toFixed(2)} verbleibend`}
+          </p>
+        </div>
+      )}
+
       {/* Category filter */}
       <div className="flex gap-2 flex-wrap mb-6">
         {categories.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setSelectedCategory(cat)}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-              selectedCategory === cat
-                ? 'bg-blue-800 text-white'
-                : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'
-            }`}
-          >
+          <button key={cat} onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
             {cat}
           </button>
         ))}
@@ -148,7 +212,6 @@ export default function Shop() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map(product => (
             <div key={product.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
-              {/* Product color block */}
               <div className="h-32 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
                 <ShoppingBag className="w-12 h-12 text-blue-300 opacity-60" />
               </div>
@@ -159,7 +222,7 @@ export default function Shop() {
                 </div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-xs text-gray-400 flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
-                  {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium">· Schneider</span>}
+                  {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium">· Wappenänderung</span>}
                 </div>
                 <div className="flex flex-wrap gap-1 mb-4">
                   {product.sizes.slice(0, 6).map(s => (
@@ -172,8 +235,7 @@ export default function Shop() {
                   disabled={!activeQuarter || adding === product.id}
                   className="mt-auto w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-medium py-2 rounded-xl transition-colors"
                 >
-                  <Plus className="w-4 h-4" />
-                  In den Warenkorb
+                  <Plus className="w-4 h-4" /> In den Warenkorb
                 </button>
               </div>
             </div>
@@ -181,30 +243,24 @@ export default function Shop() {
         </div>
       )}
 
-      {/* Size selection modal */}
+      {/* Size modal */}
       {sizeModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
-              <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                <X className="w-4 h-4" />
-              </button>
+              <div>
+                <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">€ {Number(sizeModal.product.price).toFixed(2)} · {sizeModal.product.category}</p>
+              </div>
+              <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-5 py-4 space-y-4">
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-2">Größe wählen</p>
                 <div className="flex flex-wrap gap-2">
                   {sizeModal.product.sizes.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                        sizeModal.size === s
-                          ? 'bg-blue-800 text-white border-blue-800'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
-                      }`}
-                    >
+                    <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
                       {s}
                     </button>
                   ))}
@@ -213,27 +269,17 @@ export default function Shop() {
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-2">Menge</p>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: Math.max(1, m.quantity - 1) } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50">
-                    <Minus className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: Math.max(1, m.quantity - 1) } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50"><Minus className="w-4 h-4" /></button>
                   <span className="text-lg font-semibold w-8 text-center">{sizeModal.quantity}</span>
-                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: m.quantity + 1 } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50">
-                    <Plus className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: m.quantity + 1 } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50"><Plus className="w-4 h-4" /></button>
                 </div>
               </div>
             </div>
             <div className="px-5 py-4 border-t flex gap-3">
-              <button onClick={() => setSizeModal(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">
-                Abbrechen
-              </button>
-              <button
-                onClick={addToCart}
-                disabled={!sizeModal.size || adding === sizeModal.product.id}
-                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2"
-              >
-                <ShoppingCart className="w-4 h-4" />
-                Hinzufügen
+              <button onClick={() => setSizeModal(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={addToCart} disabled={!sizeModal.size || adding === sizeModal.product.id}
+                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2">
+                <ShoppingCart className="w-4 h-4" /> Hinzufügen
               </button>
             </div>
           </div>
@@ -251,9 +297,7 @@ export default function Shop() {
                 <h2 className="font-bold text-gray-900">Warenkorb</h2>
                 {cartCount > 0 && <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full">{cartCount}</span>}
               </div>
-              <button onClick={() => setCartOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setCartOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -273,16 +317,10 @@ export default function Shop() {
                         <p className="text-xs font-semibold text-gray-700 mt-1">€ {((item.products?.price ?? 0) * item.quantity).toFixed(2)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30">
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
+                        <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30"><Minus className="w-3.5 h-3.5" /></button>
                         <span className="text-sm font-medium w-5 text-center">{item.quantity}</span>
-                        <button onClick={() => updateQty(item, 1)} className="p-1 rounded-md hover:bg-gray-100">
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => removeItem(item)} className="p-1 ml-1 rounded-md hover:bg-red-50 text-red-400 hover:text-red-600">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <button onClick={() => updateQty(item, 1)} className="p-1 rounded-md hover:bg-gray-100"><Plus className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => removeItem(item)} className="p-1 ml-1 rounded-md hover:bg-red-50 text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                   ))}
@@ -293,16 +331,25 @@ export default function Shop() {
             {cartItems.length > 0 && (
               <div className="border-t px-5 py-4 space-y-3 bg-gray-50">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">Gesamtwert</span>
-                  <span className="text-lg font-bold text-gray-900">€ {cartTotal.toFixed(2)}</span>
+                  <span className="text-sm text-gray-600">Warenkorb gesamt</span>
+                  <span className="font-bold text-gray-900">€ {cartTotal.toFixed(2)}</span>
                 </div>
-                <button
-                  onClick={submitCart}
-                  disabled={submitting}
-                  className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60"
-                >
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Restbudget nach Bestellung</span>
+                  <span className={`font-semibold ${budgetAfterCart < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    € {budgetAfterCart.toFixed(2)}
+                  </span>
+                </div>
+                {needsApproval && (
+                  <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700">Budget überschritten – Bestellung wird zur Genehmigung weitergeleitet.</p>
+                  </div>
+                )}
+                <button onClick={submitCart} disabled={submitting}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60">
                   <Send className="w-4 h-4" />
-                  {submitting ? 'Wird eingereicht...' : 'Zur Genehmigung einreichen'}
+                  {submitting ? 'Wird eingereicht...' : needsApproval ? 'Zur Genehmigung einreichen' : 'Bestellung einreichen'}
                 </button>
               </div>
             )}

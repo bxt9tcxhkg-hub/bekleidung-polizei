@@ -15,6 +15,7 @@ import ShoeRefunds from './pages/ShoeRefunds'
 import Users from './pages/Users'
 import AuditLog from './pages/AuditLog'
 import Approvals from './pages/Approvals'
+import Budgets from './pages/Budgets'
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
             {/* Genehmiger */}
             <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
             <Route path="schuherstattungen" element={<ProtectedRoute genehmigerOnly><ShoeRefunds /></ProtectedRoute>} />
+            <Route path="budgets" element={<ProtectedRoute genehmigerOnly><Budgets /></ProtectedRoute>} />
 
             {/* Sachbearbeiter */}
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />

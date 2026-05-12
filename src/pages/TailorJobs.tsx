@@ -1,48 +1,87 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, Scissors, CheckCircle } from 'lucide-react'
+import { Scissors, CheckCircle, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { TailorJob, Quarter } from '../lib/types'
+import type { Order } from '../lib/types'
+
+type TailorOrder = Order & {
+  products?: { name: string; category: string }
+  profiles?: { name: string; dienstnummer: string | null }
+  quarters?: { name: string }
+}
+
+interface TailorJob {
+  id: string
+  quarter_id: string
+  status: 'open' | 'done'
+  note: string | null
+  created_at: string | null
+  completed_at: string | null
+  quarters?: { name: string }
+  orders?: TailorOrder[]
+}
 
 export default function TailorJobs() {
   const [jobs, setJobs] = useState<TailorJob[]>([])
-  const [quarters, setQuarters] = useState<Quarter[]>([])
+  const [unassigned, setUnassigned] = useState<TailorOrder[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ quarter_id: '', note: '' })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('tailor_jobs')
-      .select('*, quarters(id,name), orders(id,status,size,quantity,products(name))')
-      .order('created_at', { ascending: false })
-    setJobs(data ?? [])
+    const [jobsRes, unassignedRes] = await Promise.all([
+      supabase
+        .from('tailor_jobs')
+        .select('*, quarters(name), orders(*, products(name,category), profiles(name,dienstnummer), quarters(name))')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('orders')
+        .select('*, products(name,category), profiles(name,dienstnummer), quarters(name)')
+        .eq('status', 'at_tailor')
+        .is('tailor_job_id', null),
+    ])
+    setJobs((jobsRes.data ?? []) as TailorJob[])
+    setUnassigned((unassignedRes.data ?? []) as TailorOrder[])
     setLoading(false)
   }
 
-  useEffect(() => {
-    async function init() {
-      await load()
-      const { data } = await supabase.from('quarters').select('*').order('year', { ascending: false })
-      setQuarters(data ?? [])
-    }
-    init()
-  }, [])
+  useEffect(() => { load() }, [])
 
-  async function create() {
-    setError('')
-    if (!form.quarter_id) { setError('Quartal ist Pflicht.'); return }
-    setSaving(true)
-    const { error } = await supabase.from('tailor_jobs').insert({ quarter_id: form.quarter_id, note: form.note || null, status: 'open' })
-    if (error) setError(error.message)
-    else { setShowForm(false); setForm({ quarter_id: '', note: '' }); load() }
-    setSaving(false)
+  async function createJobFromUnassigned() {
+    if (unassigned.length === 0) return
+    setCreating(true)
+    // Einen Job pro Quartal anlegen
+    const byQuarter: Record<string, TailorOrder[]> = {}
+    for (const o of unassigned) {
+      if (!byQuarter[o.quarter_id]) byQuarter[o.quarter_id] = []
+      byQuarter[o.quarter_id].push(o)
+    }
+    for (const [quarterId, orders] of Object.entries(byQuarter)) {
+      const { data: job } = await supabase
+        .from('tailor_jobs')
+        .insert({ quarter_id: quarterId, status: 'open' })
+        .select()
+        .single()
+      if (job) {
+        await Promise.all(
+          orders.map(o => supabase.from('orders').update({ tailor_job_id: job.id }).eq('id', o.id))
+        )
+      }
+    }
+    setCreating(false)
+    load()
   }
 
   async function markDone(job: TailorJob) {
+    if (!confirm(`Schneiderjob als erledigt markieren? Alle ${job.orders?.length ?? 0} Artikel werden auf "Bereit zur Ausgabe" gesetzt.`)) return
     await supabase.from('tailor_jobs').update({ status: 'done', completed_at: new Date().toISOString().split('T')[0] }).eq('id', job.id)
+    if (job.orders && job.orders.length > 0) {
+      await Promise.all(
+        job.orders
+          .filter(o => o.status === 'at_tailor')
+          .map(o => supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id))
+      )
+    }
     load()
   }
 
@@ -51,90 +90,102 @@ export default function TailorJobs() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Schneiderjobs</h1>
-          <p className="text-gray-500 text-sm mt-1">Schneideraufträge verwalten</p>
+          <p className="text-gray-500 text-sm mt-1">Artikel mit Wappenänderung</p>
         </div>
-        <button onClick={() => { setError(''); setShowForm(true) }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Neuer Job
-        </button>
+        {unassigned.length > 0 && (
+          <button onClick={createJobFromUnassigned} disabled={creating}
+            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-60">
+            <Scissors className="w-4 h-4" />
+            {creating ? 'Wird erstellt...' : `Job erstellen (${unassigned.length} Artikel)`}
+          </button>
+        )}
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
-      ) : (
-        <div className="grid gap-4">
-          {jobs.length === 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-12 text-gray-400">
-              <Scissors className="w-10 h-10 mb-3" />
-              <p>Keine Schneiderjobs</p>
-            </div>
-          )}
-          {jobs.map(job => (
-            <div key={job.id} className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h2 className="font-bold text-gray-900">{(job as any).quarters?.name ?? '–'}</h2>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${job.status === 'open' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
-                      {job.status === 'open' ? 'Offen' : 'Erledigt'}
-                    </span>
-                  </div>
-                  {job.note && <p className="text-sm text-gray-500 mb-3">{job.note}</p>}
-                  {job.completed_at && (
-                    <p className="text-xs text-gray-400">Abgeschlossen: {new Date(job.completed_at).toLocaleDateString('de-AT')}</p>
-                  )}
-
-                  {(job as any).orders && (job as any).orders.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs font-semibold text-gray-500 mb-2">ZUGEHÖRIGE BESTELLUNGEN ({(job as any).orders.length})</p>
-                      <div className="flex flex-wrap gap-2">
-                        {(job as any).orders.map((o: any) => (
-                          <span key={o.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-md">
-                            {o.products?.name} · Gr. {o.size} · {o.quantity}×
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {job.status === 'open' && (
-                  <button onClick={() => markDone(job)} className="flex items-center gap-2 text-sm font-medium bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors flex-shrink-0">
-                    <CheckCircle className="w-4 h-4" /> Erledigt
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+      {/* Nicht zugewiesene Artikel */}
+      {unassigned.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+          <p className="text-sm font-semibold text-amber-800 mb-2">
+            {unassigned.length} Artikel warten auf Zuweisung zu einem Schneiderjob
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {unassigned.map(o => (
+              <span key={o.id} className="text-xs bg-white border border-amber-200 text-amber-700 px-2 py-1 rounded-md">
+                {o.products?.name} · Gr. {o.size} · {o.profiles?.name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Neuer Schneiderjob</h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Quartal *</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.quarter_id} onChange={e => setForm(f => ({ ...f, quarter_id: e.target.value }))}>
-                  <option value="">– Bitte wählen –</option>
-                  {quarters.map(q => <option key={q.id} value={q.id}>{q.name}</option>)}
-                </select>
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
+      ) : jobs.length === 0 && unassigned.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-12 text-gray-400">
+          <Scissors className="w-10 h-10 mb-3" />
+          <p>Keine Schneiderjobs vorhanden</p>
+          <p className="text-sm mt-1">Artikel gelangen hierher wenn sie beim Lieferanten ankommen und eine Wappenänderung benötigen</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {jobs.map(job => (
+            <div key={job.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${job.status === 'open' ? 'bg-orange-100' : 'bg-green-100'}`}>
+                    <Scissors className={`w-4 h-4 ${job.status === 'open' ? 'text-orange-700' : 'text-green-700'}`} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-gray-900">{job.quarters?.name ?? '–'}</p>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${job.status === 'open' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                        {job.status === 'open' ? 'Offen' : 'Erledigt'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {job.orders?.length ?? 0} Artikel
+                      {job.completed_at && ` · Abgeschlossen ${new Date(job.completed_at).toLocaleDateString('de-AT')}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {job.status === 'open' && (
+                    <button onClick={() => markDone(job)}
+                      className="flex items-center gap-1.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+                      <CheckCircle className="w-4 h-4" /> Erledigt
+                    </button>
+                  )}
+                  <button onClick={() => setExpanded(expanded === job.id ? null : job.id)}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500">
+                    <ChevronDown className={`w-4 h-4 transition-transform ${expanded === job.id ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notiz</label>
-                <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} placeholder="Optionale Notiz..." />
-              </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+
+              {expanded === job.id && job.orders && job.orders.length > 0 && (
+                <div className="border-t border-gray-100">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="text-left px-5 py-2 text-xs font-semibold text-gray-500">Benutzer</th>
+                      <th className="text-left px-5 py-2 text-xs font-semibold text-gray-500">Artikel</th>
+                      <th className="text-left px-5 py-2 text-xs font-semibold text-gray-500">Gr. / Menge</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {job.orders.map(o => (
+                        <tr key={o.id} className="hover:bg-gray-50">
+                          <td className="px-5 py-2.5">
+                            <p className="font-medium text-gray-900">{o.profiles?.name}</p>
+                            {o.profiles?.dienstnummer && <p className="text-xs text-gray-400">DG {o.profiles.dienstnummer}</p>}
+                          </td>
+                          <td className="px-5 py-2.5 text-gray-700">{o.products?.name}</td>
+                          <td className="px-5 py-2.5 text-gray-500">{o.size} · {o.quantity}×</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={create} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
-                {saving ? 'Erstellen...' : 'Erstellen'}
-              </button>
-            </div>
-          </div>
+          ))}
         </div>
       )}
     </div>
