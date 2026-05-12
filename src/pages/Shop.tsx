@@ -72,9 +72,11 @@ export default function Shop() {
   const needsApproval = budgetAfterCart < 0
 
   const userGender = profile?.gender ?? 'male'
+  const userOrg = profile?.organisation ?? 'Stadtpolizei'
+  const orgFiltered = products.filter(p => !p.organisation || p.organisation === userOrg)
   const genderFiltered = genderFilterActive
-    ? products.filter(p => p.gender === 'unisex' || p.gender === userGender)
-    : products
+    ? orgFiltered.filter(p => p.gender === 'unisex' || p.gender === userGender)
+    : orgFiltered
 
   const categories = ['Alle', ...Array.from(new Set(genderFiltered.map(p => p.category)))]
   const filtered = selectedCategory === 'Alle' ? genderFiltered : genderFiltered.filter(p => p.category === selectedCategory)

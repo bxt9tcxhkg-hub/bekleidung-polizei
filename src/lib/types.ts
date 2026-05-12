@@ -37,6 +37,7 @@ export interface Profile {
   name: string
   dienstnummer: string | null
   gender: 'male' | 'female'
+  organisation: string
   roles: string[]
   active: boolean
   created_at: string | null

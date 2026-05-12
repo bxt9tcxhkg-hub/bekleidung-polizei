@@ -5,11 +5,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
 import type { Profile } from '../lib/types'
 
-const CSV_TEMPLATE = `name;benutzername;email;dienstnummer;rollen
-Max Mustermann;mmustermann;max@beispiel.at;1234;user
-Maria Muster;mmuster;maria@beispiel.at;5678;user|genehmiger`
+const CSV_TEMPLATE = `name;benutzername;email;dienstnummer;organisation;rollen
+Max Mustermann;mmustermann;max@beispiel.at;1234;Stadtpolizei;user
+Maria Muster;mmuster;maria@beispiel.at;5678;Parkaufsicht;user|genehmiger`
 
-interface ImportUser { name: string; username: string; email: string; dienstnummer: string; roles: string[] }
+interface ImportUser { name: string; username: string; email: string; dienstnummer: string; organisation: string; roles: string[] }
 
 function rowToUser(row: Record<string, string>): ImportUser | null {
   const get = (...keys: string[]) => {
@@ -23,11 +23,14 @@ function rowToUser(row: Record<string, string>): ImportUser | null {
   const username = get('benutzername', 'username', 'benutzer', 'login')
   if (!name || !username) return null
   const rollen = get('rollen', 'roles', 'rolle', 'role')
+  const org = get('organisation', 'org', 'abteilung', 'einheit')
+  const normOrg = org.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei'
   return {
     name,
     username,
     email: get('email', 'e-mail', 'mail'),
     dienstnummer: get('dienstnummer', 'dg', 'dienst-nr', 'dienstnr'),
+    organisation: normOrg,
     roles: rollen ? rollen.split('|').map(s => s.trim()).filter(Boolean) : ['user'],
   }
 }
@@ -43,7 +46,8 @@ function parseCsvUsers(text: string): Record<string, string>[] {
   })
 }
 
-const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', active: true })
+const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
+const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
 
 export default function Users() {
   const { isStrictAdmin } = _useAuth()
@@ -78,7 +82,7 @@ export default function Users() {
   }
 
   function openEdit(u: Profile) {
-    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, gender: u.gender ?? 'male', active: u.active })
+    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, gender: u.gender ?? 'male', organisation: u.organisation ?? 'Stadtpolizei', active: u.active })
     setEditId(u.id)
     setError('')
     setShowForm(true)
@@ -88,8 +92,8 @@ export default function Users() {
     setError('')
     if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
     setSaving(true)
-    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, active: form.active }
-    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, active: form.active }
+    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, organisation: form.organisation, active: form.active }
+    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, organisation: form.organisation, active: form.active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -166,7 +170,7 @@ export default function Users() {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ name: row.name, username: row.username, email: row.email || undefined, dienstnummer: row.dienstnummer || null, roles: row.roles }),
+        body: JSON.stringify({ name: row.name, username: row.username, email: row.email || undefined, dienstnummer: row.dienstnummer || null, organisation: row.organisation, roles: row.roles }),
       })
       if (res.ok) done++; else err++
       setImportProgress({ done: done + err, total: importRows.length, err })
@@ -212,6 +216,7 @@ export default function Users() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Benutzername</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstnummer</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Rollen</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
@@ -231,6 +236,11 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username}</td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {u.organisation ?? 'Stadtpolizei'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
                       {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
@@ -301,13 +311,13 @@ export default function Users() {
                   <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Benutzer erkannt – Vorschau:</p>
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <table className="w-full text-xs">
-                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">E-Mail</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
+                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">Organisation</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {importRows.map((r, i) => (
                           <tr key={i} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-medium">{r.name}</td>
                             <td className="px-3 py-2">{r.username}</td>
-                            <td className="px-3 py-2 text-gray-500">{r.email || '–'}</td>
+                            <td className="px-3 py-2">{r.organisation}</td>
                             <td className="px-3 py-2">{r.dienstnummer || '–'}</td>
                             <td className="px-3 py-2">{r.roles.join(', ')}</td>
                           </tr>
@@ -362,7 +372,19 @@ export default function Users() {
                     </button>
                   ))}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel)</p>
+                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel).</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
+                <div className="flex gap-2">
+                  {ORGS.map(org => (
+                    <button key={org} type="button" onClick={() => setForm(f => ({ ...f, organisation: org }))}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      {org}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog sichtbar sind.</p>
               </div>
               {!editId && (
                 <div>

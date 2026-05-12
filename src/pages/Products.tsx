@@ -30,16 +30,18 @@ function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'create
   const preis = get('preis', 'price', 'betrag')
   const schneider = get('schneider', 'tailoring', 'wappen', 'wappenänderung')
   const geschlecht = get('geschlecht', 'gender', 'hr/da')
+  const genderFromCol = GENDER_MAP[geschlecht.toLowerCase()]
+  const genderFromName = /\bHR\b/.test(name) ? 'male' : /\bDA\b/.test(name) ? 'female' : null
   return {
     article_number: artikel_nr,
     name,
     category: get('kategorie', 'category', 'kategory') || 'Sonstiges',
-    gender: GENDER_MAP[geschlecht.toLowerCase()] ?? 'unisex',
+    gender: genderFromCol ?? genderFromName ?? 'unisex',
     sizes: groessen ? groessen.split('|').map(s => s.trim()).filter(Boolean) : [],
     price: parseFloat(preis.replace(',', '.')) || 0,
     needs_tailoring: ['ja', 'yes', '1', 'true'].includes(schneider.toLowerCase()),
     size_guide: get('grössentabelle', 'groessentabelle', 'size_guide', 'größentabelle') || null,
-    organisation: get('organisation', 'org') || 'Stadtpolizei',
+    organisation: (() => { const o = get('organisation', 'org', 'abteilung'); return o.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei' })(),
     active: true,
   }
 }

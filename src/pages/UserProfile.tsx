@@ -81,6 +81,10 @@ export default function UserProfile() {
               <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel)</p>
             </div>
 
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
+              <p className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded-lg">{profile?.organisation ?? 'Stadtpolizei'}</p>
+            </div>
             <div className="pt-1">
               <label className="block text-xs font-medium text-gray-600 mb-1">Benutzername</label>
               <p className="text-sm text-gray-500 px-3 py-2 bg-gray-50 rounded-lg">{profile?.username}</p>
