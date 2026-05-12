@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { X, Check, Package, Scissors, FileText } from 'lucide-react'
+import { X, Check, Package, Scissors, FileText, RotateCcw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderStatus } from '../lib/types'
@@ -15,6 +15,15 @@ const ADMIN_TABS: { key: AdminTab; label: string; status: OrderStatus }[] = [
   { key: 'ausgegeben',  label: 'Ausgegeben',            status: 'issued' },
   { key: 'storniert',   label: 'Storniert',             status: 'cancelled' },
 ]
+
+const STATUS_BACK: Partial<Record<OrderStatus, OrderStatus>> = {
+  ordered_supplier: 'approved',
+  at_tailor: 'ordered_supplier',
+  ready_for_issue: 'ordered_supplier',
+  partially_issued: 'ready_for_issue',
+  issued: 'ready_for_issue',
+  cancelled: 'approved',
+}
 
 export default function Orders() {
   const { profile } = useAuth()
@@ -73,6 +82,25 @@ export default function Orders() {
     await Promise.all(items.map(o => {
       const qr = receivedInputs[o.id] ? parseInt(receivedInputs[o.id]) : o.quantity
       return supabase.from('orders').update({ status: nextStatus, quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', o.id)
+    }))
+    setSelectedIds(new Set()); setSaving(false); load()
+  }
+
+  async function stepBack() {
+    const tabStatus = ADMIN_TABS.find(t => t.key === activeTab)?.status
+    if (!tabStatus) return
+    const prevStatus = STATUS_BACK[tabStatus]
+    if (!prevStatus) return
+    const items = sorted.filter(o => selectedIds.has(o.id))
+    if (!items.length) return
+    setSaving(true)
+    await Promise.all(items.map(o => {
+      const base = { status: prevStatus, updated_at: new Date().toISOString() }
+      if (tabStatus === 'ordered_supplier')
+        return supabase.from('orders').update({ ...base, quantity_received: null }).eq('id', o.id)
+      if (tabStatus === 'partially_issued' || tabStatus === 'issued')
+        return supabase.from('orders').update({ ...base, quantity_issued: null }).eq('id', o.id)
+      return supabase.from('orders').update(base).eq('id', o.id)
     }))
     setSelectedIds(new Set()); setSaving(false); load()
   }
@@ -397,6 +425,7 @@ export default function Orders() {
             )}
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr.</th>
@@ -413,7 +442,8 @@ export default function Orders() {
                   const qtyIssued = o.quantity_issued ?? 0
                   const outstanding = qtyRef - qtyIssued
                   return (
-                    <tr key={o.id} className="hover:bg-gray-50">
+                    <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
+                      <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
                       <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
                       <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                       <td className="px-4 py-3 text-gray-600">{o.size}</td>
@@ -445,6 +475,7 @@ export default function Orders() {
           {activeTab === 'ausgegeben' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr.</th>
@@ -454,7 +485,8 @@ export default function Orders() {
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => (
-                  <tr key={o.id} className="hover:bg-gray-50">
+                  <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
+                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
                     <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
                     <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                     <td className="px-4 py-3 text-gray-600">{o.size}</td>
@@ -471,6 +503,7 @@ export default function Orders() {
           {activeTab === 'storniert' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
+                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr. / Anz.</th>
@@ -479,7 +512,8 @@ export default function Orders() {
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => (
-                  <tr key={o.id} className="hover:bg-gray-50 opacity-75">
+                  <tr key={o.id} className={`hover:bg-gray-50 opacity-75 ${selectedIds.has(o.id) ? 'bg-blue-50 !opacity-100' : ''}`}>
+                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
                     <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
                     <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                     <td className="px-4 py-3 text-gray-600">{o.size} · {o.quantity}×</td>
@@ -521,6 +555,11 @@ export default function Orders() {
             className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-1.5 rounded-xl">
             <Check className="w-4 h-4" /> Bereit zur Ausgabe
           </button>
+          <div className="w-px h-5 bg-white/20" />
+          <button onClick={stepBack} disabled={saving}
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
+          </button>
           <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
@@ -532,6 +571,47 @@ export default function Orders() {
           <button onClick={() => advanceSelected('ready_for_issue')} disabled={saving}
             className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-1.5 rounded-xl">
             <Check className="w-4 h-4" /> Bereit zur Ausgabe
+          </button>
+          <div className="w-px h-5 bg-white/20" />
+          <button onClick={stepBack} disabled={saving}
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {(activeTab === 'ausgabe' || activeTab === 'teilweise') && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+          <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
+          <div className="w-px h-5 bg-white/20" />
+          <button onClick={stepBack} disabled={saving}
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {activeTab === 'ausgegeben' && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+          <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
+          <div className="w-px h-5 bg-white/20" />
+          <button onClick={stepBack} disabled={saving}
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {activeTab === 'storniert' && selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+          <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
+          <div className="w-px h-5 bg-white/20" />
+          <button onClick={stepBack} disabled={saving}
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            <RotateCcw className="w-3.5 h-3.5" /> Wiederherstellen
           </button>
           <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
