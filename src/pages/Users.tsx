@@ -233,7 +233,7 @@ export default function Users() {
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {u.gender === 'female' ? 'Dame' : 'Herr'}
+                      {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -358,10 +358,11 @@ export default function Users() {
                   {(['male', 'female'] as const).map(g => (
                     <button key={g} type="button" onClick={() => setForm(f => ({ ...f, gender: g }))}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : 'bg-pink-600 text-white border-pink-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
-                      {g === 'male' ? 'Herr' : 'Dame'}
+                      {g === 'male' ? 'Männlich' : 'Weiblich'}
                     </button>
                   ))}
                 </div>
+                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel)</p>
               </div>
               {!editId && (
                 <div>
