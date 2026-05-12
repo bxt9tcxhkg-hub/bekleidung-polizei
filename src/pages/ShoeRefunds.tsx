@@ -10,7 +10,8 @@ export default function ShoeRefunds() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
+  const MAX_REFUND = 120
+  const [form, setForm] = useState({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
   const [userSearch, setUserSearch] = useState('')
   const [userDropdown, setUserDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -57,16 +58,17 @@ export default function ShoeRefunds() {
     const uid = isAdmin ? form.user_id : profile!.id
     if (!uid || !form.amount || !form.refund_date) { setError('Pflichtfelder fehlen.'); return }
     setSaving(true)
+    const amount = parseFloat(form.amount)
     const { error } = await supabase.from('shoe_refunds').insert({
       user_id: uid,
-      amount: parseFloat(form.amount),
-      approved_amount: parseFloat(form.approved_amount || form.amount),
+      amount,
+      approved_amount: Math.min(amount, MAX_REFUND),
       refund_date: form.refund_date,
       note: form.note || null,
       created_by: profile!.id,
     })
     if (error) setError(error.message)
-    else { setShowForm(false); setForm({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); load() }
+    else { setShowForm(false); setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); load() }
     setSaving(false)
   }
 
@@ -165,15 +167,20 @@ export default function ShoeRefunds() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">Erstattungsdatum *</label>
                 <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.refund_date} onChange={e => setForm(f => ({ ...f, refund_date: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Betrag (€) *</label>
-                  <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Genehmigt (€)</label>
-                  <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.approved_amount} onChange={e => setForm(f => ({ ...f, approved_amount: e.target.value }))} placeholder="= Betrag" />
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Rechnungsbetrag (€) *</label>
+                <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+                {form.amount && !isNaN(parseFloat(form.amount)) && (() => {
+                  const amt = parseFloat(form.amount)
+                  const approved = Math.min(amt, MAX_REFUND)
+                  const selfPay = amt - approved
+                  return (
+                    <div className={`mt-2 px-3 py-2 rounded-lg text-xs space-y-0.5 ${selfPay > 0 ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>
+                      <p>Erstattet: <strong>€ {approved.toFixed(2)}</strong></p>
+                      {selfPay > 0 && <p>Eigenanteil: <strong>€ {selfPay.toFixed(2)}</strong></p>}
+                    </div>
+                  )
+                })()}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Notiz</label>
