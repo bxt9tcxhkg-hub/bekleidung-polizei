@@ -11,6 +11,8 @@ export default function ShoeRefunds() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
+  const [userSearch, setUserSearch] = useState('')
+  const [userDropdown, setUserDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -37,6 +39,19 @@ export default function ShoeRefunds() {
     if (profile) init()
   }, [profile, isAdmin])
 
+  function selectUser(u: Profile) {
+    setForm(f => ({ ...f, user_id: u.id }))
+    setUserSearch(u.name || u.username)
+    setUserDropdown(false)
+  }
+
+  const filteredUsers = userSearch.trim().length > 0
+    ? users.filter(u =>
+        u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+        (u.dienstnummer ?? '').includes(userSearch)
+      )
+    : users
+
   async function create() {
     setError('')
     const uid = isAdmin ? form.user_id : profile!.id
@@ -51,7 +66,7 @@ export default function ShoeRefunds() {
       created_by: profile!.id,
     })
     if (error) setError(error.message)
-    else { setShowForm(false); setForm({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); load() }
+    else { setShowForm(false); setForm({ user_id: '', amount: '', approved_amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); load() }
     setSaving(false)
   }
 
@@ -117,12 +132,33 @@ export default function ShoeRefunds() {
             </div>
             <div className="px-6 py-4 space-y-4">
               {isAdmin && (
-                <div>
+                <div className="relative">
                   <label className="block text-xs font-medium text-gray-600 mb-1">Benutzer *</label>
-                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))}>
-                    <option value="">– Bitte wählen –</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.name || u.username} {u.dienstnummer ? `(DG ${u.dienstnummer})` : ''}</option>)}
-                  </select>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Name oder Dienstnummer eingeben..."
+                    value={userSearch}
+                    onChange={e => { setUserSearch(e.target.value); setUserDropdown(true); if (!e.target.value) setForm(f => ({ ...f, user_id: '' })) }}
+                    onFocus={() => setUserDropdown(true)}
+                    onBlur={() => setTimeout(() => setUserDropdown(false), 150)}
+                  />
+                  {userDropdown && filteredUsers.length > 0 && (
+                    <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
+                      {filteredUsers.map(u => (
+                        <li key={u.id}>
+                          <button type="button" onMouseDown={() => selectUser(u)}
+                            className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors">
+                            <p className="text-sm font-medium text-gray-900">{u.name || u.username}</p>
+                            {u.dienstnummer && <p className="text-xs text-gray-400">DG {u.dienstnummer}</p>}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {form.user_id && (
+                    <p className="text-xs text-green-600 mt-1">✓ Benutzer ausgewählt</p>
+                  )}
                 </div>
               )}
               <div>
