@@ -47,7 +47,7 @@ function parseCsvUsers(text: string): Record<string, string>[] {
 }
 
 const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
-const emptyForm = () => ({ name: '', username: '', email: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
+const emptyForm = () => ({ name: '', username: '', initialPassword: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
 
 export default function Users() {
   const { isStrictAdmin } = _useAuth()
@@ -83,7 +83,7 @@ export default function Users() {
   }
 
   function openEdit(u: Profile) {
-    setForm({ name: u.name, username: u.username, email: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, gender: u.gender ?? 'male', organisation: u.organisation ?? 'Stadtpolizei', active: u.active })
+    setForm({ name: u.name, username: u.username, initialPassword: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, gender: u.gender ?? 'male', organisation: u.organisation ?? 'Stadtpolizei', active: u.active })
     setEditId(u.id)
     setError('')
     setShowForm(true)
@@ -92,8 +92,9 @@ export default function Users() {
   async function save() {
     setError('')
     if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
+    if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
+    if (!editId && form.initialPassword.length < 6) { setError('Initiales Passwort muss mindestens 6 Zeichen haben.'); return }
     setSaving(true)
-    const payload = { name: form.name, username: form.username, email: form.email || undefined, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, organisation: form.organisation, active: form.active }
     const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, organisation: form.organisation, active: form.active }
 
     if (editId) {
@@ -103,11 +104,8 @@ export default function Users() {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ ...dbPayload, initial_password: form.initialPassword }),
       })
       const json = await res.json()
       if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
@@ -398,9 +396,9 @@ export default function Users() {
               </div>
               {!editId && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">E-Mail (für Login)</label>
-                  <input type="email" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="vorname.nachname@polizei.at" />
-                  <p className="text-xs text-gray-400 mt-1">Leer lassen = interner Platzhalter-Account</p>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Initiales Passwort *</label>
+                  <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" value={form.initialPassword} onChange={e => setForm(f => ({ ...f, initialPassword: e.target.value }))} placeholder="z.B. Vorname2025" autoComplete="off" />
+                  <p className="text-xs text-gray-400 mt-1">Der Benutzer muss beim ersten Login ein neues Passwort festlegen.</p>
                 </div>
               )}
               <div>

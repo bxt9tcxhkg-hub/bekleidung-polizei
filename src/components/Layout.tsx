@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import ChangePasswordModal from './ChangePasswordModal'
 
 interface NavItem {
   to: string
@@ -22,7 +23,7 @@ interface NavSection {
 
 export default function Layout() {
   const location = useLocation()
-  const { profile, isSachbearbeiter, isGenehmiger, signOut } = useAuth()
+  const { profile, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const sections: NavSection[] = [
@@ -155,6 +156,7 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
+        {mustChangePassword && <ChangePasswordModal />}
       </div>
     </div>
   )
