@@ -23,24 +23,28 @@ function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'create
     }
     return ''
   }
-  const artikel_nr = get('artikel_nr', 'artikelnr', 'article_number', 'artikelnummer')
+  const artikel_nr = get('artikel_nr', 'artikelnr', 'article_number', 'articlenumber', 'artikelnummer')
   const name = get('name', 'bezeichnung', 'produkt')
-  if (!artikel_nr || !name) return null
+  if (!name) return null
+  // treat missing or dash-only article number as auto-generated placeholder
+  const article_number = (artikel_nr && artikel_nr !== '-') ? artikel_nr : `auto-${name.slice(0, 20).replace(/\s+/g, '-').toLowerCase()}`
   const groessen = get('groessen', 'größen', 'groesse', 'größe', 'sizes')
   const preis = get('preis', 'price', 'betrag')
   const schneider = get('schneider', 'tailoring', 'wappen', 'wappenänderung')
-  const geschlecht = get('geschlecht', 'gender', 'hr/da')
+  const geschlecht = get('geschlecht', 'gender', 'targetgender', 'hr/da')
   const genderFromCol = GENDER_MAP[geschlecht.toLowerCase()]
-  const genderFromName = /\bHR\b/.test(name) ? 'male' : /\bDA\b/.test(name) ? 'female' : null
+  const genderFromName = /\bHR\b/i.test(name) ? 'male' : /\bDA\b/i.test(name) ? 'female' : null
+  // sizes: support both | and ; as separator
+  const sizeSep = groessen.includes('|') ? '|' : ';'
   return {
-    article_number: artikel_nr,
+    article_number,
     name,
     category: get('kategorie', 'category', 'kategory') || 'Sonstiges',
     gender: genderFromCol ?? genderFromName ?? 'unisex',
-    sizes: groessen ? groessen.split('|').map(s => s.trim()).filter(Boolean) : [],
+    sizes: groessen ? groessen.split(sizeSep).map(s => s.trim()).filter(Boolean) : [],
     price: parseFloat(preis.replace(',', '.')) || 0,
     needs_tailoring: ['ja', 'yes', '1', 'true'].includes(schneider.toLowerCase()),
-    size_guide: get('grössentabelle', 'groessentabelle', 'size_guide', 'größentabelle') || null,
+    size_guide: get('grössentabelle', 'groessentabelle', 'size_guide', 'sizeguide', 'größentabelle') || null,
     organisation: (() => { const o = get('organisation', 'org', 'abteilung'); return o.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei' })(),
     active: true,
   }
