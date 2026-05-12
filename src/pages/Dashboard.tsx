@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Scissors } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -70,14 +71,14 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl p-5 bg-blue-50 text-blue-700">
+        <Link to="/warenkorb" className="rounded-xl p-5 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Warenkorb</span>
             <div className="bg-blue-100 p-2 rounded-lg"><ShoppingCart className="w-4 h-4" /></div>
           </div>
           <p className="text-2xl font-bold">{cartCount}</p>
           <p className="text-xs mt-1 opacity-70">Artikel noch nicht eingereicht</p>
-        </div>
+        </Link>
         <div className="rounded-xl p-5 bg-purple-50 text-purple-700">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Aktives Quartal</span>
@@ -86,13 +87,13 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
           <p className="text-2xl font-bold">{activeQuarter?.name ?? '–'}</p>
           {activeQuarter && <p className="text-xs mt-1 opacity-70">{new Date(activeQuarter.end_date).toLocaleDateString('de-AT')} Fristende</p>}
         </div>
-        <div className="rounded-xl p-5 bg-green-50 text-green-700">
+        <Link to="/meine-bestellungen" className="rounded-xl p-5 bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Laufende Bestellungen</span>
             <div className="bg-green-100 p-2 rounded-lg"><ShoppingBag className="w-4 h-4" /></div>
           </div>
           <p className="text-2xl font-bold">{recentOrders.length}</p>
-        </div>
+        </Link>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -157,10 +158,10 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   const cards = [
-    { label: 'Warten auf Genehmiger', value: stats.submitted, icon: Clock, color: 'bg-yellow-50 text-yellow-700', iconBg: 'bg-yellow-100' },
-    { label: 'Genehmigt (zu bestellen)', value: stats.approved, icon: ShoppingBag, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100' },
-    { label: 'Offene Schneiderjobs', value: stats.tailorJobs, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100' },
-    { label: 'Budget gebunden (Quartal)', value: `€ ${stats.committedBudget.toFixed(2)}`, icon: Euro, color: 'bg-red-50 text-red-700', iconBg: 'bg-red-100' },
+    { label: 'Warten auf Genehmiger', value: stats.submitted, icon: Clock, color: 'bg-yellow-50 text-yellow-700', iconBg: 'bg-yellow-100', hover: 'hover:bg-yellow-100', to: '/genehmigungen' },
+    { label: 'Genehmigt (zu bestellen)', value: stats.approved, icon: ShoppingBag, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', hover: 'hover:bg-teal-100', to: '/bestellungen' },
+    { label: 'Offene Schneiderjobs', value: stats.tailorJobs, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', hover: '', to: null },
+    { label: 'Budget gebunden (Quartal)', value: `€ ${stats.committedBudget.toFixed(2)}`, icon: Euro, color: 'bg-red-50 text-red-700', iconBg: 'bg-red-100', hover: 'hover:bg-red-100', to: '/budgets' },
   ]
 
   return (
@@ -173,15 +174,20 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map(({ label, value, icon: Icon, color, iconBg }) => (
-          <div key={label} className={`rounded-xl p-5 ${color}`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">{label}</span>
-              <div className={`${iconBg} p-2 rounded-lg`}><Icon className="w-4 h-4" /></div>
-            </div>
-            <p className="text-2xl font-bold">{value}</p>
-          </div>
-        ))}
+        {cards.map(({ label, value, icon: Icon, color, iconBg, hover, to }) => {
+          const inner = (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium">{label}</span>
+                <div className={`${iconBg} p-2 rounded-lg`}><Icon className="w-4 h-4" /></div>
+              </div>
+              <p className="text-2xl font-bold">{value}</p>
+            </>
+          )
+          return to
+            ? <Link key={label} to={to} className={`rounded-xl p-5 ${color} ${hover} transition-colors`}>{inner}</Link>
+            : <div key={label} className={`rounded-xl p-5 ${color}`}>{inner}</div>
+        })}
       </div>
     </div>
   )
@@ -209,13 +215,13 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl p-5 bg-yellow-50 text-yellow-700">
+      <Link to="/genehmigungen" className="rounded-xl p-5 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition-colors block">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-medium">Ausstehende Genehmigungen</span>
           <div className="bg-yellow-100 p-2 rounded-lg"><CheckSquare className="w-4 h-4" /></div>
         </div>
         <p className="text-2xl font-bold">{pending.length}</p>
-      </div>
+      </Link>
 
       {pending.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
