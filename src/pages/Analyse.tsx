@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { TrendingUp, Package, BarChart3, AlertTriangle, CheckCircle, Info } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { TrendingUp, Package, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 type AnalyseTab = 'ranking' | 'groessen' | 'trend'
 
@@ -40,6 +42,8 @@ interface QuarterStat {
 }
 
 export default function Analyse() {
+  const navigate = useNavigate()
+  const { isSachbearbeiter } = useAuth()
   const [tab, setTab] = useState<AnalyseTab>('ranking')
   const [stats, setStats] = useState<ProductStat[]>([])
   const [sizeRecs, setSizeRecs] = useState<SizeRec[]>([])
@@ -263,12 +267,22 @@ export default function Analyse() {
                         Gr. {r.size} · Ø {r.avgQtrDemand.toFixed(1)}×/Quartal · Mindestbestand: {r.minStock}×
                       </p>
                     </div>
-                    <div className="text-right flex-shrink-0 space-y-0.5">
-                      <p className={`text-xs font-semibold ${r.currentStock === 0 ? 'text-red-600' : 'text-amber-600'}`}>
-                        Lager: {r.currentStock}×
-                        {r.pendingQty > 0 && <span className="text-gray-400 font-normal"> (+{r.pendingQty} bestellt)</span>}
-                      </p>
-                      <p className="text-xs text-blue-700 font-semibold">→ {r.toOrder}× bestellen</p>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="text-right space-y-0.5">
+                        <p className={`text-xs font-semibold ${r.currentStock === 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                          Lager: {r.currentStock}×
+                          {r.pendingQty > 0 && <span className="text-gray-400 font-normal"> (+{r.pendingQty} bestellt)</span>}
+                        </p>
+                        <p className="text-xs text-blue-700 font-semibold">→ {r.toOrder}× bestellen</p>
+                      </div>
+                      {isSachbearbeiter && (
+                        <button
+                          onClick={() => navigate('/lager', { state: { productId: r.product_id, size: r.size, qty: r.toOrder } })}
+                          className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" /> Bestellen
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -451,9 +465,19 @@ export default function Analyse() {
                                   )}
                                 </div>
                                 {rec.needsRestock && rec.toOrder > 0 ? (
-                                  <span className="font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
-                                    → {rec.toOrder}× bestellen
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                                      → {rec.toOrder}× bestellen
+                                    </span>
+                                    {isSachbearbeiter && (
+                                      <button
+                                        onClick={() => navigate('/lager', { state: { productId: rec.product_id, size: rec.size, qty: rec.toOrder } })}
+                                        className="flex items-center gap-1 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-2 py-0.5 rounded-lg transition-colors"
+                                      >
+                                        <ShoppingBag className="w-3 h-3" /> Bestellen
+                                      </button>
+                                    )}
+                                  </div>
                                 ) : rec.pendingQty > 0 && !rec.needsRestock ? (
                                   <span className="text-blue-600 font-medium">Bestellung läuft</span>
                                 ) : (

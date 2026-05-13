@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Plus, Minus, X, ShoppingBag, Tag, Send, Warehouse, ClipboardList, Check, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -30,6 +31,8 @@ interface SizeModal {
 
 export default function Lager() {
   const { profile } = useAuth()
+  const location = useLocation()
+  const navState = (location.state as { productId?: string; size?: string; qty?: number } | null)
   const [tab, setTab] = useState<Tab>('bestand')
 
   const [products, setProducts] = useState<Product[]>([])
@@ -69,6 +72,18 @@ export default function Lager() {
   }
 
   useEffect(() => { if (profile) loadAll() }, [profile])
+
+  // Pre-select product+size when navigating from Analyse page
+  useEffect(() => {
+    if (loading || !navState?.productId) return
+    const product = products.find(p => p.id === navState.productId)
+    if (!product) return
+    const size = navState.size && product.sizes.includes(navState.size) ? navState.size : product.sizes[0] ?? ''
+    setTab('bestellen')
+    setSizeModal({ product, size, quantity: navState.qty ?? 1 })
+    // Clear the navigation state so it doesn't re-trigger on re-renders
+    window.history.replaceState({}, '')
+  }, [loading])
 
   // Build inventory map: product_id__size → quantity
   const invMap: Record<string, number> = {}

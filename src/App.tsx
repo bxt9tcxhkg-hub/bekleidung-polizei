@@ -10,7 +10,6 @@ import UserProfile from './pages/UserProfile'
 import Products from './pages/Products'
 import Orders from './pages/Orders'
 import Quarters from './pages/Quarters'
-import TailorJobs from './pages/TailorJobs'
 import ShoeRefunds from './pages/ShoeRefunds'
 import Users from './pages/Users'
 import AuditLog from './pages/AuditLog'
@@ -50,7 +49,6 @@ export default function App() {
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
             <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
             <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
-            <Route path="schneiderjobs" element={<ProtectedRoute sachbearbeiterOnly><TailorJobs /></ProtectedRoute>} />
             <Route path="benutzer" element={<ProtectedRoute sachbearbeiterOnly><Users /></ProtectedRoute>} />
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
