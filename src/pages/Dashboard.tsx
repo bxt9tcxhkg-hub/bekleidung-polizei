@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Scissors } from 'lucide-react'
+import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Truck, Scissors, Package, Footprints } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
@@ -127,29 +127,28 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
 }
 
 function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
-  const [stats, setStats] = useState({ submitted: 0, approved: 0, tailorJobs: 0, committedBudget: 0 })
+  const [stats, setStats] = useState({ eingereicht: 0, lieferant: 0, schneider: 0, ausgabe: 0 })
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       const quarterRes = await supabase.from('quarters').select('*').eq('status', 'active').single()
-      const aq = quarterRes.data ?? null
-      setActiveQuarter(aq)
+      setActiveQuarter(quarterRes.data ?? null)
 
-      const [submittedRes, approvedRes, tailorRes, budgetRes] = await Promise.all([
-        supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
+      const [eingRes, liefRes, schnRes, ausgRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'approved'),
-        supabase.from('tailor_jobs').select('id', { count: 'exact' }).eq('status', 'open'),
-        aq
-          ? supabase.from('orders').select('status, quantity, products(price)').eq('quarter_id', aq.id).not('status', 'in', '(pending,cancelled,issued)')
-          : Promise.resolve({ data: [] as any[] }),
+        supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'ordered_supplier'),
+        supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'at_tailor'),
+        supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'ready_for_issue'),
       ])
 
-      const budgetOrders = (budgetRes.data ?? []) as any[]
-      const committed = budgetOrders.reduce((s: number, o: any) => s + (o.products?.price ?? 0) * o.quantity, 0)
-
-      setStats({ submitted: submittedRes.count ?? 0, approved: approvedRes.count ?? 0, tailorJobs: tailorRes.count ?? 0, committedBudget: committed })
+      setStats({
+        eingereicht: eingRes.count ?? 0,
+        lieferant: liefRes.count ?? 0,
+        schneider: schnRes.count ?? 0,
+        ausgabe: ausgRes.count ?? 0,
+      })
       setLoading(false)
     }
     load()
@@ -158,10 +157,10 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   const cards = [
-    { label: 'Warten auf Genehmiger', value: stats.submitted, icon: Clock, color: 'bg-yellow-50 text-yellow-700', iconBg: 'bg-yellow-100', hover: 'hover:bg-yellow-100', to: '/genehmigungen' },
-    { label: 'Genehmigt (zu bestellen)', value: stats.approved, icon: ShoppingBag, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', hover: 'hover:bg-teal-100', to: '/bestellungen' },
-    { label: 'Offene Schneiderjobs', value: stats.tailorJobs, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', hover: '', to: null },
-    { label: 'Budget gebunden (Quartal)', value: `€ ${stats.committedBudget.toFixed(2)}`, icon: Euro, color: 'bg-red-50 text-red-700', iconBg: 'bg-red-100', hover: 'hover:bg-red-100', to: '/budgets' },
+    { label: 'Eingereicht', value: stats.eingereicht, icon: ShoppingBag, color: 'bg-blue-50 text-blue-700', iconBg: 'bg-blue-100', to: '/bestellungen' },
+    { label: 'Beim Lieferanten', value: stats.lieferant, icon: Truck, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', to: '/bestellungen' },
+    { label: 'Beim Schneider', value: stats.schneider, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', to: '/bestellungen' },
+    { label: 'Bereit zur Ausgabe', value: stats.ausgabe, icon: Package, color: 'bg-green-50 text-green-700', iconBg: 'bg-green-100', to: '/bestellungen' },
   ]
 
   return (
@@ -174,38 +173,34 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map(({ label, value, icon: Icon, color, iconBg, hover, to }) => {
-          const inner = (
-            <>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium">{label}</span>
-                <div className={`${iconBg} p-2 rounded-lg`}><Icon className="w-4 h-4" /></div>
-              </div>
-              <p className="text-2xl font-bold">{value}</p>
-            </>
-          )
-          return to
-            ? <Link key={label} to={to} className={`rounded-xl p-5 ${color} ${hover} transition-colors`}>{inner}</Link>
-            : <div key={label} className={`rounded-xl p-5 ${color}`}>{inner}</div>
-        })}
+        {cards.map(({ label, value, icon: Icon, color, iconBg, to }) => (
+          <Link key={label} to={to} className={`rounded-xl p-5 ${color} hover:brightness-95 transition-all`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium">{label}</span>
+              <div className={`${iconBg} p-2 rounded-lg`}><Icon className="w-4 h-4" /></div>
+            </div>
+            <p className="text-2xl font-bold">{value}</p>
+          </Link>
+        ))}
       </div>
     </div>
   )
 }
 
 function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
-  const [pending, setPending] = useState<Order[]>([])
+  const [pendingOrders, setPendingOrders] = useState(0)
+  const [pendingRefunds, setPendingRefunds] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('orders')
-        .select('*, products(name, category), quarters(name), profiles(name, dienstnummer)')
-        .eq('status', 'pending_approval')
-        .order('created_at', { ascending: true })
-        .limit(10)
-      setPending(data ?? [])
+      const year = new Date().getFullYear()
+      const [ordersRes, refundsRes] = await Promise.all([
+        supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
+        supabase.from('shoe_refunds').select('id', { count: 'exact' }).gte('created_at', `${year}-01-01`),
+      ])
+      setPendingOrders(ordersRes.count ?? 0)
+      setPendingRefunds(refundsRes.count ?? 0)
       setLoading(false)
     }
     load()
@@ -214,33 +209,23 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   return (
-    <div className="space-y-6">
-      <Link to="/genehmigungen" className="rounded-xl p-5 bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition-colors block">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Link to="/genehmigungen" className="rounded-xl p-5 bg-yellow-50 text-yellow-700 hover:brightness-95 transition-all">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">Ausstehende Genehmigungen</span>
+          <span className="text-sm font-medium">Bestellungen zur Genehmigung</span>
           <div className="bg-yellow-100 p-2 rounded-lg"><CheckSquare className="w-4 h-4" /></div>
         </div>
-        <p className="text-2xl font-bold">{pending.length}</p>
+        <p className="text-2xl font-bold">{pendingOrders}</p>
+        <p className="text-xs mt-1 opacity-70">Budgetüberschreitungen ausstehend</p>
       </Link>
-
-      {pending.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-900 text-sm">Älteste ausstehende Bestellungen</h2>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {pending.map(o => (
-              <div key={o.id} className="flex items-center gap-4 px-5 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{(o as any).products?.name}</p>
-                  <p className="text-xs text-gray-400">{(o as any).profiles?.name} · {(o as any).quarters?.name} · Gr. {o.size}</p>
-                </div>
-                <span className="text-xs text-yellow-600 font-medium">{o.quantity}×</span>
-              </div>
-            ))}
-          </div>
+      <Link to="/schuherstattungen" className="rounded-xl p-5 bg-blue-50 text-blue-700 hover:brightness-95 transition-all">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium">Schuherstattungen</span>
+          <div className="bg-blue-100 p-2 rounded-lg"><Footprints className="w-4 h-4" /></div>
         </div>
-      )}
+        <p className="text-2xl font-bold">{pendingRefunds}</p>
+        <p className="text-xs mt-1 opacity-70">Erfasst {new Date().getFullYear()}</p>
+      </Link>
     </div>
   )
 }
