@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints, Search } from 'lucide-react'
+import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints, Search, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
@@ -26,6 +26,24 @@ export default function Budgets() {
   const [showBulk, setShowBulk] = useState(false)
   const [bulkSaving, setBulkSaving] = useState(false)
   const [search, setSearch] = useState('')
+
+  // Drill-down
+  const [drilldown, setDrilldown] = useState<{ profile: Profile; orders: any[] } | null>(null)
+  const [drilldownLoading, setDrilldownLoading] = useState(false)
+
+  async function openDrilldown(profile: Profile) {
+    setDrilldownLoading(true)
+    setDrilldown({ profile, orders: [] })
+    const { data } = await supabase
+      .from('orders')
+      .select('id, quantity, unit_price, size, created_at, products(name, article_number)')
+      .eq('user_id', profile.id)
+      .not('status', 'in', '("pending","cancelled")')
+      .gte('created_at', `${CURRENT_YEAR}-01-01`)
+      .order('created_at', { ascending: false })
+    setDrilldown({ profile, orders: data ?? [] })
+    setDrilldownLoading(false)
+  }
 
   // Shoe refund cap
   const [caps, setCaps] = useState<ShoeRefundCap[]>([])
@@ -198,8 +216,11 @@ export default function Budgets() {
                 const remaining = total - used
                 const pct = Math.min(100, (used / total) * 100)
                 return (
-                  <tr key={profile.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{profile.name}</td>
+                  <tr key={profile.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => editId !== profile.id && openDrilldown(profile)}>
+                    <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
+                      {profile.name}
+                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+                    </td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{profile.dienstnummer ?? '–'}</td>
                     <td className="px-4 py-3 text-right">
                       {editId === profile.id ? (
@@ -291,6 +312,65 @@ export default function Budgets() {
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
                 {bulkSaving ? 'Wird gespeichert...' : 'Für alle setzen'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drilldown modal */}
+      {drilldown && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
+              <div>
+                <h2 className="font-bold text-gray-900">{drilldown.profile.name}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Bestellungen {CURRENT_YEAR}{drilldown.profile.dienstnummer ? ` · DG ${drilldown.profile.dienstnummer}` : ''}</p>
+              </div>
+              <button onClick={() => setDrilldown(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {drilldownLoading ? (
+                <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-800" /></div>
+              ) : drilldown.orders.length === 0 ? (
+                <div className="flex flex-col items-center py-12 text-gray-400">
+                  <p className="font-medium">Keine Bestellungen im Jahr {CURRENT_YEAR}</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Gr.</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Betrag</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Datum</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {drilldown.orders.map(o => (
+                      <tr key={o.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400">{(o as any).products?.article_number}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{o.size}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-gray-400 text-xs hidden sm:table-cell">
+                          {new Date(o.created_at).toLocaleDateString('de-AT')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50 border-t-2 border-gray-200">
+                      <td colSpan={2} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-900">
+                        € {drilldown.orders.reduce((s, o) => s + o.unit_price * o.quantity, 0).toFixed(2)}
+                      </td>
+                      <td className="hidden sm:table-cell" />
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
             </div>
           </div>
         </div>

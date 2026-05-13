@@ -48,6 +48,10 @@ export default function Lager() {
   const [addDropdown, setAddDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  // Wareneingang follow-up
+  const [followUp, setFollowUp] = useState<{ orders: any[]; stockOrder: StockOrder } | null>(null)
+  const [advancingOrders, setAdvancingOrders] = useState(false)
+
   // Bestellen
   const [selectedCategory, setSelectedCategory] = useState('Alle')
   const [cart, setCart] = useState<CartItem[]>([])
@@ -200,7 +204,27 @@ export default function Lager() {
       { onConflict: 'product_id,size' }
     )
     setSaving(false)
-    loadAll()
+    await loadAll()
+    // Check for pending user orders for same product + size
+    const { data: waiting } = await supabase
+      .from('orders')
+      .select('id, quantity, size, profiles(name), products(name)')
+      .eq('product_id', order.product_id)
+      .eq('size', order.size)
+      .eq('status', 'approved')
+    if (waiting && waiting.length > 0) {
+      setFollowUp({ orders: waiting, stockOrder: order })
+    }
+  }
+
+  async function advanceWaitingOrders() {
+    if (!followUp) return
+    setAdvancingOrders(true)
+    await Promise.all(followUp.orders.map(o =>
+      supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id)
+    ))
+    setAdvancingOrders(false)
+    setFollowUp(null)
   }
 
   const cartCount = cart.reduce((s, c) => s + c.quantity, 0)
@@ -612,6 +636,49 @@ export default function Lager() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Wareneingang Follow-up Dialog ── */}
+      {followUp && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-6 py-5 border-b">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                  <Check className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <h2 className="font-bold text-gray-900">Wareneingang gebucht</h2>
+                  <p className="text-xs text-gray-500">{(followUp.stockOrder as any).products?.name} · Gr. {followUp.stockOrder.size} · {followUp.stockOrder.quantity}×</p>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-gray-700 mb-3">
+                <span className="font-semibold">{followUp.orders.length} Benutzerbestellung{followUp.orders.length !== 1 ? 'en' : ''}</span> warten auf diesen Artikel.
+                Direkt auf „Bereit zur Ausgabe" setzen?
+              </p>
+              <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto">
+                {followUp.orders.map(o => (
+                  <div key={o.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                    <span className="font-medium text-gray-800">{(o as any).profiles?.name ?? '–'}</span>
+                    <span className="text-gray-500">Gr. {o.size} · {o.quantity}×</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setFollowUp(null)}
+                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">
+                Später manuell
+              </button>
+              <button onClick={advanceWaitingOrders} disabled={advancingOrders}
+                className="flex-1 bg-green-700 hover:bg-green-800 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                {advancingOrders ? 'Wird gesetzt...' : 'Ja, bereit zur Ausgabe'}
+              </button>
+            </div>
           </div>
         </div>
       )}
