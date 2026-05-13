@@ -206,7 +206,7 @@ export default function Budgets() {
                         <div className="flex items-center justify-end gap-1 flex-wrap">
                           <span className="text-gray-500 text-xs">€</span>
                           <input type="number" step="0.01" min="0" autoFocus
-                            className="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                             value={editForm.amount}
                             onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
                             onKeyDown={e => { if (e.key === 'Enter') saveBudget(profile.id); if (e.key === 'Escape') setEditId(null) }}
@@ -239,7 +239,7 @@ export default function Budgets() {
                       <span className={`font-medium ${pct > 90 ? 'text-red-600' : pct > 70 ? 'text-amber-600' : 'text-gray-700'}`}>
                         € {used.toFixed(2)}
                       </span>
-                      <div className="h-1.5 bg-gray-100 rounded-full mt-1 w-20 ml-auto">
+                      <div className="h-1.5 bg-gray-100 rounded-full mt-1 w-20 md:w-24 ml-auto">
                         <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
                       </div>
                     </td>

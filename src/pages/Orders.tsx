@@ -554,89 +554,89 @@ export default function Orders() {
       {/* ── Floating action bars ── */}
 
       {activeTab === 'eingereicht' && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} Bestellung{selectedIds.size !== 1 ? 'en' : ''} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={createSammelbestellung} disabled={saving}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-sm font-medium px-4 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
             <FileText className="w-4 h-4" />
             {saving ? 'Wird gespeichert...' : 'Sammelbestellung erstellen'}
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {activeTab === 'lieferant' && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={() => advanceWithReceived('at_tailor')} disabled={saving}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-sm font-medium px-4 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
             <Scissors className="w-4 h-4" /> Zum Schneider
           </button>
           <button onClick={() => advanceWithReceived('ready_for_issue')} disabled={saving}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
             <Check className="w-4 h-4" /> Bereit zur Ausgabe
           </button>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={stepBack} disabled={saving}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {activeTab === 'schneider' && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={() => advanceSelected('ready_for_issue')} disabled={saving}
-            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
             <Check className="w-4 h-4" /> Bereit zur Ausgabe
           </button>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={stepBack} disabled={saving}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {(activeTab === 'ausgabe' || activeTab === 'teilweise') && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={stepBack} disabled={saving}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {activeTab === 'ausgegeben' && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={stepBack} disabled={saving}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {activeTab === 'storniert' && selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl">
+        <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={stepBack} disabled={saving}
-            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-1.5 rounded-xl">
+            className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Wiederherstellen
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-1 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
     </div>

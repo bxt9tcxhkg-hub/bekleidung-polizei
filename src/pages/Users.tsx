@@ -225,7 +225,7 @@ export default function Users() {
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -276,10 +276,10 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
-                      <button onClick={() => openEdit(u)} className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
+                      <button onClick={() => openEdit(u)} className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deleteUser(u)} className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
+                      <button onClick={() => deleteUser(u)} className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
                         <UserX className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -325,7 +325,7 @@ export default function Users() {
               {importRows.length > 0 && (
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Benutzer erkannt – Vorschau:</p>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">Organisation</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
