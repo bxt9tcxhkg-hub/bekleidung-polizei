@@ -247,7 +247,7 @@ export default function Users() {
                       <div className={`p-1.5 rounded-lg ${u.roles.includes('admin') ? 'bg-blue-100' : 'bg-gray-100'}`}>
                         {u.roles.includes('admin') ? <Shield className="w-3.5 h-3.5 text-blue-700" /> : <User className="w-3.5 h-3.5 text-gray-500" />}
                       </div>
-                      <span className="font-medium text-gray-900">{u.name}</span>
+                      <span className="font-medium text-gray-900 truncate max-w-xs">{u.name}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username}</td>
@@ -432,8 +432,8 @@ export default function Users() {
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : editId ? 'Speichern' : 'Anlegen'}
               </button>
             </div>

@@ -94,9 +94,9 @@ export default function ShoeRefunds() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           {refunds.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-gray-400">
-              <Footprints className="w-10 h-10 mb-3" />
-              <p>Keine Erstattungen vorhanden</p>
+            <div className="flex flex-col items-center py-16 text-center">
+              <Footprints className="w-12 h-12 mb-3 text-gray-300" />
+              <p className="font-semibold text-gray-500">Keine Erstattungen vorhanden</p>
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -194,8 +194,8 @@ export default function ShoeRefunds() {
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => { setShowForm(false); setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); setError('') }} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={create} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+              <button onClick={() => { setShowForm(false); setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' }); setUserSearch(''); setError('') }} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={create} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
               </button>
             </div>

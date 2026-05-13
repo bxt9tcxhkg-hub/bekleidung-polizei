@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Package } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order } from '../lib/types'
@@ -133,9 +134,10 @@ export default function MyOrders() {
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : orders.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-gray-400">
-          <p className="font-medium">Noch keine Bestellungen</p>
-          <p className="text-sm mt-1">Bestelle im Bekleidungskatalog</p>
+        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+          <Package className="w-12 h-12 mb-3 text-gray-300" />
+          <p className="font-semibold text-gray-500">Noch keine Bestellungen</p>
+          <p className="text-sm text-gray-400 mt-1">Bestelle im Bekleidungskatalog</p>
         </div>
       ) : (
         <div className="space-y-6">

@@ -321,7 +321,7 @@ export default function Lager() {
                                   onKeyDown={e => { if (e.key === 'Enter') saveQty(entry); if (e.key === 'Escape') setEditingId(null) }}
                                 />
                                 <button onClick={() => saveQty(entry)} disabled={saving}
-                                  className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50">
+                                  className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-60">
                                   <Check className="w-3.5 h-3.5" />
                                 </button>
                                 <button onClick={() => setEditingId(null)}
@@ -474,7 +474,7 @@ export default function Lager() {
                         <td className="px-4 py-3 text-right">
                           {o.status === 'approved' && (
                             <button onClick={() => markReceived(o)} disabled={saving}
-                              className="text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-50 whitespace-nowrap">
+                              className="text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg disabled:opacity-60 whitespace-nowrap">
                               Wareneingang
                             </button>
                           )}

@@ -144,11 +144,11 @@ export default function Approvals() {
                             </span>
                             <div className="flex items-center gap-2">
                               <button onClick={() => approve(o)} disabled={processing === o.id}
-                                className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                                className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                                 <CheckCircle className="w-3.5 h-3.5" /> Freigeben
                               </button>
                               <button onClick={() => setCancelReason({ id: o.id, reason: '', type: 'order' })} disabled={processing === o.id}
-                                className="flex items-center gap-1.5 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                                className="flex items-center gap-1.5 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                                 <XCircle className="w-3.5 h-3.5" /> Ablehnen
                               </button>
                             </div>
@@ -201,11 +201,11 @@ export default function Approvals() {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2 justify-end">
                             <button onClick={() => approveStockOrder(o.id)} disabled={processing === o.id}
-                              className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                              className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                               <CheckCircle className="w-3.5 h-3.5" /> Freigeben
                             </button>
                             <button onClick={() => setCancelReason({ id: o.id, reason: '', type: 'stock' })} disabled={processing === o.id}
-                              className="flex items-center gap-1.5 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+                              className="flex items-center gap-1.5 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                               <XCircle className="w-3.5 h-3.5" /> Ablehnen
                             </button>
                           </div>
@@ -235,14 +235,14 @@ export default function Approvals() {
                 placeholder="Grund für die Ablehnung..." autoFocus />
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setCancelReason(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={() => setCancelReason(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button
                 onClick={() => cancelReason.type === 'stock'
                   ? rejectStockOrder(cancelReason.id, cancelReason.reason)
                   : reject(cancelReason.id, cancelReason.reason)
                 }
                 disabled={!cancelReason.reason.trim() || processing === cancelReason.id}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 Ablehnen
               </button>
             </div>

@@ -205,6 +205,7 @@ export default function Budgets() {
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Verbraucht</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Verbleibend</th>
                 <th className="px-4 py-3" />
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -217,10 +218,7 @@ export default function Budgets() {
                 const pct = Math.min(100, (used / total) * 100)
                 return (
                   <tr key={profile.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => editId !== profile.id && openDrilldown(profile)}>
-                    <td className="px-4 py-3 font-medium text-gray-900 flex items-center gap-2">
-                      {profile.name}
-                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{profile.name}</td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{profile.dienstnummer ?? '–'}</td>
                     <td className="px-4 py-3 text-right">
                       {editId === profile.id ? (
@@ -273,6 +271,9 @@ export default function Budgets() {
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                     </td>
+                    <td className="px-4 py-3 text-gray-300">
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </td>
                   </tr>
                 )
               })}
@@ -307,9 +308,9 @@ export default function Budgets() {
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => { setShowBulk(false); setBulkForm({ amount: '', valid_from: today() }) }}
-                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={saveBulk} disabled={!bulkForm.amount || bulkSaving}
-                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {bulkSaving ? 'Wird gespeichert...' : 'Für alle setzen'}
               </button>
             </div>
@@ -407,9 +408,9 @@ export default function Budgets() {
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => setShowCapForm(false)}
-                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={saveCap} disabled={!capForm.amount || capSaving}
-                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {capSaving ? 'Wird gespeichert...' : 'Speichern'}
               </button>
             </div>

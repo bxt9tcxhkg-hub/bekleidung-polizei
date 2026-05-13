@@ -35,9 +35,9 @@ export default function AuditLog() {
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {logs.length === 0 ? (
-            <div className="flex flex-col items-center py-12 text-gray-400">
-              <ClipboardList className="w-10 h-10 mb-3" />
-              <p>Keine Einträge vorhanden</p>
+            <div className="flex flex-col items-center py-16 text-center">
+              <ClipboardList className="w-12 h-12 mb-3 text-gray-300" />
+              <p className="font-semibold text-gray-500">Keine Einträge vorhanden</p>
             </div>
           ) : (
             <>
