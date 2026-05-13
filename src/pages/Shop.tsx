@@ -26,6 +26,7 @@ export default function Shop() {
   const [sizeModal, setSizeModal] = useState<{ product: Product; size: string; quantity: number } | null>(null)
   const [genderFilterActive, setGenderFilterActive] = useState(true)
   const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
+  const [lastSizes, setLastSizes] = useState<Record<string, string>>({})
 
   async function loadBudget() {
     const [total, orders] = await Promise.all([
@@ -60,7 +61,19 @@ export default function Shop() {
       const qs = qRes.data ?? []
       setQuarters(qs)
       setActiveQuarter(qs.find(q => q.status === 'active') ?? null)
-      await Promise.all([loadCart(), loadBudget()])
+      const [, , prevRes] = await Promise.all([
+        loadCart(),
+        loadBudget(),
+        supabase.from('orders').select('product_id,size,created_at')
+          .eq('user_id', profile!.id)
+          .not('status', 'in', '("pending","cancelled")')
+          .order('created_at', { ascending: false }),
+      ])
+      const map: Record<string, string> = {}
+      for (const o of (prevRes.data ?? [])) {
+        if (!map[o.product_id]) map[o.product_id] = o.size
+      }
+      setLastSizes(map)
       setLoading(false)
     }
     if (profile) init()
@@ -83,7 +96,8 @@ export default function Shop() {
   const filtered = selectedCategory === 'Alle' ? genderFiltered : genderFiltered.filter(p => p.category === selectedCategory)
 
   function openSizeModal(product: Product) {
-    setSizeModal({ product, size: product.sizes[0] ?? '', quantity: 1 })
+    const defaultSize = lastSizes[product.id] ?? product.sizes[0] ?? ''
+    setSizeModal({ product, size: defaultSize, quantity: 1 })
   }
 
   async function addToCart() {
@@ -243,6 +257,11 @@ export default function Shop() {
                       <Info className="w-3 h-3" /> Größentabelle
                     </button>
                   )}
+                  {lastSizes[product.id] && (
+                    <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded-full">
+                      Zuletzt: Gr. {lastSizes[product.id]}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1 mb-4">
                   {product.sizes.slice(0, 6).map(s => (
@@ -282,14 +301,27 @@ export default function Shop() {
             </div>
             <div className="px-5 py-4 space-y-4">
               <div>
-                <p className="text-xs font-medium text-gray-600 mb-2">Größe wählen</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-medium text-gray-600">Größe wählen</p>
+                  {lastSizes[sizeModal.product.id] && (
+                    <span className="text-xs text-blue-600 font-medium">
+                      Zuletzt bestellt: Gr. {lastSizes[sizeModal.product.id]}
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  {sizeModal.product.sizes.map(s => (
-                    <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
-                      {s}
-                    </button>
-                  ))}
+                  {sizeModal.product.sizes.map(s => {
+                    const isLast = lastSizes[sizeModal.product.id] === s
+                    return (
+                      <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors relative ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
+                        {s}
+                        {isLast && (
+                          <span className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-white ${sizeModal.size === s ? 'bg-yellow-300' : 'bg-blue-400'}`} title="Zuletzt bestellt" />
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
               <div>
