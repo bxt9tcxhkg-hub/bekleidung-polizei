@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package,
   CalendarRange, Footprints, Users, ClipboardList,
-  LogOut, Shield, Menu, X, CheckSquare, UserCircle, Wallet,
+  LogOut, Shield, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
@@ -44,6 +44,7 @@ export default function Layout() {
       color: 'text-orange-300',
       items: [
         { to: '/bestellungen', label: 'Bestellungen', icon: Package },
+        { to: '/lager', label: 'Lagerverwaltung', icon: Warehouse },
         { to: '/produkte', label: 'Produkte', icon: Package },
         { to: '/quartale', label: 'Quartale', icon: CalendarRange },
         { to: '/benutzer', label: 'Benutzer', icon: Users },

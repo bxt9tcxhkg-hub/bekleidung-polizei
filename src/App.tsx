@@ -16,6 +16,7 @@ import Users from './pages/Users'
 import AuditLog from './pages/AuditLog'
 import Approvals from './pages/Approvals'
 import Budgets from './pages/Budgets'
+import Lager from './pages/Lager'
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="schneiderjobs" element={<ProtectedRoute sachbearbeiterOnly><TailorJobs /></ProtectedRoute>} />
             <Route path="benutzer" element={<ProtectedRoute sachbearbeiterOnly><Users /></ProtectedRoute>} />
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
+            <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>

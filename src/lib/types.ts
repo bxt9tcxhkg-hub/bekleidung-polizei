@@ -123,6 +123,26 @@ export interface ShoeRefund {
   creator?: Profile
 }
 
+export type StockOrderStatus = 'pending_approval' | 'approved' | 'rejected' | 'received'
+
+export interface StockOrder {
+  id: string
+  product_id: string
+  size: string
+  quantity: number
+  status: StockOrderStatus
+  note: string | null
+  requested_by: string
+  approved_by: string | null
+  approved_at: string | null
+  received_at: string | null
+  created_at: string
+  updated_at: string
+  products?: Product
+  requester?: Profile
+  approver?: Profile
+}
+
 export interface AuditLog {
   id: string
   action: string
@@ -142,6 +162,7 @@ type ShoeRefundCapRow = Omit<ShoeRefundCap, 'profiles' | 'creator'>
 type TailorJobRow = Omit<TailorJob, 'profiles' | 'quarters' | 'orders' | 'creator'>
 type ShoeRefundRow = Omit<ShoeRefund, 'profiles' | 'creator'>
 type AuditLogRow = Omit<AuditLog, 'profiles' | 'creator'>
+type StockOrderRow = Omit<StockOrder, 'products' | 'requester' | 'approver'>
 
 export type Database = {
   public: {
@@ -156,6 +177,7 @@ export type Database = {
       audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [] }
       user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [] }
       shoe_refund_caps: { Row: ShoeRefundCapRow; Insert: Omit<ShoeRefundCapRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundCapRow>; Relationships: [] }
+      stock_orders: { Row: StockOrderRow; Insert: Omit<StockOrderRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<StockOrderRow>; Relationships: [] }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -186,6 +208,20 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
   partially_issued: 'bg-orange-100 text-orange-700',
   issued: 'bg-emerald-100 text-emerald-700',
   cancelled: 'bg-red-100 text-red-700',
+}
+
+export const STOCK_ORDER_STATUS_LABELS: Record<StockOrderStatus, string> = {
+  pending_approval: 'Wartet auf Freigabe',
+  approved: 'Freigegeben',
+  rejected: 'Abgelehnt',
+  received: 'Wareneingang',
+}
+
+export const STOCK_ORDER_STATUS_COLORS: Record<StockOrderStatus, string> = {
+  pending_approval: 'bg-yellow-100 text-yellow-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-700',
+  received: 'bg-emerald-100 text-emerald-700',
 }
 
 export const QUARTER_STATUS_LABELS: Record<QuarterStatus, string> = {

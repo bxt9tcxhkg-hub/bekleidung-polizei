@@ -28,6 +28,7 @@ const STATUS_BACK: Partial<Record<OrderStatus, OrderStatus>> = {
 export default function Orders() {
   const { profile } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
+  const [inventoryMap, setInventoryMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<AdminTab>('eingereicht')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -37,17 +38,23 @@ export default function Orders() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('orders')
-      .select('*, products(id,name,category,article_number,needs_tailoring), quarters(id,name), profiles(id,name,username,dienstnummer)')
-      .not('status', 'in', '("pending","pending_approval")')
-      .order('created_at', { ascending: false })
-    const loaded = (data ?? []) as Order[]
+    const [ordersRes, invRes] = await Promise.all([
+      supabase
+        .from('orders')
+        .select('*, products(id,name,category,article_number,needs_tailoring), quarters(id,name), profiles(id,name,username,dienstnummer)')
+        .not('status', 'in', '("pending","pending_approval")')
+        .order('created_at', { ascending: false }),
+      supabase.from('inventory').select('product_id,size,quantity'),
+    ])
+    const loaded = (ordersRes.data ?? []) as Order[]
     setOrders(loaded)
     const rec: Record<string, string> = {}
     loaded.forEach(o => { if (o.quantity_received != null) rec[o.id] = String(o.quantity_received) })
     setReceivedInputs(rec)
     setIssuedInputs({})
+    const inv: Record<string, number> = {}
+    ;(invRes.data ?? []).forEach((e: any) => { inv[`${e.product_id}__${e.size}`] = e.quantity })
+    setInventoryMap(inv)
     setLoading(false)
   }
 
@@ -350,19 +357,32 @@ export default function Orders() {
                 <th className={thClass}>Produkt</th>
                 <th className={`${thClass} hidden sm:table-cell`}>Quartal</th>
                 <th className={thClass}>Gr. / Anz.</th>
+                <th className={`${thCClass} hidden sm:table-cell`}>Lager</th>
                 <th className="hidden sm:table-cell text-right px-3 py-2.5 md:px-4 md:py-3 font-semibold text-gray-600 whitespace-nowrap text-xs md:text-sm">Preis</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => (
-                  <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{(o as any).quarters?.name}</td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-right font-medium text-gray-700 hidden sm:table-cell">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
-                  </tr>
-                ))}
+                {sorted.map(o => {
+                  const stock = inventoryMap[`${o.product_id}__${o.size}`] ?? 0
+                  return (
+                    <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{(o as any).quarters?.name}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-center hidden sm:table-cell">
+                        {stock >= o.quantity ? (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">{stock}× lagernd</span>
+                        ) : stock > 0 ? (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">{stock}× lagernd</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">–</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-right font-medium text-gray-700 hidden sm:table-cell">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           )}

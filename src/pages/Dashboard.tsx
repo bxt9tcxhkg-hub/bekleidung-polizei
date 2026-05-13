@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Truck, Scissors, Package, Footprints } from 'lucide-react'
+import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Truck, Scissors, Package, Footprints, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
@@ -127,7 +127,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
 }
 
 function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
-  const [stats, setStats] = useState({ eingereicht: 0, lieferant: 0, schneider: 0, ausgabe: 0 })
+  const [stats, setStats] = useState({ eingereicht: 0, lieferant: 0, schneider: 0, ausgabe: 0, lagerPending: 0 })
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -136,11 +136,12 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
       const quarterRes = await supabase.from('quarters').select('*').eq('status', 'active').single()
       setActiveQuarter(quarterRes.data ?? null)
 
-      const [eingRes, liefRes, schnRes, ausgRes] = await Promise.all([
+      const [eingRes, liefRes, schnRes, ausgRes, lagerRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'approved'),
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'ordered_supplier'),
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'at_tailor'),
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'ready_for_issue'),
+        supabase.from('stock_orders').select('id', { count: 'exact' }).eq('status', 'approved'),
       ])
 
       setStats({
@@ -148,6 +149,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
         lieferant: liefRes.count ?? 0,
         schneider: schnRes.count ?? 0,
         ausgabe: ausgRes.count ?? 0,
+        lagerPending: lagerRes.count ?? 0,
       })
       setLoading(false)
     }
@@ -156,7 +158,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
-  const cards = [
+  const orderCards = [
     { label: 'Eingereicht', value: stats.eingereicht, icon: ShoppingBag, color: 'bg-blue-50 text-blue-700', iconBg: 'bg-blue-100', to: '/bestellungen' },
     { label: 'Beim Lieferanten', value: stats.lieferant, icon: Truck, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', to: '/bestellungen' },
     { label: 'Beim Schneider', value: stats.schneider, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', to: '/bestellungen' },
@@ -173,7 +175,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
         </div>
       )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {cards.map(({ label, value, icon: Icon, color, iconBg, to }) => (
+        {orderCards.map(({ label, value, icon: Icon, color, iconBg, to }) => (
           <Link key={label} to={to} className={`rounded-xl p-5 ${color} hover:brightness-95 transition-all`}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium">{label}</span>
@@ -182,6 +184,16 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
             <p className="text-2xl font-bold">{value}</p>
           </Link>
         ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Link to="/lager" className="rounded-xl p-5 bg-indigo-50 text-indigo-700 hover:brightness-95 transition-all">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium">Lagerverwaltung</span>
+            <div className="bg-indigo-100 p-2 rounded-lg"><Warehouse className="w-4 h-4" /></div>
+          </div>
+          <p className="text-2xl font-bold">{stats.lagerPending}</p>
+          <p className="text-xs mt-1 opacity-70">Freigegebene Lagerbestellungen zum Einbuchen</p>
+        </Link>
       </div>
     </div>
   )
