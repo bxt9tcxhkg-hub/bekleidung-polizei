@@ -304,8 +304,8 @@ export default function Orders() {
     setTimeout(() => win.print(), 400)
   }
 
-  const thClass = 'text-left px-4 py-3 font-semibold text-gray-600'
-  const thCClass = 'text-center px-4 py-3 font-semibold text-gray-600'
+  const thClass = 'text-left px-3 py-2.5 md:px-4 md:py-3 font-semibold text-gray-600 whitespace-nowrap text-xs md:text-sm'
+  const thCClass = 'text-center px-3 py-2.5 md:px-4 md:py-3 font-semibold text-gray-600 whitespace-nowrap text-xs md:text-sm'
 
   return (
     <div>
@@ -315,7 +315,7 @@ export default function Orders() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1.5 mb-5 flex-wrap">
+      <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1 scrollbar-hide flex-nowrap">
         {ADMIN_TABS.map(tab => (
           <button key={tab.key} onClick={() => switchTab(tab.key)}
             className={`flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-lg border transition-colors ${
@@ -345,22 +345,22 @@ export default function Orders() {
           {activeTab === 'eingereicht' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
+                <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
-                <th className={thClass}>Quartal</th>
+                <th className={`${thClass} hidden sm:table-cell`}>Quartal</th>
                 <th className={thClass}>Gr. / Anz.</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600">Preis</th>
+                <th className="hidden sm:table-cell text-right px-3 py-2.5 md:px-4 md:py-3 font-semibold text-gray-600 whitespace-nowrap text-xs md:text-sm">Preis</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                    <td className="px-4 py-3 text-gray-500 text-sm">{(o as any).quarters?.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{o.size} · {o.quantity}×</td>
-                    <td className="px-4 py-3 text-right font-medium text-gray-700">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{(o as any).quarters?.name}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-right font-medium text-gray-700 hidden sm:table-cell">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -371,13 +371,13 @@ export default function Orders() {
           {activeTab === 'lieferant' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
+                <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr.</th>
                 <th className={thCClass}>Bestellt</th>
                 <th className={thCClass}>Erhalten</th>
-                <th className="px-4 py-3" />
+                <th className="px-3 py-2.5 md:px-4 md:py-3" />
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => {
@@ -385,20 +385,20 @@ export default function Orders() {
                   const dirty = receivedInputs[o.id] !== undefined && receivedInputs[o.id] !== String(o.quantity_received ?? '')
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                      <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                      <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                      <td className="px-4 py-3 text-gray-600">{o.size}</td>
-                      <td className="px-4 py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
-                      <td className="px-4 py-3"><div className="flex justify-center">
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><div className="flex justify-center">
                         <input type="number" min="0" max={o.quantity}
-                          className={`w-16 text-center border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${dirty ? 'border-amber-400 bg-amber-50' : saved ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
+                          className={`w-14 text-center border rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${dirty ? 'border-amber-400 bg-amber-50' : saved ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
                           placeholder={String(o.quantity)} value={receivedInputs[o.id] ?? ''}
                           onChange={e => setReceivedInputs(prev => ({ ...prev, [o.id]: e.target.value }))} />
                       </div></td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5 md:px-4 md:py-3">
                         <button onClick={() => saveReceived(o)} disabled={saving || !dirty}
-                          className="text-xs font-medium bg-blue-700 hover:bg-blue-800 text-white px-3 py-1.5 rounded-lg disabled:opacity-30 whitespace-nowrap">
+                          className="text-xs font-medium bg-blue-700 hover:bg-blue-800 text-white px-3 py-2 rounded-lg disabled:opacity-30 whitespace-nowrap">
                           Speichern
                         </button>
                       </td>
@@ -413,7 +413,7 @@ export default function Orders() {
           {activeTab === 'schneider' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
+                <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr.</th>
@@ -423,12 +423,12 @@ export default function Orders() {
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                    <td className="px-4 py-3 text-gray-600">{o.size}</td>
-                    <td className="px-4 py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{o.quantity_received ?? '–'}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-600">{o.quantity_received ?? '–'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -441,23 +441,23 @@ export default function Orders() {
             {activeTab === 'ausgabe' && (
               <div className="flex justify-end px-4 py-3 border-b border-gray-100">
                 <button onClick={generateAusgabeliste}
-                  className="flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+                  className="flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-blue-50 transition-colors">
                   <FileText className="w-4 h-4" /> Ausgabeliste als PDF
                 </button>
               </div>
             )}
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
+                <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr.</th>
-                <th className={thCClass}>Bestellt</th>
-                <th className={thCClass}>Geliefert</th>
+                <th className={`${thCClass} hidden sm:table-cell`}>Bestellt</th>
+                <th className={`${thCClass} hidden sm:table-cell`}>Geliefert</th>
                 {activeTab === 'teilweise' && <th className={thCClass}>Ausgegeben</th>}
                 <th className={thCClass}>{activeTab === 'teilweise' ? 'Ausstehend' : 'Verfügbar'}</th>
                 <th className={thCClass}>Auszugeben</th>
-                <th className="px-4 py-3" />
+                <th className="px-3 py-2.5 md:px-4 md:py-3" />
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => {
@@ -466,23 +466,23 @@ export default function Orders() {
                   const outstanding = qtyRef - qtyIssued
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                      <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                      <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                      <td className="px-4 py-3 text-gray-600">{o.size}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{o.quantity}</td>
-                      <td className="px-4 py-3 text-center text-gray-700">{o.quantity_received ?? '–'}</td>
-                      {activeTab === 'teilweise' && <td className="px-4 py-3 text-center text-gray-700">{qtyIssued}</td>}
-                      <td className="px-4 py-3 text-center font-semibold text-blue-700">{outstanding}</td>
-                      <td className="px-4 py-3"><div className="flex justify-center">
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity_received ?? '–'}</td>
+                      {activeTab === 'teilweise' && <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{qtyIssued}</td>}
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-blue-700">{outstanding}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><div className="flex justify-center">
                         <input type="number" min="1" max={outstanding}
-                          className="w-16 text-center border border-gray-200 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-14 text-center border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder={String(outstanding)} value={issuedInputs[o.id] ?? ''}
                           onChange={e => setIssuedInputs(prev => ({ ...prev, [o.id]: e.target.value }))} />
                       </div></td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5 md:px-4 md:py-3">
                         <button onClick={() => issueOrder(o)} disabled={saving}
-                          className="text-xs font-medium bg-green-700 hover:bg-green-800 text-white px-3 py-1.5 rounded-lg disabled:opacity-40 whitespace-nowrap">
+                          className="text-xs font-medium bg-green-700 hover:bg-green-800 text-white px-3 py-2 rounded-lg disabled:opacity-40 whitespace-nowrap">
                           Ausgeben
                         </button>
                       </td>
@@ -498,7 +498,7 @@ export default function Orders() {
           {activeTab === 'ausgegeben' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
+                <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr.</th>
@@ -509,13 +509,13 @@ export default function Orders() {
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
-                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                    <td className="px-4 py-3 text-gray-600">{o.size}</td>
-                    <td className="px-4 py-3 text-center text-gray-700">{o.quantity}</td>
-                    <td className="px-4 py-3 text-center text-gray-700">{o.quantity_issued ?? o.quantity}</td>
-                    <td className="px-4 py-3 text-gray-500">{(o as any).quarters?.name}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity_issued ?? o.quantity}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{(o as any).quarters?.name}</td>
                   </tr>
                 ))}
               </tbody>
@@ -526,7 +526,7 @@ export default function Orders() {
           {activeTab === 'storniert' && (
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
+                <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
                 <th className={thClass}>Benutzer</th>
                 <th className={thClass}>Produkt</th>
                 <th className={thClass}>Gr. / Anz.</th>
@@ -536,12 +536,12 @@ export default function Orders() {
               <tbody className="divide-y divide-gray-100">
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 opacity-75 ${selectedIds.has(o.id) ? 'bg-blue-50 !opacity-100' : ''}`}>
-                    <td className="px-4 py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-4 py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                    <td className="px-4 py-3 text-gray-600">{o.size} · {o.quantity}×</td>
-                    <td className="px-4 py-3 text-red-600">{o.cancel_reason ?? '–'}</td>
-                    <td className="px-4 py-3 text-gray-500">{(o as any).quarters?.name}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-red-600">{o.cancel_reason ?? '–'}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{(o as any).quarters?.name}</td>
                   </tr>
                 ))}
               </tbody>

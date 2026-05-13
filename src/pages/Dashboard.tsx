@@ -70,7 +70,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         <Link to="/warenkorb" className="rounded-xl p-5 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Warenkorb</span>
@@ -172,7 +172,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
           <span className="text-xs text-blue-500 ml-auto">{new Date(activeQuarter.start_date).toLocaleDateString('de-AT')} – {new Date(activeQuarter.end_date).toLocaleDateString('de-AT')}</span>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map(({ label, value, icon: Icon, color, iconBg, to }) => (
           <Link key={label} to={to} className={`rounded-xl p-5 ${color} hover:brightness-95 transition-all`}>
             <div className="flex items-center justify-between mb-3">
