@@ -100,10 +100,10 @@ export default function Approvals() {
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Budgetüberschreitungen</h2>
             {orders.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-10 text-gray-400">
-                <CheckCircle className="w-10 h-10 mb-3 text-green-400" />
-                <p className="font-medium text-gray-600">Keine offenen Freigaben</p>
-                <p className="text-sm mt-1">Alle Bestellungen liegen im Budget</p>
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+                <CheckCircle className="w-12 h-12 mb-3 text-gray-300" />
+                <p className="font-semibold text-gray-500">Keine offenen Freigaben</p>
+                <p className="text-sm text-gray-400 mt-1">Alle Bestellungen liegen im Budget</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -166,9 +166,9 @@ export default function Approvals() {
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Lagerbestellungen</h2>
             {stockOrders.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-10 text-gray-400">
-                <Package className="w-10 h-10 mb-3 opacity-40" />
-                <p className="font-medium text-gray-600">Keine offenen Lagerbestellungen</p>
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+                <Package className="w-12 h-12 mb-3 text-gray-300" />
+                <p className="font-semibold text-gray-500">Keine offenen Lagerbestellungen</p>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">

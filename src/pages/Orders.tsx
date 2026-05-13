@@ -341,9 +341,9 @@ export default function Orders() {
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : sorted.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-gray-400">
-          <Package className="w-10 h-10 mb-3 opacity-40" />
-          <p className="font-medium">Keine Bestellungen</p>
+        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+          <Package className="w-12 h-12 mb-3 text-gray-300" />
+          <p className="font-semibold text-gray-500">Keine Bestellungen</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -366,8 +366,8 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{(o as any).quarters?.name}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center hidden sm:table-cell">
@@ -406,8 +406,8 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><div className="flex justify-center">
@@ -418,7 +418,7 @@ export default function Orders() {
                       </div></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3">
                         <button onClick={() => saveReceived(o)} disabled={saving || !dirty}
-                          className="text-xs font-medium bg-blue-700 hover:bg-blue-800 text-white px-3 py-2 rounded-lg disabled:opacity-30 whitespace-nowrap">
+                          className="text-xs font-medium bg-blue-700 hover:bg-blue-800 text-white px-3 py-2 rounded-lg disabled:opacity-60 whitespace-nowrap">
                           Speichern
                         </button>
                       </td>
@@ -444,8 +444,8 @@ export default function Orders() {
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-600">{o.quantity_received ?? '–'}</td>
@@ -487,8 +487,8 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity_received ?? '–'}</td>
@@ -502,7 +502,7 @@ export default function Orders() {
                       </div></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3">
                         <button onClick={() => issueOrder(o)} disabled={saving || !(parseInt(issuedInputs[o.id] ?? '') > 0)}
-                          className="text-xs font-medium bg-green-700 hover:bg-green-800 text-white px-3 py-2 rounded-lg disabled:opacity-40 whitespace-nowrap">
+                          className="text-xs font-medium bg-green-700 hover:bg-green-800 text-white px-3 py-2 rounded-lg disabled:opacity-60 whitespace-nowrap">
                           Ausgeben
                         </button>
                       </td>
@@ -530,8 +530,8 @@ export default function Orders() {
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity_issued ?? o.quantity}</td>
@@ -557,8 +557,8 @@ export default function Orders() {
                 {sorted.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 opacity-75 ${selectedIds.has(o.id) ? 'bg-blue-50 !opacity-100' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-red-600">{o.cancel_reason ?? '–'}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{(o as any).quarters?.name}</td>

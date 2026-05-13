@@ -375,7 +375,7 @@ export default function Shop() {
                         <p className="text-xs font-semibold text-gray-700 mt-1">€ {((item.products?.price ?? 0) * item.quantity).toFixed(2)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30"><Minus className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-60"><Minus className="w-3.5 h-3.5" /></button>
                         <span className="text-sm font-medium w-5 text-center">{item.quantity}</span>
                         <button onClick={() => updateQty(item, 1)} className="p-1 rounded-md hover:bg-gray-100"><Plus className="w-3.5 h-3.5" /></button>
                         <button onClick={() => removeItem(item)} className="p-1 ml-1 rounded-md hover:bg-red-50 text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>

@@ -285,10 +285,10 @@ export default function Lager() {
           {/* ── Bestand ── */}
           {tab === 'bestand' && (
             Object.keys(invByProduct).length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-gray-400">
-                <Warehouse className="w-10 h-10 mb-3 opacity-40" />
-                <p className="font-medium text-gray-600">Kein Bestand erfasst</p>
-                <p className="text-sm mt-1">Klicke „Bestand erfassen" um Artikel einzubuchen</p>
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+                <Warehouse className="w-12 h-12 mb-3 text-gray-300" />
+                <p className="font-semibold text-gray-500">Kein Bestand erfasst</p>
+                <p className="text-sm text-gray-400 mt-1">Klicke „Bestand erfassen" um Artikel einzubuchen</p>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -435,9 +435,9 @@ export default function Lager() {
           {/* ── Bestellhistorie ── */}
           {tab === 'historie' && (
             stockOrders.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-gray-400">
-                <ClipboardList className="w-10 h-10 mb-3 opacity-40" />
-                <p className="font-medium text-gray-600">Keine Lagerbestellungen vorhanden</p>
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+                <ClipboardList className="w-12 h-12 mb-3 text-gray-300" />
+                <p className="font-semibold text-gray-500">Keine Lagerbestellungen vorhanden</p>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -600,7 +600,7 @@ export default function Lager() {
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           <button onClick={() => updateCartQty(idx, -1)} disabled={item.quantity <= 1}
-                            className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30">
+                            className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-60">
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <span className="text-sm font-semibold w-6 text-center">{item.quantity}</span>
