@@ -86,7 +86,7 @@ const emptyProduct = (): Omit<Product, 'id' | 'created_at'> => ({
   sizes: [],
   price: 0,
   needs_tailoring: false,
-  size_guide: '',
+  size_guide: null,
   organisation: 'Stadtpolizei',
   active: true,
 })
@@ -137,7 +137,7 @@ export default function Products() {
   }
 
   function openEdit(p: Product) {
-    setForm({ article_number: p.article_number, name: p.name, category: p.category, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? '', organisation: p.organisation ?? 'Stadtpolizei', active: p.active })
+    setForm({ article_number: p.article_number, name: p.name, category: p.category, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active })
     setEditId(p.id)
     setError('')
     setShowForm(true)
@@ -147,11 +147,12 @@ export default function Products() {
     setError('')
     if (!form.article_number || !form.name) { setError('Artikelnummer und Name sind Pflichtfelder.'); return }
     setSaving(true)
+    const payload = { ...form, size_guide: form.size_guide?.trim() || null }
     if (editId) {
-      const { error } = await supabase.from('products').update(form).eq('id', editId)
+      const { error } = await supabase.from('products').update(payload).eq('id', editId)
       if (error) setError(error.message)
     } else {
-      const { error } = await supabase.from('products').insert(form)
+      const { error } = await supabase.from('products').insert(payload)
       if (error) setError(error.message)
     }
     setSaving(false)
@@ -523,7 +524,7 @@ export default function Products() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Größentabelle (URL, optional)</label>
-                <input type="url" placeholder="https://..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.size_guide ?? ''} onChange={e => setForm(f => ({ ...f, size_guide: e.target.value }))} />
+                <input type="url" placeholder="https://..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.size_guide ?? ''} onChange={e => setForm(f => ({ ...f, size_guide: e.target.value || null }))} />
               </div>
               <div className="flex items-center gap-3">
                 <input type="checkbox" id="tailoring" checked={form.needs_tailoring} onChange={e => setForm(f => ({ ...f, needs_tailoring: e.target.checked }))} className="rounded" />

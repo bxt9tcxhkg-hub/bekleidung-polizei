@@ -122,7 +122,7 @@ export default function Orders() {
 
   async function issueOrder(order: Order) {
     const qtyNow = parseInt(issuedInputs[order.id] ?? '') || 0
-    if (qtyNow <= 0) { alert('Bitte Menge eingeben.'); return }
+    if (qtyNow <= 0) return
     const qtyRef = order.quantity_received ?? order.quantity
     const prevIssued = order.quantity_issued ?? 0
     const newTotal = activeTab === 'teilweise' ? prevIssued + qtyNow : qtyNow
@@ -501,7 +501,7 @@ export default function Orders() {
                           onChange={e => setIssuedInputs(prev => ({ ...prev, [o.id]: e.target.value }))} />
                       </div></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3">
-                        <button onClick={() => issueOrder(o)} disabled={saving}
+                        <button onClick={() => issueOrder(o)} disabled={saving || !(parseInt(issuedInputs[o.id] ?? '') > 0)}
                           className="text-xs font-medium bg-green-700 hover:bg-green-800 text-white px-3 py-2 rounded-lg disabled:opacity-40 whitespace-nowrap">
                           Ausgeben
                         </button>

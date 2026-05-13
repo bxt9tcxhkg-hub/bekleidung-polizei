@@ -22,6 +22,7 @@ export default function ChangePasswordModal() {
       data: { force_password_change: false },
     })
     if (error) { setError(error.message); setSaving(false) }
+    else { setSaving(false); setDismissed(true) }
   }
 
   return (

@@ -412,10 +412,10 @@ export default function Users() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
                 <div className="flex gap-3">
-                  {['user', 'admin', 'genehmiger'].map(role => (
+                  {([['user', 'Benutzer'], ['admin', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as const).map(([role, label]) => (
                     <label key={role} className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} className="rounded" />
-                      <span className="text-sm text-gray-700 capitalize">{role}</span>
+                      <span className="text-sm text-gray-700">{label}</span>
                     </label>
                   ))}
                 </div>
