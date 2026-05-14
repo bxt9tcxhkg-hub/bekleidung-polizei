@@ -273,12 +273,12 @@ export default function Dashboard() {
       </div>
 
       {tabs.length > 1 && (
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-full">
           {tabs.map((tab, i) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(i)}
-              className={`text-sm font-medium px-4 py-2 rounded-lg transition-all ${activeTab === i ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              className={`flex-1 text-sm font-medium px-2 py-2 rounded-lg transition-all whitespace-nowrap ${activeTab === i ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {tab.label}
             </button>
