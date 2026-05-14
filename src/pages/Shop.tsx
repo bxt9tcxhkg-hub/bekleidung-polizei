@@ -33,12 +33,11 @@ export default function Shop() {
   async function loadGrundausstattung() {
     if (!activeQuarter) return
     setLoadingGrund(true)
-    const { data } = await supabase
-      .from('grundausstattung')
+    const { data } = await (supabase.from('grundausstattung') as any)
       .select('*, products(*)')
       .eq('organisation', profile?.organisation ?? 'Stadtpolizei')
     if (data && data.length > 0) {
-      for (const item of data) {
+      for (const item of data as any[]) {
         if (!item.products) continue
         await supabase.from('orders').insert({
           user_id: profile!.id,

@@ -70,7 +70,7 @@ export default function Grundausstattung() {
     setError('')
     if (!form.product_id) { setError('Bitte Artikel auswählen.'); return }
     setSaving(true)
-    const { error } = await supabase.from('grundausstattung').upsert({
+    const { error } = await (supabase.from('grundausstattung') as any).upsert({
       organisation: org,
       product_id: form.product_id,
       size: form.size,
