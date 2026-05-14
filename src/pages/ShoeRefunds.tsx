@@ -90,6 +90,8 @@ export default function ShoeRefunds() {
       note: form.note || null,
       created_by: profile!.id,
       status: 'pending',
+      reviewed_by: null,
+      reviewed_at: null,
     })
     if (error) setError(error.message)
     else {
