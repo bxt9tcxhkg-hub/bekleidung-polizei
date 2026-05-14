@@ -63,7 +63,7 @@ export default function Lager() {
   async function loadAll() {
     setLoading(true)
     const [prodsRes, invRes, ordersRes] = await Promise.all([
-      supabase.from('products').select('*').eq('active', true).order('category').order('name'),
+      supabase.from('products').select('*').eq('active', true).eq('organisation', profile?.organisation ?? 'Stadtpolizei').order('category').order('name'),
       supabase.from('inventory').select('*, products(*)').order('updated_at', { ascending: false }),
       supabase.from('stock_orders')
         .select('*, products(id,name,article_number,category), requester:profiles!stock_orders_requested_by_fkey(id,name), approver:profiles!stock_orders_approved_by_fkey(id,name)')

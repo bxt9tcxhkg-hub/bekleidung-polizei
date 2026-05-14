@@ -54,7 +54,7 @@ export default function Shop() {
     async function init() {
       setLoading(true)
       const [pRes, qRes] = await Promise.all([
-        supabase.from('products').select('*').eq('active', true).order('category').order('name'),
+        supabase.from('products').select('*').eq('active', true).eq('organisation', profile?.organisation ?? 'Stadtpolizei').order('category').order('name'),
         supabase.from('quarters').select('*').not('status', 'eq', 'closed').order('year', { ascending: false }),
       ])
       setProducts(pRes.data ?? [])
