@@ -247,7 +247,8 @@ export default function Dashboard() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Guten Tag, {profile.name || profile.username}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{(() => { const h = new Date().getHours(); return h < 12 ? 'Guten Morgen,' : h < 18 ? 'Guten Tag,' : 'Guten Abend,' })()}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{profile.name || profile.username}</h1>
         <p className="text-gray-500 text-sm mt-1">Übersicht der Bekleidungsverwaltung <span className="text-xs bg-yellow-200 text-yellow-800 px-1 rounded">v2</span></p>
       </div>
 
