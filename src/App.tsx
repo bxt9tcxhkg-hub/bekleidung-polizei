@@ -17,6 +17,7 @@ import Approvals from './pages/Approvals'
 import Budgets from './pages/Budgets'
 import Lager from './pages/Lager'
 import Analyse from './pages/Analyse'
+import Grundausstattung from './pages/Grundausstattung'
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />
+            <Route path="grundausstattung" element={<ProtectedRoute sachbearbeiterOnly><Grundausstattung /></ProtectedRoute>} />
           </Route>
         </Routes>
       </BrowserRouter>
