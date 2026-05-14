@@ -258,21 +258,21 @@ export default function Products() {
           <h1 className="text-2xl font-bold text-gray-900">Produkte</h1>
           <p className="text-gray-500 text-sm mt-1">Bekleidungskatalog</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           {isStrictAdmin && filtered.length > 0 && (
-            <button onClick={() => setConfirmDelete({ mode: 'all' })} className="flex items-center gap-2 border border-red-300 text-red-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-red-50 transition-colors">
-              <Trash2 className="w-4 h-4" />
-              {orgFilter === 'all' ? 'Alle löschen' : `${orgFilter} löschen`}
+            <button onClick={() => setConfirmDelete({ mode: 'all' })} className="flex items-center gap-2 border border-red-300 text-red-600 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-red-50 transition-colors" title="Löschen">
+              <Trash2 className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden sm:inline">{orgFilter === 'all' ? 'Alle löschen' : `${orgFilter} löschen`}</span>
             </button>
           )}
           {isStrictAdmin && (
-            <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError(''); setImportOrg('Stadtpolizei') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-              <Upload className="w-4 h-4" /> Import
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError(''); setImportOrg('Stadtpolizei') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
+              <Upload className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Import</span>
             </button>
           )}
           {isAdmin && (
-            <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-              <Plus className="w-4 h-4" /> Neues Produkt
+            <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neues Produkt">
+              <Plus className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Neues Produkt</span>
             </button>
           )}
         </div>

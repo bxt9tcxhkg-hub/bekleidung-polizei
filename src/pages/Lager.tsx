@@ -245,15 +245,15 @@ export default function Lager() {
         </div>
         {tab === 'bestand' && (
           <button onClick={() => setAddForm({ product_id: '', size: '', quantity: '' })}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            <Plus className="w-4 h-4" /> Bestand erfassen
+            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0">
+            <Plus className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Bestand erfassen</span>
           </button>
         )}
         {tab === 'bestellen' && (
           <button onClick={() => setCartOpen(true)}
-            className="relative flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl transition-colors">
-            <ShoppingBag className="w-4 h-4" />
-            Warenkorb
+            className="relative flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-xl transition-colors flex-shrink-0">
+            <ShoppingBag className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Warenkorb</span>
             {cartCount > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                 {cartCount}
