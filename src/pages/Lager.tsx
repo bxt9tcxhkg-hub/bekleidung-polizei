@@ -54,6 +54,7 @@ export default function Lager() {
 
   // Bestellen
   const [selectedCategory, setSelectedCategory] = useState('Alle')
+  const [selectedSubCategory, setSelectedSubCategory] = useState('Alle')
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
   const [sizeModal, setSizeModal] = useState<SizeModal | null>(null)
@@ -137,8 +138,12 @@ export default function Lager() {
 
   // ── Bestellen ─────────────────────────────────────────────────────────────
 
-  const categories = ['Alle', ...Array.from(new Set(products.map(p => p.category)))]
-  const filteredProducts = selectedCategory === 'Alle' ? products : products.filter(p => p.category === selectedCategory)
+  const categories = ['Alle', ...Array.from(new Set(products.map(p => p.category))).values()].sort((a, b) => a === 'Alle' ? -1 : b === 'Alle' ? 1 : a.localeCompare(b))
+  const catFiltered = selectedCategory === 'Alle' ? products : products.filter(p => p.category === selectedCategory)
+  const subCategories = selectedCategory === 'Alle' ? [] : ['Alle', ...Array.from(new Set(catFiltered.map(p => p.sub_category).filter(Boolean)))]
+  const filteredProducts = selectedSubCategory === 'Alle' || selectedCategory === 'Alle'
+    ? catFiltered
+    : catFiltered.filter(p => p.sub_category === selectedSubCategory)
 
   function openSizeModal(product: Product) {
     setSizeModal({ product, size: product.sizes[0] ?? '', quantity: 1 })
@@ -366,14 +371,25 @@ export default function Lager() {
               )}
 
               {/* Category filter */}
-              <div className="flex gap-2 flex-wrap mb-5 overflow-x-auto pb-1">
+              <div className="flex gap-2 flex-wrap overflow-x-auto pb-1">
                 {categories.map(cat => (
-                  <button key={cat} onClick={() => setSelectedCategory(cat)}
+                  <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubCategory('Alle') }}
                     className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors whitespace-nowrap ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
                     {cat}
                   </button>
                 ))}
               </div>
+              {subCategories.length > 1 && (
+                <div className="flex gap-2 flex-wrap mt-2 mb-5">
+                  {subCategories.map(sub => (
+                    <button key={sub} onClick={() => setSelectedSubCategory(sub as string)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-blue-200'}`}>
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {subCategories.length <= 1 && <div className="mb-5" />}
 
               {/* Product grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

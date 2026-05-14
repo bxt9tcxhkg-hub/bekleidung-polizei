@@ -48,6 +48,7 @@ export interface Product {
   article_number: string
   name: string
   category: string
+  sub_category: string | null
   gender: 'male' | 'female' | 'unisex'
   sizes: string[]
   price: number

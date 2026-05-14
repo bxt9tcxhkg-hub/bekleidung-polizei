@@ -20,6 +20,7 @@ export default function Shop() {
   const [loading, setLoading] = useState(true)
   const [cartOpen, setCartOpen] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>('Alle')
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('Alle')
   const [adding, setAdding] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitResult, setSubmitResult] = useState<'approved' | 'pending_approval' | null>(null)
@@ -92,8 +93,12 @@ export default function Shop() {
     ? orgFiltered.filter(p => p.gender === 'unisex' || p.gender === userGender)
     : orgFiltered
 
-  const categories = ['Alle', ...Array.from(new Set(genderFiltered.map(p => p.category)))]
-  const filtered = selectedCategory === 'Alle' ? genderFiltered : genderFiltered.filter(p => p.category === selectedCategory)
+  const categories = ['Alle', ...Array.from(new Set(genderFiltered.map(p => p.category))).values()].sort((a, b) => a === 'Alle' ? -1 : b === 'Alle' ? 1 : a.localeCompare(b))
+  const catFiltered = selectedCategory === 'Alle' ? genderFiltered : genderFiltered.filter(p => p.category === selectedCategory)
+  const subCategories = selectedCategory === 'Alle' ? [] : ['Alle', ...Array.from(new Set(catFiltered.map(p => p.sub_category).filter(Boolean)))]
+  const filtered = selectedSubCategory === 'Alle' || selectedCategory === 'Alle'
+    ? catFiltered
+    : catFiltered.filter(p => p.sub_category === selectedSubCategory)
 
   function openSizeModal(product: Product) {
     const defaultSize = lastSizes[product.id] ?? product.sizes[0] ?? ''
@@ -226,12 +231,24 @@ export default function Shop() {
         )}
         <div className="w-px bg-gray-200 self-stretch mx-1" />
         {categories.map(cat => (
-          <button key={cat} onClick={() => setSelectedCategory(cat)}
+          <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubCategory('Alle') }}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
             {cat}
           </button>
         ))}
       </div>
+
+      {/* Sub-category filter */}
+      {subCategories.length > 1 && (
+        <div className="flex gap-2 flex-wrap mt-2 ml-1">
+          {subCategories.map(sub => (
+            <button key={sub} onClick={() => setSelectedSubCategory(sub as string)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-blue-200'}`}>
+              {sub}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Product grid */}
       {loading ? (
