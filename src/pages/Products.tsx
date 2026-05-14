@@ -66,7 +66,10 @@ function parseCsv(text: string): Record<string, string>[] {
 }
 
 const SIZES_COMMON = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '44', '46', '48', '50', '52', '54', '56']
-const CATEGORIES = ['Hemd', 'Hose', 'Jacke', 'Pullover', 'Weste', 'Schuhe', 'Accessoire', 'Sonstiges']
+const CATEGORIES_BY_ORG: Record<string, string[]> = {
+  Stadtpolizei: ['Funktionshemden', 'Gürtel & Krawatten', 'Handschuhe', 'Hemden & Blusen', 'Hosen', 'Hosen & Röcke', 'Jacken', 'Jacken & Mäntel', 'Kappen & Baretts', 'Schuhe', 'Socken', 'Sonstiges', 'Stiefel', 'Strickware', 'Unterbekleidung', 'Zubehör'],
+  Parkaufsicht: ['Accessoires', 'Einsatzuniform', 'Kopfbedeckung', 'Schuhe & Stiefel'],
+}
 
 function Badge({ active }: { active: boolean }) {
   return (
@@ -81,7 +84,7 @@ const GENDER_LABELS: Record<string, string> = { male: 'Herren (HR)', female: 'Da
 const emptyProduct = (): Omit<Product, 'id' | 'created_at'> => ({
   article_number: '',
   name: '',
-  category: CATEGORIES[0],
+  category: CATEGORIES_BY_ORG['Stadtpolizei'][0],
   gender: 'unisex',
   sizes: [],
   price: 0,
@@ -483,7 +486,7 @@ export default function Products() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Kategorie</label>
                   <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                    {(CATEGORIES_BY_ORG[form.organisation] ?? CATEGORIES_BY_ORG['Stadtpolizei']).map(c => <option key={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
@@ -509,7 +512,15 @@ export default function Products() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
-                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.organisation ?? ''} onChange={e => setForm(f => ({ ...f, organisation: e.target.value }))} />
+                  <div className="flex gap-2">
+                    {(['Stadtpolizei', 'Parkaufsicht'] as const).map(org => (
+                      <button key={org} type="button"
+                        onClick={() => setForm(f => ({ ...f, organisation: org, category: CATEGORIES_BY_ORG[org][0] }))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                        {org}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div>
