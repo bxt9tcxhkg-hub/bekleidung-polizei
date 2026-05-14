@@ -297,83 +297,116 @@ export default function Analyse() {
           )}
 
           {/* Tabs */}
-          <div className="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto">
+          <div className="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl w-full">
             {([
-              { key: 'ranking', label: 'Artikel-Ranking', icon: TrendingUp },
-              { key: 'groessen', label: 'Größenanalyse', icon: BarChart3 },
-              { key: 'trend', label: 'Quartals-Trend', icon: BarChart3 },
-            ] as { key: AnalyseTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+              { key: 'ranking', label: 'Artikel-Ranking', short: 'Ranking', icon: TrendingUp },
+              { key: 'groessen', label: 'Größenanalyse', short: 'Größen', icon: BarChart3 },
+              { key: 'trend', label: 'Quartals-Trend', short: 'Trend', icon: BarChart3 },
+            ] as { key: AnalyseTab; label: string; short: string; icon: React.ElementType }[]).map(({ key, label, short, icon: Icon }) => (
               <button key={key} onClick={() => setTab(key)}
-                className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all whitespace-nowrap ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                <Icon className="w-4 h-4" />{label}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium px-2 py-2 rounded-lg transition-all ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">{short}</span>
               </button>
             ))}
           </div>
 
           {/* ── Artikel-Ranking ── */}
           {tab === 'ranking' && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600 w-10">#</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Kategorie</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Bestellungen</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Menge</th>
-                    <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Lagernd</th>
-                    <th className="px-4 py-3 w-36 hidden lg:table-cell" />
-                    <th className="text-center px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Empfehlung</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {stats.map((p, i) => {
-                    const pct = Math.round((p.totalQty / maxQty) * 100)
-                    const needsRestock = productNeedsRestock.has(p.product_id)
-                    return (
-                      <tr key={p.product_id} className="hover:bg-gray-50 cursor-pointer"
-                        onClick={() => { setSelectedProduct(p.product_id); setTab('groessen') }}>
-                        <td className="px-4 py-3 text-gray-400 font-medium text-xs">{i + 1}</td>
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-gray-900">{p.name}</p>
-                          <p className="text-xs text-gray-400">{p.article_number}</p>
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 text-xs hidden sm:table-cell">{p.category}</td>
-                        <td className="px-4 py-3 text-right text-gray-700">{p.orderCount}×</td>
-                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{p.totalQty}×</td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">
-                          <span className={`text-sm font-medium ${p.stock === 0 ? 'text-red-500' : p.stock < 3 ? 'text-amber-500' : 'text-green-600'}`}>
-                            {p.stock}×
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 hidden lg:table-cell">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+            <>
+              {/* Mobile: card list */}
+              <div className="sm:hidden space-y-2">
+                {stats.map((p, i) => {
+                  const needsRestock = productNeedsRestock.has(p.product_id)
+                  return (
+                    <div key={p.product_id}
+                      className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3 cursor-pointer active:bg-gray-50"
+                      onClick={() => { setSelectedProduct(p.product_id); setTab('groessen') }}>
+                      <span className="text-sm font-bold text-gray-300 w-5 flex-shrink-0 text-center">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.article_number}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold text-gray-900">{p.totalQty}×</p>
+                        <p className="text-xs text-gray-400">{p.orderCount} Best.</p>
+                      </div>
+                      {needsRestock
+                        ? <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        : p.stock > 0
+                          ? <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                          : <span className="w-4 flex-shrink-0" />}
+                    </div>
+                  )
+                })}
+                <p className="text-xs text-gray-400 text-center py-2">Antippen → Größenanalyse</p>
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden sm:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600 w-10">#</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Kategorie</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Bestellungen</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Menge</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Lagernd</th>
+                      <th className="px-4 py-3 w-36 hidden lg:table-cell" />
+                      <th className="text-center px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Empfehlung</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.map((p, i) => {
+                      const pct = Math.round((p.totalQty / maxQty) * 100)
+                      const needsRestock = productNeedsRestock.has(p.product_id)
+                      return (
+                        <tr key={p.product_id} className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => { setSelectedProduct(p.product_id); setTab('groessen') }}>
+                          <td className="px-4 py-3 text-gray-400 font-medium text-xs">{i + 1}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{p.name}</p>
+                            <p className="text-xs text-gray-400">{p.article_number}</p>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs hidden sm:table-cell">{p.category}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{p.orderCount}×</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{p.totalQty}×</td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            <span className={`text-sm font-medium ${p.stock === 0 ? 'text-red-500' : p.stock < 3 ? 'text-amber-500' : 'text-green-600'}`}>
+                              {p.stock}×
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
                             </div>
-                            <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center hidden md:table-cell">
-                          {needsRestock ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                              <AlertTriangle className="w-3 h-3" /> Einlagern
-                            </span>
-                          ) : p.stock > 0 ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-                              <CheckCircle className="w-3 h-3" /> OK
-                            </span>
-                          ) : null}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              <p className="text-xs text-gray-400 px-4 py-2 border-t border-gray-100">
-                Klick auf eine Zeile öffnet die Größenanalyse für diesen Artikel.
-              </p>
-            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center hidden md:table-cell">
+                            {needsRestock ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                <AlertTriangle className="w-3 h-3" /> Einlagern
+                              </span>
+                            ) : p.stock > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                <CheckCircle className="w-3 h-3" /> OK
+                              </span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <p className="text-xs text-gray-400 px-4 py-2 border-t border-gray-100">
+                  Klick auf eine Zeile öffnet die Größenanalyse für diesen Artikel.
+                </p>
+              </div>
+            </>
           )}
 
           {/* ── Größenanalyse ── */}
