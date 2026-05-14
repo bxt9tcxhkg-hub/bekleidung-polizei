@@ -296,30 +296,32 @@ export default function Shop() {
               <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-5 py-4 space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-gray-600">Größe wählen</p>
-                  {lastSizes[sizeModal.product.id] && (
-                    <span className="text-xs text-blue-600 font-medium">
-                      Zuletzt bestellt: Gr. {lastSizes[sizeModal.product.id]}
-                    </span>
-                  )}
+              {sizeModal.product.sizes.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-gray-600">Größe wählen</p>
+                    {lastSizes[sizeModal.product.id] && (
+                      <span className="text-xs text-blue-600 font-medium">
+                        Zuletzt bestellt: Gr. {lastSizes[sizeModal.product.id]}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {sizeModal.product.sizes.map(s => {
+                      const isLast = lastSizes[sizeModal.product.id] === s
+                      return (
+                        <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
+                          className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors relative ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
+                          {s}
+                          {isLast && (
+                            <span className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-white ${sizeModal.size === s ? 'bg-yellow-300' : 'bg-blue-400'}`} title="Zuletzt bestellt" />
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {sizeModal.product.sizes.map(s => {
-                    const isLast = lastSizes[sizeModal.product.id] === s
-                    return (
-                      <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
-                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors relative ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
-                        {s}
-                        {isLast && (
-                          <span className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-white ${sizeModal.size === s ? 'bg-yellow-300' : 'bg-blue-400'}`} title="Zuletzt bestellt" />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+              )}
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-2">Menge</p>
                 <div className="flex items-center gap-3">
@@ -331,7 +333,7 @@ export default function Shop() {
             </div>
             <div className="px-5 py-4 border-t flex gap-3">
               <button onClick={() => setSizeModal(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={addToCart} disabled={!sizeModal.size || adding === sizeModal.product.id}
+              <button onClick={addToCart} disabled={(sizeModal.product.sizes.length > 0 && !sizeModal.size) || adding === sizeModal.product.id}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                 <ShoppingCart className="w-4 h-4" /> Hinzufügen
               </button>
