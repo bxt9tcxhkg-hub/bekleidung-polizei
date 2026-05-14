@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingCart, CalendarRange, CheckSquare, Clock, TrendingUp, ShoppingBag, Euro, Truck, Scissors, Package, Footprints, Warehouse } from 'lucide-react'
+import { ShoppingCart, CalendarRange, CheckSquare, ShoppingBag, Euro, Truck, Scissors, Package, Footprints, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
-import type { Quarter, Order } from '../lib/types'
+import type { Quarter } from '../lib/types'
 import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -12,21 +11,18 @@ const CURRENT_YEAR = new Date().getFullYear()
 function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
   const [cartCount, setCartCount] = useState(0)
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
-  const [recentOrders, setRecentOrders] = useState<Order[]>([])
+  const [activeOrderCount, setActiveOrderCount] = useState(0)
   const [totalBudget, setTotalBudget] = useState(DEFAULT_BUDGET)
-  const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [cartRes, quarterRes, ordersRes, totalBud, usedRes] = await Promise.all([
+      const [cartRes, quarterRes, activeRes, totalBud, usedRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('user_id', profile.id).eq('status', 'pending'),
         supabase.from('quarters').select('*').eq('status', 'active').single(),
-        supabase.from('orders').select('*, products(name, category), quarters(name)')
+        supabase.from('orders').select('id', { count: 'exact' })
           .eq('user_id', profile.id)
-          .not('status', 'in', '(pending,cancelled)')
-          .order('created_at', { ascending: false })
-          .limit(5),
+          .not('status', 'in', '(pending,cancelled)'),
         getCurrentBudget(profile.id, CURRENT_YEAR),
         supabase.from('orders').select('unit_price, quantity')
           .eq('user_id', profile.id)
@@ -35,7 +31,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
       ])
       setCartCount(cartRes.count ?? 0)
       setActiveQuarter(quarterRes.data ?? null)
-      setRecentOrders(ordersRes.data ?? [])
+      setActiveOrderCount(activeRes.count ?? 0)
       setTotalBudget(totalBud)
       setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
       setLoading(false)
@@ -92,35 +88,8 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
             <span className="text-sm font-medium">Laufende Bestellungen</span>
             <div className="bg-green-100 p-2 rounded-lg"><ShoppingBag className="w-4 h-4" /></div>
           </div>
-          <p className="text-2xl font-bold">{recentOrders.length}</p>
+          <p className="text-2xl font-bold">{activeOrderCount}</p>
         </Link>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-100">
-          <Clock className="w-4 h-4 text-gray-400" />
-          <h2 className="font-semibold text-gray-900 text-sm">Meine letzten Bestellungen</h2>
-        </div>
-        {recentOrders.length === 0 ? (
-          <div className="flex flex-col items-center py-12 text-gray-400">
-            <TrendingUp className="w-8 h-8 mb-2" />
-            <p className="text-sm">Noch keine eingereichten Bestellungen</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {recentOrders.map(o => (
-              <div key={o.id} className="flex items-center gap-4 px-5 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{(o as any).products?.name ?? '–'}</p>
-                  <p className="text-xs text-gray-400">{(o as any).quarters?.name} · Gr. {o.size} · {o.quantity}×</p>
-                </div>
-                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
-                  {ORDER_STATUS_LABELS[o.status]}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
