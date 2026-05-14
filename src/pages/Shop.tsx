@@ -216,23 +216,23 @@ export default function Shop() {
       )}
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap mb-6">
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 mb-4 scrollbar-hide">
         {genderFilterActive ? (
           <button onClick={() => setGenderFilterActive(false)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-200 transition-colors flex-shrink-0">
             {userGender === 'female' ? 'Weiblich' : 'Männlich'}
             <X className="w-3.5 h-3.5" />
           </button>
         ) : (
           <button onClick={() => setGenderFilterActive(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-white border border-dashed border-gray-300 text-gray-500 hover:border-blue-300 hover:text-blue-700 transition-colors">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-white border border-dashed border-gray-300 text-gray-500 hover:border-blue-300 hover:text-blue-700 transition-colors flex-shrink-0">
             {userGender === 'female' ? 'Weiblich' : 'Männlich'}
           </button>
         )}
-        <div className="w-px bg-gray-200 self-stretch mx-1" />
+        <div className="w-px bg-gray-200 self-stretch mx-1 flex-shrink-0" />
         {categories.map(cat => (
           <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubCategory('Alle') }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
+            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors flex-shrink-0 ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
             {cat}
           </button>
         ))}
@@ -240,10 +240,10 @@ export default function Shop() {
 
       {/* Sub-category filter */}
       {subCategories.length > 1 && (
-        <div className="flex gap-2 flex-wrap mt-2 mb-4 ml-1">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 mb-4 scrollbar-hide">
           {subCategories.map(sub => (
             <button key={sub} onClick={() => setSelectedSubCategory(sub as string)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-blue-200'}`}>
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-blue-200'}`}>
               {sub}
             </button>
           ))}
@@ -254,44 +254,46 @@ export default function Shop() {
       {loading ? (
         <div className="flex justify-center py-16"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map(product => (
             <div key={product.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
-              <div className="h-32 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
-                <ShoppingBag className="w-12 h-12 text-blue-300 opacity-60" />
+              <div className="h-20 sm:h-28 bg-gradient-to-br from-blue-900 to-blue-700 flex items-center justify-center">
+                <ShoppingBag className="w-8 h-8 sm:w-10 sm:h-10 text-blue-300 opacity-60" />
               </div>
-              <div className="p-4 flex flex-col flex-1">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <h3 className="font-semibold text-gray-900 text-sm leading-snug">{product.name}</h3>
-                  <span className="text-blue-800 font-bold text-sm whitespace-nowrap">€ {Number(product.price).toFixed(2)}</span>
+              <div className="p-3 sm:p-4 flex flex-col flex-1">
+                <div className="flex items-start justify-between gap-1 mb-1">
+                  <h3 className="font-semibold text-gray-900 text-xs sm:text-sm leading-snug">{product.name}</h3>
+                  <span className="text-blue-800 font-bold text-xs sm:text-sm whitespace-nowrap ml-1">€ {Number(product.price).toFixed(2)}</span>
                 </div>
-                <div className="flex items-center gap-2 mb-3 flex-wrap">
-                  <span className="text-xs text-gray-400 flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
-                  {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium">· Wappenänderung</span>}
+                <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                  <span className="text-xs text-gray-400 hidden sm:flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
+                  {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium hidden sm:block">· Wappen</span>}
                   {product.size_guide && (
                     <button onClick={() => setSizeGuideModal(product.size_guide!)}
                       className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 font-medium">
-                      <Info className="w-3 h-3" /> Größentabelle
+                      <Info className="w-3 h-3" /><span className="hidden sm:inline"> Größentabelle</span>
                     </button>
                   )}
                   {lastSizes[product.id] && (
-                    <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-0.5 rounded-full">
-                      Zuletzt: Gr. {lastSizes[product.id]}
+                    <span className="text-xs text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded-full">
+                      Gr. {lastSizes[product.id]}
                     </span>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-1 mb-4">
-                  {product.sizes.slice(0, 6).map(s => (
-                    <span key={s} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md">{s}</span>
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {product.sizes.slice(0, 4).map(s => (
+                    <span key={s} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-md">{s}</span>
                   ))}
-                  {product.sizes.length > 6 && <span className="text-xs px-2 py-0.5 text-gray-400">+{product.sizes.length - 6}</span>}
+                  {product.sizes.length > 4 && <span className="text-xs px-1.5 py-0.5 text-gray-400">+{product.sizes.length - 4}</span>}
                 </div>
                 <button
                   onClick={() => openSizeModal(product)}
                   disabled={!activeQuarter || adding === product.id}
-                  className="mt-auto w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:bg-gray-200 disabled:text-gray-400 text-white text-sm font-medium py-2 rounded-xl transition-colors"
+                  className="mt-auto w-full flex items-center justify-center gap-1.5 bg-blue-800 hover:bg-blue-900 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs sm:text-sm font-medium py-2 rounded-xl transition-colors"
                 >
-                  <Plus className="w-4 h-4" /> In den Warenkorb
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">In den Warenkorb</span>
+                  <span className="sm:hidden">Hinzufügen</span>
                 </button>
               </div>
             </div>
