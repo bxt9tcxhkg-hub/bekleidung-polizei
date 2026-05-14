@@ -94,9 +94,9 @@ export default function TailorJobs() {
         </div>
         {unassigned.length > 0 && (
           <button onClick={createJobFromUnassigned} disabled={creating}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-60">
-            <Scissors className="w-4 h-4" />
-            {creating ? 'Wird erstellt...' : `Job erstellen (${unassigned.length} Artikel)`}
+            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors disabled:opacity-60 flex-shrink-0" title="Job erstellen">
+            <Scissors className="w-4 h-4 flex-shrink-0" />
+            <span className="hidden sm:inline">{creating ? 'Wird erstellt...' : `Job erstellen (${unassigned.length})`}</span>
           </button>
         )}
       </div>
