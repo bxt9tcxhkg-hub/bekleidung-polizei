@@ -240,7 +240,7 @@ export default function Shop() {
 
       {/* Sub-category filter */}
       {subCategories.length > 1 && (
-        <div className="flex gap-2 flex-wrap mt-2 ml-1">
+        <div className="flex gap-2 flex-wrap mt-2 mb-4 ml-1">
           {subCategories.map(sub => (
             <button key={sub} onClick={() => setSelectedSubCategory(sub as string)}
               className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-blue-200'}`}>
