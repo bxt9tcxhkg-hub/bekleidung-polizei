@@ -232,7 +232,7 @@ export default function Shop() {
         <div className="w-px bg-gray-200 self-stretch mx-1 flex-shrink-0" />
         {categories.map(cat => (
           <button key={cat} onClick={() => { setSelectedCategory(cat); setSelectedSubCategory('Alle') }}
-            className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors flex-shrink-0 ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex-shrink-0 ${selectedCategory === cat ? 'bg-blue-800 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
             {cat}
           </button>
         ))}
@@ -243,7 +243,7 @@ export default function Shop() {
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 mb-4 scrollbar-hide">
           {subCategories.map(sub => (
             <button key={sub} onClick={() => setSelectedSubCategory(sub as string)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-blue-200'}`}>
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex-shrink-0 ${selectedSubCategory === sub ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-300'}`}>
               {sub}
             </button>
           ))}
