@@ -185,16 +185,14 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
           </Link>
         ))}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Link to="/lager" className="rounded-xl p-5 bg-indigo-50 text-indigo-700 hover:brightness-95 transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium">Lagerverwaltung</span>
-            <div className="bg-indigo-100 p-2 rounded-lg"><Warehouse className="w-4 h-4" /></div>
-          </div>
-          <p className="text-2xl font-bold">{stats.lagerPending}</p>
+      <Link to="/lager" className="rounded-xl p-5 bg-indigo-50 text-indigo-700 hover:brightness-95 transition-all flex items-center justify-between">
+        <div>
+          <span className="text-sm font-medium">Lagerverwaltung</span>
+          <p className="text-2xl font-bold mt-1">{stats.lagerPending}</p>
           <p className="text-xs mt-1 opacity-70">Freigegebene Lagerbestellungen zum Einbuchen</p>
-        </Link>
-      </div>
+        </div>
+        <div className="bg-indigo-100 p-3 rounded-xl"><Warehouse className="w-5 h-5" /></div>
+      </Link>
     </div>
   )
 }
