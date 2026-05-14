@@ -43,7 +43,7 @@ interface QuarterStat {
 
 export default function Analyse() {
   const navigate = useNavigate()
-  const { isSachbearbeiter, profile } = useAuth()
+  const { isSachbearbeiter, isGenehmiger, profile } = useAuth()
   const [tab, setTab] = useState<AnalyseTab>('ranking')
   const [stats, setStats] = useState<ProductStat[]>([])
   const [sizeRecs, setSizeRecs] = useState<SizeRec[]>([])
@@ -52,6 +52,8 @@ export default function Analyse() {
   const [loading, setLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -64,7 +66,7 @@ export default function Analyse() {
           .select('product_id, size, quantity, quarter_id, products(id,name,article_number,category,organisation), quarters(id,name,year,quarter_num,end_date)')
           .not('status', 'in', '("pending","pending_approval","cancelled")'),
         supabase.from('inventory').select('product_id,size,quantity'),
-        supabase.from('quarters').select('id,name,year,quarter_num,end_date').order('end_date', { ascending: false }),
+        supabase.from('quarters').select('id,name,year,quarter_num,start_date,end_date').order('end_date', { ascending: false }),
         supabase.from('stock_orders').select('product_id,size,quantity,status').in('status', ['pending_approval', 'approved']),
         supabase.from('products').select('id').eq('organisation', org).eq('active', true),
       ])
@@ -75,8 +77,13 @@ export default function Analyse() {
       const allQuarters = (quartersRes.data ?? []) as any[]
       const pendingStock = ((pendingStockRes.data ?? []) as any[]).filter(e => orgProductIds.has(e.product_id))
 
-      // Last 4 quarters by end_date (most recent first)
-      const recentQuarters = allQuarters.slice(0, 4)
+      // Determine which quarters fall in the selected date range (or default to last 4)
+      const recentQuarters = (fromDate || toDate)
+        ? allQuarters.filter(q =>
+            (!fromDate || q.end_date >= fromDate) &&
+            (!toDate || q.start_date <= toDate)
+          )
+        : allQuarters.slice(0, 4)
       const recentQIds = new Set(recentQuarters.map((q: any) => q.id))
       const actualRecentCount = Math.max(recentQuarters.length, 1)
       setRecentQuarterCount(actualRecentCount)
@@ -195,7 +202,7 @@ export default function Analyse() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [fromDate, toDate])
 
   const totalOrders = stats.reduce((s, p) => s + p.orderCount, 0)
   const totalQty = stats.reduce((s, p) => s + p.totalQty, 0)
@@ -250,6 +257,29 @@ export default function Analyse() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <>
+          {/* Date range filter for Genehmiger */}
+          {isGenehmiger && (
+            <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-5">
+              <p className="text-xs font-medium text-gray-500 mb-2">Analysezeitraum</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[130px]" />
+                <span className="text-gray-400 text-sm">–</span>
+                <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[130px]" />
+                {(fromDate || toDate) && (
+                  <button onClick={() => { setFromDate(''); setToDate('') }}
+                    className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 px-3 py-1.5 rounded-lg transition-colors">
+                    Zurücksetzen
+                  </button>
+                )}
+              </div>
+              {!(fromDate || toDate) && (
+                <p className="text-xs text-gray-400 mt-1.5">Standard: letzte 4 Quartale</p>
+              )}
+            </div>
+          )}
+
           {/* Summary cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
@@ -263,7 +293,7 @@ export default function Analyse() {
             <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
               <p className="text-xs text-gray-500 mb-1">Analysezeitraum</p>
               <p className="text-2xl font-bold text-gray-900">{recentQuarterCount}Q</p>
-              <p className="text-xs text-gray-400">letzte Quartale</p>
+              <p className="text-xs text-gray-400">{fromDate || toDate ? 'im Zeitraum' : 'letzte Quartale'}</p>
             </div>
             <div className={`rounded-xl border px-4 py-4 ${urgentRecs.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
               <p className={`text-xs mb-1 ${urgentRecs.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>Lager-Empfehlungen</p>
