@@ -43,7 +43,7 @@ interface QuarterStat {
 
 export default function Analyse() {
   const navigate = useNavigate()
-  const { isSachbearbeiter } = useAuth()
+  const { isSachbearbeiter, profile } = useAuth()
   const [tab, setTab] = useState<AnalyseTab>('ranking')
   const [stats, setStats] = useState<ProductStat[]>([])
   const [sizeRecs, setSizeRecs] = useState<SizeRec[]>([])
@@ -56,20 +56,23 @@ export default function Analyse() {
     async function load() {
       setLoading(true)
 
-      const [ordersRes, invRes, quartersRes, pendingStockRes] = await Promise.all([
+      const org = profile?.organisation ?? 'Stadtpolizei'
+      const [ordersRes, invRes, quartersRes, pendingStockRes, orgProductsRes] = await Promise.all([
         supabase
           .from('orders')
-          .select('product_id, size, quantity, quarter_id, products(id,name,article_number,category), quarters(id,name,year,quarter_num,end_date)')
+          .select('product_id, size, quantity, quarter_id, products(id,name,article_number,category,organisation), quarters(id,name,year,quarter_num,end_date)')
           .not('status', 'in', '("pending","pending_approval","cancelled")'),
         supabase.from('inventory').select('product_id,size,quantity'),
         supabase.from('quarters').select('id,name,year,quarter_num,end_date').order('end_date', { ascending: false }),
         supabase.from('stock_orders').select('product_id,size,quantity,status').in('status', ['pending_approval', 'approved']),
+        supabase.from('products').select('id').eq('organisation', org).eq('active', true),
       ])
 
-      const orders = (ordersRes.data ?? []) as any[]
-      const inventory = invRes.data ?? []
+      const orgProductIds = new Set((orgProductsRes.data ?? []).map((p: any) => p.id))
+      const orders = ((ordersRes.data ?? []) as any[]).filter(o => orgProductIds.has(o.product_id))
+      const inventory = (invRes.data ?? []).filter((e: any) => orgProductIds.has(e.product_id))
       const allQuarters = (quartersRes.data ?? []) as any[]
-      const pendingStock = (pendingStockRes.data ?? []) as any[]
+      const pendingStock = ((pendingStockRes.data ?? []) as any[]).filter(e => orgProductIds.has(e.product_id))
 
       // Last 4 quarters by end_date (most recent first)
       const recentQuarters = allQuarters.slice(0, 4)
