@@ -155,13 +155,13 @@ export default function Quarters() {
                     <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">Aktiv</span>
                   </div>
                   <p className="text-sm text-gray-500 mt-0.5">
-                    {new Date(active.start_date).toLocaleDateString('de-AT')} – {new Date(active.end_date).toLocaleDateString('de-AT')}
-                    {daysLeft !== null && daysLeft >= 0 && (
-                      <span className={`ml-2 font-medium ${daysLeft <= 7 ? 'text-amber-600' : 'text-gray-400'}`}>
-                        · noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
-                      </span>
-                    )}
+                    {new Date(active.start_date).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit' })} – {new Date(active.end_date).toLocaleDateString('de-AT')}
                   </p>
+                  {daysLeft !== null && daysLeft >= 0 && (
+                    <p className={`text-sm font-medium mt-0.5 ${daysLeft <= 7 ? 'text-amber-600' : 'text-gray-400'}`}>
+                      noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
+                    </p>
+                  )}
                 </div>
                 <button onClick={() => openEdit(active)}
                   className="text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
