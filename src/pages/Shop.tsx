@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, AlertTriangle, CheckCircle, Info, BookOpen } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
@@ -28,32 +28,6 @@ export default function Shop() {
   const [genderFilterActive, setGenderFilterActive] = useState(true)
   const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
   const [lastSizes, setLastSizes] = useState<Record<string, string>>({})
-  const [loadingGrund, setLoadingGrund] = useState(false)
-
-  async function loadGrundausstattung() {
-    if (!activeQuarter) return
-    setLoadingGrund(true)
-    const { data } = await (supabase.from('grundausstattung') as any)
-      .select('*, products(*)')
-      .eq('organisation', profile?.organisation ?? 'Stadtpolizei')
-    if (data && data.length > 0) {
-      for (const item of data as any[]) {
-        if (!item.products) continue
-        await supabase.from('orders').insert({
-          user_id: profile!.id,
-          product_id: item.product_id,
-          quarter_id: activeQuarter.id,
-          size: item.size,
-          quantity: item.quantity,
-          unit_price: item.products.price,
-          status: 'pending',
-        })
-      }
-      await loadCart()
-      setCartOpen(true)
-    }
-    setLoadingGrund(false)
-  }
 
   async function loadBudget() {
     const [total, orders] = await Promise.all([
@@ -208,31 +182,18 @@ export default function Shop() {
             ? <p className="text-gray-500 text-sm mt-1">Aktives Quartal: <span className="font-medium text-gray-700">{activeQuarter.name}</span></p>
             : <p className="text-amber-600 text-sm mt-1">Kein aktives Quartal – Bestellungen derzeit nicht möglich</p>}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {activeQuarter && (
-            <button
-              onClick={loadGrundausstattung}
-              disabled={loadingGrund}
-              title="Grundausstattung laden"
-              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-60"
-            >
-              <BookOpen className="w-4 h-4 flex-shrink-0" />
-              <span className="hidden sm:inline">{loadingGrund ? 'Laden...' : 'Grundausstattung'}</span>
-            </button>
+        <button
+          onClick={() => setCartOpen(true)}
+          className="relative flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-xl transition-colors"
+        >
+          <ShoppingCart className="w-4 h-4 flex-shrink-0" />
+          <span className="hidden sm:inline">Warenkorb</span>
+          {cartCount > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+              {cartCount}
+            </span>
           )}
-          <button
-            onClick={() => setCartOpen(true)}
-            className="relative flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-xl transition-colors"
-          >
-            <ShoppingCart className="w-4 h-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Warenkorb</span>
-            {cartCount > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                {cartCount}
-              </span>
-            )}
-          </button>
-        </div>
+        </button>
       </div>
 
       {/* Budget bar */}

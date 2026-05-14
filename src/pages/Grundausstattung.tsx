@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, Trash2, BookOpen } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, X, Trash2, BookOpen, ShoppingCart, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import type { Product } from '../lib/types'
+import type { Product, Quarter } from '../lib/types'
 
 type Org = 'Stadtpolizei' | 'Parkaufsicht'
 
@@ -10,90 +11,123 @@ interface GrundItem {
   id: string
   organisation: Org
   product_id: string
-  size: string
   quantity: number
   products?: Product
 }
 
 export default function Grundausstattung() {
+  const navigate = useNavigate()
   const { profile } = useAuth()
   const [org, setOrg] = useState<Org>('Stadtpolizei')
   const [items, setItems] = useState<GrundItem[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ product_id: '', size: '', quantity: '1' })
+
+  // Verwaltung – Artikel hinzufügen
+  const [showAdd, setShowAdd] = useState(false)
   const [productSearch, setProductSearch] = useState('')
   const [productDropdown, setProductDropdown] = useState(false)
+  const [addProductId, setAddProductId] = useState('')
+  const [addQty, setAddQty] = useState('1')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [error, setError] = useState('')
+  const [addError, setAddError] = useState('')
+
+  // Neue Einstellung – Größen auswählen
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({}) // product_id → size
+  const [addingToCart, setAddingToCart] = useState(false)
+  const [cartSuccess, setCartSuccess] = useState(false)
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
-      .from('grundausstattung')
+    const { data } = await (supabase.from('grundausstattung') as any)
       .select('*, products(*)')
       .eq('organisation', org)
       .order('updated_at', { ascending: true })
-    setItems((data ?? []) as GrundItem[])
+    const loaded = (data ?? []) as GrundItem[]
+    setItems(loaded)
+    // Pre-fill sizes from product defaults
+    const sizes: Record<string, string> = {}
+    loaded.forEach(item => {
+      if (item.products?.sizes?.length) sizes[item.product_id] = item.products.sizes[0]
+    })
+    setSelectedSizes(sizes)
     setLoading(false)
   }
 
   useEffect(() => {
     async function init() {
-      const { data } = await supabase.from('products').select('*').eq('active', true).order('name')
-      setProducts(data ?? [])
+      const [pRes, qRes] = await Promise.all([
+        supabase.from('products').select('*').eq('active', true).order('name'),
+        supabase.from('quarters').select('*').eq('status', 'active').limit(1),
+      ])
+      setProducts(pRes.data ?? [])
+      setActiveQuarter((qRes.data ?? [])[0] ?? null)
     }
     init()
   }, [])
 
   useEffect(() => { load() }, [org])
 
+  const orgProducts = products.filter(p => p.organisation === org)
+  const addProduct = products.find(p => p.id === addProductId)
   const filteredProducts = productSearch.trim()
-    ? products.filter(p =>
-        p.organisation === org &&
-        (p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-         p.article_number.toLowerCase().includes(productSearch.toLowerCase()))
+    ? orgProducts.filter(p =>
+        p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+        p.article_number.toLowerCase().includes(productSearch.toLowerCase())
       )
-    : products.filter(p => p.organisation === org)
-
-  const selectedProduct = products.find(p => p.id === form.product_id)
+    : orgProducts
 
   function selectProduct(p: Product) {
-    setForm(f => ({ ...f, product_id: p.id, size: p.sizes[0] ?? '' }))
+    setAddProductId(p.id)
     setProductSearch(p.name)
     setProductDropdown(false)
   }
 
-  async function save() {
-    setError('')
-    if (!form.product_id) { setError('Bitte Artikel auswählen.'); return }
+  async function addItem() {
+    setAddError('')
+    if (!addProductId) { setAddError('Bitte Artikel auswählen.'); return }
     setSaving(true)
     const { error } = await (supabase.from('grundausstattung') as any).upsert({
       organisation: org,
-      product_id: form.product_id,
-      size: form.size,
-      quantity: parseInt(form.quantity) || 1,
+      product_id: addProductId,
+      quantity: parseInt(addQty) || 1,
       created_by: profile!.id,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'organisation,product_id,size' })
-    if (error) setError(error.message)
-    else { setShowForm(false); resetForm(); load() }
+    }, { onConflict: 'organisation,product_id' })
+    if (error) setAddError(error.message)
+    else { setShowAdd(false); setAddProductId(''); setProductSearch(''); setAddQty('1'); load() }
     setSaving(false)
   }
 
-  async function remove(id: string) {
+  async function removeItem(id: string) {
     setDeleting(id)
-    await supabase.from('grundausstattung').delete().eq('id', id)
+    await (supabase.from('grundausstattung') as any).delete().eq('id', id)
     setDeleting(null)
     load()
   }
 
-  function resetForm() {
-    setForm({ product_id: '', size: '', quantity: '1' })
-    setProductSearch('')
-    setError('')
+  async function addAllToCart() {
+    if (!activeQuarter) return
+    const missing = items.filter(i => i.products?.sizes?.length && !selectedSizes[i.product_id])
+    if (missing.length > 0) return
+    setAddingToCart(true)
+    for (const item of items) {
+      if (!item.products) continue
+      await supabase.from('orders').insert({
+        user_id: profile!.id,
+        product_id: item.product_id,
+        quarter_id: activeQuarter.id,
+        size: selectedSizes[item.product_id] ?? '',
+        quantity: item.quantity,
+        unit_price: item.products.price,
+        status: 'pending',
+      })
+    }
+    setAddingToCart(false)
+    setCartSuccess(true)
+    setTimeout(() => { setCartSuccess(false); navigate('/warenkorb') }, 1200)
   }
 
   const grouped = items.reduce<Record<string, GrundItem[]>>((acc, item) => {
@@ -103,6 +137,9 @@ export default function Grundausstattung() {
     return acc
   }, {})
 
+  const allSizesSelected = items.every(i => !i.products?.sizes?.length || selectedSizes[i.product_id])
+  const missingCount = items.filter(i => i.products?.sizes?.length && !selectedSizes[i.product_id]).length
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -110,18 +147,10 @@ export default function Grundausstattung() {
           <h1 className="text-2xl font-bold text-gray-900">Grundausstattung</h1>
           <p className="text-gray-500 text-sm mt-1">Standardartikel für Neueinstellungen</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowForm(true) }}
-          className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
-          title="Artikel hinzufügen"
-        >
-          <Plus className="w-4 h-4 flex-shrink-0" />
-          <span className="hidden sm:inline">Artikel hinzufügen</span>
-        </button>
       </div>
 
       {/* Org tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-5">
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6">
         {(['Stadtpolizei', 'Parkaufsicht'] as Org[]).map(o => (
           <button key={o} onClick={() => setOrg(o)}
             className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${org === o ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -132,124 +161,199 @@ export default function Grundausstattung() {
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
-      ) : items.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
-          <BookOpen className="w-12 h-12 mb-3 text-gray-300" />
-          <p className="font-semibold text-gray-500">Keine Artikel definiert</p>
-          <p className="text-sm text-gray-400 mt-1">Füge Artikel zur Grundausstattung für {org} hinzu</p>
-        </div>
       ) : (
-        <div className="space-y-4">
-          {Object.entries(grouped).map(([category, catItems]) => (
-            <div key={category} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{category}</p>
-              </div>
-              <table className="w-full text-sm">
-                <tbody className="divide-y divide-gray-100">
-                  {catItems.map(item => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{item.products?.name ?? '–'}</p>
-                        <p className="text-xs text-gray-400 font-mono">{item.products?.article_number}</p>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">
-                        {item.size ? <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-medium">Gr. {item.size}</span> : <span className="text-gray-400">–</span>}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 text-sm font-medium">{item.quantity}×</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => remove(item.id)}
-                          disabled={deleting === item.id}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 disabled:opacity-50 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-          <p className="text-xs text-gray-400 text-center pb-2">{items.length} Artikel · {items.reduce((s, i) => s + i.quantity, 0)} Stück gesamt</p>
-        </div>
-      )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Artikel hinzufügen — {org}</h2>
-              <button onClick={() => { setShowForm(false); resetForm() }} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              {/* Product search */}
-              <div className="relative">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Artikel *</label>
-                <input
-                  type="text"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Name oder Artikelnummer..."
-                  value={productSearch}
-                  onChange={e => { setProductSearch(e.target.value); setProductDropdown(true); if (!e.target.value) setForm(f => ({ ...f, product_id: '', size: '' })) }}
-                  onFocus={() => setProductDropdown(true)}
-                  onBlur={() => setTimeout(() => setProductDropdown(false), 150)}
-                />
-                {productDropdown && filteredProducts.length > 0 && (
-                  <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
-                    {filteredProducts.map(p => (
-                      <li key={p.id}>
-                        <button type="button" onMouseDown={() => selectProduct(p)}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors">
-                          <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                          <p className="text-xs text-gray-400 font-mono">{p.article_number}</p>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {form.product_id && <p className="text-xs text-green-600 mt-1">✓ Artikel ausgewählt</p>}
-              </div>
-
-              {/* Size */}
-              {selectedProduct && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Größe</label>
-                  {selectedProduct.sizes.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {selectedProduct.sizes.map(s => (
-                        <button key={s} type="button" onClick={() => setForm(f => ({ ...f, size: s }))}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${form.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400">Keine Größen — wird ohne Größe hinzugefügt</p>
-                  )}
-                </div>
-              )}
-
-              {/* Quantity */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Menge</label>
-                <input
-                  type="number" min="1"
-                  className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={form.quantity}
-                  onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
-                />
-              </div>
-
-              {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-            </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => { setShowForm(false); resetForm() }} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
-                {saving ? 'Speichern...' : 'Hinzufügen'}
+          {/* ── Linke Spalte: Verwaltung ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900">Standardartikel</h2>
+              <button
+                onClick={() => { setShowAdd(true); setAddProductId(''); setProductSearch(''); setAddQty('1'); setAddError('') }}
+                className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Hinzufügen
               </button>
             </div>
+
+            {items.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-12 text-center">
+                <BookOpen className="w-10 h-10 mb-3 text-gray-300" />
+                <p className="font-medium text-gray-500 text-sm">Keine Artikel definiert</p>
+                <p className="text-xs text-gray-400 mt-1">Füge Artikel zur Grundausstattung für {org} hinzu</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                {Object.entries(grouped).map(([cat, catItems], gi) => (
+                  <div key={cat}>
+                    {gi > 0 && <div className="border-t border-gray-100" />}
+                    <div className="px-4 py-2 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{cat}</p>
+                    </div>
+                    {catItems.map(item => (
+                      <div key={item.id} className="flex items-center justify-between px-4 py-3 border-t border-gray-50 hover:bg-gray-50">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 text-sm truncate">{item.products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400 font-mono">{item.products?.article_number}</p>
+                        </div>
+                        <div className="flex items-center gap-3 ml-2 flex-shrink-0">
+                          <span className="text-sm text-gray-500">{item.quantity}×</span>
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            disabled={deleting === item.id}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
+                  {items.length} Artikel · {items.reduce((s, i) => s + i.quantity, 0)} Stück gesamt
+                </div>
+              </div>
+            )}
+
+            {/* Add modal */}
+            {showAdd && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+                  <div className="flex items-center justify-between px-5 py-4 border-b">
+                    <h3 className="font-bold text-gray-900 text-sm">Artikel hinzufügen</h3>
+                    <button onClick={() => setShowAdd(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="px-5 py-4 space-y-3">
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Artikel *</label>
+                      <input
+                        type="text"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Name oder Artikelnummer..."
+                        value={productSearch}
+                        onChange={e => { setProductSearch(e.target.value); setProductDropdown(true); if (!e.target.value) setAddProductId('') }}
+                        onFocus={() => setProductDropdown(true)}
+                        onBlur={() => setTimeout(() => setProductDropdown(false), 150)}
+                        autoFocus
+                      />
+                      {productDropdown && filteredProducts.length > 0 && (
+                        <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                          {filteredProducts.map(p => (
+                            <li key={p.id}>
+                              <button type="button" onMouseDown={() => selectProduct(p)}
+                                className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm">
+                                <p className="font-medium text-gray-900">{p.name}</p>
+                                <p className="text-xs text-gray-400 font-mono">{p.article_number}</p>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Menge</label>
+                      <input type="number" min="1"
+                        className="w-20 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={addQty} onChange={e => setAddQty(e.target.value)} />
+                    </div>
+                    {addError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg">{addError}</p>}
+                  </div>
+                  <div className="flex gap-3 px-5 py-4 border-t">
+                    <button onClick={() => setShowAdd(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+                    <button onClick={addItem} disabled={saving || !addProductId} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                      {saving ? 'Speichern...' : 'Hinzufügen'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Rechte Spalte: Neue Einstellung ── */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900">Neue Einstellung</h2>
+              {!activeQuarter && <span className="text-xs text-amber-600">Kein aktives Quartal</span>}
+            </div>
+
+            {items.length === 0 ? (
+              <div className="bg-gray-50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center py-12 text-center">
+                <p className="text-sm text-gray-400">Zuerst Standardartikel definieren</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                {Object.entries(grouped).map(([cat, catItems], gi) => (
+                  <div key={cat}>
+                    {gi > 0 && <div className="border-t border-gray-100" />}
+                    <div className="px-4 py-2 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{cat}</p>
+                    </div>
+                    {catItems.map(item => {
+                      const p = item.products
+                      const hasSizes = p && p.sizes.length > 0
+                      const chosen = selectedSizes[item.product_id]
+                      return (
+                        <div key={item.id} className="px-4 py-3 border-t border-gray-50">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900 text-sm truncate">{p?.name ?? '–'}</p>
+                              <p className="text-xs text-gray-400">{item.quantity}× · {p?.article_number}</p>
+                            </div>
+                            {!hasSizes && (
+                              <span className="flex items-center gap-1 text-xs text-green-600 flex-shrink-0 mt-0.5">
+                                <Check className="w-3 h-3" /> Keine Größe
+                              </span>
+                            )}
+                          </div>
+                          {hasSizes && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {p!.sizes.map(s => (
+                                <button
+                                  key={s}
+                                  onClick={() => setSelectedSizes(prev => ({ ...prev, [item.product_id]: s }))}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                                    chosen === s
+                                      ? 'bg-blue-800 text-white border-blue-800'
+                                      : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                  }`}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+
+                <div className="px-4 py-4 border-t border-gray-200 bg-gray-50">
+                  {missingCount > 0 && (
+                    <p className="text-xs text-amber-600 mb-3">
+                      {missingCount} Artikel ohne Größe — bitte alle auswählen
+                    </p>
+                  )}
+                  <button
+                    onClick={addAllToCart}
+                    disabled={!activeQuarter || !allSizesSelected || addingToCart || cartSuccess || items.length === 0}
+                    className={`w-full flex items-center justify-center gap-2 font-medium py-3 rounded-xl text-sm transition-colors ${
+                      cartSuccess
+                        ? 'bg-green-600 text-white'
+                        : 'bg-blue-800 hover:bg-blue-900 text-white disabled:bg-gray-200 disabled:text-gray-400'
+                    }`}
+                  >
+                    {cartSuccess
+                      ? <><Check className="w-4 h-4" /> In den Warenkorb gelegt</>
+                      : addingToCart
+                        ? 'Wird hinzugefügt...'
+                        : <><ShoppingCart className="w-4 h-4" /> Alle in den Warenkorb</>
+                    }
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
