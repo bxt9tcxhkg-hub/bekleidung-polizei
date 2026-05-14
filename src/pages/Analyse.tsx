@@ -355,26 +355,24 @@ export default function Analyse() {
               </div>
               <div className="space-y-2">
                 {urgentRecs.slice(0, 6).map((r, i) => (
-                  <div key={i} className="flex items-center gap-3 bg-white rounded-lg px-3 py-2.5 border border-amber-100">
-                    <Package className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
-                      <p className="text-xs text-gray-500">
-                        Gr. {r.size} · Ø {r.avgQtrDemand.toFixed(1)}×/Quartal · Mindestbestand: {r.minStock}×
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <div className="text-right space-y-0.5">
-                        <p className={`text-xs font-semibold ${r.currentStock === 0 ? 'text-red-600' : 'text-amber-600'}`}>
-                          Lager: {r.currentStock}×
-                          {r.pendingQty > 0 && <span className="text-gray-400 font-normal"> (+{r.pendingQty} bestellt)</span>}
+                  <div key={i} className="bg-white rounded-lg px-3 py-3 border border-amber-100">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Gr. {r.size} · Ø {r.avgQtrDemand.toFixed(1)}×/Q · Min: {r.minStock}×
                         </p>
-                        <p className="text-xs text-blue-700 font-semibold">→ {r.toOrder}× bestellen</p>
                       </div>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${r.currentStock === 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                        Lager: {r.currentStock}×{r.pendingQty > 0 && <span className="text-gray-400 font-normal"> +{r.pendingQty}</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-blue-700 font-semibold">→ {r.toOrder}× bestellen</p>
                       {isSachbearbeiter && (
                         <button
                           onClick={() => navigate('/lager', { state: { productId: r.product_id, size: r.size, qty: r.toOrder } })}
-                          className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+                          className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex-shrink-0"
                         >
                           <ShoppingBag className="w-3.5 h-3.5" /> Bestellen
                         </button>
