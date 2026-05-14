@@ -111,6 +111,8 @@ export interface TailorJob {
   orders?: Order[]
 }
 
+export type ShoeRefundStatus = 'pending' | 'approved' | 'rejected'
+
 export interface ShoeRefund {
   id: string
   user_id: string
@@ -118,10 +120,14 @@ export interface ShoeRefund {
   approved_amount: number
   refund_date: string
   note: string | null
+  status: ShoeRefundStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
   created_by: string | null
   created_at: string | null
   profiles?: Profile
   creator?: Profile
+  reviewer?: Profile
 }
 
 export type StockOrderStatus = 'pending_approval' | 'approved' | 'rejected' | 'received'
