@@ -133,6 +133,7 @@ export default function Products() {
   const [importDone, setImportDone] = useState<{ ok: number; err: number } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ mode: 'single'; product: Product } | { mode: 'all' } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [customSizeInput, setCustomSizeInput] = useState('')
   const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -250,6 +251,13 @@ export default function Products() {
       ...f,
       sizes: f.sizes.includes(size) ? f.sizes.filter(s => s !== size) : [...f.sizes, size],
     }))
+  }
+
+  function addCustomSize() {
+    const val = customSizeInput.trim()
+    if (!val || form.sizes.includes(val)) { setCustomSizeInput(''); return }
+    setForm(f => ({ ...f, sizes: [...f.sizes, val] }))
+    setCustomSizeInput('')
   }
 
   return (
@@ -561,12 +569,39 @@ export default function Products() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Größen</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mb-2">
                   {SIZES_COMMON.map(s => (
                     <button key={s} type="button" onClick={() => toggleSize(s)} className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${form.sizes.includes(s) ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
                       {s}
                     </button>
                   ))}
+                </div>
+                {/* Custom sizes not in the predefined list */}
+                {form.sizes.filter(s => !SIZES_COMMON.includes(s)).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {form.sizes.filter(s => !SIZES_COMMON.includes(s)).map(s => (
+                      <span key={s} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-800 text-white rounded-lg text-xs font-medium">
+                        {s}
+                        <button type="button" onClick={() => toggleSize(s)} className="hover:text-blue-200 ml-0.5">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Eigene Größe (z.B. 43, 36/32, One Size)..."
+                    value={customSizeInput}
+                    onChange={e => setCustomSizeInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomSize() } }}
+                  />
+                  <button type="button" onClick={addCustomSize}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors">
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
               <div>
