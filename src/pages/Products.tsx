@@ -67,7 +67,7 @@ function parseCsv(text: string): Record<string, string>[] {
 
 const SIZES_COMMON = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', '44', '46', '48', '50', '52', '54', '56']
 const CATEGORIES_BY_ORG: Record<string, string[]> = {
-  Stadtpolizei: ['Funktionshemden', 'Gürtel & Krawatten', 'Handschuhe', 'Hemden & Blusen', 'Hosen', 'Hosen & Röcke', 'Jacken', 'Jacken & Mäntel', 'Kappen & Baretts', 'Schuhe', 'Socken', 'Sonstiges', 'Stiefel', 'Strickware', 'Unterbekleidung', 'Zubehör'],
+  Stadtpolizei: ['Funktionshemden', 'Gürtel & Krawatten', 'Handschuhe', 'Hemden & Blusen', 'Hosen & Röcke', 'Jacken & Mäntel', 'Kappen & Baretts', 'Schuhe & Stiefel', 'Socken', 'Sonstiges', 'Strickware', 'Unterbekleidung', 'Zubehör'],
   Parkaufsicht: ['Accessoires', 'Einsatzuniform', 'Kopfbedeckung', 'Schuhe & Stiefel'],
 }
 
