@@ -50,7 +50,7 @@ const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
 const emptyForm = () => ({ name: '', username: '', initialPassword: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
 
 export default function Users() {
-  const { isStrictAdmin } = _useAuth()
+  const { isStrictAdmin, profile: authProfile } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
   const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
   const [loading, setLoading] = useState(true)
@@ -95,7 +95,10 @@ export default function Users() {
     if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
     if (!editId && form.initialPassword.length < 6) { setError('Initiales Passwort muss mindestens 6 Zeichen haben.'); return }
     setSaving(true)
-    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: form.roles, gender: form.gender, organisation: form.organisation, active: form.active }
+    let safeRoles = form.roles
+    if (!isStrictAdmin) safeRoles = safeRoles.filter(r => r !== 'admin' && r !== 'genehmiger')
+    if (safeRoles.length === 0) safeRoles = ['user']
+    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active: form.active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -187,7 +190,11 @@ export default function Users() {
     load()
   }
 
+  const isSelfEdit = editId === authProfile?.id
+
   function toggleRole(role: string) {
+    if (isSelfEdit) return
+    if (!isStrictAdmin && (role === 'admin' || role === 'genehmiger')) return
     setForm(f => ({
       ...f,
       roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role],
@@ -412,13 +419,22 @@ export default function Users() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
                 <div className="flex gap-3">
-                  {([['user', 'Benutzer'], ['admin', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as const).map(([role, label]) => (
-                    <label key={role} className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} className="rounded" />
-                      <span className="text-sm text-gray-700">{label}</span>
-                    </label>
-                  ))}
+                  {([['user', 'Benutzer'], ['admin', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as const).map(([role, label]) => {
+                    const restricted = isSelfEdit || (!isStrictAdmin && (role === 'admin' || role === 'genehmiger'))
+                    return (
+                      <label key={role} className={`flex items-center gap-2 ${restricted ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} disabled={restricted} className="rounded disabled:cursor-not-allowed" />
+                        <span className="text-sm text-gray-700">{label}</span>
+                      </label>
+                    )
+                  })}
                 </div>
+                {isSelfEdit && (
+                  <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
+                )}
+                {!isSelfEdit && !isStrictAdmin && (
+                  <p className="text-xs text-gray-400 mt-1">Sachbearbeiter und Genehmiger-Rollen können nur von Administratoren vergeben werden.</p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
