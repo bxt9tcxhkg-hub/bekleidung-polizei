@@ -239,6 +239,7 @@ export default function Budgets() {
               <RefreshCw className="w-3.5 h-3.5" /> Alle anpassen
             </button>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -322,6 +323,7 @@ export default function Budgets() {
               })}
             </tbody>
           </table>
+          </div>
           <p className="text-xs text-gray-400 px-4 py-2 border-t">* Standardwert € {DEFAULT_BUDGET.toFixed(2)} (kein individuelles Budget gesetzt)</p>
         </div>
       )}
@@ -372,7 +374,7 @@ export default function Budgets() {
               </div>
               <button onClick={() => setDrilldown(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto overflow-x-auto">
               {drilldownLoading ? (
                 <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-800" /></div>
               ) : drilldown.orders.length === 0 ? (
