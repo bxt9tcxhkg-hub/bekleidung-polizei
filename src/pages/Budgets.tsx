@@ -135,12 +135,55 @@ export default function Budgets() {
   const currentCap = caps.find(c => c.valid_from <= today())
   const scheduledCap = caps.find(c => c.valid_from > today())
 
+  const totalBudget = rows.reduce((s, r) => s + (r.currentBudget?.total_budget ?? DEFAULT_BUDGET), 0)
+  const totalUsed = rows.reduce((s, r) => s + r.used, 0)
+  const utilizationPct = totalBudget > 0 ? Math.min(100, (totalUsed / totalBudget) * 100) : 0
+  const overBudgetCount = rows.filter(r => r.used > (r.currentBudget?.total_budget ?? DEFAULT_BUDGET)).length
+  const unusedCount = rows.filter(r => r.used === 0).length
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>
         <p className="text-gray-500 text-sm mt-1">Jahresbudget und Schuherstattung verwalten</p>
       </div>
+
+      {/* Budget summary */}
+      {!loading && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+          <p className="text-sm font-semibold text-gray-700">Budgetauswertung {CURRENT_YEAR}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Gesamtbudget</p>
+              <p className="text-xl font-bold text-gray-900">€ {totalBudget.toFixed(0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Verbraucht</p>
+              <p className="text-xl font-bold text-gray-900">€ {totalUsed.toFixed(0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Budget überschritten</p>
+              <p className={`text-xl font-bold ${overBudgetCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{overBudgetCount} Nutzer</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-0.5">Kein Verbrauch</p>
+              <p className="text-xl font-bold text-gray-500">{unusedCount} Nutzer</p>
+            </div>
+          </div>
+          <div>
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Ausschöpfung</span>
+              <span className={utilizationPct >= 90 ? 'text-red-600 font-semibold' : utilizationPct >= 70 ? 'text-amber-600 font-semibold' : 'text-green-600 font-semibold'}>{utilizationPct.toFixed(1)} %</span>
+            </div>
+            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${utilizationPct >= 90 ? 'bg-red-500' : utilizationPct >= 70 ? 'bg-amber-400' : 'bg-green-500'}`}
+                style={{ width: `${utilizationPct}%` }} />
+            </div>
+            {utilizationPct >= 90 && <p className="text-xs text-red-600 mt-1.5 font-medium">⚠ Budget nahezu ausgeschöpft — Aufstockung empfohlen.</p>}
+            {overBudgetCount > 0 && <p className="text-xs text-amber-700 mt-1">Hinweis: {overBudgetCount} {overBudgetCount === 1 ? 'Nutzer hat' : 'Nutzer haben'} das zugeteilte Budget überschritten.</p>}
+          </div>
+        </div>
+      )}
 
       {/* Shoe refund cap card */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
