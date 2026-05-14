@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, Tag, AlertTriangle, CheckCircle, Info } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, AlertTriangle, CheckCircle, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
@@ -261,31 +261,8 @@ export default function Shop() {
                 <ShoppingBag className="w-8 h-8 sm:w-10 sm:h-10 text-blue-300 opacity-60" />
               </div>
               <div className="p-3 sm:p-4 flex flex-col flex-1">
-                <div className="flex items-start justify-between gap-1 mb-1">
-                  <h3 className="font-semibold text-gray-900 text-xs sm:text-sm leading-snug">{product.name}</h3>
-                  <span className="text-blue-800 font-bold text-xs sm:text-sm whitespace-nowrap ml-1">€ {Number(product.price).toFixed(2)}</span>
-                </div>
-                <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-                  <span className="text-xs text-gray-400 hidden sm:flex items-center gap-1"><Tag className="w-3 h-3" />{product.category}</span>
-                  {product.needs_tailoring && <span className="text-xs text-purple-600 font-medium hidden sm:block">· Wappen</span>}
-                  {product.size_guide && (
-                    <button onClick={() => setSizeGuideModal(product.size_guide!)}
-                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-0.5 font-medium">
-                      <Info className="w-3 h-3" /><span className="hidden sm:inline"> Größentabelle</span>
-                    </button>
-                  )}
-                  {lastSizes[product.id] && (
-                    <span className="text-xs text-blue-600 font-medium bg-blue-50 px-1.5 py-0.5 rounded-full">
-                      Gr. {lastSizes[product.id]}
-                    </span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {product.sizes.slice(0, 4).map(s => (
-                    <span key={s} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded-md">{s}</span>
-                  ))}
-                  {product.sizes.length > 4 && <span className="text-xs px-1.5 py-0.5 text-gray-400">+{product.sizes.length - 4}</span>}
-                </div>
+                <h3 className="font-semibold text-gray-900 text-xs sm:text-sm leading-snug mb-1">{product.name}</h3>
+                <p className="text-blue-800 font-bold text-xs sm:text-sm mb-3">€ {Number(product.price).toFixed(2)}</p>
                 <button
                   onClick={() => openSizeModal(product)}
                   disabled={!activeQuarter || adding === product.id}
