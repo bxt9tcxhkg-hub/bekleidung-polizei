@@ -305,7 +305,7 @@ export default function Products() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel-Nr.</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Artikel-Nr.</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Kategorie</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
@@ -321,8 +321,11 @@ export default function Products() {
                 <tr><td colSpan={7} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
               ) : filtered.map(p => (
                 <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.article_number}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600 hidden sm:table-cell">{p.article_number}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">{p.name}</p>
+                    <p className="text-xs text-gray-400 font-mono sm:hidden">{p.article_number}</p>
+                  </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{p.category}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>

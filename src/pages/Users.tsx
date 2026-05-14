@@ -245,7 +245,7 @@ export default function Users() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstnummer</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">Rollen</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Rollen</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -273,7 +273,7 @@ export default function Users() {
                       {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap">
                       {u.roles.map(r => {
                         const roleLabel: Record<string, string> = { user: 'Benutzer', sachbearbeiter: 'Sachbearbeiter', admin: 'Admin', genehmiger: 'Genehmiger' }

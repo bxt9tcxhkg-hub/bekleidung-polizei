@@ -105,7 +105,7 @@ export default function ShoeRefunds() {
                   {isAdmin && <th className="text-left px-4 py-3 font-semibold text-gray-600">Benutzer</th>}
                   <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
                   <th className="text-right px-4 py-3 font-semibold text-gray-600">Betrag</th>
-                  <th className="text-right px-4 py-3 font-semibold text-gray-600">Genehmigt</th>
+                  <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Genehmigt</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Notiz</th>
                 </tr>
               </thead>
@@ -120,7 +120,7 @@ export default function ShoeRefunds() {
                     )}
                     <td className="px-4 py-3 text-gray-700">{new Date(r.refund_date).toLocaleDateString('de-AT')}</td>
                     <td className="px-4 py-3 text-right text-gray-700">€ {Number(r.amount).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-green-700">€ {Number(r.approved_amount).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-green-700 hidden sm:table-cell">€ {Number(r.approved_amount).toFixed(2)}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">{r.note ?? '–'}</td>
                   </tr>
                 ))}
