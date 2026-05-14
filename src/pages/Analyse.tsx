@@ -604,8 +604,9 @@ export default function Analyse() {
 
                             {/* Recommendation details */}
                             {rec ? (
-                              <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-200">
-                                <div className="flex items-center gap-3 text-gray-500">
+                              <div className="text-xs pt-2 border-t border-gray-200 space-y-2">
+                                {/* Row 1: Mindestbestand + In Bestellung */}
+                                <div className="flex items-center justify-between gap-2">
                                   {editingMinQty === rec.product_id ? (
                                     <div className="flex items-center gap-1.5">
                                       <span className="text-gray-500">Min.:</span>
@@ -621,7 +622,7 @@ export default function Analyse() {
                                       <button onClick={() => setEditingMinQty(null)} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">✕</button>
                                     </div>
                                   ) : (
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1 text-gray-500">
                                       Mindestbestand: <strong className="text-gray-700">{rec.minStock}×</strong>
                                       {(isAdmin || isSachbearbeiter) && (
                                         <button onClick={() => { setEditingMinQty(rec.product_id); setEditMinQtyVal(String(productMinQty[rec.product_id] ?? 0)) }} className="ml-0.5 text-gray-400 hover:text-blue-600 transition-colors" title="Mindestbestand anpassen">
@@ -631,20 +632,21 @@ export default function Analyse() {
                                     </span>
                                   )}
                                   {rec.pendingQty > 0 && (
-                                    <span className="text-blue-600">In Bestellung: {rec.pendingQty}×</span>
+                                    <span className="text-blue-600 shrink-0">In Bestellung: {rec.pendingQty}×</span>
                                   )}
                                 </div>
+                                {/* Row 2: Action */}
                                 {rec.needsRestock && rec.toOrder > 0 ? (
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded-lg">
                                       → {rec.toOrder}× bestellen
                                     </span>
                                     {isSachbearbeiter && (
                                       <button
                                         onClick={() => navigate('/lager', { state: { productId: rec.product_id, size: rec.size, qty: rec.toOrder } })}
-                                        className="flex items-center gap-1 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-2 py-0.5 rounded-lg transition-colors"
+                                        className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0"
                                       >
-                                        <ShoppingBag className="w-3 h-3" /> Bestellen
+                                        <ShoppingBag className="w-3.5 h-3.5" /> Bestellen
                                       </button>
                                     )}
                                   </div>
