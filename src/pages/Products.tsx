@@ -40,6 +40,7 @@ function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'create
     article_number,
     name,
     category: get('kategorie', 'category', 'kategory') || 'Sonstiges',
+    sub_category: get('subcategory', 'subCategory', 'sub_category', 'unterkategorie', 'unterkat') || null,
     gender: genderFromCol ?? genderFromName ?? 'unisex',
     sizes: groessen ? groessen.split(sizeSep).map(s => s.trim()).filter(Boolean) : [],
     price: parseFloat(preis.replace(',', '.')) || 0,
