@@ -486,7 +486,7 @@ export default function Products() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Kategorie</label>
                   <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                    {(CATEGORIES_BY_ORG[form.organisation] ?? CATEGORIES_BY_ORG['Stadtpolizei']).map(c => <option key={c}>{c}</option>)}
+                    {(CATEGORIES_BY_ORG[form.organisation ?? 'Stadtpolizei'] ?? CATEGORIES_BY_ORG['Stadtpolizei']).map((c: string) => <option key={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
