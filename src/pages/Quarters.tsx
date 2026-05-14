@@ -144,26 +144,24 @@ export default function Quarters() {
 
           {/* Active quarter — main action card */}
           {active && (
-            <div className="bg-white rounded-xl border-2 border-blue-200 p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 p-2.5 rounded-xl">
-                    <CalendarRange className="w-5 h-5 text-blue-700" />
+            <div className="bg-white rounded-xl border-2 border-blue-200 p-5">
+              <div className="flex items-start gap-3">
+                <div className="bg-blue-100 p-2.5 rounded-xl flex-shrink-0">
+                  <CalendarRange className="w-5 h-5 text-blue-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-gray-900 text-lg leading-tight">{active.name}</h2>
+                    <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">Aktiv</span>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="font-bold text-gray-900 text-lg">{active.name}</h2>
-                      <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Aktiv</span>
-                    </div>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      {new Date(active.start_date).toLocaleDateString('de-AT')} – {new Date(active.end_date).toLocaleDateString('de-AT')}
-                      {daysLeft !== null && daysLeft >= 0 && (
-                        <span className={`ml-2 font-medium ${daysLeft <= 7 ? 'text-amber-600' : 'text-gray-400'}`}>
-                          · noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
-                        </span>
-                      )}
-                    </p>
-                  </div>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {new Date(active.start_date).toLocaleDateString('de-AT')} – {new Date(active.end_date).toLocaleDateString('de-AT')}
+                    {daysLeft !== null && daysLeft >= 0 && (
+                      <span className={`ml-2 font-medium ${daysLeft <= 7 ? 'text-amber-600' : 'text-gray-400'}`}>
+                        · noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <button onClick={() => openEdit(active)}
                   className="text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
@@ -171,15 +169,15 @@ export default function Quarters() {
                 </button>
               </div>
 
-              <div className="mt-5 pt-4 border-t border-gray-100 flex items-center justify-between gap-4">
-                <p className="text-sm text-gray-500">
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-sm text-gray-500 mb-3">
                   Quartal abschließen beendet den Bestellzeitraum.
                   {planned.length > 0
                     ? ` ${planned[0].name} startet sofort.`
                     : ' Kein Folgequartal geplant.'}
                 </p>
                 <button onClick={closeAndNext} disabled={closing}
-                  className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex-shrink-0">
+                  className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
                   <CheckCircle className="w-4 h-4" />
                   {closing ? 'Wird abgeschlossen...' : 'Quartal abschließen'}
                 </button>
