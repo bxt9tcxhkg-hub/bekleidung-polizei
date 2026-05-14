@@ -179,8 +179,8 @@ export default function Budgets() {
               <div className={`h-full rounded-full transition-all ${utilizationPct >= 90 ? 'bg-red-500' : utilizationPct >= 70 ? 'bg-amber-400' : 'bg-green-500'}`}
                 style={{ width: `${utilizationPct}%` }} />
             </div>
-            {utilizationPct >= 90 && <p className="text-xs text-red-600 mt-1.5 font-medium">⚠ Budget nahezu ausgeschöpft — Aufstockung empfohlen.</p>}
-            {overBudgetCount > 0 && <p className="text-xs text-amber-700 mt-1">Hinweis: {overBudgetCount} {overBudgetCount === 1 ? 'Nutzer hat' : 'Nutzer haben'} das zugeteilte Budget überschritten.</p>}
+            {utilizationPct >= 90 && <p className="text-xs text-red-600 mt-1.5 font-medium">Budget nahezu ausgeschöpft — bei der Planung für {CURRENT_YEAR + 1} höheres Budget einplanen.</p>}
+            {overBudgetCount > 0 && <p className="text-xs text-amber-700 mt-1">{overBudgetCount} {overBudgetCount === 1 ? 'Nutzer hat' : 'Nutzer haben'} das Budget überschritten — Richtwert für {CURRENT_YEAR + 1} entsprechend anpassen.</p>}
           </div>
         </div>
       )}
