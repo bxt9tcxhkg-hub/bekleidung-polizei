@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, Package, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag } from 'lucide-react'
+import { TrendingUp, Package, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -51,6 +51,7 @@ export default function Analyse() {
   const [recentQuarterCount, setRecentQuarterCount] = useState(4)
   const [loading, setLoading] = useState(true)
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
+  const [infoOpen, setInfoOpen] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -210,10 +211,40 @@ export default function Analyse() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Bestellanalyse</h1>
-        <p className="text-gray-500 text-sm mt-1">Nachfrageauswertung zur Unterstützung der Lagerplanung</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Bestellanalyse</h1>
+          <p className="text-gray-500 text-sm mt-1">Nachfrageauswertung zur Unterstützung der Lagerplanung</p>
+        </div>
+        <button onClick={() => setInfoOpen(true)}
+          className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0 mt-0.5">
+          <Info className="w-5 h-5" />
+        </button>
       </div>
+
+      {infoOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Empfehlungslogik</h2>
+              <button onClick={() => setInfoOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3 text-sm text-gray-700">
+              <p>Ø-Quartalsnachfrage aus den letzten {recentQuarterCount} Quartalen × 1 Quartal Vorlaufzeit = <strong>Mindestbestand</strong>.</p>
+              <p>Empfohlene Bestellmenge = 2 Quartale Bedarf − aktueller Bestand − bereits laufende Lagerbestellungen.</p>
+              <p className="text-gray-500 text-xs">Berechnung erfolgt auf Größenebene.</p>
+            </div>
+            <div className="px-5 py-4 border-t">
+              <button onClick={() => setInfoOpen(false)}
+                className="w-full bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
@@ -239,16 +270,6 @@ export default function Analyse() {
               <p className={`text-2xl font-bold ${urgentRecs.length > 0 ? 'text-amber-800' : 'text-green-800'}`}>{urgentRecs.length}</p>
               <p className={`text-xs ${urgentRecs.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>Größen-Positionen</p>
             </div>
-          </div>
-
-          {/* Recommendation logic explanation */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-5 flex items-start gap-3">
-            <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-            <p className="text-xs text-blue-700">
-              <strong>Empfehlungslogik:</strong> Ø-Quartalsnachfrage aus den letzten {recentQuarterCount} Quartalen × 1 Quartal Vorlaufzeit = Mindestbestand.
-              Empfohlene Bestellmenge = 2 Quartale Bedarf − aktueller Bestand − bereits laufende Lagerbestellungen.
-              Berechnung auf Größenebene.
-            </p>
           </div>
 
           {/* Recommendation banner */}
