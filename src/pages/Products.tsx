@@ -111,6 +111,7 @@ const emptyProduct = (): Omit<Product, 'id' | 'created_at'> => ({
   size_guide: null,
   organisation: 'Stadtpolizei',
   active: true,
+  min_quantity: 0,
 })
 
 export default function Products() {
@@ -159,7 +160,7 @@ export default function Products() {
   }
 
   function openEdit(p: Product) {
-    setForm({ article_number: p.article_number, name: p.name, category: p.category, sub_category: p.sub_category ?? null, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active })
+    setForm({ article_number: p.article_number, name: p.name, category: p.category, sub_category: p.sub_category ?? null, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active, min_quantity: p.min_quantity ?? 0 })
     setEditId(p.id)
     setError('')
     setShowForm(true)
@@ -500,7 +501,7 @@ export default function Products() {
               <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Artikelnummer *</label>
                   <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.article_number} onChange={e => setForm(f => ({ ...f, article_number: e.target.value }))} />
@@ -512,14 +513,14 @@ export default function Products() {
                     {(CATEGORIES_BY_ORG[form.organisation ?? 'Stadtpolizei'] ?? CATEGORIES_BY_ORG['Stadtpolizei']).map((c: string) => <option key={c}>{c}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Unterkategorie</label>
-                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.sub_category ?? ''}
-                    onChange={e => setForm(f => ({ ...f, sub_category: e.target.value || null }))}>
-                    <option value="">–</option>
-                    {(SUB_CATEGORIES_BY_ORG[form.organisation ?? 'Stadtpolizei']?.[form.category] ?? []).map((c: string) => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Unterkategorie</label>
+                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.sub_category ?? ''}
+                  onChange={e => setForm(f => ({ ...f, sub_category: e.target.value || null }))}>
+                  <option value="">–</option>
+                  {(SUB_CATEGORIES_BY_ORG[form.organisation ?? 'Stadtpolizei']?.[form.category] ?? []).map((c: string) => <option key={c}>{c}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
@@ -536,22 +537,26 @@ export default function Products() {
                   ))}
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
+                <div className="flex gap-2">
+                  {(['Stadtpolizei', 'Parkaufsicht'] as const).map(org => (
+                    <button key={org} type="button"
+                      onClick={() => setForm(f => ({ ...f, organisation: org, category: CATEGORIES_BY_ORG[org][0], sub_category: null }))}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      {org}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€)</label>
                   <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
-                  <div className="flex gap-2">
-                    {(['Stadtpolizei', 'Parkaufsicht'] as const).map(org => (
-                      <button key={org} type="button"
-                        onClick={() => setForm(f => ({ ...f, organisation: org, category: CATEGORIES_BY_ORG[org][0], sub_category: null }))}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
-                        {org}
-                      </button>
-                    ))}
-                  </div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Mindestbestand</label>
+                  <input type="number" step="1" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.min_quantity} onChange={e => setForm(f => ({ ...f, min_quantity: parseInt(e.target.value) || 0 }))} placeholder="0" />
                 </div>
               </div>
               <div>

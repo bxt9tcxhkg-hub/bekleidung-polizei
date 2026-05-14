@@ -56,6 +56,7 @@ export interface Product {
   size_guide: string | null
   organisation: string | null
   active: boolean
+  min_quantity: number
   created_at: string | null
 }
 

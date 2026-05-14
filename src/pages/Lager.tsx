@@ -338,10 +338,18 @@ export default function Lager() {
                             ) : (
                               <button onClick={() => { setEditingId(entry.id); setEditQty(String(entry.quantity)) }}
                                 className="inline-flex items-center gap-2 hover:bg-gray-100 px-3 py-1 rounded-lg transition-colors group">
-                                <span className={`text-sm font-semibold ${entry.quantity === 0 ? 'text-gray-400' : entry.quantity < 3 ? 'text-amber-600' : 'text-green-700'}`}>
-                                  {entry.quantity}×
-                                </span>
-                                <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
+                                {(() => {
+                                  const min = entry.products?.min_quantity ?? 0
+                                  const qty = entry.quantity
+                                  const color = qty === 0 ? 'text-gray-400' : min > 0 && qty < min ? 'text-red-600' : min > 0 && qty <= min * 1.5 ? 'text-amber-600' : 'text-green-700'
+                                  return <span className={`text-sm font-semibold ${color}`}>{qty}×</span>
+                                })()}
+                                {(() => {
+                                  const min = entry.products?.min_quantity ?? 0
+                                  return min > 0 && entry.quantity < min
+                                    ? <span className="text-xs text-red-400">min. {min}</span>
+                                    : <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
+                                })()}
                               </button>
                             )}
                           </td>
