@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X } from 'lucide-react'
+import { TrendingUp, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -53,10 +53,14 @@ interface QuarterStat {
 
 export default function Analyse() {
   const navigate = useNavigate()
-  const { isSachbearbeiter, profile } = useAuth()
+  const { isSachbearbeiter, isAdmin, profile } = useAuth()
   const [tab, setTab] = useState<AnalyseTab>('ranking')
   const [stats, setStats] = useState<ProductStat[]>([])
   const [sizeRecs, setSizeRecs] = useState<SizeRec[]>([])
+  const [productMinQty, setProductMinQty] = useState<Record<string, number>>({})
+  const [editingMinQty, setEditingMinQty] = useState<string | null>(null)
+  const [editMinQtyVal, setEditMinQtyVal] = useState('')
+  const [savingMinQty, setSavingMinQty] = useState(false)
   const [quarterStats, setQuarterStats] = useState<QuarterStat[]>([])
   const [recentQuarterCount, setRecentQuarterCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -66,6 +70,17 @@ export default function Analyse() {
   const [periodPreset, setPeriodPreset] = useState('all')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+
+  async function saveMinQty(productId: string) {
+    const val = parseInt(editMinQtyVal)
+    if (isNaN(val) || val < 0) return
+    setSavingMinQty(true)
+    await supabase.from('products').update({ min_quantity: val }).eq('id', productId)
+    setProductMinQty(m => ({ ...m, [productId]: val }))
+    setSizeRecs(recs => recs.map(r => r.product_id === productId ? { ...r, minStock: Math.max(Math.ceil(r.avgQtrDemand), val), toOrder: Math.max(0, Math.max(Math.ceil(r.avgQtrDemand * 2), Math.max(Math.ceil(r.avgQtrDemand), val)) - r.currentStock - r.pendingQty), needsRestock: r.currentStock < Math.max(Math.ceil(r.avgQtrDemand), val) } : r))
+    setSavingMinQty(false)
+    setEditingMinQty(null)
+  }
 
   useEffect(() => {
     async function load() {
@@ -80,10 +95,14 @@ export default function Analyse() {
         supabase.from('inventory').select('product_id,size,quantity'),
         supabase.from('quarters').select('id,name,year,quarter_num,start_date,end_date').order('end_date', { ascending: false }),
         supabase.from('stock_orders').select('product_id,size,quantity,status').in('status', ['pending_approval', 'approved']),
-        supabase.from('products').select('id').eq('organisation', org).eq('active', true),
+        supabase.from('products').select('id,min_quantity').eq('organisation', org).eq('active', true),
       ])
 
-      const orgProductIds = new Set((orgProductsRes.data ?? []).map((p: any) => p.id))
+      const orgProducts = (orgProductsRes.data ?? []) as any[]
+      const orgProductIds = new Set(orgProducts.map((p: any) => p.id))
+      const minQtyMap: Record<string, number> = {}
+      orgProducts.forEach((p: any) => { minQtyMap[p.id] = p.min_quantity ?? 0 })
+      setProductMinQty(minQtyMap)
       const orders = ((ordersRes.data ?? []) as any[]).filter(o => orgProductIds.has(o.product_id))
       const inventory = (invRes.data ?? []).filter((e: any) => orgProductIds.has(e.product_id))
       const allQuarters = (quartersRes.data ?? []) as any[]
@@ -179,8 +198,9 @@ export default function Analyse() {
         const avgQtrDemand = totalRecentQty / actualRecentCount
         const currentStock = invMap[key] ?? 0
         const pendingQty = pendingMap[key] ?? 0
-        const minStock = Math.ceil(avgQtrDemand)           // 1 quarter lead time
-        const toOrder = Math.max(0, Math.ceil(avgQtrDemand * 2) - currentStock - pendingQty)
+        const calcMin = Math.ceil(avgQtrDemand)
+        const minStock = Math.max(calcMin, minQtyMap[pid] ?? 0)
+        const toOrder = Math.max(0, Math.max(Math.ceil(avgQtrDemand * 2), minStock) - currentStock - pendingQty)
         const needsRestock = currentStock < minStock
 
         recs.push({
@@ -586,7 +606,30 @@ export default function Analyse() {
                             {rec ? (
                               <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-200">
                                 <div className="flex items-center gap-3 text-gray-500">
-                                  <span>Mindestbestand: <strong className="text-gray-700">{rec.minStock}×</strong></span>
+                                  {editingMinQty === rec.product_id ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-gray-500">Min.:</span>
+                                      <input
+                                        type="number" min="0"
+                                        className="w-14 text-center border border-blue-400 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        value={editMinQtyVal}
+                                        autoFocus
+                                        onChange={e => setEditMinQtyVal(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') saveMinQty(rec.product_id); if (e.key === 'Escape') setEditingMinQty(null) }}
+                                      />
+                                      <button onClick={() => saveMinQty(rec.product_id)} disabled={savingMinQty} className="px-1.5 py-0.5 bg-blue-800 text-white rounded text-xs disabled:opacity-60">✓</button>
+                                      <button onClick={() => setEditingMinQty(null)} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">✕</button>
+                                    </div>
+                                  ) : (
+                                    <span className="flex items-center gap-1">
+                                      Mindestbestand: <strong className="text-gray-700">{rec.minStock}×</strong>
+                                      {(isAdmin || isSachbearbeiter) && (
+                                        <button onClick={() => { setEditingMinQty(rec.product_id); setEditMinQtyVal(String(productMinQty[rec.product_id] ?? 0)) }} className="ml-0.5 text-gray-400 hover:text-blue-600 transition-colors" title="Mindestbestand anpassen">
+                                          <Pencil className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </span>
+                                  )}
                                   {rec.pendingQty > 0 && (
                                     <span className="text-blue-600">In Bestellung: {rec.pendingQty}×</span>
                                   )}
