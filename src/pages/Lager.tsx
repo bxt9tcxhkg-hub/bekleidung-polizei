@@ -238,10 +238,30 @@ export default function Lager() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lagerverwaltung</h1>
-          <p className="text-gray-500 text-sm mt-1">Bestand erfassen und Nachbestellungen verwalten</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Lagerverwaltung</h1>
+        <p className="text-gray-500 text-sm mt-1">Bestand erfassen und Nachbestellungen verwalten</p>
+      </div>
+
+      {/* Tabs + action button */}
+      <div className="flex items-center gap-2 mb-5">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl flex-1">
+        {([
+          { key: 'bestand', label: 'Bestand', icon: Warehouse },
+          { key: 'bestellen', label: 'Nachbestellen', icon: ShoppingBag },
+          { key: 'historie', label: 'Bestellhistorie', icon: ClipboardList },
+        ] as { key: Tab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all relative ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            <Icon className="w-4 h-4" />
+            {label}
+            {key === 'historie' && (pendingOrdersCount + approvedOrdersCount) > 0 && (
+              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                {pendingOrdersCount + approvedOrdersCount}
+              </span>
+            )}
+          </button>
+        ))}
         </div>
         {tab === 'bestand' && (
           <button onClick={() => setAddForm({ product_id: '', size: '', quantity: '' })}
@@ -261,26 +281,6 @@ export default function Lager() {
             )}
           </button>
         )}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl w-fit">
-        {([
-          { key: 'bestand', label: 'Bestand', icon: Warehouse },
-          { key: 'bestellen', label: 'Nachbestellen', icon: ShoppingBag },
-          { key: 'historie', label: 'Bestellhistorie', icon: ClipboardList },
-        ] as { key: Tab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-all relative ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            <Icon className="w-4 h-4" />
-            {label}
-            {key === 'historie' && (pendingOrdersCount + approvedOrdersCount) > 0 && (
-              <span className="text-xs font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                {pendingOrdersCount + approvedOrdersCount}
-              </span>
-            )}
-          </button>
-        ))}
       </div>
 
       {loading ? (
