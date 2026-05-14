@@ -48,6 +48,7 @@ function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'create
     size_guide: get('grössentabelle', 'groessentabelle', 'size_guide', 'sizeguide', 'größentabelle') || null,
     organisation: (() => { const o = get('organisation', 'org', 'abteilung'); return o.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei' })(),
     active: true,
+    min_quantity: 0,
   }
 }
 
