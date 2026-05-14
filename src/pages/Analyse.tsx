@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, Package, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X } from 'lucide-react'
+import { TrendingUp, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
