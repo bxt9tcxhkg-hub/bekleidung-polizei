@@ -192,9 +192,8 @@ export default function Users() {
   const isSelfEdit = editId === authProfile?.id
 
   function canAssignRole(role: string) {
-    if (role === 'genehmiger') return isGenehmiger
-    if (role === 'admin') return isStrictAdmin || isGenehmiger
-    return true // 'user' anyone can assign
+    if (role === 'admin' || role === 'genehmiger') return isStrictAdmin || isGenehmiger
+    return true // 'user' and 'sachbearbeiter' can be assigned by any staff
   }
 
   function toggleRole(role: string) {
@@ -256,8 +255,8 @@ export default function Users() {
                 <tr key={u.id} className={`hover:bg-gray-50 ${!u.active ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded-lg ${u.roles.includes('admin') ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                        {u.roles.includes('admin') ? <Shield className="w-3.5 h-3.5 text-blue-700" /> : <User className="w-3.5 h-3.5 text-gray-500" />}
+                      <div className={`p-1.5 rounded-lg ${u.roles.includes('admin') ? 'bg-purple-100' : u.roles.includes('sachbearbeiter') || u.roles.includes('genehmiger') ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                        {u.roles.includes('admin') || u.roles.includes('sachbearbeiter') || u.roles.includes('genehmiger') ? <Shield className={`w-3.5 h-3.5 ${u.roles.includes('admin') ? 'text-purple-700' : 'text-blue-700'}`} /> : <User className="w-3.5 h-3.5 text-gray-500" />}
                       </div>
                       <span className="font-medium text-gray-900 truncate max-w-xs">{u.name}</span>
                     </div>
@@ -276,9 +275,15 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
-                      {u.roles.map(r => (
-                        <span key={r} className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">{r}</span>
-                      ))}
+                      {u.roles.map(r => {
+                        const roleLabel: Record<string, string> = { user: 'Benutzer', sachbearbeiter: 'Sachbearbeiter', admin: 'Admin', genehmiger: 'Genehmiger' }
+                        const roleColor: Record<string, string> = { user: 'bg-gray-100 text-gray-600', sachbearbeiter: 'bg-blue-100 text-blue-700', admin: 'bg-purple-100 text-purple-700', genehmiger: 'bg-green-100 text-green-700' }
+                        return (
+                          <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColor[r] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {roleLabel[r] ?? r}
+                          </span>
+                        )
+                      })}
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -424,7 +429,7 @@ export default function Users() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
                 <div className="flex gap-3">
-                  {([['user', 'Benutzer'], ['admin', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as const).map(([role, label]) => {
+                  {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter'], ['admin', 'Admin'], ['genehmiger', 'Genehmiger']] as [string, string][]).map(([role, label]) => {
                     const restricted = isSelfEdit || !canAssignRole(role)
                     return (
                       <label key={role} className={`flex items-center gap-2 ${restricted ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
@@ -437,10 +442,8 @@ export default function Users() {
                 {isSelfEdit && (
                   <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
                 )}
-                {!isSelfEdit && !isGenehmiger && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    {isStrictAdmin ? 'Die Genehmiger-Rolle kann nur von einem Genehmiger vergeben werden.' : 'Erweiterte Rollen können nur von Administratoren vergeben werden.'}
-                  </p>
+                {!isSelfEdit && !isStrictAdmin && !isGenehmiger && (
+                  <p className="text-xs text-gray-400 mt-1">Admin- und Genehmiger-Rollen können nur von Admins oder Genehmigern vergeben werden.</p>
                 )}
               </div>
               <div className="flex items-center gap-3">
