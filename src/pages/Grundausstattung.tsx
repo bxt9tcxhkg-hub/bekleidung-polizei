@@ -23,6 +23,7 @@ export default function Grundausstattung() {
   const [products, setProducts] = useState<Product[]>([])
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Verwaltung – Artikel hinzufügen
   const [showAdd, setShowAdd] = useState(false)
@@ -33,27 +34,36 @@ export default function Grundausstattung() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [addError, setAddError] = useState('')
+  const [cartError, setCartError] = useState('')
 
   // Neue Einstellung – Größen auswählen
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({}) // product_id → size
   const [addingToCart, setAddingToCart] = useState(false)
   const [cartSuccess, setCartSuccess] = useState(false)
 
-  async function load() {
-    setLoading(true)
+  async function load(isInitial = false) {
+    if (isInitial) setLoading(true); else setRefreshing(true)
     const { data } = await (supabase.from('grundausstattung') as any)
       .select('*, products(*)')
       .eq('organisation', org)
       .order('updated_at', { ascending: true })
     const loaded = (data ?? []) as GrundItem[]
     setItems(loaded)
-    // Pre-fill sizes from product defaults
-    const sizes: Record<string, string> = {}
-    loaded.forEach(item => {
-      if (item.products?.sizes?.length) sizes[item.product_id] = item.products.sizes[0]
+    // Only set default sizes for items that don't already have a selection
+    setSelectedSizes(prev => {
+      const next = { ...prev }
+      loaded.forEach(item => {
+        if (item.products?.sizes?.length && !next[item.product_id]) {
+          next[item.product_id] = item.products.sizes[0]
+        }
+      })
+      // Remove selections for items no longer in the list
+      Object.keys(next).forEach(pid => {
+        if (!loaded.find(i => i.product_id === pid)) delete next[pid]
+      })
+      return next
     })
-    setSelectedSizes(sizes)
-    setLoading(false)
+    if (isInitial) setLoading(false); else setRefreshing(false)
   }
 
   useEffect(() => {
@@ -68,10 +78,9 @@ export default function Grundausstattung() {
     init()
   }, [])
 
-  useEffect(() => { load() }, [org])
+  useEffect(() => { load(true) }, [org])
 
   const orgProducts = products.filter(p => p.organisation === org)
-  const addProduct = products.find(p => p.id === addProductId)
   const filteredProducts = productSearch.trim()
     ? orgProducts.filter(p =>
         p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
@@ -97,7 +106,7 @@ export default function Grundausstattung() {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'organisation,product_id' })
     if (error) setAddError(error.message)
-    else { setShowAdd(false); setAddProductId(''); setProductSearch(''); setAddQty('1'); load() }
+    else { setShowAdd(false); setAddProductId(''); setProductSearch(''); setAddQty('1'); load(false) }
     setSaving(false)
   }
 
@@ -105,17 +114,17 @@ export default function Grundausstattung() {
     setDeleting(id)
     await (supabase.from('grundausstattung') as any).delete().eq('id', id)
     setDeleting(null)
-    load()
+    load(false)
   }
 
   async function addAllToCart() {
     if (!activeQuarter) return
-    const missing = items.filter(i => i.products?.sizes?.length && !selectedSizes[i.product_id])
-    if (missing.length > 0) return
+    setCartError('')
     setAddingToCart(true)
+    let failed = false
     for (const item of items) {
       if (!item.products) continue
-      await supabase.from('orders').insert({
+      const { error } = await supabase.from('orders').insert({
         user_id: profile!.id,
         product_id: item.product_id,
         quarter_id: activeQuarter.id,
@@ -124,10 +133,13 @@ export default function Grundausstattung() {
         unit_price: item.products.price,
         status: 'pending',
       })
+      if (error) { failed = true; setCartError(`Fehler bei "${item.products.name}": ${error.message}`); break }
     }
     setAddingToCart(false)
-    setCartSuccess(true)
-    setTimeout(() => { setCartSuccess(false); navigate('/warenkorb') }, 1200)
+    if (!failed) {
+      setCartSuccess(true)
+      setTimeout(() => { setCartSuccess(false); navigate('/warenkorb') }, 1200)
+    }
   }
 
   const grouped = items.reduce<Record<string, GrundItem[]>>((acc, item) => {
@@ -167,7 +179,10 @@ export default function Grundausstattung() {
           {/* ── Linke Spalte: Verwaltung ── */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-gray-900">Standardartikel</h2>
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                Standardartikel
+                {refreshing && <span className="inline-block w-3 h-3 rounded-full border-2 border-blue-800 border-t-transparent animate-spin" />}
+              </h2>
               <button
                 onClick={() => { setShowAdd(true); setAddProductId(''); setProductSearch(''); setAddQty('1'); setAddError('') }}
                 className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors"
@@ -351,6 +366,7 @@ export default function Grundausstattung() {
                         : <><ShoppingCart className="w-4 h-4" /> Alle in den Warenkorb</>
                     }
                   </button>
+                  {cartError && <p className="text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg mt-2">{cartError}</p>}
                 </div>
               </div>
             )}
