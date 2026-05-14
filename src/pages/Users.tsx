@@ -50,7 +50,7 @@ const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
 const emptyForm = () => ({ name: '', username: '', initialPassword: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
 
 export default function Users() {
-  const { isStrictAdmin, profile: authProfile } = _useAuth()
+  const { isStrictAdmin, isGenehmiger, profile: authProfile } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
   const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
   const [loading, setLoading] = useState(true)
@@ -95,8 +95,7 @@ export default function Users() {
     if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
     if (!editId && form.initialPassword.length < 6) { setError('Initiales Passwort muss mindestens 6 Zeichen haben.'); return }
     setSaving(true)
-    let safeRoles = form.roles
-    if (!isStrictAdmin) safeRoles = safeRoles.filter(r => r !== 'admin' && r !== 'genehmiger')
+    let safeRoles = form.roles.filter(r => canAssignRole(r))
     if (safeRoles.length === 0) safeRoles = ['user']
     const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active: form.active }
 
@@ -192,9 +191,15 @@ export default function Users() {
 
   const isSelfEdit = editId === authProfile?.id
 
+  function canAssignRole(role: string) {
+    if (role === 'genehmiger') return isGenehmiger
+    if (role === 'admin') return isStrictAdmin || isGenehmiger
+    return true // 'user' anyone can assign
+  }
+
   function toggleRole(role: string) {
     if (isSelfEdit) return
-    if (!isStrictAdmin && (role === 'admin' || role === 'genehmiger')) return
+    if (!canAssignRole(role)) return
     setForm(f => ({
       ...f,
       roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role],
@@ -420,7 +425,7 @@ export default function Users() {
                 <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
                 <div className="flex gap-3">
                   {([['user', 'Benutzer'], ['admin', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as const).map(([role, label]) => {
-                    const restricted = isSelfEdit || (!isStrictAdmin && (role === 'admin' || role === 'genehmiger'))
+                    const restricted = isSelfEdit || !canAssignRole(role)
                     return (
                       <label key={role} className={`flex items-center gap-2 ${restricted ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                         <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} disabled={restricted} className="rounded disabled:cursor-not-allowed" />
@@ -432,8 +437,10 @@ export default function Users() {
                 {isSelfEdit && (
                   <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
                 )}
-                {!isSelfEdit && !isStrictAdmin && (
-                  <p className="text-xs text-gray-400 mt-1">Sachbearbeiter und Genehmiger-Rollen können nur von Administratoren vergeben werden.</p>
+                {!isSelfEdit && !isGenehmiger && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {isStrictAdmin ? 'Die Genehmiger-Rolle kann nur von einem Genehmiger vergeben werden.' : 'Erweiterte Rollen können nur von Administratoren vergeben werden.'}
+                  </p>
                 )}
               </div>
               <div className="flex items-center gap-3">
