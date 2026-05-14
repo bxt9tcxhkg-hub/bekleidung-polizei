@@ -13,6 +13,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [activeOrderCount, setActiveOrderCount] = useState(0)
   const [totalBudget, setTotalBudget] = useState(DEFAULT_BUDGET)
+  const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -46,7 +47,13 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
 
   return (
     <div className="space-y-6">
-      {/* Budget */}
+      {activeQuarter && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex items-center gap-3">
+          <CalendarRange className="w-4 h-4 text-blue-600" />
+          <span className="text-sm text-blue-800 font-medium">Aktives Quartal: {activeQuarter.name}</span>
+          <span className="text-xs text-blue-500 ml-auto">{new Date(activeQuarter.start_date).toLocaleDateString('de-AT')} – {new Date(activeQuarter.end_date).toLocaleDateString('de-AT')}</span>
+        </div>
+      )}
       <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -65,24 +72,15 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
             : `€ ${remaining.toFixed(2)} verbleibend`}
         </p>
       </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <Link to="/warenkorb" className="rounded-xl p-5 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Warenkorb</span>
             <div className="bg-blue-100 p-2 rounded-lg"><ShoppingCart className="w-4 h-4" /></div>
           </div>
           <p className="text-2xl font-bold">{cartCount}</p>
-          <p className="text-xs mt-1 opacity-70">Artikel noch nicht eingereicht</p>
+          <p className="text-xs mt-1 opacity-70">Noch nicht eingereicht</p>
         </Link>
-        <div className="rounded-xl p-5 bg-purple-50 text-purple-700">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium">Aktives Quartal</span>
-            <div className="bg-purple-100 p-2 rounded-lg"><CalendarRange className="w-4 h-4" /></div>
-          </div>
-          <p className="text-2xl font-bold">{activeQuarter?.name ?? '–'}</p>
-          {activeQuarter && <p className="text-xs mt-1 opacity-70">{new Date(activeQuarter.end_date).toLocaleDateString('de-AT')} Fristende</p>}
-        </div>
         <Link to="/meine-bestellungen" className="rounded-xl p-5 bg-green-50 text-green-700 hover:bg-green-100 transition-colors">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Laufende Bestellungen</span>
@@ -169,17 +167,20 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
 function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
   const [pendingOrders, setPendingOrders] = useState(0)
   const [pendingRefunds, setPendingRefunds] = useState(0)
+  const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       const year = new Date().getFullYear()
-      const [ordersRes, refundsRes] = await Promise.all([
+      const [ordersRes, refundsRes, quarterRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
         supabase.from('shoe_refunds').select('id', { count: 'exact' }).gte('created_at', `${year}-01-01`),
+        supabase.from('quarters').select('*').eq('status', 'active').single(),
       ])
       setPendingOrders(ordersRes.count ?? 0)
       setPendingRefunds(refundsRes.count ?? 0)
+      setActiveQuarter(quarterRes.data ?? null)
       setLoading(false)
     }
     load()
@@ -188,7 +189,15 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="space-y-6">
+      {activeQuarter && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex items-center gap-3">
+          <CalendarRange className="w-4 h-4 text-blue-600" />
+          <span className="text-sm text-blue-800 font-medium">Aktives Quartal: {activeQuarter.name}</span>
+          <span className="text-xs text-blue-500 ml-auto">{new Date(activeQuarter.start_date).toLocaleDateString('de-AT')} – {new Date(activeQuarter.end_date).toLocaleDateString('de-AT')}</span>
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Link to="/genehmigungen" className="rounded-xl p-5 bg-yellow-50 text-yellow-700 hover:brightness-95 transition-all">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-medium">Bestellungen zur Genehmigung</span>
@@ -205,6 +214,7 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
         <p className="text-2xl font-bold">{pendingRefunds}</p>
         <p className="text-xs mt-1 opacity-70">Erfasst {new Date().getFullYear()}</p>
       </Link>
+    </div>
     </div>
   )
 }
