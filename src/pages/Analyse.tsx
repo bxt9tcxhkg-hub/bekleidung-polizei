@@ -91,7 +91,7 @@ export default function Analyse() {
         supabase
           .from('orders')
           .select('product_id, size, quantity, quarter_id, products(id,name,article_number,category,organisation), quarters(id,name,year,quarter_num,end_date)')
-          .not('status', 'in', '("pending","pending_approval","cancelled")'),
+          .not('status', 'in', '(pending,pending_approval,cancelled)'),
         supabase.from('inventory').select('product_id,size,quantity'),
         supabase.from('quarters').select('id,name,year,quarter_num,start_date,end_date').order('end_date', { ascending: false }),
         supabase.from('stock_orders').select('product_id,size,quantity,status').in('status', ['pending_approval', 'approved']),

@@ -89,7 +89,7 @@ export default function MyOrders() {
         getCurrentBudget(profile.id, CURRENT_YEAR),
         supabase.from('orders').select('unit_price, quantity')
           .eq('user_id', profile.id)
-          .not('status', 'in', '("pending","cancelled")')
+          .not('status', 'in', '(pending,cancelled)')
           .gte('created_at', `${CURRENT_YEAR}-01-01`),
       ])
       setOrders((ordersRes.data ?? []) as MyOrder[])

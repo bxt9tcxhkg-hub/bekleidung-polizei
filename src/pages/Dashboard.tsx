@@ -27,7 +27,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
         getCurrentBudget(profile.id, CURRENT_YEAR),
         supabase.from('orders').select('unit_price, quantity')
           .eq('user_id', profile.id)
-          .not('status', 'in', '("pending","cancelled")')
+          .not('status', 'in', '(pending,cancelled)')
           .gte('created_at', `${CURRENT_YEAR}-01-01`),
       ])
       setCartCount(cartRes.count ?? 0)
@@ -175,7 +175,7 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
       const year = new Date().getFullYear()
       const [ordersRes, refundsRes, quarterRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
-        supabase.from('shoe_refunds').select('id', { count: 'exact' }).gte('created_at', `${year}-01-01`),
+        supabase.from('shoe_refunds').select('id', { count: 'exact' }).eq('status', 'pending'),
         supabase.from('quarters').select('*').eq('status', 'active').single(),
       ])
       setPendingOrders(ordersRes.count ?? 0)
@@ -212,7 +212,7 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
           <div className="bg-blue-100 p-2 rounded-lg"><Footprints className="w-4 h-4" /></div>
         </div>
         <p className="text-2xl font-bold">{pendingRefunds}</p>
-        <p className="text-xs mt-1 opacity-70">Erfasst {new Date().getFullYear()}</p>
+        <p className="text-xs mt-1 opacity-70">Ausstehend zur Genehmigung</p>
       </Link>
     </div>
     </div>

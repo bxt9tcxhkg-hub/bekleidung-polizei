@@ -34,7 +34,7 @@ export default function Shop() {
       getCurrentBudget(profile!.id, CURRENT_YEAR),
       supabase.from('orders').select('unit_price, quantity')
         .eq('user_id', profile!.id)
-        .not('status', 'in', '("pending","cancelled")')
+        .not('status', 'in', '(pending,cancelled)')
         .gte('created_at', `${CURRENT_YEAR}-01-01`),
     ])
     setTotalBudgetAmt(total)
@@ -67,7 +67,7 @@ export default function Shop() {
         loadBudget(),
         supabase.from('orders').select('product_id,size,created_at')
           .eq('user_id', profile!.id)
-          .not('status', 'in', '("pending","cancelled")')
+          .not('status', 'in', '(pending,cancelled)')
           .order('created_at', { ascending: false }),
       ])
       const map: Record<string, string> = {}
