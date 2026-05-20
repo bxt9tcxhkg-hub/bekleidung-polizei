@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      selfDestroying: true,
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
         name: 'Stadtpolizei Dornbirn – Bekleidung',
