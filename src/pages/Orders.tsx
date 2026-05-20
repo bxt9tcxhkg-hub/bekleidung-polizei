@@ -3,10 +3,11 @@ import { X, Check, Package, Scissors, FileText, RotateCcw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderStatus } from '../lib/types'
+import Lieferungen from './Lieferungen'
 
-type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'teilweise' | 'ausgegeben' | 'storniert'
+type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'teilweise' | 'ausgegeben' | 'storniert' | 'lieferungen'
 
-const ADMIN_TABS: { key: AdminTab; label: string; status: OrderStatus }[] = [
+const ADMIN_TABS: { key: AdminTab; label: string; status?: OrderStatus }[] = [
   { key: 'eingereicht', label: 'Eingereicht',          status: 'approved' },
   { key: 'lieferant',   label: 'Beim Lieferanten',    status: 'ordered_supplier' },
   { key: 'schneider',   label: 'Beim Schneider',       status: 'at_tailor' },
@@ -14,9 +15,10 @@ const ADMIN_TABS: { key: AdminTab; label: string; status: OrderStatus }[] = [
   { key: 'teilweise',   label: 'Teilweise ausgegeben', status: 'partially_issued' },
   { key: 'ausgegeben',  label: 'Ausgegeben',            status: 'issued' },
   { key: 'storniert',   label: 'Storniert',             status: 'cancelled' },
+  { key: 'lieferungen', label: 'Lieferungen' },
 ]
 
-const STATUS_BACK: Partial<Record<OrderStatus, OrderStatus>> = {
+const STATUS_BACK: Partial<Record<string, OrderStatus>> = {
   ordered_supplier: 'approved',
   at_tailor: 'ordered_supplier',
   ready_for_issue: 'ordered_supplier',
@@ -67,7 +69,7 @@ export default function Orders() {
     ? [...tabOrders].sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
     : tabOrders
   const allSelected = tabOrders.length > 0 && tabOrders.every(o => selectedIds.has(o.id))
-  const counts = Object.fromEntries(ADMIN_TABS.map(t => [t.key, orders.filter(o => o.status === t.status).length])) as Record<AdminTab, number>
+  const counts = Object.fromEntries(ADMIN_TABS.map(t => [t.key, t.status ? orders.filter(o => o.status === t.status).length : 0])) as Record<AdminTab, number>
 
   function toggleSelect(id: string) {
     setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
@@ -143,7 +145,19 @@ export default function Orders() {
     })
     generateKurzbrief(Object.values(groups))
     setSaving(true)
-    await Promise.all(selected.map(o => supabase.from('orders').update({ status: 'ordered_supplier', updated_at: new Date().toISOString() }).eq('id', o.id)))
+    // Create delivery and link orders
+    const { data: delivery } = await (supabase.from('deliveries') as any).insert({
+      created_by: profile!.id,
+      status: 'ordered',
+    }).select('id').single()
+    const deliveryId = delivery?.id ?? null
+    await Promise.all(selected.map(o =>
+      (supabase.from('orders') as any).update({
+        status: 'ordered_supplier',
+        updated_at: new Date().toISOString(),
+        ...(deliveryId ? { delivery_id: deliveryId } : {}),
+      }).eq('id', o.id)
+    ))
     setSelectedIds(new Set()); setSaving(false); load()
   }
 
@@ -338,14 +352,16 @@ export default function Orders() {
         ))}
       </div>
 
-      {loading ? (
+      {activeTab === 'lieferungen' && <Lieferungen />}
+
+      {activeTab !== 'lieferungen' && loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
-      ) : sorted.length === 0 ? (
+      ) : activeTab !== 'lieferungen' && sorted.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
           <Package className="w-12 h-12 mb-3 text-gray-300" />
           <p className="font-semibold text-gray-500">Keine Bestellungen</p>
         </div>
-      ) : (
+      ) : activeTab !== 'lieferungen' ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
 
           {/* ── Eingereicht ── */}
@@ -569,7 +585,7 @@ export default function Orders() {
           )}
 
         </div>
-      )}
+      ) : null}
 
       {/* ── Floating action bars ── */}
 

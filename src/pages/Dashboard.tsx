@@ -172,7 +172,6 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
 
   useEffect(() => {
     async function load() {
-      const year = new Date().getFullYear()
       const [ordersRes, refundsRes, quarterRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
         supabase.from('shoe_refunds').select('id', { count: 'exact' }).eq('status', 'pending'),
