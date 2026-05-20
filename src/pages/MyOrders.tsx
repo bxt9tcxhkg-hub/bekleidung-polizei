@@ -16,7 +16,7 @@ type MyOrder = Order & {
 const STATUS_STEPS = [
   { key: 'pending_approval', label: 'Wartet auf Freigabe' },
   { key: 'approved',         label: 'Freigegeben' },
-  { key: 'ordered_supplier', label: 'Beim Lieferanten' },
+  { key: 'ordered_supplier', label: 'In Bestellung' },
   { key: 'at_tailor',        label: 'Beim Schneider' },
   { key: 'ready_for_issue',  label: 'Bereit zur Ausgabe' },
   { key: 'partially_issued', label: 'Teilweise ausgegeben' },

@@ -9,7 +9,7 @@ type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'teilwei
 
 const ADMIN_TABS: { key: AdminTab; label: string; status?: OrderStatus }[] = [
   { key: 'eingereicht', label: 'Eingereicht',          status: 'approved' },
-  { key: 'lieferant',   label: 'Beim Lieferanten',    status: 'ordered_supplier' },
+  { key: 'lieferant',   label: 'In Bestellung',        status: 'ordered_supplier' },
   { key: 'schneider',   label: 'Beim Schneider',       status: 'at_tailor' },
   { key: 'ausgabe',     label: 'Bereit zur Ausgabe',   status: 'ready_for_issue' },
   { key: 'teilweise',   label: 'Teilweise ausgegeben', status: 'partially_issued' },
