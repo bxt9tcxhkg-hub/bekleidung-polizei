@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Upload, FileText, Check, ChevronDown, ChevronUp, Truck, Package, CheckSquare, Square } from 'lucide-react'
+import { Upload, FileText, Check, ChevronDown, ChevronUp, Truck, Package, CheckSquare, Square, AlertCircle, Euro } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Order } from '../lib/types'
+
+interface VorrechnungAnalysis {
+  rechnungsnummer: string | null
+  gesamtbetrag: number | null
+  positionen: { artikelnummer: string; bezeichnung: string; menge: number; einzelpreis: number }[]
+}
 
 type DeliveryOrder = Order & {
   products?: { name: string; article_number: string; category: string; needs_tailoring: boolean }
@@ -12,6 +18,11 @@ interface Delivery {
   created_at: string
   vorrechnung_url: string | null
   vorrechnung_name: string | null
+  vorrechnung_number: string | null
+  vorrechnung_amount: number | null
+  vorrechnung_analysis: VorrechnungAnalysis | null
+  paid: boolean
+  paid_at: string | null
   status: 'ordered' | 'partially_received' | 'received'
   orders?: DeliveryOrder[]
 }
@@ -20,7 +31,7 @@ export default function Lieferungen() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [checked, setChecked] = useState<Record<string, Set<string>>>({})  // deliveryId → Set<orderId>
+  const [checked, setChecked] = useState<Record<string, Set<string>>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState('')
@@ -48,7 +59,6 @@ export default function Lieferungen() {
     }
 
     setDeliveries(deliveryList)
-    // Auto-expand open deliveries
     setExpanded(new Set(deliveryList.filter(d => d.status !== 'received').map(d => d.id)))
     setLoading(false)
   }
@@ -88,10 +98,18 @@ export default function Lieferungen() {
     ))
 
     const allReceived = delivery.orders?.every(o => receivedIds.has(o.id)) ?? false
-    const newStatus = allReceived ? 'received' : 'partially_received'
-    await (supabase.from('deliveries') as any).update({ status: newStatus }).eq('id', delivery.id)
+    await (supabase.from('deliveries') as any)
+      .update({ status: allReceived ? 'received' : 'partially_received' })
+      .eq('id', delivery.id)
 
     setSaving(null)
+    await load()
+  }
+
+  async function markAsPaid(deliveryId: string) {
+    await (supabase.from('deliveries') as any)
+      .update({ paid: true, paid_at: new Date().toISOString() })
+      .eq('id', deliveryId)
     await load()
   }
 
@@ -117,10 +135,16 @@ export default function Lieferungen() {
     try {
       const res = await fetch('/upload', { method: 'POST', body: formData })
       if (!res.ok) throw new Error()
-      const { key, name } = await res.json()
-      await (supabase.from('deliveries') as any)
-        .update({ vorrechnung_url: `/files/${key}`, vorrechnung_name: name })
-        .eq('id', deliveryId)
+      const { key, name, analysis } = await res.json()
+
+      const update: Record<string, unknown> = { vorrechnung_url: `/files/${key}`, vorrechnung_name: name }
+      if (analysis) {
+        update.vorrechnung_analysis = analysis
+        if (analysis.rechnungsnummer) update.vorrechnung_number = analysis.rechnungsnummer
+        if (analysis.gesamtbetrag) update.vorrechnung_amount = analysis.gesamtbetrag
+      }
+
+      await (supabase.from('deliveries') as any).update(update).eq('id', deliveryId)
       await load()
     } catch {
       setUploadError('Upload fehlgeschlagen – bitte nochmals versuchen')
@@ -168,6 +192,10 @@ export default function Lieferungen() {
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_COLOR[d.status]}`}>
                         {STATUS_LABEL[d.status]}
                       </span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex items-center gap-1 ${d.paid ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                        <Euro className="w-3 h-3" />
+                        {d.paid ? 'Bezahlt' : 'Offen'}
+                      </span>
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">{orders.length} Position{orders.length !== 1 ? 'en' : ''}</p>
                   </div>
@@ -176,25 +204,72 @@ export default function Lieferungen() {
 
                 {isExpanded && (
                   <>
-                    {/* Vorrechnung */}
-                    <div className="px-4 pb-3 border-t border-gray-50">
-                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-3 mb-2">Vorrechnung</p>
+                    {/* Vorrechnung + Bezahlung */}
+                    <div className="px-4 pb-4 border-t border-gray-50">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-3 mb-2">Vorrechnung & Bezahlung</p>
+
+                      {!d.paid ? (
+                        <div className="flex items-center justify-between bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 mb-3">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            <span className="text-sm text-red-700 font-medium">Zahlung ausstehend</span>
+                            {d.vorrechnung_amount != null && (
+                              <span className="text-sm text-red-600">— {d.vorrechnung_amount.toFixed(2)} €</span>
+                            )}
+                          </div>
+                          <button onClick={() => markAsPaid(d.id)}
+                            className="text-xs font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0 ml-3">
+                            Als bezahlt markieren
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-green-50 border border-green-100 rounded-xl px-3 py-2.5 mb-3">
+                          <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          <span className="text-sm text-green-700 font-medium">
+                            Bezahlt{d.paid_at ? ` am ${new Date(d.paid_at).toLocaleDateString('de-AT')}` : ''}
+                          </span>
+                          {d.vorrechnung_amount != null && (
+                            <span className="text-sm text-green-600 ml-auto">{d.vorrechnung_amount.toFixed(2)} €</span>
+                          )}
+                        </div>
+                      )}
+
                       {d.vorrechnung_url ? (
-                        <a href={d.vorrechnung_url} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 text-sm text-blue-700 hover:underline">
-                          <FileText className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">{d.vorrechnung_name}</span>
-                        </a>
+                        <div>
+                          <a href={d.vorrechnung_url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-sm text-blue-700 hover:underline">
+                            <FileText className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{d.vorrechnung_name}</span>
+                          </a>
+                          {d.vorrechnung_number && (
+                            <p className="text-xs text-gray-400 mt-0.5 ml-6">Rechnungsnr.: {d.vorrechnung_number}</p>
+                          )}
+                        </div>
                       ) : (
                         <button onClick={() => triggerUpload(d.id)} disabled={isUploading}
                           className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-700 disabled:opacity-50 transition-colors">
                           <Upload className="w-4 h-4" />
-                          {isUploading ? 'Wird hochgeladen...' : 'PDF hochladen'}
+                          {isUploading ? 'Wird hochgeladen & analysiert…' : 'PDF hochladen & analysieren'}
                         </button>
+                      )}
+
+                      {d.vorrechnung_analysis?.positionen && d.vorrechnung_analysis.positionen.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">KI-Analyse</p>
+                          <div className="space-y-1">
+                            {d.vorrechnung_analysis.positionen.map((p, i) => (
+                              <div key={i} className="flex items-center gap-2 text-xs bg-gray-50 rounded-lg px-3 py-1.5">
+                                {p.artikelnummer && <span className="font-mono text-gray-400 flex-shrink-0">{p.artikelnummer}</span>}
+                                <span className="flex-1 truncate text-gray-700">{p.bezeichnung}</span>
+                                <span className="text-gray-500 flex-shrink-0">{p.menge}× · {p.einzelpreis?.toFixed(2)} €</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
 
-                    {/* Order checklist */}
+                    {/* Wareneingang */}
                     <div className="border-t border-gray-100">
                       <div className="px-4 py-2 bg-gray-50 flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Wareneingang prüfen</p>
@@ -231,7 +306,7 @@ export default function Lieferungen() {
                       })}
                     </div>
 
-                    {/* Confirm button */}
+                    {/* Bestätigen */}
                     {!isDone && (
                       <div className="px-4 py-4 border-t border-gray-100 bg-gray-50">
                         <button
@@ -239,7 +314,7 @@ export default function Lieferungen() {
                           disabled={checkedSet.size === 0 || isSaving}
                           className="w-full flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800 text-white font-medium py-2.5 rounded-xl text-sm disabled:bg-gray-200 disabled:text-gray-400 transition-colors">
                           <Check className="w-4 h-4" />
-                          {isSaving ? 'Wird gespeichert...' : `${checkedSet.size} Position${checkedSet.size !== 1 ? 'en' : ''} als erhalten bestätigen`}
+                          {isSaving ? 'Wird gespeichert…' : `${checkedSet.size} Position${checkedSet.size !== 1 ? 'en' : ''} als erhalten bestätigen`}
                         </button>
                       </div>
                     )}
