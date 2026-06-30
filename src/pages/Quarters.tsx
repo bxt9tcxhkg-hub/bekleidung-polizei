@@ -21,6 +21,7 @@ export default function Quarters() {
   const [form, setForm] = useState({ start_date: '', end_date: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [showHistory, setShowHistory] = useState(false)
 
   async function load() {
@@ -70,7 +71,7 @@ export default function Quarters() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load().catch(() => setLoadError('Quartale konnten nicht geladen werden.')) }, [])
 
   async function closeAndNext() {
     const active = quarters.find(q => q.status === 'active')
@@ -121,6 +122,7 @@ export default function Quarters() {
 
   return (
     <div>
+      {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Quartale {CURRENT_YEAR}</h1>
         <p className="text-gray-500 text-sm mt-1">Bestellzyklen – Quartal abschließen startet den nächsten automatisch</p>

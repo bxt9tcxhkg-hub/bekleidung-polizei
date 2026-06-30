@@ -26,6 +26,7 @@ export default function Budgets() {
   const [showBulk, setShowBulk] = useState(false)
   const [bulkSaving, setBulkSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [error, setError] = useState('')
 
   // Drill-down
   const [drilldown, setDrilldown] = useState<{ profile: Profile; orders: any[] } | null>(null)
@@ -83,7 +84,7 @@ export default function Budgets() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load().catch(() => setError('Budgets konnten nicht geladen werden.')) }, [])
 
   async function saveBudget(userId: string) {
     const val = parseFloat(editForm.amount.replace(',', '.'))
@@ -143,6 +144,7 @@ export default function Budgets() {
 
   return (
     <div className="space-y-6">
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>
         <p className="text-gray-500 text-sm mt-1">Jahresbudget und Schuherstattung verwalten</p>

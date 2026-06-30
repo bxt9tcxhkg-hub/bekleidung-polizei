@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext'
 import type { Product, StockOrder } from '../lib/types'
 import { STOCK_ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS } from '../lib/types'
 
+const PAGE_SIZE = 50
+
 type Tab = 'bestand' | 'bestellen' | 'historie'
 
 interface InventoryItem {
@@ -39,6 +41,9 @@ export default function Lager() {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [stockOrders, setStockOrders] = useState<StockOrder[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [invPage, setInvPage] = useState(0)
+  const [ordersPage, setOrdersPage] = useState(0)
 
   // Bestand edit
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -76,7 +81,7 @@ export default function Lager() {
     setLoading(false)
   }
 
-  useEffect(() => { if (profile) loadAll() }, [profile])
+  useEffect(() => { if (profile) loadAll().catch(() => setError('Lagerdaten konnten nicht geladen werden.')) }, [profile])
 
   // Pre-select product+size when navigating from Analyse page
   useEffect(() => {
@@ -232,6 +237,14 @@ export default function Lager() {
     setFollowUp(null)
   }
 
+  // Pagination slices
+  const invEntries = Object.entries(invByProduct).flatMap(([, entries]) => entries)
+  const invTotalPages = Math.ceil(invEntries.length / PAGE_SIZE)
+  const pagedInvEntries = invEntries.slice(invPage * PAGE_SIZE, (invPage + 1) * PAGE_SIZE)
+
+  const ordersTotalPages = Math.ceil(stockOrders.length / PAGE_SIZE)
+  const pagedStockOrders = stockOrders.slice(ordersPage * PAGE_SIZE, (ordersPage + 1) * PAGE_SIZE)
+
   const cartCount = cart.reduce((s, c) => s + c.quantity, 0)
   const pendingOrdersCount = stockOrders.filter(o => o.status === 'pending_approval').length
   const approvedOrdersCount = stockOrders.filter(o => o.status === 'approved').length
@@ -242,6 +255,13 @@ export default function Lager() {
         <h1 className="text-2xl font-bold text-gray-900">Lagerverwaltung</h1>
         <p className="text-gray-500 text-sm mt-1">Bestand erfassen und Nachbestellungen verwalten</p>
       </div>
+
+      {error && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200">
+          <span className="flex-1 text-sm font-medium text-red-700">{error}</span>
+          <button onClick={() => setError('')} className="p-1 rounded hover:bg-red-100"><X className="w-4 h-4 text-red-500" /></button>
+        </div>
+      )}
 
       {/* Tabs + action button */}
       <div className="flex items-center gap-2 mb-5">
@@ -308,59 +328,72 @@ export default function Lager() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {Object.entries(invByProduct).flatMap(([, entries]) =>
-                      entries.map(entry => (
-                        <tr key={entry.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-gray-900">{entry.products?.name ?? '–'}</p>
-                            <p className="text-xs text-gray-400">{entry.products?.article_number} · {entry.products?.category}</p>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">{entry.size}</td>
-                          <td className="px-4 py-3 text-center">
-                            {editingId === entry.id ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <input type="number" min="0"
-                                  className="w-16 text-center border border-blue-400 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  value={editQty}
-                                  onChange={e => setEditQty(e.target.value)}
-                                  autoFocus
-                                  onKeyDown={e => { if (e.key === 'Enter') saveQty(entry); if (e.key === 'Escape') setEditingId(null) }}
-                                />
-                                <button onClick={() => saveQty(entry)} disabled={saving}
-                                  className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-60">
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                                <button onClick={() => setEditingId(null)}
-                                  className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <button onClick={() => { setEditingId(entry.id); setEditQty(String(entry.quantity)) }}
-                                className="inline-flex items-center gap-2 hover:bg-gray-100 px-3 py-1 rounded-lg transition-colors group">
-                                {(() => {
-                                  const min = entry.products?.min_quantity ?? 0
-                                  const qty = entry.quantity
-                                  const color = qty === 0 ? 'text-gray-400' : min > 0 && qty < min ? 'text-red-600' : min > 0 && qty <= min * 1.5 ? 'text-amber-600' : 'text-green-700'
-                                  return <span className={`text-sm font-semibold ${color}`}>{qty}×</span>
-                                })()}
-                                {(() => {
-                                  const min = entry.products?.min_quantity ?? 0
-                                  return min > 0 && entry.quantity < min
-                                    ? <span className="text-xs text-red-400">min. {min}</span>
-                                    : <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
-                                })()}
+                    {pagedInvEntries.map(entry => (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{entry.products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400">{entry.products?.article_number} · {entry.products?.category}</p>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">{entry.size}</td>
+                        <td className="px-4 py-3 text-center">
+                          {editingId === entry.id ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <input type="number" min="0"
+                                className="w-16 text-center border border-blue-400 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                value={editQty}
+                                onChange={e => setEditQty(e.target.value)}
+                                autoFocus
+                                onKeyDown={e => { if (e.key === 'Enter') saveQty(entry); if (e.key === 'Escape') setEditingId(null) }}
+                              />
+                              <button onClick={() => saveQty(entry)} disabled={saving}
+                                className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-60">
+                                <Check className="w-3.5 h-3.5" />
                               </button>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
-                            {entry.updated_at ? new Date(entry.updated_at).toLocaleDateString('de-AT') : '–'}
-                          </td>
-                        </tr>
-                      ))
-                    )}
+                              <button onClick={() => setEditingId(null)}
+                                className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setEditingId(entry.id); setEditQty(String(entry.quantity)) }}
+                              className="inline-flex items-center gap-2 hover:bg-gray-100 px-3 py-1 rounded-lg transition-colors group">
+                              {(() => {
+                                const min = entry.products?.min_quantity ?? 0
+                                const qty = entry.quantity
+                                const color = qty === 0 ? 'text-gray-400' : min > 0 && qty < min ? 'text-red-600' : min > 0 && qty <= min * 1.5 ? 'text-amber-600' : 'text-green-700'
+                                return <span className={`text-sm font-semibold ${color}`}>{qty}×</span>
+                              })()}
+                              {(() => {
+                                const min = entry.products?.min_quantity ?? 0
+                                return min > 0 && entry.quantity < min
+                                  ? <span className="text-xs text-red-400">min. {min}</span>
+                                  : <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
+                              })()}
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
+                          {entry.updated_at ? new Date(entry.updated_at).toLocaleDateString('de-AT') : '–'}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
+                {invTotalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+                    <span>{invPage * PAGE_SIZE + 1}–{Math.min((invPage + 1) * PAGE_SIZE, invEntries.length)} von {invEntries.length}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setInvPage(p => p - 1)} disabled={invPage === 0}
+                        className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
+                        Zurück
+                      </button>
+                      <button onClick={() => setInvPage(p => p + 1)} disabled={invPage >= invTotalPages - 1}
+                        className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
+                        Weiter
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           )}
@@ -479,7 +512,7 @@ export default function Lager() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {stockOrders.map(o => (
+                    {pagedStockOrders.map(o => (
                       <tr key={o.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
@@ -508,6 +541,21 @@ export default function Lager() {
                     ))}
                   </tbody>
                 </table>
+                {ordersTotalPages > 1 && (
+                  <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 text-sm text-gray-500">
+                    <span>{ordersPage * PAGE_SIZE + 1}–{Math.min((ordersPage + 1) * PAGE_SIZE, stockOrders.length)} von {stockOrders.length}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setOrdersPage(p => p - 1)} disabled={ordersPage === 0}
+                        className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
+                        Zurück
+                      </button>
+                      <button onClick={() => setOrdersPage(p => p + 1)} disabled={ordersPage >= ordersTotalPages - 1}
+                        className="px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
+                        Weiter
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           )}

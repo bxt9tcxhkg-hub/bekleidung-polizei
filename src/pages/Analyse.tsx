@@ -64,6 +64,7 @@ export default function Analyse() {
   const [quarterStats, setQuarterStats] = useState<QuarterStat[]>([])
   const [recentQuarterCount, setRecentQuarterCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [periodOpen, setPeriodOpen] = useState(false)
@@ -240,7 +241,7 @@ export default function Analyse() {
 
       setLoading(false)
     }
-    load()
+    load().catch(() => setError('Analyse konnten nicht geladen werden.'))
   }, [periodPreset, fromDate, toDate])
 
   const totalOrders = stats.reduce((s, p) => s + p.orderCount, 0)
@@ -257,6 +258,7 @@ export default function Analyse() {
 
   return (
     <div>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Bestellanalyse</h1>

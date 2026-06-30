@@ -16,6 +16,7 @@ export default function Approvals() {
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' } | null>(null)
+  const [error, setError] = useState('')
 
   async function load() {
     setLoading(true)
@@ -36,7 +37,7 @@ export default function Approvals() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load().catch(() => setError('Freigaben konnten nicht geladen werden.')) }, [])
 
   async function approve(order: PendingOrder) {
     if (processing) return
@@ -93,6 +94,8 @@ export default function Approvals() {
         <h1 className="text-2xl font-bold text-gray-900">Freigaben</h1>
         <p className="text-gray-500 text-sm mt-1">Budgetüberschreitungen und Lagerbestellungen genehmigen</p>
       </div>
+
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>

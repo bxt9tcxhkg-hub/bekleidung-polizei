@@ -53,7 +53,7 @@ export default function ShoeRefunds() {
 
   useEffect(() => {
     async function init() {
-      const [cap] = await Promise.all([getCurrentShoeRefundCap(), load()])
+      const [cap] = await Promise.all([getCurrentShoeRefundCap(), load().catch(() => setError('Schuherstattungen konnten nicht geladen werden.'))])
       setMaxRefund(cap)
       if (canManage) {
         const { data } = await supabase.from('profiles').select('*').eq('active', true).order('name')
@@ -132,6 +132,7 @@ export default function ShoeRefunds() {
 
   return (
     <div>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Schuherstattungen</h1>

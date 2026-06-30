@@ -15,6 +15,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
   const [totalBudget, setTotalBudget] = useState(DEFAULT_BUDGET)
   const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -37,7 +38,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
       setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
       setLoading(false)
     }
-    load()
+    load().catch(() => setError('Daten konnten nicht geladen werden.'))
   }, [profile.id])
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
@@ -47,6 +48,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
 
   return (
     <div className="space-y-6">
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       {activeQuarter && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex items-center gap-3">
           <CalendarRange className="w-4 h-4 text-blue-600" />
@@ -97,6 +99,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
   const [stats, setStats] = useState({ eingereicht: 0, lieferant: 0, schneider: 0, ausgabe: 0, lagerPending: 0 })
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -120,7 +123,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
       })
       setLoading(false)
     }
-    load()
+    load().catch(() => setError('Daten konnten nicht geladen werden.'))
   }, [profile.id])
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
@@ -134,6 +137,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
 
   return (
     <div className="space-y-6">
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       {activeQuarter && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex items-center gap-3">
           <CalendarRange className="w-4 h-4 text-blue-600" />
@@ -169,6 +173,7 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
   const [pendingRefunds, setPendingRefunds] = useState(0)
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -182,13 +187,14 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
       setActiveQuarter(quarterRes.data ?? null)
       setLoading(false)
     }
-    load()
+    load().catch(() => setError('Daten konnten nicht geladen werden.'))
   }, [profile.id])
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   return (
     <div className="space-y-6">
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       {activeQuarter && (
         <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex items-center gap-3">
           <CalendarRange className="w-4 h-4 text-blue-600" />

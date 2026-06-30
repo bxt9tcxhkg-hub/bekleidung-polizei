@@ -35,6 +35,7 @@ export default function Grundausstattung() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [addError, setAddError] = useState('')
   const [cartError, setCartError] = useState('')
+  const [error, setError] = useState('')
 
   // Neue Einstellung – Größen auswählen
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({}) // product_id → size
@@ -78,7 +79,7 @@ export default function Grundausstattung() {
     init()
   }, [])
 
-  useEffect(() => { load(true) }, [org])
+  useEffect(() => { load(true).catch(() => setError('Daten konnten nicht geladen werden.')) }, [org])
 
   const orgProducts = products.filter(p => p.organisation === org)
   const filteredProducts = productSearch.trim()
@@ -170,6 +171,12 @@ export default function Grundausstattung() {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>

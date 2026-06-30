@@ -73,7 +73,7 @@ export default function Users() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load().catch(() => setError('Benutzer konnten nicht geladen werden.')) }, [])
 
   function openNew() {
     setForm(emptyForm())
@@ -207,6 +207,7 @@ export default function Users() {
 
   return (
     <div>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>

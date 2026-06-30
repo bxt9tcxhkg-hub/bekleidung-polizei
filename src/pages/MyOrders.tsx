@@ -75,6 +75,7 @@ export default function MyOrders() {
   const [totalBudgetAmt, setTotalBudgetAmt] = useState(DEFAULT_BUDGET)
   const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -97,7 +98,7 @@ export default function MyOrders() {
       setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
       setLoading(false)
     }
-    load()
+    load().catch(() => setError('Bestellungen konnten nicht geladen werden.'))
   }, [profile])
 
   const totalBudget = totalBudgetAmt
@@ -109,6 +110,7 @@ export default function MyOrders() {
 
   return (
     <div>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Meine Bestellungen</h1>
         <p className="text-gray-500 text-sm mt-1">Status und Verlauf deiner Bestellungen</p>

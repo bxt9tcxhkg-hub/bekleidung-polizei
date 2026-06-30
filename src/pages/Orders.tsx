@@ -7,6 +7,8 @@ import Lieferungen from './Lieferungen'
 
 type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'teilweise' | 'ausgegeben' | 'storniert' | 'lieferungen'
 
+const PAGE_SIZE = 50
+
 const ADMIN_TABS: { key: AdminTab; label: string; status?: OrderStatus }[] = [
   { key: 'eingereicht', label: 'Eingereicht',          status: 'approved' },
   { key: 'lieferant',   label: 'In Bestellung',        status: 'ordered_supplier' },
@@ -37,6 +39,8 @@ export default function Orders() {
   const [receivedInputs, setReceivedInputs] = useState<Record<string, string>>({})
   const [issuedInputs, setIssuedInputs] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [page, setPage] = useState(0)
+  const [error, setError] = useState('')
 
   async function load() {
     setLoading(true)
@@ -60,14 +64,15 @@ export default function Orders() {
     setLoading(false)
   }
 
-  useEffect(() => { if (profile) load() }, [profile])
+  useEffect(() => { if (profile) load().catch(() => setError('Bestellungen konnten nicht geladen werden.')) }, [profile])
 
-  function switchTab(tab: AdminTab) { setActiveTab(tab); setSelectedIds(new Set()) }
+  function switchTab(tab: AdminTab) { setActiveTab(tab); setSelectedIds(new Set()); setPage(0) }
 
   const tabOrders = orders.filter(o => ADMIN_TABS.find(t => t.key === activeTab)?.status === o.status)
   const sorted = ['ausgabe', 'teilweise', 'ausgegeben'].includes(activeTab)
     ? [...tabOrders].sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
     : tabOrders
+  const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const allSelected = tabOrders.length > 0 && tabOrders.every(o => selectedIds.has(o.id))
   const counts = Object.fromEntries(ADMIN_TABS.map(t => [t.key, t.status ? orders.filter(o => o.status === t.status).length : 0])) as Record<AdminTab, number>
 
@@ -335,6 +340,10 @@ export default function Orders() {
         <p className="text-gray-500 text-sm mt-1">Bestellverwaltung</p>
       </div>
 
+      {error && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">{error}</div>
+      )}
+
       {/* Tab bar */}
       <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1 scrollbar-hide flex-nowrap">
         {ADMIN_TABS.map(tab => (
@@ -377,7 +386,7 @@ export default function Orders() {
                 <th className="hidden sm:table-cell text-right px-3 py-2.5 md:px-4 md:py-3 font-semibold text-gray-600 whitespace-nowrap text-xs md:text-sm">Preis</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => {
+                {paginated.map(o => {
                   const stock = inventoryMap[`${o.product_id}__${o.size}`] ?? 0
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
@@ -416,7 +425,7 @@ export default function Orders() {
                 <th className="px-3 py-2.5 md:px-4 md:py-3" />
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => {
+                {paginated.map(o => {
                   const saved = o.quantity_received != null
                   const dirty = receivedInputs[o.id] !== undefined && receivedInputs[o.id] !== String(o.quantity_received ?? '')
                   return (
@@ -457,7 +466,7 @@ export default function Orders() {
                 <th className={thCClass}>Erhalten</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => (
+                {paginated.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
@@ -496,7 +505,7 @@ export default function Orders() {
                 <th className="px-3 py-2.5 md:px-4 md:py-3" />
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => {
+                {paginated.map(o => {
                   const qtyRef = o.quantity_received ?? o.quantity
                   const qtyIssued = o.quantity_issued ?? 0
                   const outstanding = qtyRef - qtyIssued
@@ -543,7 +552,7 @@ export default function Orders() {
                 <th className={thClass}>Quartal</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => (
+                {paginated.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
@@ -570,7 +579,7 @@ export default function Orders() {
                 <th className={thClass}>Quartal</th>
               </tr></thead>
               <tbody className="divide-y divide-gray-100">
-                {sorted.map(o => (
+                {paginated.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 opacity-75 ${selectedIds.has(o.id) ? 'bg-blue-50 !opacity-100' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
@@ -584,6 +593,13 @@ export default function Orders() {
             </table>
           )}
 
+          {sorted.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-4 px-1">
+              <button onClick={() => setPage(p => p - 1)} disabled={page === 0} className="text-sm text-blue-700 hover:text-blue-900 disabled:text-gray-300 font-medium">← Zurück</button>
+              <span className="text-xs text-gray-500">Seite {page + 1} von {Math.ceil(sorted.length / PAGE_SIZE)} · {sorted.length} Einträge</span>
+              <button onClick={() => setPage(p => p + 1)} disabled={(page + 1) * PAGE_SIZE >= sorted.length} className="text-sm text-blue-700 hover:text-blue-900 disabled:text-gray-300 font-medium">Weiter →</button>
+            </div>
+          )}
         </div>
       ) : null}
 
