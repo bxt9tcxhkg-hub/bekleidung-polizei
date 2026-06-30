@@ -5,10 +5,14 @@ export interface SizeGroup {
 
 const NAMED_SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '3XL', '4XL']
 
-// Prefix format: N44, U22, S88 — letter before the number
-const PREFIX_RE = /^[UNS]\d/
-// Suffix format: 44N, 22U, 88S — letter after the number
+// U/N/S prefix: Untersetzt / Normal / Schlank (male trousers)
+const UNS_RE = /^[UNS]\d/
+// K/L prefix: Kurz / Lang (female trousers — N is shared with UNS)
+const KL_RE = /^[KL]\d/
+// Suffix U/N/S
 const SUFFIX_RE = /\d[UNS]$/
+// Jacket: 44I or 44II
+const JACKET_RE = /^\d+I{1,2}$/
 
 function extractNum(s: string): number {
   const n = parseFloat(s.replace(/^[A-Za-z]+/, '').replace(/[A-Za-z]+$/, ''))
@@ -28,25 +32,42 @@ function sortSizes(sizes: string[]): string[] {
 }
 
 export function groupSizes(sizes: string[]): SizeGroup[] | null {
-  const hasPrefix = sizes.some(s => PREFIX_RE.test(s))
-  const hasSuffix = sizes.some(s => SUFFIX_RE.test(s))
-  if (!hasPrefix && !hasSuffix) return null
+  // Jacket format: 44I / 44II → Weite I / Weite II
+  if (sizes.some(s => JACKET_RE.test(s))) {
+    return [
+      { label: 'Weite I',  sizes: sortSizes(sizes.filter(s => /^\d+I$/.test(s))) },
+      { label: 'Weite II', sizes: sortSizes(sizes.filter(s => /^\d+II$/.test(s))) },
+    ].filter(g => g.sizes.length > 0)
+  }
 
-  let groups: SizeGroup[]
-  if (hasPrefix) {
-    groups = [
+  // U/S prefix present → Untersetzt / Normal / Schlank
+  if (sizes.some(s => /^[US]\d/.test(s))) {
+    return [
       { label: 'Untersetzt', sizes: sortSizes(sizes.filter(s => /^U\d/.test(s))) },
-      { label: 'Normal',     sizes: sortSizes(sizes.filter(s => /^N\d/.test(s) || !PREFIX_RE.test(s))) },
+      { label: 'Normal',     sizes: sortSizes(sizes.filter(s => /^N\d/.test(s) || !UNS_RE.test(s))) },
       { label: 'Schlank',    sizes: sortSizes(sizes.filter(s => /^S\d/.test(s))) },
-    ]
-  } else {
-    groups = [
+    ].filter(g => g.sizes.length > 0)
+  }
+
+  // K/L prefix present → Kurz / Normal / Lang (female trousers)
+  if (sizes.some(s => KL_RE.test(s))) {
+    return [
+      { label: 'Kurz',   sizes: sortSizes(sizes.filter(s => /^K\d/.test(s))) },
+      { label: 'Normal', sizes: sortSizes(sizes.filter(s => /^N\d/.test(s))) },
+      { label: 'Lang',   sizes: sortSizes(sizes.filter(s => /^L\d/.test(s))) },
+    ].filter(g => g.sizes.length > 0)
+  }
+
+  // Suffix U/N/S
+  if (sizes.some(s => SUFFIX_RE.test(s))) {
+    return [
       { label: 'Untersetzt', sizes: sortSizes(sizes.filter(s => s.endsWith('U'))) },
       { label: 'Normal',     sizes: sortSizes(sizes.filter(s => s.endsWith('N') || !SUFFIX_RE.test(s))) },
       { label: 'Schlank',    sizes: sortSizes(sizes.filter(s => s.endsWith('S'))) },
-    ]
+    ].filter(g => g.sizes.length > 0)
   }
-  return groups.filter(g => g.sizes.length > 0)
+
+  return null
 }
 
 export function sortedSizes(sizes: string[]): string[] {
@@ -56,6 +77,7 @@ export function sortedSizes(sizes: string[]): string[] {
 export function sizeLabel(s: string, grouped: boolean): string {
   if (!grouped) return s
   if (SUFFIX_RE.test(s)) return s.replace(/[UNS]$/, '')
-  if (PREFIX_RE.test(s)) return s.slice(1)
+  if (UNS_RE.test(s) || KL_RE.test(s)) return s.slice(1)
+  if (JACKET_RE.test(s)) return s.replace(/I+$/, '')
   return s
 }

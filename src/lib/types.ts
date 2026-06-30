@@ -41,6 +41,7 @@ export interface Profile {
   roles: string[]
   active: boolean
   created_at: string | null
+  size_preferences: Record<string, string> | null
 }
 
 export interface Product {

@@ -102,8 +102,21 @@ export default function Shop() {
     ? catFiltered
     : catFiltered.filter(p => p.sub_category === selectedSubCategory)
 
+  const SUB_CAT_PREF: Record<string, string> = {
+    'Hosen': 'hose', 'Hosen & Röcke': 'hose',
+    'Jacken': 'jacke', 'Jacken & Mäntel': 'jacke',
+    'Hemden & Blusen': 'hemd', 'Funktionshemden': 'hemd',
+    'Schuhe': 'schuh', 'Stiefel': 'schuh',
+    'Kappen & Baretts': 'kopf',
+    'Handschuhe': 'handschuh',
+    'Strickware': 'strickware', 'Unterbekleidung': 'strickware',
+  }
+
   function openSizeModal(product: Product) {
-    const defaultSize = lastSizes[product.id] ?? product.sizes[0] ?? ''
+    const prefKey = SUB_CAT_PREF[product.sub_category ?? '']
+    const prefSize = prefKey ? (profile?.size_preferences ?? {})[prefKey] : undefined
+    const hasPref = prefSize && product.sizes.includes(prefSize)
+    const defaultSize = hasPref ? prefSize : (lastSizes[product.id] ?? product.sizes[0] ?? '')
     setSizeModal({ product, size: defaultSize, quantity: 1 })
   }
 
@@ -329,7 +342,7 @@ export default function Shop() {
                       <p className="text-xs font-medium text-gray-600">Größe wählen</p>
                       {lastSizes[sizeModal.product.id] && (
                         <span className="text-xs text-blue-600 font-medium">
-                          Zuletzt bestellt: Gr. {lastSizes[sizeModal.product.id]}
+                          Zuletzt bestellt: Gr. {sizeLabel(lastSizes[sizeModal.product.id], isGrouped)}
                         </span>
                       )}
                     </div>
@@ -399,7 +412,7 @@ export default function Shop() {
                     <div key={item.id} className="flex items-start gap-3 px-5 py-4">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 leading-snug">{item.products?.name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">Gr. {item.size}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Gr. {sizeLabel(item.size, true)}</p>
                         <p className="text-xs font-semibold text-gray-700 mt-1">€ {(item.unit_price * item.quantity).toFixed(2)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
