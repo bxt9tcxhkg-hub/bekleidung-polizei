@@ -396,6 +396,7 @@ export default function Users() {
                   <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.dienstnummer} onChange={e => setForm(f => ({ ...f, dienstnummer: e.target.value }))} />
                 </div>
               </div>
+              {!form.roles.includes('admin') && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
                 <div className="flex gap-2">
@@ -408,6 +409,7 @@ export default function Users() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel).</p>
               </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
                 <div className="flex gap-2">

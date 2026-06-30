@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function UserProfile() {
-  const { profile } = useAuth()
+  const { profile, isStrictAdmin } = useAuth()
   const [form, setForm] = useState({ name: '', dienstnummer: '', gender: 'male' as 'male' | 'female' })
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -68,6 +68,7 @@ export default function UserProfile() {
                 placeholder="z. B. 1234"
               />
             </div>
+            {!isStrictAdmin && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
               <div className="flex gap-2">
@@ -80,6 +81,7 @@ export default function UserProfile() {
               </div>
               <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel)</p>
             </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
