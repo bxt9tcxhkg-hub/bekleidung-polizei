@@ -2,22 +2,28 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import Cart from './pages/Cart'
+import Shop from './pages/Shop'
 import MyOrders from './pages/MyOrders'
 import UserProfile from './pages/UserProfile'
 import Products from './pages/Products'
 import Orders from './pages/Orders'
 import Quarters from './pages/Quarters'
-import TailorJobs from './pages/TailorJobs'
 import ShoeRefunds from './pages/ShoeRefunds'
 import Users from './pages/Users'
 import AuditLog from './pages/AuditLog'
 import Approvals from './pages/Approvals'
+import Budgets from './pages/Budgets'
+import Lager from './pages/Lager'
+import Analyse from './pages/Analyse'
+import Grundausstattung from './pages/Grundausstattung'
+import NotFound from './pages/NotFound'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -32,26 +38,31 @@ export default function App() {
           >
             {/* Alle Rollen */}
             <Route index element={<Dashboard />} />
-            <Route path="schuherstattungen" element={<ShoeRefunds />} />
 
             {/* Benutzer */}
-            <Route path="warenkorb" element={<Cart />} />
+            <Route path="warenkorb" element={<Shop />} />
             <Route path="meine-bestellungen" element={<MyOrders />} />
             <Route path="profil" element={<UserProfile />} />
 
             {/* Genehmiger */}
             <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
+            <Route path="schuherstattungen" element={<ProtectedRoute genehmigerOnly><ShoeRefunds /></ProtectedRoute>} />
+            <Route path="budgets" element={<ProtectedRoute genehmigerOnly><Budgets /></ProtectedRoute>} />
 
             {/* Sachbearbeiter */}
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
             <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
             <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
-            <Route path="schneiderjobs" element={<ProtectedRoute sachbearbeiterOnly><TailorJobs /></ProtectedRoute>} />
             <Route path="benutzer" element={<ProtectedRoute sachbearbeiterOnly><Users /></ProtectedRoute>} />
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
+            <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
+            <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />
+            <Route path="grundausstattung" element={<ProtectedRoute sachbearbeiterOnly><Grundausstattung /></ProtectedRoute>} />
           </Route>
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   )
 }

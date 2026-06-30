@@ -1,178 +1,281 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, CalendarRange } from 'lucide-react'
+import { X, CheckCircle, CalendarRange, AlertTriangle, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Quarter, QuarterStatus } from '../lib/types'
-import { QUARTER_STATUS_LABELS, QUARTER_STATUS_COLORS } from '../lib/types'
+import type { Quarter } from '../lib/types'
+import { QUARTER_STATUS_COLORS, QUARTER_STATUS_LABELS } from '../lib/types'
 
-const emptyForm = () => ({
-  name: '',
-  year: new Date().getFullYear(),
-  quarter_num: 1,
-  status: 'planned' as QuarterStatus,
-  start_date: '',
-  end_date: '',
-})
+const CURRENT_YEAR = new Date().getFullYear()
+
+const DEFAULT_DATES: Record<number, { start_date: string; end_date: string }> = {
+  1: { start_date: `${CURRENT_YEAR}-01-01`, end_date: `${CURRENT_YEAR}-03-31` },
+  2: { start_date: `${CURRENT_YEAR}-04-01`, end_date: `${CURRENT_YEAR}-06-30` },
+  3: { start_date: `${CURRENT_YEAR}-07-01`, end_date: `${CURRENT_YEAR}-09-30` },
+  4: { start_date: `${CURRENT_YEAR}-10-01`, end_date: `${CURRENT_YEAR}-12-31` },
+}
 
 export default function Quarters() {
   const [quarters, setQuarters] = useState<Quarter[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
+  const [closing, setClosing] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [form, setForm] = useState(emptyForm())
+  const [form, setForm] = useState({ start_date: '', end_date: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('quarters').select('*').order('year', { ascending: false }).order('quarter_num', { ascending: false })
-    setQuarters(data ?? [])
+    const { data } = await supabase
+      .from('quarters')
+      .select('*')
+      .eq('year', CURRENT_YEAR)
+      .order('quarter_num')
+    let existing = data ?? []
+
+    // Auto-create missing quarters for this year
+    const missing = [1, 2, 3, 4].filter(n => !existing.find(q => q.quarter_num === n))
+    if (missing.length > 0) {
+      const today = new Date().toISOString().split('T')[0]
+      await Promise.all(
+        missing.map(n => {
+          const dates = DEFAULT_DATES[n]
+          const status = today >= dates.start_date && today <= dates.end_date ? 'active' : 'planned'
+          return supabase.from('quarters').insert({
+            name: `Q${n}/${CURRENT_YEAR}`,
+            year: CURRENT_YEAR,
+            quarter_num: n,
+            status,
+            ...dates,
+          })
+        })
+      )
+      const { data: fresh } = await supabase.from('quarters').select('*').eq('year', CURRENT_YEAR).order('quarter_num')
+      existing = fresh ?? []
+    }
+
+    // Auto-transition: close expired active quarter and activate next
+    const today = new Date().toISOString().split('T')[0]
+    const active = existing.find(q => q.status === 'active')
+    if (active && active.end_date < today) {
+      await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id)
+      const next = existing.find(q => q.quarter_num === active.quarter_num + 1 && q.status === 'planned')
+      if (next) await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
+      const { data: updated } = await supabase.from('quarters').select('*').eq('year', CURRENT_YEAR).order('quarter_num')
+      setQuarters(updated ?? [])
+      setLoading(false)
+      return
+    }
+
+    setQuarters(existing)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load().catch(() => setLoadError('Quartale konnten nicht geladen werden.')) }, [])
 
-  function autoName(year: number, qNum: number) {
-    return `Q${qNum}/${year}`
+  async function closeAndNext() {
+    const active = quarters.find(q => q.status === 'active')
+    if (!active) return
+    const next = quarters.find(q => q.quarter_num === active.quarter_num + 1 && q.status === 'planned')
+    if (!confirm(`${active.name} abschließen?${next ? ` ${next.name} startet sofort.` : ' Es gibt kein weiteres geplantes Quartal.'}`)) return
+    setClosing(true)
+    await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id)
+    if (next) await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
+    setClosing(false)
+    load()
   }
 
-  function openNew() {
-    const f = emptyForm()
-    setForm({ ...f, name: autoName(f.year, f.quarter_num) })
-    setEditId(null)
-    setError('')
-    setShowForm(true)
+  async function reactivate(q: Quarter) {
+    if (!confirm(`${q.name} reaktivieren?`)) return
+    // Close any currently active quarter first
+    const current = quarters.find(nq => nq.status === 'active')
+    if (current) await supabase.from('quarters').update({ status: 'closed' }).eq('id', current.id)
+    await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id)
+    load()
   }
 
   function openEdit(q: Quarter) {
-    setForm({ name: q.name, year: q.year, quarter_num: q.quarter_num, status: q.status, start_date: q.start_date, end_date: q.end_date })
+    setForm({ start_date: q.start_date, end_date: q.end_date })
     setEditId(q.id)
     setError('')
-    setShowForm(true)
   }
 
   async function save() {
     setError('')
-    if (!form.name || !form.start_date || !form.end_date) { setError('Name, Start- und Enddatum sind Pflicht.'); return }
+    if (!form.start_date || !form.end_date) { setError('Start- und Enddatum sind Pflicht.'); return }
+    if (form.start_date >= form.end_date) { setError('Startdatum muss vor dem Enddatum liegen.'); return }
     setSaving(true)
-    if (editId) {
-      const { error } = await supabase.from('quarters').update(form).eq('id', editId)
-      if (error) { setError(error.message); setSaving(false); return }
-    } else {
-      const { error } = await supabase.from('quarters').insert(form)
-      if (error) { setError(error.message); setSaving(false); return }
-    }
+    const { error } = await supabase.from('quarters').update(form).eq('id', editId!)
+    if (error) { setError(error.message); setSaving(false); return }
     setSaving(false)
-    setShowForm(false)
+    setEditId(null)
     load()
   }
 
-  async function setStatus(q: Quarter, status: QuarterStatus) {
-    await supabase.from('quarters').update({ status }).eq('id', q.id)
-    load()
-  }
+  const active = quarters.find(q => q.status === 'active')
+  const planned = quarters.filter(q => q.status === 'planned')
+  const closed = quarters.filter(q => q.status === 'closed')
+
+  const daysLeft = active
+    ? Math.ceil((new Date(active.end_date).getTime() - new Date().getTime()) / 86400000)
+    : null
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quartale</h1>
-          <p className="text-gray-500 text-sm mt-1">Verwaltung der Bestellquartale</p>
-        </div>
-        <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" /> Neues Quartal
-        </button>
+      {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Quartale {CURRENT_YEAR}</h1>
+        <p className="text-gray-500 text-sm mt-1">Bestellzyklen – Quartal abschließen startet den nächsten automatisch</p>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
-        <div className="grid gap-4">
-          {quarters.length === 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-12 text-gray-400">
-              <CalendarRange className="w-10 h-10 mb-3" />
-              <p>Noch keine Quartale angelegt</p>
-            </div>
-          )}
-          {quarters.map(q => (
-            <div key={q.id} className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h2 className="font-bold text-gray-900 text-lg">{q.name}</h2>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${QUARTER_STATUS_COLORS[q.status]}`}>
-                      {QUARTER_STATUS_LABELS[q.status]}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {q.status === 'planned' && (
-                    <button onClick={() => setStatus(q, 'active')} className="text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1.5 rounded-lg transition-colors">
-                      Aktivieren
-                    </button>
-                  )}
-                  {q.status === 'active' && (
-                    <button onClick={() => setStatus(q, 'closed')} className="text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors">
-                      Abschließen
-                    </button>
-                  )}
-                  <button onClick={() => openEdit(q)} className="text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
-                    Bearbeiten
-                  </button>
-                </div>
+        <div className="space-y-6">
+
+          {/* No active quarter warning */}
+          {!active && (
+            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-red-800">Kein aktives Quartal</p>
+                <p className="text-xs text-red-600 mt-0.5">Benutzer können aktuell nicht bestellen.</p>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Active quarter — main action card */}
+          {active && (
+            <div className="bg-white rounded-xl border-2 border-blue-200 p-5">
+              <div className="flex items-start gap-3">
+                <div className="bg-blue-100 p-2.5 rounded-xl flex-shrink-0">
+                  <CalendarRange className="w-5 h-5 text-blue-700" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-bold text-gray-900 text-lg leading-tight">{active.name}</h2>
+                    <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">Aktiv</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    {new Date(active.start_date).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit' })} – {new Date(active.end_date).toLocaleDateString('de-AT')}
+                  </p>
+                  {daysLeft !== null && daysLeft >= 0 && (
+                    <p className={`text-sm font-medium mt-0.5 ${daysLeft <= 7 ? 'text-amber-600' : 'text-gray-400'}`}>
+                      noch {daysLeft} Tag{daysLeft !== 1 ? 'e' : ''}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => openEdit(active)}
+                  className="text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
+                  Datum anpassen
+                </button>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-sm text-gray-500 mb-3">
+                  Quartal abschließen beendet den Bestellzeitraum.
+                  {planned.length > 0
+                    ? ` ${planned[0].name} startet sofort.`
+                    : ' Kein Folgequartal geplant.'}
+                </p>
+                <button onClick={closeAndNext} disabled={closing}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                  <CheckCircle className="w-4 h-4" />
+                  {closing ? 'Wird abgeschlossen...' : 'Quartal abschließen'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Planned quarters */}
+          {planned.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Kommende Quartale</h3>
+              <div className="space-y-2">
+                {planned.map(q => (
+                  <div key={q.id} className="bg-white rounded-xl border border-gray-200 px-5 py-3 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg font-black text-gray-200">Q{q.quarter_num}</span>
+                      <div>
+                        <p className="font-medium text-gray-700 text-sm">{q.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
+                        </p>
+                      </div>
+                    </div>
+                    <button onClick={() => openEdit(q)}
+                      className="text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition-colors">
+                      Datum anpassen
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Closed quarters (collapsible) */}
+          {closed.length > 0 && (
+            <div>
+              <button onClick={() => setShowHistory(h => !h)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 hover:text-gray-600 transition-colors">
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+                Abgeschlossene Quartale ({closed.length})
+              </button>
+              {showHistory && (
+                <div className="space-y-2">
+                  {closed.map(q => (
+                    <div key={q.id} className="bg-white rounded-xl border border-gray-100 px-5 py-3 flex items-center justify-between gap-4 opacity-60 hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg font-black text-gray-200">Q{q.quarter_num}</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-700 text-sm">{q.name}</p>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${QUARTER_STATUS_COLORS[q.status]}`}>
+                              {QUARTER_STATUS_LABELS[q.status]}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-400">
+                            {new Date(q.start_date).toLocaleDateString('de-AT')} – {new Date(q.end_date).toLocaleDateString('de-AT')}
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => reactivate(q)}
+                        className="text-xs font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors">
+                        Reaktivieren
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {showForm && (
+      {/* Edit date modal */}
+      {editId && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">{editId ? 'Quartal bearbeiten' : 'Neues Quartal'}</h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+              <h2 className="font-bold text-gray-900">Datum anpassen</h2>
+              <button onClick={() => setEditId(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Jahr</label>
-                  <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.year} onChange={e => { const y = parseInt(e.target.value); setForm(f => ({ ...f, year: y, name: autoName(y, f.quarter_num) })) }} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Quartal (1–4)</label>
-                  <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.quarter_num} onChange={e => { const q = parseInt(e.target.value); setForm(f => ({ ...f, quarter_num: q, name: autoName(f.year, q) })) }}>
-                    {[1, 2, 3, 4].map(n => <option key={n} value={n}>Q{n}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Startdatum</label>
+                <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Startdatum *</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Enddatum *</label>
-                  <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as QuarterStatus }))}>
-                  {(['planned', 'active', 'closed'] as QuarterStatus[]).map(s => <option key={s} value={s}>{QUARTER_STATUS_LABELS[s]}</option>)}
-                </select>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Enddatum (Bestellfrist)</label>
+                <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} />
               </div>
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+              <button onClick={() => setEditId(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
               </button>
             </div>

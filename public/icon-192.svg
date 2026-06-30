@@ -1,0 +1,6 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 192 192'>
+  <rect width='192' height='192' rx='40' fill='#1e3a8a'/>
+  <path d='M96 32 L148 56 L148 100 C148 132 96 160 96 160 C96 160 44 132 44 100 L44 56 Z' fill='#3b82f6'/>
+  <path d='M96 44 L140 64 L140 100 C140 126 96 150 96 150 C96 150 52 126 52 100 L52 64 Z' fill='#1e3a8a'/>
+  <text x='96' y='115' text-anchor='middle' font-family='system-ui,sans-serif' font-weight='bold' font-size='36' fill='white'>SP</text>
+</svg>

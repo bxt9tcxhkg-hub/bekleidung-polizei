@@ -1,0 +1,741 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { TrendingUp, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X, Pencil } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
+
+type AnalyseTab = 'ranking' | 'groessen' | 'trend'
+
+const PERIOD_PRESETS = [
+  { key: 'all',      label: 'Gesamter Zeitraum' },
+  { key: 'last1',    label: 'Letztes Quartal' },
+  { key: 'last2',    label: 'Letzte 2 Quartale' },
+  { key: 'last4',    label: 'Letzte 4 Quartale' },
+  { key: 'thisYear', label: 'Aktuelles Jahr' },
+  { key: 'lastYear', label: 'Vorjahr' },
+  { key: 'custom',   label: 'Benutzerdefiniert' },
+]
+
+interface ProductStat {
+  product_id: string
+  name: string
+  article_number: string
+  category: string
+  totalQty: number
+  orderCount: number
+  sizeCounts: Record<string, number>       // all-time qty per size
+  stockBySizes: Record<string, number>
+  stock: number
+}
+
+interface SizeRec {
+  product_id: string
+  name: string
+  article_number: string
+  category: string
+  size: string
+  quartersWithData: number   // how many of the last 4 quarters had orders
+  avgQtrDemand: number       // average qty per quarter (last 4 quarters)
+  currentStock: number
+  pendingQty: number         // already ordered but not yet received
+  minStock: number           // reorder point = 1 quarter lead time
+  toOrder: number            // recommended order qty (net of stock + pending)
+  needsRestock: boolean
+}
+
+interface QuarterStat {
+  name: string
+  year: number
+  quarter_num: number
+  orderCount: number
+  totalQty: number
+}
+
+export default function Analyse() {
+  const navigate = useNavigate()
+  const { isSachbearbeiter, isAdmin, profile } = useAuth()
+  const [tab, setTab] = useState<AnalyseTab>('ranking')
+  const [stats, setStats] = useState<ProductStat[]>([])
+  const [sizeRecs, setSizeRecs] = useState<SizeRec[]>([])
+  const [productMinQty, setProductMinQty] = useState<Record<string, number>>({})
+  const [editingMinQty, setEditingMinQty] = useState<string | null>(null)
+  const [editMinQtyVal, setEditMinQtyVal] = useState('')
+  const [savingMinQty, setSavingMinQty] = useState(false)
+  const [quarterStats, setQuarterStats] = useState<QuarterStat[]>([])
+  const [recentQuarterCount, setRecentQuarterCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [periodOpen, setPeriodOpen] = useState(false)
+  const [periodPreset, setPeriodPreset] = useState('all')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+
+  async function saveMinQty(productId: string) {
+    const val = parseInt(editMinQtyVal)
+    if (isNaN(val) || val < 0) return
+    setSavingMinQty(true)
+    await supabase.from('products').update({ min_quantity: val }).eq('id', productId)
+    setProductMinQty(m => ({ ...m, [productId]: val }))
+    setSizeRecs(recs => recs.map(r => r.product_id === productId ? { ...r, minStock: Math.max(Math.ceil(r.avgQtrDemand), val), toOrder: Math.max(0, Math.max(Math.ceil(r.avgQtrDemand * 2), Math.max(Math.ceil(r.avgQtrDemand), val)) - r.currentStock - r.pendingQty), needsRestock: r.currentStock < Math.max(Math.ceil(r.avgQtrDemand), val) } : r))
+    setSavingMinQty(false)
+    setEditingMinQty(null)
+  }
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+
+      const org = profile?.organisation ?? 'Stadtpolizei'
+      const [ordersRes, invRes, quartersRes, pendingStockRes, orgProductsRes] = await Promise.all([
+        supabase
+          .from('orders')
+          .select('product_id, size, quantity, quarter_id, products(id,name,article_number,category,organisation), quarters(id,name,year,quarter_num,end_date)')
+          .not('status', 'in', '(pending,pending_approval,cancelled)'),
+        supabase.from('inventory').select('product_id,size,quantity'),
+        supabase.from('quarters').select('id,name,year,quarter_num,start_date,end_date').order('end_date', { ascending: false }),
+        supabase.from('stock_orders').select('product_id,size,quantity,status').eq('status', 'approved'),
+        supabase.from('products').select('id,min_quantity').eq('organisation', org).eq('active', true),
+      ])
+
+      const orgProducts = (orgProductsRes.data ?? []) as any[]
+      const orgProductIds = new Set(orgProducts.map((p: any) => p.id))
+      const minQtyMap: Record<string, number> = {}
+      orgProducts.forEach((p: any) => { minQtyMap[p.id] = p.min_quantity ?? 0 })
+      setProductMinQty(minQtyMap)
+      const orders = ((ordersRes.data ?? []) as any[]).filter(o => orgProductIds.has(o.product_id))
+      const inventory = (invRes.data ?? []).filter((e: any) => orgProductIds.has(e.product_id))
+      const allQuarters = (quartersRes.data ?? []) as any[]
+      const pendingStock = ((pendingStockRes.data ?? []) as any[]).filter(e => orgProductIds.has(e.product_id))
+
+      // Determine which quarters fall in the selected period
+      const currentYear = new Date().getFullYear()
+      let recentQuarters: any[]
+      switch (periodPreset) {
+        case 'last1':    recentQuarters = allQuarters.slice(0, 1); break
+        case 'last2':    recentQuarters = allQuarters.slice(0, 2); break
+        case 'last4':    recentQuarters = allQuarters.slice(0, 4); break
+        case 'thisYear': recentQuarters = allQuarters.filter((q: any) => q.year === currentYear); break
+        case 'lastYear': recentQuarters = allQuarters.filter((q: any) => q.year === currentYear - 1); break
+        case 'custom':
+          recentQuarters = allQuarters.filter((q: any) =>
+            (!fromDate || q.end_date >= fromDate) &&
+            (!toDate || q.start_date <= toDate)
+          )
+          break
+        default: recentQuarters = allQuarters // 'all'
+      }
+      const recentQIds = new Set(recentQuarters.map((q: any) => q.id))
+      const actualRecentCount = recentQuarters.length
+      setRecentQuarterCount(actualRecentCount)
+
+      // Orders filtered to the selected period
+      const periodOrders = periodPreset === 'all' ? orders : orders.filter((o: any) => recentQIds.has(o.quarter_id))
+
+      // ── Inventory maps ──────────────────────────────────────────────────
+      const invMap: Record<string, number> = {}   // product__size → qty
+      const invByProduct: Record<string, number> = {}
+      inventory.forEach((e: any) => {
+        invMap[`${e.product_id}__${e.size}`] = e.quantity
+        invByProduct[e.product_id] = (invByProduct[e.product_id] ?? 0) + e.quantity
+      })
+
+      // ── Pending stock orders map ─────────────────────────────────────────
+      const pendingMap: Record<string, number> = {}  // product__size → qty
+      pendingStock.forEach((e: any) => {
+        const key = `${e.product_id}__${e.size}`
+        pendingMap[key] = (pendingMap[key] ?? 0) + e.quantity
+      })
+
+      // ── Product stats for selected period ───────────────────────────────
+      const productMap: Record<string, ProductStat> = {}
+      periodOrders.forEach((o: any) => {
+        const pid = o.product_id
+        if (!productMap[pid]) {
+          productMap[pid] = {
+            product_id: pid,
+            name: o.products?.name ?? '–',
+            article_number: o.products?.article_number ?? '–',
+            category: o.products?.category ?? '–',
+            totalQty: 0,
+            orderCount: 0,
+            sizeCounts: {},
+            stock: invByProduct[pid] ?? 0,
+            stockBySizes: {},
+          }
+        }
+        productMap[pid].totalQty += o.quantity
+        productMap[pid].orderCount += 1
+        productMap[pid].sizeCounts[o.size] = (productMap[pid].sizeCounts[o.size] ?? 0) + o.quantity
+      })
+      inventory.forEach((e: any) => {
+        if (productMap[e.product_id]) {
+          productMap[e.product_id].stockBySizes[e.size] = e.quantity
+        }
+      })
+      const sorted = Object.values(productMap).sort((a, b) => b.totalQty - a.totalQty)
+      setStats(sorted)
+      if (sorted.length > 0) setSelectedProduct(sorted[0].product_id)
+
+      // ── Per-size demand for selected period ─────────────────────────────
+      const perQtr: Record<string, Record<string, number>> = {}
+
+      periodOrders.forEach((o: any) => {
+          const key = `${o.product_id}__${o.size}`
+          if (!perQtr[key]) perQtr[key] = {}
+          perQtr[key][o.quarter_id] = (perQtr[key][o.quarter_id] ?? 0) + o.quantity
+        })
+
+      const recs: SizeRec[] = []
+      Object.entries(perQtr).forEach(([key, qtrMap]) => {
+        const [pid, size] = key.split('__')
+        const product = productMap[pid]
+        if (!product) return
+
+        const quartersWithData = Object.keys(qtrMap).length
+        const totalRecentQty = Object.values(qtrMap).reduce((s, v) => s + v, 0)
+        // Average over the full window (not just quarters with data) — more conservative
+        const avgQtrDemand = totalRecentQty / actualRecentCount
+        const currentStock = invMap[key] ?? 0
+        const pendingQty = pendingMap[key] ?? 0
+        const calcMin = Math.ceil(avgQtrDemand)
+        const minStock = Math.max(calcMin, minQtyMap[pid] ?? 0)
+        const toOrder = Math.max(0, Math.max(Math.ceil(avgQtrDemand * 2), minStock) - currentStock - pendingQty)
+        const needsRestock = currentStock < minStock
+
+        recs.push({
+          product_id: pid,
+          name: product.name,
+          article_number: product.article_number,
+          category: product.category,
+          size,
+          quartersWithData,
+          avgQtrDemand,
+          currentStock,
+          pendingQty,
+          minStock,
+          toOrder,
+          needsRestock,
+        })
+      })
+
+      // Sort: most urgent first (largest gap between minStock and currentStock)
+      recs.sort((a, b) => (b.minStock - b.currentStock) - (a.minStock - a.currentStock))
+      setSizeRecs(recs)
+
+      // ── Quarter trend ────────────────────────────────────────────────────
+      const quarterMap: Record<string, QuarterStat> = {}
+      periodOrders.forEach((o: any) => {
+        const q = o.quarters
+        if (!q) return
+        if (!quarterMap[o.quarter_id]) {
+          quarterMap[o.quarter_id] = { name: q.name, year: q.year, quarter_num: q.quarter_num, orderCount: 0, totalQty: 0 }
+        }
+        quarterMap[o.quarter_id].orderCount += 1
+        quarterMap[o.quarter_id].totalQty += o.quantity
+      })
+      setQuarterStats(
+        Object.values(quarterMap).sort((a, b) => a.year !== b.year ? a.year - b.year : a.quarter_num - b.quarter_num)
+      )
+
+      setLoading(false)
+    }
+    load().catch(() => setError('Analyse konnten nicht geladen werden.'))
+  }, [periodPreset, fromDate, toDate])
+
+  const totalOrders = stats.reduce((s, p) => s + p.orderCount, 0)
+  const totalQty = stats.reduce((s, p) => s + p.totalQty, 0)
+  const maxQty = stats[0]?.totalQty ?? 1
+  const maxQtrQty = Math.max(...quarterStats.map(q => q.totalQty), 1)
+
+  const urgentRecs = sizeRecs.filter(r => r.needsRestock && r.toOrder > 0)
+  const selected = stats.find(s => s.product_id === selectedProduct)
+  const selectedRecs = sizeRecs.filter(r => r.product_id === selectedProduct)
+
+  // For ranking tab: a product "needs restock" if any of its sizes do
+  const productNeedsRestock = new Set(urgentRecs.map(r => r.product_id))
+
+  return (
+    <div>
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Bestellanalyse</h1>
+          <p className="text-gray-500 text-sm mt-1">Nachfrageauswertung zur Unterstützung der Lagerplanung</p>
+        </div>
+        <button onClick={() => setInfoOpen(true)}
+          className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors flex-shrink-0 mt-0.5">
+          <Info className="w-5 h-5" />
+        </button>
+      </div>
+
+      {infoOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Empfehlungslogik</h2>
+              <button onClick={() => setInfoOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-3 text-sm text-gray-700">
+              <p>Ø-Quartalsnachfrage aus dem gewählten Zeitraum × 1 Quartal Vorlaufzeit = <strong>Mindestbestand</strong>.</p>
+              <p>Empfohlene Bestellmenge = 2 Quartale Bedarf − aktueller Bestand − bereits laufende Lagerbestellungen.</p>
+              <p className="text-gray-500 text-xs">Berechnung erfolgt auf Größenebene.</p>
+            </div>
+            <div className="px-5 py-4 border-t">
+              <button onClick={() => setInfoOpen(false)}
+                className="w-full bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {periodOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Analysezeitraum</h2>
+              <button onClick={() => setPeriodOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-2">
+              {PERIOD_PRESETS.map(p => (
+                <button key={p.key} onClick={() => setPeriodPreset(p.key)}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${periodPreset === p.key ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                  {p.label}
+                </button>
+              ))}
+              {periodPreset === 'custom' && (
+                <div className="pt-2 space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Von</label>
+                    <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 mb-1 block">Bis</label>
+                    <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-4 border-t">
+              <button onClick={() => setPeriodOpen(false)}
+                className="w-full bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
+                Übernehmen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+              <p className="text-xs text-gray-500 mb-1">Bestellungen gesamt</p>
+              <p className="text-2xl font-bold text-gray-900">{totalOrders}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+              <p className="text-xs text-gray-500 mb-1">Artikel (Stück)</p>
+              <p className="text-2xl font-bold text-gray-900">{totalQty}</p>
+            </div>
+            <button onClick={() => setPeriodOpen(true)}
+              className="bg-white rounded-xl border border-gray-200 px-4 py-4 text-left hover:border-blue-400 transition-colors">
+              <p className="text-xs text-gray-500 mb-1">Analysezeitraum</p>
+              <p className="text-lg font-bold text-gray-900 leading-snug">
+                {PERIOD_PRESETS.find(p => p.key === periodPreset)?.label}
+              </p>
+              <p className="text-xs text-blue-500 mt-1 font-medium">
+                {recentQuarterCount > 0 ? `${recentQuarterCount} Quartal${recentQuarterCount !== 1 ? 'e' : ''}` : 'Antippen zum Ändern'}
+              </p>
+            </button>
+            <div className={`rounded-xl border px-4 py-4 ${urgentRecs.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+              <p className={`text-xs mb-1 ${urgentRecs.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>Lager-Empfehlungen</p>
+              <p className={`text-2xl font-bold ${urgentRecs.length > 0 ? 'text-amber-800' : 'text-green-800'}`}>{urgentRecs.length}</p>
+              <p className={`text-xs ${urgentRecs.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>Größen-Positionen</p>
+            </div>
+          </div>
+
+          {/* Recommendation banner */}
+          {urgentRecs.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <p className="font-semibold text-amber-900 text-sm">
+                  {urgentRecs.length} Größen-Position{urgentRecs.length !== 1 ? 'en' : ''} unter Mindestbestand
+                </p>
+              </div>
+              <div className="space-y-2">
+                {urgentRecs.slice(0, 6).map((r, i) => (
+                  <div key={i} className="bg-white rounded-lg px-3 py-3 border border-amber-100">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Gr. {r.size} · Ø {r.avgQtrDemand.toFixed(1)}×/Q · Min: {r.minStock}×
+                        </p>
+                      </div>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${r.currentStock === 0 ? 'text-red-600' : 'text-amber-600'}`}>
+                        Lager: {r.currentStock}×{r.pendingQty > 0 && <span className="text-gray-400 font-normal"> +{r.pendingQty}</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-blue-700 font-semibold">→ {r.toOrder}× bestellen</p>
+                      {isSachbearbeiter && (
+                        <button
+                          onClick={() => navigate('/lager', { state: { productId: r.product_id, size: r.size, qty: r.toOrder } })}
+                          className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex-shrink-0"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" /> Bestellen
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {urgentRecs.length > 6 && (
+                  <p className="text-xs text-amber-600 text-center pt-1">+ {urgentRecs.length - 6} weitere → Größenanalyse</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex gap-1 mb-5 bg-gray-100 p-1 rounded-xl w-full">
+            {([
+              { key: 'ranking', label: 'Artikel-Ranking', short: 'Ranking', icon: TrendingUp },
+              { key: 'groessen', label: 'Größenanalyse', short: 'Größen', icon: BarChart3 },
+              { key: 'trend', label: 'Quartals-Trend', short: 'Trend', icon: BarChart3 },
+            ] as { key: AnalyseTab; label: string; short: string; icon: React.ElementType }[]).map(({ key, label, short, icon: Icon }) => (
+              <button key={key} onClick={() => setTab(key)}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-medium px-2 py-2 rounded-lg transition-all ${tab === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">{short}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── Artikel-Ranking ── */}
+          {tab === 'ranking' && (
+            <>
+              {/* Mobile: card list */}
+              <div className="sm:hidden space-y-2">
+                {stats.map((p, i) => {
+                  const needsRestock = productNeedsRestock.has(p.product_id)
+                  return (
+                    <div key={p.product_id}
+                      className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3 cursor-pointer active:bg-gray-50"
+                      onClick={() => { setSelectedProduct(p.product_id); setTab('groessen') }}>
+                      <span className="text-sm font-bold text-gray-300 w-5 flex-shrink-0 text-center">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                        <p className="text-xs text-gray-400">{p.article_number}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-sm font-bold text-gray-900">{p.totalQty}×</p>
+                        <p className="text-xs text-gray-400">{p.orderCount} Best.</p>
+                      </div>
+                      {needsRestock
+                        ? <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        : p.stock > 0
+                          ? <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                          : <span className="w-4 flex-shrink-0" />}
+                    </div>
+                  )
+                })}
+                <p className="text-xs text-gray-400 text-center py-2">Antippen → Größenanalyse</p>
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden sm:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600 w-10">#</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel</th>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Kategorie</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Bestellungen</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600">Menge</th>
+                      <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Lagernd</th>
+                      <th className="px-4 py-3 w-36 hidden lg:table-cell" />
+                      <th className="text-center px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Empfehlung</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.map((p, i) => {
+                      const pct = Math.round((p.totalQty / maxQty) * 100)
+                      const needsRestock = productNeedsRestock.has(p.product_id)
+                      return (
+                        <tr key={p.product_id} className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => { setSelectedProduct(p.product_id); setTab('groessen') }}>
+                          <td className="px-4 py-3 text-gray-400 font-medium text-xs">{i + 1}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{p.name}</p>
+                            <p className="text-xs text-gray-400">{p.article_number}</p>
+                          </td>
+                          <td className="px-4 py-3 text-gray-500 text-xs hidden sm:table-cell">{p.category}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{p.orderCount}×</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{p.totalQty}×</td>
+                          <td className="px-4 py-3 text-right hidden md:table-cell">
+                            <span className={`text-sm font-medium ${p.stock === 0 ? 'text-red-500' : p.stock < 3 ? 'text-amber-500' : 'text-green-600'}`}>
+                              {p.stock}×
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 hidden lg:table-cell">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-400 w-8 text-right">{pct}%</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center hidden md:table-cell">
+                            {needsRestock ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                <AlertTriangle className="w-3 h-3" /> Einlagern
+                              </span>
+                            ) : p.stock > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                <CheckCircle className="w-3 h-3" /> OK
+                              </span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <p className="text-xs text-gray-400 px-4 py-2 border-t border-gray-100">
+                  Klick auf eine Zeile öffnet die Größenanalyse für diesen Artikel.
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* ── Größenanalyse ── */}
+          {tab === 'groessen' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <label className="block text-xs font-medium text-gray-600 mb-2">Artikel auswählen</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={selectedProduct ?? ''}
+                  onChange={e => setSelectedProduct(e.target.value)}
+                >
+                  {stats.map(p => (
+                    <option key={p.product_id} value={p.product_id}>
+                      {p.name} ({p.totalQty}× bestellt{productNeedsRestock.has(p.product_id) ? ' ⚠' : ''})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selected && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-start justify-between mb-5">
+                    <div>
+                      <h3 className="font-bold text-gray-900">{selected.name}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">{selected.category} · {selected.article_number}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">Gesamt bestellt</p>
+                      <p className="text-xl font-bold text-gray-900">{selected.totalQty}×</p>
+                    </div>
+                  </div>
+
+                  {/* Size rows */}
+                  <div className="space-y-4">
+                    {Object.entries(selected.sizeCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([size, allTimeQty]) => {
+                        const rec = selectedRecs.find(r => r.size === size)
+                        const pct = Math.round((allTimeQty / selected.totalQty) * 100)
+                        const stock = selected.stockBySizes[size] ?? 0
+
+                        return (
+                          <div key={size} className={`rounded-xl p-3 ${rec?.needsRestock ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold text-gray-900">Gr. {size}</span>
+                                {rec?.needsRestock && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-gray-500">{allTimeQty}× gesamt</span>
+                                {rec && (
+                                  <span className="text-gray-500">Ø {rec.avgQtrDemand.toFixed(1)}×/Q</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Demand bar */}
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <span className="text-xs text-gray-400 w-16">Nachfrage</span>
+                              <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-500 w-8 text-right">{pct}%</span>
+                            </div>
+
+                            {/* Stock bar */}
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-xs text-gray-400 w-16">Lagernd</span>
+                              <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                                {rec && rec.avgQtrDemand > 0 ? (
+                                  <div
+                                    className={`h-full rounded-full ${stock === 0 ? 'bg-red-400' : stock < (rec.minStock) ? 'bg-amber-400' : 'bg-green-500'}`}
+                                    style={{ width: `${Math.min(100, Math.round((stock / Math.max(rec.minStock * 2, 1)) * 100))}%` }}
+                                  />
+                                ) : (
+                                  <div className="h-full bg-green-500 rounded-full" style={{ width: stock > 0 ? '50%' : '0%' }} />
+                                )}
+                              </div>
+                              <span className={`text-xs font-semibold w-8 text-right ${stock === 0 ? 'text-red-500' : stock < (rec?.minStock ?? 0) ? 'text-amber-500' : 'text-green-600'}`}>
+                                {stock}×
+                              </span>
+                            </div>
+
+                            {/* Recommendation details */}
+                            {rec ? (
+                              <div className="text-xs pt-2 border-t border-gray-200 space-y-2">
+                                {/* Row 1: Mindestbestand + In Bestellung */}
+                                <div className="flex items-center justify-between gap-2">
+                                  {editingMinQty === rec.product_id ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-gray-500">Min.:</span>
+                                      <input
+                                        type="number" min="0"
+                                        className="w-14 text-center border border-blue-400 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                        value={editMinQtyVal}
+                                        autoFocus
+                                        onChange={e => setEditMinQtyVal(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') saveMinQty(rec.product_id); if (e.key === 'Escape') setEditingMinQty(null) }}
+                                      />
+                                      <button onClick={() => saveMinQty(rec.product_id)} disabled={savingMinQty} className="px-1.5 py-0.5 bg-blue-800 text-white rounded text-xs disabled:opacity-60">✓</button>
+                                      <button onClick={() => setEditingMinQty(null)} className="px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">✕</button>
+                                    </div>
+                                  ) : (
+                                    <span className="flex items-center gap-1 text-gray-500">
+                                      Mindestbestand: <strong className="text-gray-700">{rec.minStock}×</strong>
+                                      {(isAdmin || isSachbearbeiter) && (
+                                        <button onClick={() => { setEditingMinQty(rec.product_id); setEditMinQtyVal(String(productMinQty[rec.product_id] ?? 0)) }} className="ml-0.5 text-gray-400 hover:text-blue-600 transition-colors" title="Mindestbestand anpassen">
+                                          <Pencil className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </span>
+                                  )}
+                                  {rec.pendingQty > 0 && (
+                                    <span className="text-blue-600 shrink-0">In Bestellung: {rec.pendingQty}×</span>
+                                  )}
+                                </div>
+                                {/* Row 2: Action */}
+                                {rec.needsRestock && rec.toOrder > 0 ? (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-amber-700 bg-amber-100 px-2 py-1 rounded-lg">
+                                      → {rec.toOrder}× bestellen
+                                    </span>
+                                    {isSachbearbeiter && (
+                                      <button
+                                        onClick={() => navigate('/lager', { state: { productId: rec.product_id, size: rec.size, qty: rec.toOrder } })}
+                                        className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                                      >
+                                        <ShoppingBag className="w-3.5 h-3.5" /> Bestellen
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : rec.pendingQty > 0 && !rec.needsRestock ? (
+                                  <span className="text-blue-600 font-medium">Bestellung läuft</span>
+                                ) : (
+                                  <span className="text-green-600 font-medium flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" /> Ausreichend
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-gray-400 pt-2 border-t border-gray-200">
+                                Keine Bestellungen in den letzten {recentQuarterCount} Quartalen — kein Bedarf errechnet
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-500 inline-block" /> Nachfrage (Anteil)</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-green-500 inline-block" /> Lagernd vs. Mindestbestand</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Quartals-Trend ── */}
+          {tab === 'trend' && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              {quarterStats.length === 0 ? (
+                <div className="flex flex-col items-center py-16 text-gray-400">
+                  <BarChart3 className="w-10 h-10 mb-3 opacity-40" />
+                  <p>Noch keine Quartalsdaten vorhanden</p>
+                </div>
+              ) : (
+                <>
+                  <div className="px-5 py-5 border-b border-gray-100">
+                    <p className="text-xs font-medium text-gray-500 mb-4">Bestellmenge pro Quartal</p>
+                    <div className="flex items-end gap-3 h-32">
+                      {quarterStats.map(q => {
+                        const h = Math.round((q.totalQty / maxQtrQty) * 100)
+                        const isRecent = recentQuarterCount >= (quarterStats.length - quarterStats.indexOf(q))
+                        return (
+                          <div key={q.name} className="flex flex-col items-center gap-1 flex-1 min-w-0">
+                            <span className="text-xs font-semibold text-gray-700">{q.totalQty}</span>
+                            <div className="w-full flex items-end justify-center" style={{ height: '6rem' }}>
+                              <div className={`w-full max-w-[2.5rem] rounded-t-md transition-all ${isRecent ? 'bg-blue-600' : 'bg-gray-300'}`}
+                                style={{ height: `${Math.max(h, 4)}%` }} />
+                            </div>
+                            <span className="text-xs text-gray-500 truncate w-full text-center">{q.name}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-blue-600 inline-block" /> In Analyse berücksichtigt</span>
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-gray-300 inline-block" /> Ältere Quartale</span>
+                    </div>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Quartal</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-600">Bestellpositionen</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-600">Menge gesamt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {quarterStats.map(q => (
+                        <tr key={q.name} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{q.name}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{q.orderCount}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{q.totalQty}×</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

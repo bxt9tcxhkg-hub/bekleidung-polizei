@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 export default function Login() {
   const { user } = useAuth()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,8 +17,10 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setLoading(true)
+    const input = username.trim()
+    const email = input.includes('@') ? input : `${input.toLowerCase()}@stadtpolizei-dornbirn.local`
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError(error.message === 'Invalid login credentials' ? 'Ungültige Anmeldedaten' : error.message)
+    if (error) setError('Ungültiger Benutzername oder Passwort')
     setLoading(false)
   }
 
@@ -35,14 +37,15 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Benutzername</label>
             <input
-              type="email"
+              type="text"
               required
-              value={email}
-              onChange={e => setEmail(e.target.value)}
+              autoComplete="username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              placeholder="name@polizei.at"
+              placeholder="mmustermann oder name@beispiel.at"
             />
           </div>
           <div>
@@ -50,6 +53,7 @@ export default function Login() {
             <input
               type="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"

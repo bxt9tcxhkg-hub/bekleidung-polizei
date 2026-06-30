@@ -1,11 +1,12 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package,
-  CalendarRange, Scissors, Footprints, Users, ClipboardList,
-  LogOut, Shield, Menu, X, CheckSquare, UserCircle,
+  CalendarRange, Footprints, Users, ClipboardList,
+  LogOut, Shield, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import ChangePasswordModal from './ChangePasswordModal'
 
 interface NavItem {
   to: string
@@ -22,7 +23,7 @@ interface NavSection {
 
 export default function Layout() {
   const location = useLocation()
-  const { profile, isSachbearbeiter, isGenehmiger, signOut } = useAuth()
+  const { profile, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const sections: NavSection[] = [
@@ -32,9 +33,8 @@ export default function Layout() {
       color: 'text-blue-300',
       items: [
         { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/warenkorb', label: 'Warenkorb', icon: ShoppingCart },
+        { to: '/warenkorb', label: 'Bekleidung bestellen', icon: ShoppingCart },
         { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
-        { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
         { to: '/profil', label: 'Mein Profil', icon: UserCircle },
       ],
     },
@@ -44,9 +44,11 @@ export default function Layout() {
       color: 'text-orange-300',
       items: [
         { to: '/bestellungen', label: 'Bestellungen', icon: Package },
+        { to: '/lager', label: 'Lagerverwaltung', icon: Warehouse },
+        { to: '/analyse', label: 'Analyse', icon: BarChart3 },
+        { to: '/grundausstattung', label: 'Grundausstattung', icon: BookOpen },
         { to: '/produkte', label: 'Produkte', icon: Package },
         { to: '/quartale', label: 'Quartale', icon: CalendarRange },
-        { to: '/schneiderjobs', label: 'Schneiderjobs', icon: Scissors },
         { to: '/benutzer', label: 'Benutzer', icon: Users },
         { to: '/auditlog', label: 'Audit-Log', icon: ClipboardList },
       ],
@@ -56,7 +58,10 @@ export default function Layout() {
       label: 'Genehmiger',
       color: 'text-green-300',
       items: [
-        { to: '/genehmigungen', label: 'Genehmigungen', icon: CheckSquare },
+        { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
+        { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
+        { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
+        ...(!isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
       ],
     }] : []),
   ]
@@ -138,7 +143,7 @@ export default function Layout() {
 
       <div className="flex-1 flex flex-col min-w-0">
         <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200">
-          <button onClick={() => setSidebarOpen(true)} className="p-1.5 rounded-md hover:bg-gray-100">
+          <button onClick={() => setSidebarOpen(true)} className="p-2.5 rounded-md hover:bg-gray-100">
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
@@ -146,7 +151,7 @@ export default function Layout() {
             <span className="font-semibold text-gray-900 text-sm">Stadtpolizei Dornbirn</span>
           </div>
           {sidebarOpen && (
-            <button onClick={() => setSidebarOpen(false)} className="ml-auto p-1.5 rounded-md hover:bg-gray-100">
+            <button onClick={() => setSidebarOpen(false)} className="ml-auto p-2.5 rounded-md hover:bg-gray-100">
               <X className="w-5 h-5" />
             </button>
           )}
@@ -155,6 +160,7 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
+        {mustChangePassword && <ChangePasswordModal />}
       </div>
     </div>
   )

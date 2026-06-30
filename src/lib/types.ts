@@ -11,11 +11,33 @@ export type OrderStatus =
 
 export type QuarterStatus = 'planned' | 'active' | 'closed'
 
+export interface ShoeRefundCap {
+  id: string
+  cap_amount: number
+  valid_from: string
+  note: string | null
+  created_by: string | null
+  created_at: string | null
+}
+
+export interface UserBudget {
+  id: string
+  user_id: string
+  year: number
+  total_budget: number
+  valid_from: string
+  created_at: string | null
+  updated_at: string | null
+  profiles?: Profile
+}
+
 export interface Profile {
   id: string
   username: string
   name: string
   dienstnummer: string | null
+  gender: 'male' | 'female'
+  organisation: string
   roles: string[]
   active: boolean
   created_at: string | null
@@ -26,12 +48,15 @@ export interface Product {
   article_number: string
   name: string
   category: string
+  sub_category: string | null
+  gender: 'male' | 'female' | 'unisex'
   sizes: string[]
   price: number
   needs_tailoring: boolean
   size_guide: string | null
   organisation: string | null
   active: boolean
+  min_quantity: number
   created_at: string | null
 }
 
@@ -61,6 +86,7 @@ export interface Order {
   quarter_id: string
   size: string
   quantity: number
+  unit_price: number
   status: OrderStatus
   quantity_received: number | null
   quantity_issued: number | null
@@ -86,6 +112,8 @@ export interface TailorJob {
   orders?: Order[]
 }
 
+export type ShoeRefundStatus = 'pending' | 'approved' | 'rejected'
+
 export interface ShoeRefund {
   id: string
   user_id: string
@@ -93,10 +121,34 @@ export interface ShoeRefund {
   approved_amount: number
   refund_date: string
   note: string | null
+  status: ShoeRefundStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
   created_by: string | null
   created_at: string | null
   profiles?: Profile
   creator?: Profile
+  reviewer?: Profile
+}
+
+export type StockOrderStatus = 'pending_approval' | 'approved' | 'rejected' | 'received'
+
+export interface StockOrder {
+  id: string
+  product_id: string
+  size: string
+  quantity: number
+  status: StockOrderStatus
+  note: string | null
+  requested_by: string
+  approved_by: string | null
+  approved_at: string | null
+  received_at: string | null
+  created_at: string
+  updated_at: string
+  products?: Product
+  requester?: Profile
+  approver?: Profile
 }
 
 export interface AuditLog {
@@ -108,18 +160,37 @@ export interface AuditLog {
   profiles?: Profile
 }
 
+type ProfileRow = Omit<Profile, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
+type ProductRow = Omit<Product, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
+type InventoryRow = Omit<Inventory, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
+type QuarterRow = Omit<Quarter, 'profiles' | 'products' | 'orders' | 'creator'>
+type OrderRow = Omit<Order, 'profiles' | 'products' | 'quarters' | 'creator'>
+type UserBudgetRow = Omit<UserBudget, 'profiles'>
+type ShoeRefundCapRow = Omit<ShoeRefundCap, 'profiles' | 'creator'>
+type TailorJobRow = Omit<TailorJob, 'profiles' | 'quarters' | 'orders' | 'creator'>
+type ShoeRefundRow = Omit<ShoeRefund, 'profiles' | 'creator'>
+type AuditLogRow = Omit<AuditLog, 'profiles' | 'creator'>
+type StockOrderRow = Omit<StockOrder, 'products' | 'requester' | 'approver'>
+
 export type Database = {
   public: {
     Tables: {
-      profiles: { Row: Profile; Insert: Omit<Profile, 'created_at'>; Update: Partial<Profile> }
-      products: { Row: Product; Insert: Omit<Product, 'id' | 'created_at'>; Update: Partial<Product> }
-      inventory: { Row: Inventory; Insert: Omit<Inventory, 'id'>; Update: Partial<Inventory> }
-      quarters: { Row: Quarter; Insert: Omit<Quarter, 'id' | 'created_at'>; Update: Partial<Quarter> }
-      orders: { Row: Order; Insert: Omit<Order, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Order> }
-      tailor_jobs: { Row: TailorJob; Insert: Omit<TailorJob, 'id' | 'created_at'>; Update: Partial<TailorJob> }
-      shoe_refunds: { Row: ShoeRefund; Insert: Omit<ShoeRefund, 'id' | 'created_at'>; Update: Partial<ShoeRefund> }
-      audit_log: { Row: AuditLog; Insert: Omit<AuditLog, 'id' | 'created_at'>; Update: Partial<AuditLog> }
+      profiles: { Row: ProfileRow; Insert: Omit<ProfileRow, 'created_at'>; Update: Partial<ProfileRow>; Relationships: [] }
+      products: { Row: ProductRow; Insert: Omit<ProductRow, 'id' | 'created_at'>; Update: Partial<ProductRow>; Relationships: [] }
+      inventory: { Row: InventoryRow; Insert: Omit<InventoryRow, 'id'>; Update: Partial<InventoryRow>; Relationships: [] }
+      quarters: { Row: QuarterRow; Insert: Omit<QuarterRow, 'id' | 'created_at'>; Update: Partial<QuarterRow>; Relationships: [] }
+      orders: { Row: OrderRow; Insert: Pick<OrderRow, 'user_id' | 'product_id' | 'quarter_id' | 'size' | 'quantity' | 'status'> & Partial<Omit<OrderRow, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'product_id' | 'quarter_id' | 'size' | 'quantity' | 'status'>>; Update: Partial<OrderRow>; Relationships: [] }
+      tailor_jobs: { Row: TailorJobRow; Insert: Pick<TailorJobRow, 'quarter_id' | 'status'> & Partial<Omit<TailorJobRow, 'id' | 'created_at' | 'quarter_id' | 'status'>>; Update: Partial<TailorJobRow>; Relationships: [] }
+      shoe_refunds: { Row: ShoeRefundRow; Insert: Omit<ShoeRefundRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundRow>; Relationships: [] }
+      audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [] }
+      user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [] }
+      shoe_refund_caps: { Row: ShoeRefundCapRow; Insert: Omit<ShoeRefundCapRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundCapRow>; Relationships: [] }
+      stock_orders: { Row: StockOrderRow; Insert: Omit<StockOrderRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<StockOrderRow>; Relationships: [] }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
+    Enums: Record<string, never>
+    CompositeTypes: Record<string, never>
   }
 }
 
@@ -145,6 +216,20 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
   partially_issued: 'bg-orange-100 text-orange-700',
   issued: 'bg-emerald-100 text-emerald-700',
   cancelled: 'bg-red-100 text-red-700',
+}
+
+export const STOCK_ORDER_STATUS_LABELS: Record<StockOrderStatus, string> = {
+  pending_approval: 'Wartet auf Freigabe',
+  approved: 'Freigegeben',
+  rejected: 'Abgelehnt',
+  received: 'Wareneingang',
+}
+
+export const STOCK_ORDER_STATUS_COLORS: Record<StockOrderStatus, string> = {
+  pending_approval: 'bg-yellow-100 text-yellow-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-700',
+  received: 'bg-emerald-100 text-emerald-700',
 }
 
 export const QUARTER_STATUS_LABELS: Record<QuarterStatus, string> = {
