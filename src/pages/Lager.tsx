@@ -4,7 +4,7 @@ import { Plus, Minus, X, ShoppingBag, Tag, Send, Warehouse, ClipboardList, Check
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product, StockOrder } from '../lib/types'
-import { groupSizes, sizeLabel } from '../lib/sizes'
+import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 import { STOCK_ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS } from '../lib/types'
 
 const PAGE_SIZE = 50
@@ -654,7 +654,7 @@ export default function Lager() {
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-2">Größe wählen</p>
                 {(() => {
-                  const sizes = sizeModal.product.sizes
+                  const sizes = sortedSizes(sizeModal.product.sizes)
                   const groups = groupSizes(sizes)
                   const isGrouped = groups !== null
                   const SizeBtn = ({ s }: { s: string }) => {

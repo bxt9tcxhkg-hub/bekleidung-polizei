@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
 import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
-import { groupSizes, sizeLabel } from '../lib/sizes'
+import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -306,7 +306,7 @@ export default function Shop() {
             </div>
             <div className="px-5 py-4 space-y-4">
               {sizeModal.product.sizes.length > 0 && (() => {
-                const sizes = sizeModal.product.sizes
+                const sizes = sortedSizes(sizeModal.product.sizes)
                 const groups = groupSizes(sizes)
                 const isGrouped = groups !== null
 

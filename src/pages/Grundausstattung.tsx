@@ -4,7 +4,7 @@ import { Plus, X, Trash2, BookOpen, ShoppingCart, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product, Quarter } from '../lib/types'
-import { groupSizes, sizeLabel } from '../lib/sizes'
+import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 
 type Org = 'Stadtpolizei' | 'Parkaufsicht'
 
@@ -330,7 +330,7 @@ export default function Grundausstattung() {
                             )}
                           </div>
                           {hasSizes && (() => {
-                            const sizes = p!.sizes
+                            const sizes = sortedSizes(p!.sizes)
                             const groups = groupSizes(sizes)
                             const isGrouped = groups !== null
                             const SizeBtn = ({ s }: { s: string }) => (
