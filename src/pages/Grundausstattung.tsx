@@ -4,6 +4,7 @@ import { Plus, X, Trash2, BookOpen, ShoppingCart, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product, Quarter } from '../lib/types'
+import { groupSizes, sizeLabel } from '../lib/sizes'
 
 type Org = 'Stadtpolizei' | 'Parkaufsicht'
 
@@ -328,23 +329,40 @@ export default function Grundausstattung() {
                               </span>
                             )}
                           </div>
-                          {hasSizes && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {p!.sizes.map(s => (
-                                <button
-                                  key={s}
-                                  onClick={() => setSelectedSizes(prev => ({ ...prev, [item.product_id]: s }))}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                                    chosen === s
-                                      ? 'bg-blue-800 text-white border-blue-800'
-                                      : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
-                                  }`}
-                                >
-                                  {s}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          {hasSizes && (() => {
+                            const sizes = p!.sizes
+                            const groups = groupSizes(sizes)
+                            const isGrouped = groups !== null
+                            const SizeBtn = ({ s }: { s: string }) => (
+                              <button
+                                key={s}
+                                onClick={() => setSelectedSizes(prev => ({ ...prev, [item.product_id]: s }))}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                                  chosen === s
+                                    ? 'bg-blue-800 text-white border-blue-800'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                                }`}
+                              >
+                                {sizeLabel(s, isGrouped)}
+                              </button>
+                            )
+                            return isGrouped ? (
+                              <div className="flex flex-col gap-1.5">
+                                {groups!.map(g => (
+                                  <div key={g.label}>
+                                    <p className="text-xs text-gray-400 mb-1">{g.label}:</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {g.sizes.map(s => <SizeBtn key={s} s={s} />)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-1.5">
+                                {sizes.map(s => <SizeBtn key={s} s={s} />)}
+                              </div>
+                            )
+                          })()}
                         </div>
                       )
                     })}
