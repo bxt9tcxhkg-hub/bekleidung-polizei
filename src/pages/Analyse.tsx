@@ -53,7 +53,7 @@ interface QuarterStat {
 
 export default function Analyse() {
   const navigate = useNavigate()
-  const { isSachbearbeiter, isAdmin, profile } = useAuth()
+  const { isSachbearbeiter, profile } = useAuth()
   const [tab, setTab] = useState<AnalyseTab>('ranking')
   const [stats, setStats] = useState<ProductStat[]>([])
   const [sizeRecs, setSizeRecs] = useState<SizeRec[]>([])
@@ -626,7 +626,7 @@ export default function Analyse() {
                                   ) : (
                                     <span className="flex items-center gap-1 text-gray-500">
                                       Mindestbestand: <strong className="text-gray-700">{rec.minStock}×</strong>
-                                      {(isAdmin || isSachbearbeiter) && (
+                                      {isSachbearbeiter && (
                                         <button onClick={() => { setEditingMinQty(rec.product_id); setEditMinQtyVal(String(productMinQty[rec.product_id] ?? 0)) }} className="ml-0.5 text-gray-400 hover:text-blue-600 transition-colors" title="Mindestbestand anpassen">
                                           <Pencil className="w-3 h-3" />
                                         </button>

@@ -190,14 +190,16 @@ export default function Orders() {
     setSelectedIds(new Set()); setSaving(false); load()
   }
 
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
   function generateKurzbrief(items: { artNr: string; productName: string; size: string; totalQty: number }[]) {
     const now = new Date()
     const DE_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
     const dateLong = `${String(now.getDate()).padStart(2,'0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
     const dateShort = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`
-    const userName = profile?.name ?? '–'
+    const userName = esc(profile?.name ?? '–')
     const tableRows = items.map(g =>
-      `<tr><td>${g.artNr}</td><td>${g.productName}</td><td class="b">${g.size}</td><td class="b c">${g.totalQty}</td></tr>`
+      `<tr><td>${esc(g.artNr)}</td><td>${esc(g.productName)}</td><td class="b">${esc(g.size)}</td><td class="b c">${g.totalQty}</td></tr>`
     ).join('\n')
     const html = `<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><title>Kurzbrief</title><style>
@@ -276,8 +278,8 @@ export default function Orders() {
     ausgabeOrders.forEach(o => {
       const uid = o.user_id
       if (!byUser[uid]) byUser[uid] = {
-        name: (o as any).profiles?.name ?? '–',
-        dienstnummer: (o as any).profiles?.dienstnummer ?? null,
+        name: esc((o as any).profiles?.name ?? '–'),
+        dienstnummer: (o as any).profiles?.dienstnummer ? esc((o as any).profiles.dienstnummer) : null,
         orders: [],
       }
       byUser[uid].orders.push(o)
@@ -293,9 +295,9 @@ export default function Orders() {
         const issued = o.quantity_issued ?? 0
         const outstanding = avail - issued
         return `<tr>
-          <td>${(o as any).products?.name ?? '–'}</td>
-          <td>${(o as any).products?.category ?? ''}</td>
-          <td class="center">${o.size}</td>
+          <td>${esc((o as any).products?.name ?? '–')}</td>
+          <td>${esc((o as any).products?.category ?? '')}</td>
+          <td class="center">${esc(o.size)}</td>
           <td class="center">${o.quantity}</td>
           <td class="center">${avail}</td>
           <td class="center highlight">${outstanding}</td>
