@@ -270,9 +270,11 @@ export default function Users() {
                     </span>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
-                    </span>
+                    {!u.roles.includes('admin') && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap">
