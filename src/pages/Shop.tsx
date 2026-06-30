@@ -313,12 +313,13 @@ export default function Shop() {
                   { label: 'Schlank',    sizes: sizes.filter(s => s.endsWith('S')) },
                 ].filter(g => g.sizes.length > 0) : null
 
-                const SizeBtn = ({ s }: { s: string }) => {
+                const SizeBtn = ({ s, grouped }: { s: string; grouped: boolean }) => {
                   const isLast = lastSizes[sizeModal.product.id] === s
+                  const label = grouped ? s.replace(/[UNS]$/, '') : s
                   return (
                     <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors relative ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
-                      {s}
+                      {label}
                       {isLast && (
                         <span className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-white ${sizeModal.size === s ? 'bg-yellow-300' : 'bg-blue-400'}`} title="Zuletzt bestellt" />
                       )}
@@ -342,14 +343,14 @@ export default function Shop() {
                           <div key={g.label}>
                             <p className="text-xs text-gray-400 mb-1.5">{g.label}:</p>
                             <div className="flex flex-wrap gap-2">
-                              {g.sizes.map(s => <SizeBtn key={s} s={s} />)}
+                              {g.sizes.map(s => <SizeBtn key={s} s={s} grouped={true} />)}
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-2">
-                        {sizes.map(s => <SizeBtn key={s} s={s} />)}
+                        {sizes.map(s => <SizeBtn key={s} s={s} grouped={false} />)}
                       </div>
                     )}
                   </div>
