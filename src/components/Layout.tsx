@@ -113,8 +113,8 @@ export default function Layout() {
           <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
           <p className="text-blue-300 text-xs truncate">
             {[
-              profile?.roles?.includes('admin') || profile?.roles?.includes('sachbearbeiter') ? 'Sachbearbeiter' : null,
-              profile?.roles?.includes('genehmiger') ? 'Genehmiger' : null,
+              profile?.roles?.includes('admin') ? 'Admin' : profile?.roles?.includes('sachbearbeiter') ? 'Sachbearbeiter' : null,
+              profile?.roles?.includes('admin') || profile?.roles?.includes('genehmiger') ? 'Genehmiger' : null,
               'Benutzer',
             ].filter(Boolean).join(' · ')}
             {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}

@@ -4,6 +4,7 @@ import { Plus, Minus, X, ShoppingBag, Tag, Send, Warehouse, ClipboardList, Check
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Product, StockOrder } from '../lib/types'
+import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 import { STOCK_ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS } from '../lib/types'
 
 const PAGE_SIZE = 50
@@ -652,20 +653,35 @@ export default function Lager() {
               {/* Size selector with stock */}
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-2">Größe wählen</p>
-                <div className="flex flex-wrap gap-2">
-                  {sizeModal.product.sizes.map(s => {
+                {(() => {
+                  const sizes = sortedSizes(sizeModal.product.sizes)
+                  const groups = groupSizes(sizes)
+                  const isGrouped = groups !== null
+                  const SizeBtn = ({ s }: { s: string }) => {
                     const stock = stockFor(sizeModal.product.id, s)
                     return (
                       <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
                         className={`px-3 py-2 rounded-xl text-sm font-medium border transition-colors flex flex-col items-center min-w-[3.5rem] ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
-                        <span>{s}</span>
+                        <span>{sizeLabel(s, isGrouped)}</span>
                         <span className={`text-xs mt-0.5 ${sizeModal.size === s ? 'text-blue-200' : stock > 0 ? 'text-green-600' : 'text-gray-400'}`}>
                           {stock > 0 ? `${stock} lagernd` : 'nicht lagernd'}
                         </span>
                       </button>
                     )
-                  })}
-                </div>
+                  }
+                  return groups ? (
+                    <div className="space-y-3">
+                      {groups.map(g => (
+                        <div key={g.label}>
+                          <p className="text-xs text-gray-400 mb-1.5">{g.label}:</p>
+                          <div className="flex flex-wrap gap-2">{g.sizes.map(s => <SizeBtn key={s} s={s} />)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">{sizes.map(s => <SizeBtn key={s} s={s} />)}</div>
+                  )
+                })()}
               </div>
 
               {/* Current stock info */}

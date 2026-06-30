@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const roles = profile?.roles ?? []
   const isSachbearbeiter = roles.includes('admin') || roles.includes('sachbearbeiter')
-  const isGenehmiger = roles.includes('genehmiger') || roles.includes('approver')
+  const isGenehmiger = roles.includes('admin') || roles.includes('genehmiger') || roles.includes('approver')
   const isAdmin = isSachbearbeiter
   const isStrictAdmin = roles.includes('admin')
   const mustChangePassword = user?.user_metadata?.force_password_change === true

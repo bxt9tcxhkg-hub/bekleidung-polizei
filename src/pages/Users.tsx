@@ -270,9 +270,11 @@ export default function Users() {
                     </span>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
-                    </span>
+                    {!u.roles.includes('admin') && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.gender === 'female' ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {u.gender === 'female' ? 'Weiblich' : 'Männlich'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap">
@@ -396,6 +398,7 @@ export default function Users() {
                   <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.dienstnummer} onChange={e => setForm(f => ({ ...f, dienstnummer: e.target.value }))} />
                 </div>
               </div>
+              {!form.roles.includes('admin') && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
                 <div className="flex gap-2">
@@ -408,6 +411,7 @@ export default function Users() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel).</p>
               </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
                 <div className="flex gap-2">

@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react'
-import { X, Check, Package, Scissors, FileText, RotateCcw } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { X, Check, Package, Scissors, FileText, RotateCcw, Ban } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderStatus } from '../lib/types'
 import Lieferungen from './Lieferungen'
 
-type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'teilweise' | 'ausgegeben' | 'storniert' | 'lieferungen'
+type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'ausgegeben' | 'storniert' | 'lieferungen'
 
 const PAGE_SIZE = 50
 
 const ADMIN_TABS: { key: AdminTab; label: string; status?: OrderStatus }[] = [
-  { key: 'eingereicht', label: 'Eingereicht',          status: 'approved' },
-  { key: 'lieferant',   label: 'In Bestellung',        status: 'ordered_supplier' },
-  { key: 'schneider',   label: 'Beim Schneider',       status: 'at_tailor' },
-  { key: 'ausgabe',     label: 'Bereit zur Ausgabe',   status: 'ready_for_issue' },
-  { key: 'teilweise',   label: 'Teilweise ausgegeben', status: 'partially_issued' },
-  { key: 'ausgegeben',  label: 'Ausgegeben',            status: 'issued' },
-  { key: 'storniert',   label: 'Storniert',             status: 'cancelled' },
+  { key: 'eingereicht', label: 'Eingereicht',        status: 'approved' },
+  { key: 'lieferant',   label: 'In Bestellung',      status: 'ordered_supplier' },
+  { key: 'schneider',   label: 'Beim Schneider',     status: 'at_tailor' },
+  { key: 'ausgabe',     label: 'Bereit zur Ausgabe', status: 'ready_for_issue' },
+  { key: 'ausgegeben',  label: 'Ausgegeben',          status: 'issued' },
+  { key: 'storniert',   label: 'Storniert',           status: 'cancelled' },
   { key: 'lieferungen', label: 'Lieferungen' },
 ]
 
@@ -31,16 +31,22 @@ const STATUS_BACK: Partial<Record<string, OrderStatus>> = {
 
 export default function Orders() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [inventoryMap, setInventoryMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<AdminTab>('eingereicht')
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    const t = searchParams.get('tab') as AdminTab | null
+    return ADMIN_TABS.some(tab => tab.key === t) ? t! : 'eingereicht'
+  })
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [receivedInputs, setReceivedInputs] = useState<Record<string, string>>({})
   const [issuedInputs, setIssuedInputs] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [page, setPage] = useState(0)
   const [error, setError] = useState('')
+  const [cancelModal, setCancelModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
 
   async function load() {
     setLoading(true)
@@ -68,13 +74,21 @@ export default function Orders() {
 
   function switchTab(tab: AdminTab) { setActiveTab(tab); setSelectedIds(new Set()); setPage(0) }
 
-  const tabOrders = orders.filter(o => ADMIN_TABS.find(t => t.key === activeTab)?.status === o.status)
-  const sorted = ['ausgabe', 'teilweise', 'ausgegeben'].includes(activeTab)
+  const tabOrders = orders.filter(o => {
+    if (activeTab === 'ausgabe') return o.status === 'ready_for_issue' || o.status === 'partially_issued'
+    return ADMIN_TABS.find(t => t.key === activeTab)?.status === o.status
+  })
+  const sorted = (activeTab === 'ausgabe' || activeTab === 'ausgegeben')
     ? [...tabOrders].sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
     : tabOrders
   const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const allSelected = tabOrders.length > 0 && tabOrders.every(o => selectedIds.has(o.id))
-  const counts = Object.fromEntries(ADMIN_TABS.map(t => [t.key, t.status ? orders.filter(o => o.status === t.status).length : 0])) as Record<AdminTab, number>
+  const counts = Object.fromEntries(ADMIN_TABS.map(t => [
+    t.key,
+    t.key === 'ausgabe'
+      ? orders.filter(o => o.status === 'ready_for_issue' || o.status === 'partially_issued').length
+      : (t.status ? orders.filter(o => o.status === t.status).length : 0),
+  ])) as Record<AdminTab, number>
 
   function toggleSelect(id: string) {
     setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
@@ -119,6 +133,18 @@ export default function Orders() {
     setSelectedIds(new Set()); setSaving(false); load()
   }
 
+  async function cancelSelected() {
+    const items = tabOrders.filter(o => selectedIds.has(o.id))
+    if (!items.length || !cancelReason.trim()) return
+    setSaving(true)
+    await Promise.all(items.map(o => supabase.from('orders').update({
+      status: 'cancelled',
+      cancel_reason: cancelReason.trim(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', o.id)))
+    setSelectedIds(new Set()); setCancelModal(false); setCancelReason(''); setSaving(false); load()
+  }
+
   async function saveReceived(order: Order) {
     const qr = receivedInputs[order.id] !== undefined ? parseInt(receivedInputs[order.id]) : null
     if (qr === null || isNaN(qr)) return
@@ -130,12 +156,10 @@ export default function Orders() {
   async function issueOrder(order: Order) {
     const qtyNow = parseInt(issuedInputs[order.id] ?? '') || 0
     if (qtyNow <= 0) return
-    const qtyRef = order.quantity_received ?? order.quantity
     const prevIssued = order.quantity_issued ?? 0
-    const newTotal = activeTab === 'teilweise' ? prevIssued + qtyNow : qtyNow
-    const nextStatus: OrderStatus = newTotal >= qtyRef ? 'issued' : 'partially_issued'
+    const newTotal = prevIssued + qtyNow
     setSaving(true)
-    await supabase.from('orders').update({ status: nextStatus, quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
+    await supabase.from('orders').update({ status: 'issued', quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
     setSaving(false); load()
   }
 
@@ -480,17 +504,15 @@ export default function Orders() {
             </table>
           )}
 
-          {/* ── Bereit zur Ausgabe + Teilweise ausgegeben ── */}
-          {(activeTab === 'ausgabe' || activeTab === 'teilweise') && (
+          {/* ── Bereit zur Ausgabe ── */}
+          {activeTab === 'ausgabe' && (
             <>
-            {activeTab === 'ausgabe' && (
-              <div className="flex justify-end px-4 py-3 border-b border-gray-100">
-                <button onClick={generateAusgabeliste}
-                  className="flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-blue-50 transition-colors">
-                  <FileText className="w-4 h-4" /> Ausgabeliste als PDF
-                </button>
-              </div>
-            )}
+            <div className="flex justify-end px-4 py-3 border-b border-gray-100">
+              <button onClick={generateAusgabeliste}
+                className="flex items-center gap-2 border border-blue-300 text-blue-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-blue-50 transition-colors">
+                <FileText className="w-4 h-4" /> Ausgabeliste als PDF
+              </button>
+            </div>
             <table className="w-full text-sm">
               <thead><tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-3 py-2.5 md:px-4 md:py-3 w-8"><input type="checkbox" className="rounded" checked={allSelected} onChange={toggleSelectAll} /></th>
@@ -499,8 +521,7 @@ export default function Orders() {
                 <th className={thClass}>Gr.</th>
                 <th className={`${thCClass} hidden sm:table-cell`}>Bestellt</th>
                 <th className={`${thCClass} hidden sm:table-cell`}>Geliefert</th>
-                {activeTab === 'teilweise' && <th className={thCClass}>Ausgegeben</th>}
-                <th className={thCClass}>{activeTab === 'teilweise' ? 'Ausstehend' : 'Verfügbar'}</th>
+                <th className={thCClass}>Verfügbar</th>
                 <th className={thCClass}>Auszugeben</th>
                 <th className="px-3 py-2.5 md:px-4 md:py-3" />
               </tr></thead>
@@ -517,7 +538,6 @@ export default function Orders() {
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity_received ?? '–'}</td>
-                      {activeTab === 'teilweise' && <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{qtyIssued}</td>}
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-blue-700">{outstanding}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><div className="flex justify-center">
                         <input type="number" min="1" max={outstanding}
@@ -614,6 +634,10 @@ export default function Orders() {
             <FileText className="w-4 h-4" />
             {saving ? 'Wird gespeichert...' : 'Sammelbestellung erstellen'}
           </button>
+          <button onClick={() => setCancelModal(true)}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-sm font-medium px-3 py-2 rounded-xl">
+            <Ban className="w-3.5 h-3.5" /> Stornieren
+          </button>
           <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
@@ -635,6 +659,10 @@ export default function Orders() {
             className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
           </button>
+          <button onClick={() => setCancelModal(true)}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-sm font-medium px-3 py-2 rounded-xl">
+            <Ban className="w-3.5 h-3.5" /> Stornieren
+          </button>
           <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
@@ -652,11 +680,15 @@ export default function Orders() {
             className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-60 text-sm font-medium px-3 py-2 rounded-xl">
             <RotateCcw className="w-3.5 h-3.5" /> Rückgängig
           </button>
+          <button onClick={() => setCancelModal(true)}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-sm font-medium px-3 py-2 rounded-xl">
+            <Ban className="w-3.5 h-3.5" /> Stornieren
+          </button>
           <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
       )}
 
-      {(activeTab === 'ausgabe' || activeTab === 'teilweise') && selectedIds.size > 0 && (
+      {activeTab === 'ausgabe' && selectedIds.size > 0 && (
         <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
@@ -689,6 +721,35 @@ export default function Orders() {
             <RotateCcw className="w-3.5 h-3.5" /> Wiederherstellen
           </button>
           <button onClick={() => setSelectedIds(new Set())} className="text-white/60 hover:text-white p-2 rounded-lg"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {/* Cancel modal */}
+      {cancelModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Bestellungen stornieren</h2>
+            <p className="text-sm text-gray-500 mb-4">{selectedIds.size} Bestellung{selectedIds.size !== 1 ? 'en' : ''} werden storniert.</p>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Stornierungsgrund <span className="text-red-500">*</span></label>
+            <textarea
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+              rows={3}
+              placeholder="Grund für die Stornierung..."
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              autoFocus
+            />
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => { setCancelModal(false); setCancelReason('') }}
+                className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50">
+                Abbrechen
+              </button>
+              <button onClick={cancelSelected} disabled={saving || !cancelReason.trim()}
+                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-xl">
+                {saving ? 'Wird storniert...' : 'Stornieren'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
