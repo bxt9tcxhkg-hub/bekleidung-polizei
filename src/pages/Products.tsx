@@ -565,8 +565,18 @@ export default function Products() {
                   <input type="number" step="0.01" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.price} onChange={e => setForm(f => ({ ...f, price: parseFloat(e.target.value) || 0 }))} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Mindestbestand</label>
-                  <input type="number" step="1" min="0" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.min_quantity} onChange={e => setForm(f => ({ ...f, min_quantity: parseInt(e.target.value) || 0 }))} placeholder="0" />
+                  <label className="block text-xs font-medium text-gray-600 mb-2">Mindestbestand</label>
+                  <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                    <input type="checkbox" className="rounded" checked={form.min_quantity > 0}
+                      onChange={e => setForm(f => ({ ...f, min_quantity: e.target.checked ? 1 : 0 }))} />
+                    <span className="text-xs text-gray-600">Mindestbestand festlegen</span>
+                  </label>
+                  {form.min_quantity > 0 && (
+                    <input type="number" step="1" min="1"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      value={form.min_quantity}
+                      onChange={e => setForm(f => ({ ...f, min_quantity: Math.max(1, parseInt(e.target.value) || 1) }))} />
+                  )}
                 </div>
               </div>
               <div>
