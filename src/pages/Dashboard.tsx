@@ -129,10 +129,10 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   const orderCards = [
-    { label: 'Eingereicht', value: stats.eingereicht, icon: ShoppingBag, color: 'bg-blue-50 text-blue-700', iconBg: 'bg-blue-100', to: '/bestellungen' },
-    { label: 'In Bestellung', value: stats.lieferant, icon: Truck, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', to: '/bestellungen' },
-    { label: 'Beim Schneider', value: stats.schneider, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', to: '/bestellungen' },
-    { label: 'Bereit zur Ausgabe', value: stats.ausgabe, icon: Package, color: 'bg-green-50 text-green-700', iconBg: 'bg-green-100', to: '/bestellungen' },
+    { label: 'Eingereicht', value: stats.eingereicht, icon: ShoppingBag, color: 'bg-blue-50 text-blue-700', iconBg: 'bg-blue-100', to: '/bestellungen?tab=eingereicht' },
+    { label: 'In Bestellung', value: stats.lieferant, icon: Truck, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', to: '/bestellungen?tab=lieferant' },
+    { label: 'Beim Schneider', value: stats.schneider, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', to: '/bestellungen?tab=schneider' },
+    { label: 'Bereit zur Ausgabe', value: stats.ausgabe, icon: Package, color: 'bg-green-50 text-green-700', iconBg: 'bg-green-100', to: '/bestellungen?tab=ausgabe' },
   ]
 
   return (
