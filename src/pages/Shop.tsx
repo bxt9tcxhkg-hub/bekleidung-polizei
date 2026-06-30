@@ -28,6 +28,7 @@ export default function Shop() {
   const [genderFilterActive, setGenderFilterActive] = useState(true)
   const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
   const [lastSizes, setLastSizes] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
 
   async function loadBudget() {
     const [total, orders] = await Promise.all([
@@ -77,12 +78,12 @@ export default function Shop() {
       setLastSizes(map)
       setLoading(false)
     }
-    if (profile) init()
+    if (profile) init().catch(() => setError('Daten konnten nicht geladen werden. Bitte Seite neu laden.'))
   }, [profile])
 
   const totalBudget = totalBudgetAmt
   const remainingBudget = totalBudget - usedBudget
-  const cartTotal = cartItems.reduce((s, o) => s + (o.products?.price ?? 0) * o.quantity, 0)
+  const cartTotal = cartItems.reduce((s, o) => s + o.unit_price * o.quantity, 0)
   const budgetAfterCart = remainingBudget - cartTotal
   const needsApproval = budgetAfterCart < 0
 
@@ -154,6 +155,13 @@ export default function Shop() {
 
   return (
     <div>
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl flex items-center justify-between">
+          {error}
+          <button onClick={() => setError('')} className="ml-3 text-red-400 hover:text-red-600"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
       {/* Submit result banner */}
       {submitResult && (
         <div className={`mb-4 flex items-start gap-3 px-4 py-3 rounded-xl ${submitResult === 'approved' ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
@@ -370,7 +378,7 @@ export default function Shop() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 leading-snug">{item.products?.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Gr. {item.size}</p>
-                        <p className="text-xs font-semibold text-gray-700 mt-1">€ {((item.products?.price ?? 0) * item.quantity).toFixed(2)}</p>
+                        <p className="text-xs font-semibold text-gray-700 mt-1">€ {(item.unit_price * item.quantity).toFixed(2)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-60"><Minus className="w-3.5 h-3.5" /></button>

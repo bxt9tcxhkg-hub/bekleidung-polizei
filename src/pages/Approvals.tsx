@@ -39,6 +39,7 @@ export default function Approvals() {
   useEffect(() => { load() }, [])
 
   async function approve(order: PendingOrder) {
+    if (processing) return
     setProcessing(order.id)
     await supabase.from('orders').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', order.id)
     setProcessing(null)
@@ -46,7 +47,7 @@ export default function Approvals() {
   }
 
   async function reject(id: string, reason: string) {
-    if (!reason.trim()) return
+    if (!reason.trim() || processing) return
     setProcessing(id)
     await supabase.from('orders').update({ status: 'cancelled', cancel_reason: reason, updated_at: new Date().toISOString() }).eq('id', id)
     setCancelReason(null)
@@ -55,6 +56,7 @@ export default function Approvals() {
   }
 
   async function approveStockOrder(id: string) {
+    if (processing) return
     setProcessing(id)
     await supabase.from('stock_orders').update({
       status: 'approved',
@@ -66,7 +68,7 @@ export default function Approvals() {
   }
 
   async function rejectStockOrder(id: string, reason: string) {
-    if (!reason.trim()) return
+    if (!reason.trim() || processing) return
     setProcessing(id)
     await supabase.from('stock_orders').update({
       status: 'rejected',

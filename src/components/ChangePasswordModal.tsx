@@ -15,6 +15,7 @@ export default function ChangePasswordModal() {
     e.preventDefault()
     setError('')
     if (password.length < 8) { setError('Passwort muss mindestens 8 Zeichen haben.'); return }
+    if (!/[A-Z]/.test(password) && !/[0-9]/.test(password)) { setError('Passwort muss mindestens eine Zahl oder einen Großbuchstaben enthalten.'); return }
     if (password !== confirm) { setError('Passwörter stimmen nicht überein.'); return }
     setSaving(true)
     const { error } = await supabase.auth.updateUser({

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Shop from './pages/Shop'
@@ -18,9 +19,11 @@ import Budgets from './pages/Budgets'
 import Lager from './pages/Lager'
 import Analyse from './pages/Analyse'
 import Grundausstattung from './pages/Grundausstattung'
+import NotFound from './pages/NotFound'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <BrowserRouter>
         <Routes>
@@ -56,8 +59,10 @@ export default function App() {
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />
             <Route path="grundausstattung" element={<ProtectedRoute sachbearbeiterOnly><Grundausstattung /></ProtectedRoute>} />
           </Route>
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
+    </ErrorBoundary>
   )
 }
