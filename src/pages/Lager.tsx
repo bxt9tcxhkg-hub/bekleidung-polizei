@@ -49,6 +49,11 @@ export default function Lager() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editQty, setEditQty] = useState('')
   const [addForm, setAddForm] = useState<{ product_id: string; size: string; quantity: string } | null>(null)
+
+  // Mindestmenge edit
+  const [editingMinId, setEditingMinId] = useState<string | null>(null)
+  const [editMinVal, setEditMinVal] = useState('')
+  const [savingMin, setSavingMin] = useState(false)
   const [addSearch, setAddSearch] = useState('')
   const [addDropdown, setAddDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -99,6 +104,9 @@ export default function Lager() {
   const invMap: Record<string, number> = {}
   inventory.forEach(e => { invMap[`${e.product_id}__${e.size}`] = e.quantity })
 
+  // Products with mandatory minimum stock
+  const minStockProducts = products.filter(p => p.min_quantity > 0)
+
   function stockFor(productId: string, size: string) {
     return invMap[`${productId}__${size}`] ?? 0
   }
@@ -112,6 +120,16 @@ export default function Lager() {
     await supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id)
     setEditingId(null)
     setSaving(false)
+    loadAll()
+  }
+
+  async function saveMinQty(productId: string) {
+    const val = parseInt(editMinVal)
+    if (isNaN(val) || val < 1) return
+    setSavingMin(true)
+    await supabase.from('products').update({ min_quantity: val }).eq('id', productId)
+    setEditingMinId(null)
+    setSavingMin(false)
     loadAll()
   }
 
@@ -310,7 +328,63 @@ export default function Lager() {
         <>
           {/* ── Bestand ── */}
           {tab === 'bestand' && (
-            Object.keys(invByProduct).length === 0 ? (
+            <div className="space-y-6">
+            {/* Mindestmengen */}
+            {minStockProducts.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Mindestmengen</h2>
+                <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Artikel</th>
+                        <th className="text-center px-4 py-3 font-semibold text-gray-600">Mindestmenge</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {minStockProducts.map(p => (
+                        <tr key={p.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-gray-900">{p.name}</p>
+                            <p className="text-xs text-gray-400">{p.article_number} · {p.category}</p>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {editingMinId === p.id ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <input type="number" min="1"
+                                  className="w-16 text-center border border-blue-400 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  value={editMinVal}
+                                  onChange={e => setEditMinVal(e.target.value)}
+                                  autoFocus
+                                  onKeyDown={e => { if (e.key === 'Enter') saveMinQty(p.id); if (e.key === 'Escape') setEditingMinId(null) }}
+                                />
+                                <button onClick={() => saveMinQty(p.id)} disabled={savingMin}
+                                  className="p-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-60">
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => setEditingMinId(null)}
+                                  className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button onClick={() => { setEditingMinId(p.id); setEditMinVal(String(p.min_quantity)) }}
+                                className="inline-flex items-center gap-2 hover:bg-gray-100 px-3 py-1 rounded-lg transition-colors group">
+                                <span className="text-sm font-semibold text-gray-700">{p.min_quantity}×</span>
+                                <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Lagerbestand */}
+            {Object.keys(invByProduct).length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
                 <Warehouse className="w-12 h-12 mb-3 text-gray-300" />
                 <p className="font-semibold text-gray-500">Kein Bestand erfasst</p>
@@ -395,7 +469,8 @@ export default function Lager() {
                   </div>
                 )}
               </div>
-            )
+            )}
+            </div>
           )}
 
           {/* ── Bestellen ── */}
