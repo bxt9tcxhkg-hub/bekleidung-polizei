@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
@@ -8,24 +9,33 @@ import Dashboard from './pages/Dashboard'
 import Shop from './pages/Shop'
 import MyOrders from './pages/MyOrders'
 import UserProfile from './pages/UserProfile'
-import Products from './pages/Products'
-import Orders from './pages/Orders'
-import Quarters from './pages/Quarters'
-import ShoeRefunds from './pages/ShoeRefunds'
-import Users from './pages/Users'
-import AuditLog from './pages/AuditLog'
-import Approvals from './pages/Approvals'
-import Budgets from './pages/Budgets'
-import Lager from './pages/Lager'
-import Analyse from './pages/Analyse'
-import Grundausstattung from './pages/Grundausstattung'
 import NotFound from './pages/NotFound'
+
+// Admin-/Verwaltungsseiten werden erst bei Bedarf geladen (Code-Splitting)
+const Products = lazy(() => import('./pages/Products'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Quarters = lazy(() => import('./pages/Quarters'))
+const ShoeRefunds = lazy(() => import('./pages/ShoeRefunds'))
+const Users = lazy(() => import('./pages/Users'))
+const AuditLog = lazy(() => import('./pages/AuditLog'))
+const Approvals = lazy(() => import('./pages/Approvals'))
+const Budgets = lazy(() => import('./pages/Budgets'))
+const Lager = lazy(() => import('./pages/Lager'))
+const Analyse = lazy(() => import('./pages/Analyse'))
+const Grundausstattung = lazy(() => import('./pages/Grundausstattung'))
+
+const PageSpinner = () => (
+  <div className="flex justify-center py-16">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
+  </div>
+)
 
 export default function App() {
   return (
     <ErrorBoundary>
     <AuthProvider>
       <BrowserRouter>
+        <Suspense fallback={<PageSpinner />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
@@ -61,6 +71,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
     </ErrorBoundary>

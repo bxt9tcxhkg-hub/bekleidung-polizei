@@ -123,7 +123,7 @@ export default function Shop() {
   async function addToCart() {
     if (!sizeModal || !activeQuarter) return
     setAdding(sizeModal.product.id)
-    await supabase.from('orders').insert({
+    const { error: err } = await supabase.from('orders').insert({
       user_id: profile!.id,
       product_id: sizeModal.product.id,
       quarter_id: activeQuarter.id,
@@ -132,6 +132,11 @@ export default function Shop() {
       unit_price: sizeModal.product.price,
       status: 'pending',
     })
+    if (err) {
+      setError('Artikel konnte nicht hinzugefügt werden. Bitte erneut versuchen.')
+      setAdding(null)
+      return
+    }
     setSizeModal(null)
     await loadCart()
     setCartOpen(true)
@@ -140,12 +145,14 @@ export default function Shop() {
 
   async function updateQty(item: CartItem, delta: number) {
     const newQty = Math.max(1, item.quantity + delta)
-    await supabase.from('orders').update({ quantity: newQty }).eq('id', item.id)
+    const { error: err } = await supabase.from('orders').update({ quantity: newQty }).eq('id', item.id)
+    if (err) setError('Menge konnte nicht geändert werden.')
     loadCart()
   }
 
   async function removeItem(item: CartItem) {
-    await supabase.from('orders').delete().eq('id', item.id)
+    const { error: err } = await supabase.from('orders').delete().eq('id', item.id)
+    if (err) setError('Artikel konnte nicht entfernt werden.')
     loadCart()
   }
 
@@ -153,12 +160,16 @@ export default function Shop() {
     if (cartItems.length === 0) return
     setSubmitting(true)
     const newStatus = needsApproval ? 'pending_approval' : 'approved'
-    await supabase
+    const { error: err } = await supabase
       .from('orders')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('user_id', profile!.id)
       .eq('status', 'pending')
     setSubmitting(false)
+    if (err) {
+      setError('Bestellung konnte nicht eingereicht werden. Bitte erneut versuchen.')
+      return
+    }
     setCartOpen(false)
     setSubmitResult(newStatus)
     await Promise.all([loadCart(), loadBudget()])

@@ -1,4 +1,6 @@
-interface Env {
+import { isAuthenticated, unauthorized, type AuthEnv } from './_auth'
+
+interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
   GEMINI_API_KEY: string
 }
@@ -14,15 +16,18 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
+  if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
+
   const formData = await context.request.formData()
   const file = formData.get('file') as File | null
-  const folder = (formData.get('folder') as string | null) ?? 'uploads'
+  const rawFolder = (formData.get('folder') as string | null) ?? 'uploads'
+  const folder = /^[a-z0-9_-]{1,40}$/.test(rawFolder) ? rawFolder : 'uploads'
 
   if (!file) {
     return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400 })
   }
 
-  const ext = file.name.split('.').pop() ?? ''
+  const ext = (file.name.split('.').pop() ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
   const key = `${folder}/${crypto.randomUUID()}.${ext}`
   const fileBuffer = await file.arrayBuffer()
 

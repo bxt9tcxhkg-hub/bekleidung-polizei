@@ -119,6 +119,12 @@ export default function Lieferungen() {
     fileInputRef.current?.click()
   }
 
+  async function openFile(url: string) {
+    const { data: sess } = await supabase.auth.getSession()
+    const token = sess.session?.access_token
+    window.open(token ? `${url}?token=${encodeURIComponent(token)}` : url, '_blank', 'noopener')
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !pendingDeliveryId.current) return
@@ -133,7 +139,12 @@ export default function Lieferungen() {
     formData.append('folder', 'vorrechnungen')
 
     try {
-      const res = await fetch('/upload', { method: 'POST', body: formData })
+      const { data: sess } = await supabase.auth.getSession()
+      const res = await fetch('/upload', {
+        method: 'POST',
+        body: formData,
+        headers: { Authorization: `Bearer ${sess.session?.access_token ?? ''}` },
+      })
       if (!res.ok) throw new Error()
       const { key, name, analysis } = await res.json()
 
@@ -236,11 +247,11 @@ export default function Lieferungen() {
 
                       {d.vorrechnung_url ? (
                         <div>
-                          <a href={d.vorrechnung_url} target="_blank" rel="noopener noreferrer"
+                          <button onClick={() => openFile(d.vorrechnung_url!)}
                             className="inline-flex items-center gap-2 text-sm text-blue-700 hover:underline">
                             <FileText className="w-4 h-4 flex-shrink-0" />
                             <span className="truncate">{d.vorrechnung_name}</span>
-                          </a>
+                          </button>
                           {d.vorrechnung_number && (
                             <p className="text-xs text-gray-400 mt-0.5 ml-6">Rechnungsnr.: {d.vorrechnung_number}</p>
                           )}

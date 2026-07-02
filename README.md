@@ -1,73 +1,62 @@
-# React + TypeScript + Vite
+# Bekleidungsverwaltung Stadtpolizei Dornbirn
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interne Web-App zur Verwaltung von Dienstbekleidung: Bestellungen, Genehmigungen,
+Budget, Lager, Schneider-Aufträge und Schuherstattungen.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
+- **Backend**: Supabase (PostgreSQL mit Row Level Security, Auth, Edge Functions)
+- **Hosting**: Cloudflare Pages (Auto-Deploy vom `master`-Branch)
+- **Dateien**: Cloudflare R2 (Vorrechnungen), PDF-Analyse via Gemini
 
-## React Compiler
+## Rollen
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Rolle | Bereich |
+|---|---|
+| Benutzer | Bekleidung bestellen, eigene Bestellungen, Profil (inkl. Größen) |
+| Sachbearbeiter | Bestellungen abwickeln, Lager, Produkte, Quartale, Benutzer, Analyse |
+| Genehmiger | Freigaben, Budgetverwaltung, Schuherstattungen |
+| Admin | Alle Bereiche |
 
-## Expanding the ESLint configuration
+## Bestell-Workflow
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+Warenkorb (pending)
+  → eingereicht (approved | pending_approval wenn Budget überschritten)
+  → Genehmiger gibt frei (approved)
+  → beim Lieferanten bestellt (ordered_supplier)
+  → ggf. Schneider (at_tailor)
+  → bereit zur Ausgabe (ready_for_issue)
+  → ausgegeben (issued) | storniert (cancelled, mit Grund)
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Entwicklung
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # Dev-Server
+npm run lint       # ESLint
+npm test           # Unit-Tests (vitest)
+npm run build      # Typecheck + Produktions-Build
 ```
+
+### Umgebungsvariablen (.env)
+
+```
+VITE_SUPABASE_URL=https://<projekt>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+```
+
+### Cloudflare Pages Functions
+
+- `functions/upload.ts` — Datei-Upload nach R2 (nur angemeldete Benutzer),
+  optional PDF-Analyse wenn `GEMINI_API_KEY` gesetzt ist
+- `functions/files/[[path]].ts` — Auslieferung der R2-Dateien (nur angemeldet)
+- `functions/_middleware.ts` — SPA-Fallback auf index.html
+
+### Datenbank
+
+Migrationsdateien liegen in `supabase/migrations/`. Schema-Änderungen immer
+als Migrationsdatei dokumentieren, auch wenn sie direkt über das
+Supabase-Dashboard oder MCP angewendet wurden.

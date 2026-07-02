@@ -1,8 +1,12 @@
-interface Env {
+import { isAuthenticated, unauthorized, type AuthEnv } from '../_auth'
+
+interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
 }
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
+  if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
+
   const key = (context.params['path'] as string[]).join('/')
 
   const object = await context.env.BEKLEIDUNG.get(key)
