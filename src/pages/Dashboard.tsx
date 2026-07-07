@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Quarter } from '../lib/types'
 import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
+import { fmtEUR } from '../lib/format'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -44,7 +45,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   const remaining = totalBudget - usedBudget
-  const budgetPct = Math.min(100, (usedBudget / totalBudget) * 100)
+  const budgetPct = totalBudget > 0 ? Math.min(100, (usedBudget / totalBudget) * 100) : 0
 
   return (
     <div className="space-y-6">
@@ -62,7 +63,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
             <Euro className="w-4 h-4 text-gray-400" />
             <p className="font-semibold text-gray-900">Jahresbudget {CURRENT_YEAR}</p>
           </div>
-          <p className="text-sm font-bold text-gray-700">€ {usedBudget.toFixed(2)} / € {totalBudget.toFixed(2)}</p>
+          <p className="text-sm font-bold text-gray-700">{fmtEUR(usedBudget)} / {fmtEUR(totalBudget)}</p>
         </div>
         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
@@ -71,7 +72,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
         <p className={`text-sm mt-2 font-medium ${remaining <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
           {remaining <= 0
             ? 'Budget aufgebraucht – weitere Bestellungen benötigen Genehmigung'
-            : `€ ${remaining.toFixed(2)} verbleibend`}
+            : `${fmtEUR(remaining)} verbleibend`}
         </p>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -129,7 +130,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
   const orderCards = [
-    { label: 'Eingereicht', value: stats.eingereicht, icon: ShoppingBag, color: 'bg-blue-50 text-blue-700', iconBg: 'bg-blue-100', to: '/bestellungen?tab=eingereicht' },
+    { label: 'Zu bestellen', value: stats.eingereicht, icon: ShoppingBag, color: 'bg-blue-50 text-blue-700', iconBg: 'bg-blue-100', to: '/bestellungen?tab=eingereicht' },
     { label: 'In Bestellung', value: stats.lieferant, icon: Truck, color: 'bg-teal-50 text-teal-700', iconBg: 'bg-teal-100', to: '/bestellungen?tab=lieferant' },
     { label: 'Beim Schneider', value: stats.schneider, icon: Scissors, color: 'bg-orange-50 text-orange-700', iconBg: 'bg-orange-100', to: '/bestellungen?tab=schneider' },
     { label: 'Bereit zur Ausgabe', value: stats.ausgabe, icon: Package, color: 'bg-green-50 text-green-700', iconBg: 'bg-green-100', to: '/bestellungen?tab=ausgabe' },

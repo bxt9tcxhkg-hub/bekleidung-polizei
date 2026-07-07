@@ -16,6 +16,16 @@ export async function getCurrentBudget(userId: string, year: number): Promise<nu
   return data?.total_budget ?? DEFAULT_BUDGET
 }
 
+export async function getUsedBudget(userId: string, year: number): Promise<number> {
+  const { data } = await supabase
+    .from('orders')
+    .select('unit_price, quantity')
+    .eq('user_id', userId)
+    .not('status', 'in', '(pending,cancelled)')
+    .gte('created_at', `${year}-01-01`)
+  return (data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0)
+}
+
 export async function getCurrentShoeRefundCap(): Promise<number> {
   const { data } = await supabase
     .from('shoe_refund_caps')

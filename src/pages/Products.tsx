@@ -3,6 +3,7 @@ import { Plus, Pencil, X, Check, Search, Upload, Download, Info, Trash2 } from '
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { fmtEUR } from '../lib/format'
 import type { Product } from '../lib/types'
 
 const CSV_TEMPLATE = `artikel_nr;name;kategorie;geschlecht;groessen;preis;schneider;organisation;grössentabelle
@@ -13,6 +14,14 @@ const GENDER_MAP: Record<string, 'male' | 'female' | 'unisex'> = {
   hr: 'male', herren: 'male', male: 'male', m: 'male',
   da: 'female', damen: 'female', female: 'female', f: 'female',
   unisex: 'unisex', u: 'unisex',
+}
+
+// Deterministischer Slug + Hash aus dem VOLLEN Namen, um Kollisionen bei Auto-Artikelnummern zu vermeiden
+function autoArticleNumber(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  const slug = name.toLowerCase().replace(/[^a-z0-9äöüß]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 20)
+  return `auto-${slug}-${hash.toString(36)}`
 }
 
 function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'created_at'> | null {
@@ -27,7 +36,7 @@ function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 'create
   const name = get('name', 'bezeichnung', 'produkt')
   if (!name) return null
   // treat missing or dash-only article number as auto-generated placeholder
-  const article_number = (artikel_nr && artikel_nr !== '-') ? artikel_nr : `auto-${name.slice(0, 20).replace(/\s+/g, '-').toLowerCase()}`
+  const article_number = (artikel_nr && artikel_nr !== '-') ? artikel_nr : autoArticleNumber(name)
   const groessen = get('groessen', 'größen', 'groesse', 'größe', 'sizes')
   const preis = get('preis', 'price', 'betrag')
   const schneider = get('schneider', 'tailoring', 'wappen', 'wappenänderung')
@@ -56,13 +65,40 @@ function parseFileToProducts(rows: Record<string, string>[]): Omit<Product, 'id'
   return rows.map(rowToProduct).filter(Boolean) as Omit<Product, 'id' | 'created_at'>[]
 }
 
+// Einfaches Quote-Handling: Felder in doppelten Anführungszeichen dürfen den Separator enthalten, "" = escaptes Anführungszeichen
+function splitCsvLine(line: string, sep: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++ } else inQuotes = false
+      } else {
+        cur += ch
+      }
+    } else if (ch === '"' && cur.trim() === '') {
+      inQuotes = true
+      cur = ''
+    } else if (ch === sep) {
+      out.push(cur)
+      cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  out.push(cur)
+  return out.map(s => s.trim())
+}
+
 function parseCsv(text: string): Record<string, string>[] {
   const lines = text.trim().split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
   const sep = lines[0].includes(';') ? ';' : ','
-  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+  const headers = splitCsvLine(lines[0], sep).map(h => h.toLowerCase())
   return lines.slice(1).map(line => {
-    const cols = line.split(sep).map(s => s.trim())
+    const cols = splitCsvLine(line, sep)
     return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']))
   })
 }
@@ -173,30 +209,51 @@ export default function Products() {
     if (!form.article_number || !form.name) { setError('Artikelnummer und Name sind Pflichtfelder.'); return }
     setSaving(true)
     const payload = { ...form, size_guide: form.size_guide?.trim() || null }
-    if (editId) {
-      const { error } = await supabase.from('products').update(payload).eq('id', editId)
-      if (error) setError(error.message)
-    } else {
-      const { error } = await supabase.from('products').insert(payload)
-      if (error) setError(error.message)
-    }
+    const result = editId
+      ? await supabase.from('products').update(payload).eq('id', editId)
+      : await supabase.from('products').insert(payload)
     setSaving(false)
-    if (!error) { setShowForm(false); load() }
+    if (result.error) { setError(result.error.message); return }
+    setShowForm(false)
+    load()
   }
 
   async function toggleActive(p: Product) {
-    await supabase.from('products').update({ active: !p.active }).eq('id', p.id)
+    const { error: toggleError } = await supabase.from('products').update({ active: !p.active }).eq('id', p.id)
+    if (toggleError) { setError('Status konnte nicht geändert werden.'); return }
     load()
   }
 
   async function confirmAndDelete() {
     if (!confirmDelete) return
+    setError('')
     setDeleting(true)
     if (confirmDelete.mode === 'single') {
-      await supabase.from('products').delete().eq('id', confirmDelete.product.id)
+      const p = confirmDelete.product
+      const { error: delError } = await supabase.from('products').delete().eq('id', p.id)
+      if (delError) {
+        if (delError.code === '23503') {
+          const { error: deactError } = await supabase.from('products').update({ active: false }).eq('id', p.id)
+          setError(deactError
+            ? `„${p.name}" wird noch verwendet und konnte weder gelöscht noch deaktiviert werden.`
+            : `„${p.name}" wird bereits in Bestellungen oder im Lager verwendet und kann nicht gelöscht werden – das Produkt wurde stattdessen deaktiviert.`)
+        } else {
+          setError(`Löschen fehlgeschlagen: ${delError.message}`)
+        }
+      }
     } else {
       const ids = filtered.map(p => p.id)
-      await supabase.from('products').delete().in('id', ids)
+      const { error: delError } = await supabase.from('products').delete().in('id', ids)
+      if (delError) {
+        if (delError.code === '23503') {
+          const { error: deactError } = await supabase.from('products').update({ active: false }).in('id', ids)
+          setError(deactError
+            ? 'Einige Produkte werden noch verwendet und konnten weder gelöscht noch deaktiviert werden.'
+            : 'Einige Produkte werden bereits in Bestellungen oder im Lager verwendet und können nicht gelöscht werden – sie wurden stattdessen deaktiviert.')
+        } else {
+          setError(`Löschen fehlgeschlagen: ${delError.message}`)
+        }
+      }
     }
     setDeleting(false)
     setConfirmDelete(null)
@@ -234,16 +291,24 @@ export default function Products() {
 
   async function runImport() {
     setImporting(true)
-    let ok = 0, err = 0
-    for (const row of importRows) {
-      const { error } = await supabase
+    setImportError('')
+    let ok = 0
+    const failures: string[] = []
+    for (let i = 0; i < importRows.length; i++) {
+      const row = importRows[i]
+      const { error: rowError } = await supabase
         .from('products')
         .upsert({ ...row, organisation: importOrg }, { onConflict: 'article_number,organisation' })
-      if (error) err++; else ok++
+      if (rowError) failures.push(`Zeile ${i + 1} („${row.name}")`); else ok++
     }
     setImporting(false)
-    setImportDone({ ok, err })
-    setImportRows([])
+    setImportDone({ ok, err: failures.length })
+    if (failures.length > 0) {
+      // Bei Teilfehlern die Zeilen benennen und importRows NICHT leeren
+      setImportError(`Fehler bei ${failures.length} Zeile${failures.length !== 1 ? 'n' : ''}: ${failures.join(', ')}`)
+    } else {
+      setImportRows([])
+    }
     load()
   }
 
@@ -329,7 +394,7 @@ export default function Products() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
+                <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
               ) : filtered.map(p => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs text-gray-600 hidden sm:table-cell">{p.article_number}</td>
@@ -349,7 +414,7 @@ export default function Products() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
-                    <span>€ {Number(p.price).toFixed(2)}</span>
+                    <span>{fmtEUR(Number(p.price))}</span>
                     {p.size_guide && (
                       <button onClick={() => setSizeGuideModal(p.size_guide!)} title="Größentabelle anzeigen" className="ml-1.5 inline-flex text-blue-500 hover:text-blue-700">
                         <Info className="w-3.5 h-3.5" />
@@ -439,7 +504,7 @@ export default function Products() {
                                 {r.gender === 'male' ? 'HR' : r.gender === 'female' ? 'DA' : 'Unisex'}
                               </span>
                             </td>
-                            <td className="px-3 py-2">€ {r.price.toFixed(2)}</td>
+                            <td className="px-3 py-2">{fmtEUR(r.price)}</td>
                           </tr>
                         ))}
                       </tbody>

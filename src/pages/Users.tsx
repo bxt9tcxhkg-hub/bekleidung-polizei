@@ -5,11 +5,11 @@ import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
 import type { Profile } from '../lib/types'
 
-const CSV_TEMPLATE = `name;benutzername;email;dienstnummer;organisation;rollen
-Max Mustermann;mmustermann;max@beispiel.at;1234;Stadtpolizei;user
-Maria Muster;mmuster;maria@beispiel.at;5678;Parkaufsicht;user|genehmiger`
+const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
+Max Mustermann;mmustermann;1234;Stadtpolizei;user
+Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger`
 
-interface ImportUser { name: string; username: string; email: string; dienstnummer: string; organisation: string; roles: string[] }
+interface ImportUser { name: string; username: string; dienstnummer: string; organisation: string; roles: string[] }
 
 function rowToUser(row: Record<string, string>): ImportUser | null {
   const get = (...keys: string[]) => {
@@ -27,30 +27,70 @@ function rowToUser(row: Record<string, string>): ImportUser | null {
   const normOrg = org.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei'
   return {
     name,
-    username,
-    email: get('email', 'e-mail', 'mail'),
+    username: username.toLowerCase(),
     dienstnummer: get('dienstnummer', 'dg', 'dienst-nr', 'dienstnr'),
     organisation: normOrg,
     roles: rollen ? rollen.split('|').map(s => s.trim()).filter(Boolean) : ['user'],
   }
 }
 
+/** Zerlegt eine CSV-Zeile inkl. einfachem Quote-Handling ("Feld;mit;Trennzeichen", "" = escaptes Anführungszeichen). */
+function splitCsvLine(line: string, sep: string): string[] {
+  const cols: string[] = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++ }
+        else inQuotes = false
+      } else cur += ch
+    } else if (ch === '"' && cur.trim() === '') {
+      inQuotes = true
+      cur = ''
+    } else if (ch === sep) {
+      cols.push(cur.trim())
+      cur = ''
+    } else cur += ch
+  }
+  cols.push(cur.trim())
+  return cols
+}
+
 function parseCsvUsers(text: string): Record<string, string>[] {
-  const lines = text.trim().split('\n').filter(l => l.trim())
+  const lines = text.trim().split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return []
   const sep = lines[0].includes(';') ? ';' : ','
-  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase())
+  const headers = splitCsvLine(lines[0], sep).map(h => h.toLowerCase())
   return lines.slice(1).map(line => {
-    const cols = line.split(sep).map(s => s.trim())
+    const cols = splitCsvLine(line, sep)
     return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']))
   })
 }
+
+/** Zufälliges Initialpasswort: 10 Zeichen, mind. 1 Großbuchstabe und 1 Zahl. */
+function generateInitialPassword(): string {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
+  const digits = '23456789'
+  const all = 'abcdefghjkmnpqrstuvwxyz' + upper + digits
+  const pick = (chars: string) => chars[crypto.getRandomValues(new Uint32Array(1))[0] % chars.length]
+  const out = [pick(upper), pick(digits)]
+  while (out.length < 10) out.push(pick(all))
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1)
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out.join('')
+}
+
+const USERNAME_RE = /^[a-z0-9._-]+$/
 
 const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
 const emptyForm = () => ({ name: '', username: '', initialPassword: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
 
 export default function Users() {
-  const { isStrictAdmin, isGenehmiger, profile: authProfile } = _useAuth()
+  const { isStrictAdmin, isGenehmiger, isSachbearbeiter, profile: authProfile } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
   const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
   const [loading, setLoading] = useState(true)
@@ -64,6 +104,8 @@ export default function Users() {
   const [importError, setImportError] = useState('')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; err: number } | null>(null)
+  const [importCreds, setImportCreds] = useState<{ username: string; password: string }[]>([])
+  const [credsCopied, setCredsCopied] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function load() {
@@ -91,13 +133,19 @@ export default function Users() {
 
   async function save() {
     setError('')
-    if (!form.name || !form.username) { setError('Name und Benutzername sind Pflicht.'); return }
+    if (!form.name || !form.username.trim()) { setError('Name und Benutzername sind Pflicht.'); return }
+    const username = form.username.trim().toLowerCase()
+    if (!USERNAME_RE.test(username)) { setError('Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.'); return }
     if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
-    if (!editId && form.initialPassword.length < 6) { setError('Initiales Passwort muss mindestens 6 Zeichen haben.'); return }
+    if (!editId && (form.initialPassword.length < 8 || !/[0-9]/.test(form.initialPassword) || !/[A-Z]/.test(form.initialPassword))) {
+      setError('Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.'); return
+    }
     setSaving(true)
-    let safeRoles = form.roles.filter(r => canAssignRole(r))
+    // Bereits vorhandene Rollen bleiben erhalten – nur NEU hinzugefügte Rollen unterliegen der Berechtigungsprüfung.
+    const existingRoles = editId ? (users.find(u => u.id === editId)?.roles ?? []) : []
+    let safeRoles = form.roles.filter(r => existingRoles.includes(r) || canAssignRole(r))
     if (safeRoles.length === 0) safeRoles = ['user']
-    const dbPayload = { name: form.name, username: form.username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active: form.active }
+    const dbPayload = { name: form.name, username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active: form.active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -123,17 +171,18 @@ export default function Users() {
   }
 
   async function toggleActive(u: Profile) {
-    await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
+    const { error } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
+    if (error) { setError(`Status konnte nicht geändert werden: ${error.message}`); return }
     load()
   }
 
-  async function deleteUser(u: Profile) {
-    if (!confirm(`Benutzer "${u.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) return
-    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
-    if (error) {
-      // Wenn FK-Constraint (Benutzer hat Bestellungen), nur deaktivieren
-      await supabase.from('profiles').update({ active: false }).eq('id', u.id)
-    }
+  // Es existiert keine 'delete-user' Edge Function – ein Löschen der profiles-Zeile
+  // würde den Auth-Account verwaisen lassen. Daher wird der Benutzer nur deaktiviert.
+  async function deactivateUser(u: Profile) {
+    if (!confirm(`Benutzer "${u.name}" deaktivieren?\n\nDas Konto wird nicht gelöscht, sondern nur deaktiviert. Es kann jederzeit wieder aktiviert werden.`)) return
+    const { error } = await supabase.from('profiles').update({ active: false }).eq('id', u.id)
+    if (error) { setError(`Benutzer konnte nicht deaktiviert werden: ${error.message}`); return }
+    setError('')
     load()
   }
 
@@ -168,32 +217,49 @@ export default function Users() {
 
   async function runImport() {
     setImporting(true)
+    setImportCreds([])
+    setCredsCopied(false)
     const { data: { session } } = await supabase.auth.getSession()
     let done = 0, err = 0
+    const creds: { username: string; password: string }[] = []
     setImportProgress({ done: 0, total: importRows.length, err: 0 })
     for (const row of importRows) {
+      const password = generateInitialPassword()
       try {
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ name: row.name, username: row.username, dienstnummer: row.dienstnummer || null, organisation: row.organisation, roles: row.roles, initial_password: row.username }),
+          body: JSON.stringify({ name: row.name, username: row.username, dienstnummer: row.dienstnummer || null, organisation: row.organisation, roles: row.roles, initial_password: password }),
         })
-        if (res.ok) done++; else err++
+        if (res.ok) { done++; creds.push({ username: row.username, password }) } else err++
       } catch {
         err++
       }
       setImportProgress({ done: done + err, total: importRows.length, err })
     }
+    setImportCreds(creds)
     setImporting(false)
     setImportRows([])
     load()
   }
 
+  async function copyCreds() {
+    const text = importCreds.map(c => `${c.username}\t${c.password}`).join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setCredsCopied(true)
+    } catch {
+      setImportError('Kopieren nicht möglich – bitte Liste manuell übertragen.')
+    }
+  }
+
   const isSelfEdit = editId === authProfile?.id
 
   function canAssignRole(role: string) {
-    if (role === 'admin' || role === 'genehmiger') return isStrictAdmin || isGenehmiger
-    return true // 'user' and 'sachbearbeiter' can be assigned by any staff
+    if (role === 'admin') return isStrictAdmin // Admin-Rolle darf nur ein Admin vergeben
+    if (role === 'genehmiger') return isStrictAdmin || isGenehmiger
+    if (role === 'sachbearbeiter') return isStrictAdmin || isSachbearbeiter
+    return true // 'user' darf von allen Berechtigten vergeben werden
   }
 
   function toggleRole(role: string) {
@@ -215,7 +281,7 @@ export default function Users() {
         </div>
         <div className="flex gap-2 flex-shrink-0">
           {isStrictAdmin && (
-            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError('') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
               <Upload className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Import</span>
             </button>
           )}
@@ -279,8 +345,8 @@ export default function Users() {
                   <td className="px-4 py-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap">
                       {u.roles.map(r => {
-                        const roleLabel: Record<string, string> = { user: 'Benutzer', sachbearbeiter: 'Sachbearbeiter', admin: 'Admin', genehmiger: 'Genehmiger' }
-                        const roleColor: Record<string, string> = { user: 'bg-gray-100 text-gray-600', sachbearbeiter: 'bg-blue-100 text-blue-700', admin: 'bg-purple-100 text-purple-700', genehmiger: 'bg-green-100 text-green-700' }
+                        const roleLabel: Record<string, string> = { user: 'Benutzer', sachbearbeiter: 'Sachbearbeiter', admin: 'Admin', genehmiger: 'Genehmiger', approver: 'Genehmiger' }
+                        const roleColor: Record<string, string> = { user: 'bg-gray-100 text-gray-600', sachbearbeiter: 'bg-blue-100 text-blue-700', admin: 'bg-purple-100 text-purple-700', genehmiger: 'bg-green-100 text-green-700', approver: 'bg-green-100 text-green-700' }
                         return (
                           <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColor[r] ?? 'bg-gray-100 text-gray-600'}`}>
                             {roleLabel[r] ?? r}
@@ -299,7 +365,7 @@ export default function Users() {
                       <button onClick={() => openEdit(u)} className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deleteUser(u)} className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600">
+                      <button onClick={() => deactivateUser(u)} title="Deaktivieren" className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 disabled:opacity-30" disabled={!u.active}>
                         <UserX className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -322,9 +388,10 @@ export default function Users() {
             <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
               <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 space-y-1">
                 <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Format (Semikolon-getrennt, Rollen mit |):</p>
-                <p>name;benutzername;email;dienstnummer;rollen</p>
-                <p>Max Mustermann;mmustermann;max@beispiel.at;1234;user</p>
-                <p>Maria Muster;mmuster;;5678;user|genehmiger</p>
+                <p>name;benutzername;dienstnummer;organisation;rollen</p>
+                <p>Max Mustermann;mmustermann;1234;Stadtpolizei;user</p>
+                <p>Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger</p>
+                <p className="font-sans text-gray-500 mt-2">Für jeden Benutzer wird automatisch ein zufälliges Initialpasswort erzeugt und nach dem Import einmalig angezeigt.</p>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
@@ -341,6 +408,28 @@ export default function Users() {
                   {importProgress.done}/{importProgress.total} verarbeitet{importProgress.err > 0 ? `, ${importProgress.err} Fehler` : ''}
                   {importProgress.done === importProgress.total ? ' – abgeschlossen.' : ' …'}
                 </p>
+              )}
+              {importCreds.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                  <p className="text-sm font-semibold text-amber-800">Initialpasswörter – werden nur einmal angezeigt!</p>
+                  <p className="text-xs text-amber-700">Bitte jetzt kopieren oder notieren und an die Benutzer verteilen. Jeder Benutzer muss das Passwort beim ersten Login ändern.</p>
+                  <div className="border border-amber-200 rounded-lg overflow-hidden overflow-x-auto bg-white">
+                    <table className="w-full text-xs font-mono">
+                      <thead><tr className="bg-amber-100/60 border-b border-amber-200 font-sans"><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">Initialpasswort</th></tr></thead>
+                      <tbody className="divide-y divide-amber-100">
+                        {importCreds.map(c => (
+                          <tr key={c.username}>
+                            <td className="px-3 py-1.5">{c.username}</td>
+                            <td className="px-3 py-1.5 font-semibold">{c.password}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <button onClick={copyCreds} className="text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+                    {credsCopied ? 'Kopiert ✓' : 'Liste kopieren'}
+                  </button>
+                </div>
               )}
               {importRows.length > 0 && (
                 <div>
@@ -447,8 +536,8 @@ export default function Users() {
                 {isSelfEdit && (
                   <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
                 )}
-                {!isSelfEdit && !isStrictAdmin && !isGenehmiger && (
-                  <p className="text-xs text-gray-400 mt-1">Admin- und Genehmiger-Rollen können nur von Admins oder Genehmigern vergeben werden.</p>
+                {!isSelfEdit && !isStrictAdmin && (
+                  <p className="text-xs text-gray-400 mt-1">Die Admin-Rolle kann nur von Admins vergeben werden{!isGenehmiger ? ', die Genehmiger-Rolle nur von Admins oder Genehmigern' : ''}.</p>
                 )}
               </div>
               <div className="flex items-center gap-3">

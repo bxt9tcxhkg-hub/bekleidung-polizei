@@ -4,6 +4,7 @@ import { X, Check, Package, Scissors, FileText, RotateCcw, Ban } from 'lucide-re
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderStatus } from '../lib/types'
+import { fmtEUR } from '../lib/format'
 import Lieferungen from './Lieferungen'
 
 type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'ausgegeben' | 'storniert' | 'lieferungen'
@@ -90,6 +91,12 @@ export default function Orders() {
       : (t.status ? orders.filter(o => o.status === t.status).length : 0),
   ])) as Record<AdminTab, number>
 
+  // Wenn die aktuelle Seite über die letzte Seite hinauszeigt, auf letzte gültige Seite zurücksetzen
+  useEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(sorted.length / PAGE_SIZE) - 1)
+    if (page > lastPage) setPage(lastPage)
+  }, [sorted.length, page])
+
   function toggleSelect(id: string) {
     setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   }
@@ -99,68 +106,130 @@ export default function Orders() {
     const items = tabOrders.filter(o => selectedIds.has(o.id))
     if (!items.length) return
     setSaving(true)
-    await Promise.all(items.map(o => supabase.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', o.id)))
-    setSelectedIds(new Set()); setSaving(false); load()
+    setError('')
+    const results = await Promise.all(items.map(o => supabase.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', o.id)))
+    setSaving(false)
+    if (results.some(r => r.error)) {
+      setError('Statusänderung konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      load()
+      return
+    }
+    setSelectedIds(new Set()); load()
   }
 
   async function advanceWithReceived(nextStatus: OrderStatus) {
     const items = tabOrders.filter(o => selectedIds.has(o.id))
     if (!items.length) return
+    setError('')
+    // Eingaben validieren: leer = volle Menge, sonst muss eine gültige, nicht-negative Zahl vorliegen
+    const quantities: Record<string, number> = {}
+    for (const o of items) {
+      const raw = receivedInputs[o.id]
+      if (raw === undefined || raw.trim() === '') {
+        quantities[o.id] = o.quantity
+        continue
+      }
+      const qr = parseInt(raw)
+      if (isNaN(qr) || qr < 0) {
+        setError('Ungültige Erhalten-Menge. Bitte eine Zahl größer oder gleich 0 eingeben.')
+        return
+      }
+      quantities[o.id] = qr
+    }
     setSaving(true)
-    await Promise.all(items.map(o => {
-      const qr = receivedInputs[o.id] ? parseInt(receivedInputs[o.id]) : o.quantity
-      return supabase.from('orders').update({ status: nextStatus, quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', o.id)
-    }))
-    setSelectedIds(new Set()); setSaving(false); load()
+    const results = await Promise.all(items.map(o =>
+      supabase.from('orders').update({ status: nextStatus, quantity_received: quantities[o.id], updated_at: new Date().toISOString() }).eq('id', o.id)
+    ))
+    setSaving(false)
+    if (results.some(r => r.error)) {
+      setError('Statusänderung konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      load()
+      return
+    }
+    setSelectedIds(new Set()); load()
   }
 
   async function stepBack() {
-    const tabStatus = ADMIN_TABS.find(t => t.key === activeTab)?.status
-    if (!tabStatus) return
-    const prevStatus = STATUS_BACK[tabStatus]
-    if (!prevStatus) return
     const items = sorted.filter(o => selectedIds.has(o.id))
     if (!items.length) return
     setSaving(true)
-    await Promise.all(items.map(o => {
-      const base = { status: prevStatus, updated_at: new Date().toISOString() }
-      if (tabStatus === 'ordered_supplier')
+    setError('')
+    const results = await Promise.all(items.map(o => {
+      const prevStatus = STATUS_BACK[o.status]
+      if (!prevStatus) return Promise.resolve({ error: null })
+      const base: { status: OrderStatus; updated_at: string; cancel_reason?: null } = { status: prevStatus, updated_at: new Date().toISOString() }
+      if (o.status === 'cancelled') base.cancel_reason = null
+      if (o.status === 'ordered_supplier')
         return supabase.from('orders').update({ ...base, quantity_received: null }).eq('id', o.id)
-      if (tabStatus === 'partially_issued' || tabStatus === 'issued')
+      if (o.status === 'partially_issued' || o.status === 'issued')
         return supabase.from('orders').update({ ...base, quantity_issued: null }).eq('id', o.id)
       return supabase.from('orders').update(base).eq('id', o.id)
     }))
-    setSelectedIds(new Set()); setSaving(false); load()
+    setSaving(false)
+    if (results.some(r => r.error)) {
+      setError('Rückgängig machen fehlgeschlagen. Bitte erneut versuchen.')
+      load()
+      return
+    }
+    setSelectedIds(new Set()); load()
   }
 
   async function cancelSelected() {
     const items = tabOrders.filter(o => selectedIds.has(o.id))
     if (!items.length || !cancelReason.trim()) return
     setSaving(true)
-    await Promise.all(items.map(o => supabase.from('orders').update({
+    setError('')
+    const results = await Promise.all(items.map(o => supabase.from('orders').update({
       status: 'cancelled',
       cancel_reason: cancelReason.trim(),
       updated_at: new Date().toISOString(),
     }).eq('id', o.id)))
-    setSelectedIds(new Set()); setCancelModal(false); setCancelReason(''); setSaving(false); load()
+    setSaving(false)
+    if (results.some(r => r.error)) {
+      setError('Stornierung konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      load()
+      return
+    }
+    setSelectedIds(new Set()); setCancelModal(false); setCancelReason(''); load()
   }
 
   async function saveReceived(order: Order) {
     const qr = receivedInputs[order.id] !== undefined ? parseInt(receivedInputs[order.id]) : null
-    if (qr === null || isNaN(qr)) return
+    if (qr === null || isNaN(qr) || qr < 0) {
+      setError('Ungültige Erhalten-Menge. Bitte eine Zahl größer oder gleich 0 eingeben.')
+      return
+    }
     setSaving(true)
-    await supabase.from('orders').update({ quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', order.id)
-    setSaving(false); load()
+    setError('')
+    const { error: err } = await supabase.from('orders').update({ quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', order.id)
+    setSaving(false)
+    if (err) {
+      setError('Erhalten-Menge konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      return
+    }
+    load()
   }
 
   async function issueOrder(order: Order) {
-    const qtyNow = parseInt(issuedInputs[order.id] ?? '') || 0
-    if (qtyNow <= 0) return
+    const qtyInput = parseInt(issuedInputs[order.id] ?? '') || 0
+    if (qtyInput <= 0) return
+    const available = order.quantity_received ?? order.quantity
     const prevIssued = order.quantity_issued ?? 0
+    const outstanding = Math.max(0, available - prevIssued)
+    if (outstanding <= 0) return
+    // Ausgabemenge gegen die noch offene Menge kappen
+    const qtyNow = Math.min(qtyInput, outstanding)
     const newTotal = prevIssued + qtyNow
+    const newStatus: OrderStatus = newTotal < available ? 'partially_issued' : 'issued'
     setSaving(true)
-    await supabase.from('orders').update({ status: 'issued', quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
-    setSaving(false); load()
+    setError('')
+    const { error: err } = await supabase.from('orders').update({ status: newStatus, quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
+    setSaving(false)
+    if (err) {
+      setError('Ausgabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      return
+    }
+    load()
   }
 
   async function createSammelbestellung() {
@@ -172,22 +241,35 @@ export default function Orders() {
       if (!groups[key]) groups[key] = { artNr: (o as any).products?.article_number ?? '–', productName: (o as any).products?.name ?? '–', size: o.size, totalQty: 0 }
       groups[key].totalQty += o.quantity
     })
-    generateKurzbrief(Object.values(groups))
     setSaving(true)
+    setError('')
     // Create delivery and link orders
-    const { data: delivery } = await (supabase.from('deliveries') as any).insert({
+    const { data: delivery, error: deliveryErr } = await (supabase.from('deliveries') as any).insert({
       created_by: profile!.id,
       status: 'ordered',
     }).select('id').single()
+    if (deliveryErr) {
+      setSaving(false)
+      setError('Sammelbestellung konnte nicht erstellt werden. Bitte erneut versuchen.')
+      return
+    }
     const deliveryId = delivery?.id ?? null
-    await Promise.all(selected.map(o =>
+    const results = await Promise.all(selected.map(o =>
       (supabase.from('orders') as any).update({
         status: 'ordered_supplier',
         updated_at: new Date().toISOString(),
         ...(deliveryId ? { delivery_id: deliveryId } : {}),
       }).eq('id', o.id)
     ))
-    setSelectedIds(new Set()); setSaving(false); load()
+    setSaving(false)
+    if (results.some((r: any) => r.error)) {
+      setError('Sammelbestellung konnte nicht vollständig gespeichert werden. Bitte erneut versuchen.')
+      load()
+      return
+    }
+    // Kurzbrief erst nach erfolgreichen DB-Updates drucken
+    generateKurzbrief(Object.values(groups))
+    setSelectedIds(new Set()); load()
   }
 
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -248,7 +330,7 @@ export default function Orders() {
   <tr><td>Bezug:</td><td>---</td></tr>
 </table>
 <p class="bt">Die ho. Dienststelle der Stadtpolizei Dornbirn übermittelt höflichst den Bestellauftrag vom ${dateShort} für folgende ug. Artikel:</p>
-<p class="sl">Standartmannschaft</p>
+<p class="sl">Standardmannschaft</p>
 <table class="at">
   <thead><tr><th class="c1">Artikelnummer</th><th class="c2">Artikel</th><th class="c3">Größe</th><th class="c4 c">Anzahl</th></tr></thead>
   <tbody>${tableRows}</tbody>
@@ -430,7 +512,7 @@ export default function Orders() {
                           <span className="text-xs text-gray-400">–</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-right font-medium text-gray-700 hidden sm:table-cell">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-right font-medium text-gray-700 hidden sm:table-cell">{fmtEUR(o.unit_price * o.quantity)}</td>
                     </tr>
                   )
                 })}

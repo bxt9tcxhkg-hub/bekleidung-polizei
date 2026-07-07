@@ -3,6 +3,7 @@ import { Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentShoeRefundCap } from '../lib/budget'
+import { fmtEUR } from '../lib/format'
 import type { ShoeRefund, ShoeRefundStatus, Profile } from '../lib/types'
 
 const STATUS_LABEL: Record<ShoeRefundStatus, string> = {
@@ -80,8 +81,9 @@ export default function ShoeRefunds() {
     setError('')
     const uid = canManage ? form.user_id : profile!.id
     if (!uid || !form.amount || !form.refund_date) { setError('Pflichtfelder fehlen.'); return }
-    setSaving(true)
     const amount = parseFloat(form.amount)
+    if (isNaN(amount) || amount <= 0) { setError('Bitte einen gültigen Betrag größer 0 eingeben.'); return }
+    setSaving(true)
     const { error } = await supabase.from('shoe_refunds').insert({
       user_id: uid,
       amount,
@@ -105,11 +107,21 @@ export default function ShoeRefunds() {
 
   async function review(id: string, status: 'approved' | 'rejected') {
     setReviewing(id)
-    await supabase.from('shoe_refunds').update({
+    const payload: { status: ShoeRefundStatus; reviewed_by: string; reviewed_at: string; approved_amount?: number } = {
       status,
       reviewed_by: profile!.id,
       reviewed_at: new Date().toISOString(),
-    }).eq('id', id)
+    }
+    if (status === 'approved') {
+      // Genehmigten Betrag zum Zeitpunkt der GENEHMIGUNG anhand des aktuellen Caps berechnen
+      const refund = refunds.find(r => r.id === id)
+      const cap = await getCurrentShoeRefundCap()
+      setMaxRefund(cap)
+      if (refund) payload.approved_amount = Math.min(Number(refund.amount), cap)
+    }
+    const { error } = await supabase.from('shoe_refunds').update(payload).eq('id', id)
+    if (error) setError(`Aktion fehlgeschlagen: ${error.message}`)
+    else setError('')
     setReviewing(null)
     load()
   }
@@ -198,8 +210,10 @@ export default function ShoeRefunds() {
                       </td>
                     )}
                     <td className="px-4 py-3 text-gray-700">{new Date(r.refund_date).toLocaleDateString('de-AT')}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">€ {Number(r.amount).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-green-700 hidden sm:table-cell">€ {Number(r.approved_amount).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{fmtEUR(Number(r.amount))}</td>
+                    <td className={`px-4 py-3 text-right font-medium hidden sm:table-cell ${r.status === 'rejected' ? 'text-gray-400' : 'text-green-700'}`}>
+                      {r.status === 'rejected' ? '–' : fmtEUR(Number(r.approved_amount))}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLE[r.status]}`}>
                         {STATUS_ICON[r.status]}
@@ -293,8 +307,8 @@ export default function ShoeRefunds() {
                   const selfPay = amt - approved
                   return (
                     <div className={`mt-2 px-3 py-2 rounded-lg text-xs space-y-0.5 ${selfPay > 0 ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'}`}>
-                      <p>Erstattet: <strong>€ {approved.toFixed(2)}</strong></p>
-                      {selfPay > 0 && <p>Eigenanteil: <strong>€ {selfPay.toFixed(2)}</strong></p>}
+                      <p>Erstattet: <strong>{fmtEUR(approved)}</strong></p>
+                      {selfPay > 0 && <p>Eigenanteil: <strong>{fmtEUR(selfPay)}</strong></p>}
                     </div>
                   )
                 })()}

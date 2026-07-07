@@ -3,7 +3,8 @@ import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, AlertTriangle,
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
-import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
+import { getCurrentBudget, getUsedBudget, DEFAULT_BUDGET } from '../lib/budget'
+import { fmtEUR } from '../lib/format'
 import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -32,15 +33,12 @@ export default function Shop() {
   const [error, setError] = useState('')
 
   async function loadBudget() {
-    const [total, orders] = await Promise.all([
+    const [total, used] = await Promise.all([
       getCurrentBudget(profile!.id, CURRENT_YEAR),
-      supabase.from('orders').select('unit_price, quantity')
-        .eq('user_id', profile!.id)
-        .not('status', 'in', '(pending,cancelled)')
-        .gte('created_at', `${CURRENT_YEAR}-01-01`),
+      getUsedBudget(profile!.id, CURRENT_YEAR),
     ])
     setTotalBudgetAmt(total)
-    setUsedBudget((orders.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
+    setUsedBudget(used)
   }
 
   async function loadCart() {
@@ -79,7 +77,7 @@ export default function Shop() {
       setLastSizes(map)
       setLoading(false)
     }
-    if (profile) init().catch(() => setError('Daten konnten nicht geladen werden. Bitte Seite neu laden.'))
+    if (profile) init().catch(() => { setError('Daten konnten nicht geladen werden. Bitte Seite neu laden.'); setLoading(false) })
   }, [profile])
 
   const totalBudget = totalBudgetAmt
@@ -159,19 +157,15 @@ export default function Shop() {
   async function submitCart() {
     if (cartItems.length === 0) return
     setSubmitting(true)
-    const newStatus = needsApproval ? 'pending_approval' : 'approved'
-    const { error: err } = await supabase
-      .from('orders')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('user_id', profile!.id)
-      .eq('status', 'pending')
+    // Serverseitig atomar einreichen – die Budget-Prüfung entscheidet die DB
+    const { data, error: err } = await supabase.rpc('submit_cart')
     setSubmitting(false)
     if (err) {
       setError('Bestellung konnte nicht eingereicht werden. Bitte erneut versuchen.')
       return
     }
     setCartOpen(false)
-    setSubmitResult(newStatus)
+    if (data === 'approved' || data === 'pending_approval') setSubmitResult(data)
     await Promise.all([loadCart(), loadBudget()])
   }
 
@@ -234,7 +228,7 @@ export default function Shop() {
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-6">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-medium text-gray-600">Jahresbudget {CURRENT_YEAR}</span>
-            <span className="text-xs text-gray-500">€ {usedBudget.toFixed(2)} / € {totalBudget.toFixed(2)}</span>
+            <span className="text-xs text-gray-500">{fmtEUR(usedBudget)} / {fmtEUR(totalBudget)}</span>
           </div>
           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
@@ -243,7 +237,7 @@ export default function Shop() {
             />
           </div>
           <p className={`text-xs mt-1.5 font-medium ${remainingBudget <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
-            {remainingBudget <= 0 ? 'Budget aufgebraucht – Bestellungen benötigen Genehmigung' : `€ ${remainingBudget.toFixed(2)} verbleibend`}
+            {remainingBudget <= 0 ? 'Budget aufgebraucht – Bestellungen benötigen Genehmigung' : `${fmtEUR(remainingBudget)} verbleibend`}
           </p>
         </div>
       )}
@@ -295,7 +289,7 @@ export default function Shop() {
               </div>
               <div className="p-3 sm:p-4 flex flex-col flex-1">
                 <h3 className="font-semibold text-gray-900 text-xs sm:text-sm leading-snug mb-1">{product.name}</h3>
-                <p className="text-blue-800 font-bold text-xs sm:text-sm mb-3">€ {Number(product.price).toFixed(2)}</p>
+                <p className="text-blue-800 font-bold text-xs sm:text-sm mb-3">{fmtEUR(Number(product.price))}</p>
                 <button
                   onClick={() => openSizeModal(product)}
                   disabled={!activeQuarter || adding === product.id}
@@ -318,7 +312,7 @@ export default function Shop() {
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <div>
                 <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">€ {Number(sizeModal.product.price).toFixed(2)} · {sizeModal.product.category}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{fmtEUR(Number(sizeModal.product.price))} · {sizeModal.product.category}</p>
                 {sizeModal.product.size_guide && (
                   <button onClick={() => setSizeGuideModal(sizeModal.product.size_guide!)}
                     className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-0.5 font-medium">
@@ -424,7 +418,7 @@ export default function Shop() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 leading-snug">{item.products?.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">Gr. {sizeLabel(item.size, true)}</p>
-                        <p className="text-xs font-semibold text-gray-700 mt-1">€ {(item.unit_price * item.quantity).toFixed(2)}</p>
+                        <p className="text-xs font-semibold text-gray-700 mt-1">{fmtEUR(item.unit_price * item.quantity)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <button onClick={() => updateQty(item, -1)} disabled={item.quantity <= 1} className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-60"><Minus className="w-3.5 h-3.5" /></button>
@@ -442,12 +436,12 @@ export default function Shop() {
               <div className="border-t px-5 py-4 space-y-3 bg-gray-50">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Warenkorb gesamt</span>
-                  <span className="font-bold text-gray-900">€ {cartTotal.toFixed(2)}</span>
+                  <span className="font-bold text-gray-900">{fmtEUR(cartTotal)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500">Restbudget nach Bestellung</span>
                   <span className={`font-semibold ${budgetAfterCart < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    € {budgetAfterCart.toFixed(2)}
+                    {fmtEUR(budgetAfterCart)}
                   </span>
                 </div>
                 {needsApproval && (

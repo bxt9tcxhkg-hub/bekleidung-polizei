@@ -1,40 +1,34 @@
 import { useState } from 'react'
-import { KeyRound, X } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
+// Wird nur bei erzwungenem Passwortwechsel (mustChangePassword) gerendert und darf
+// daher NICHT schließbar sein. Nach erfolgreichem updateUser feuert Supabase ein
+// USER_UPDATED-Event, force_password_change wird false und das Modal verschwindet.
 export default function ChangePasswordModal() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [dismissed, setDismissed] = useState(false)
-
-  if (dismissed) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     if (password.length < 8) { setError('Passwort muss mindestens 8 Zeichen haben.'); return }
-    if (!/[A-Z]/.test(password) && !/[0-9]/.test(password)) { setError('Passwort muss mindestens eine Zahl oder einen Großbuchstaben enthalten.'); return }
+    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) { setError('Passwort muss mindestens eine Zahl und einen Großbuchstaben enthalten.'); return }
     if (password !== confirm) { setError('Passwörter stimmen nicht überein.'); return }
     setSaving(true)
     const { error } = await supabase.auth.updateUser({
       password,
       data: { force_password_change: false },
     })
-    if (error) { setError(error.message); setSaving(false) }
-    else { setSaving(false); setDismissed(true) }
+    if (error) { setError(error.message) }
+    setSaving(false)
   }
 
   return (
     <div className="fixed inset-0 bg-blue-950/90 z-[100] flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 relative">
-        <button
-          onClick={() => setDismissed(true)}
-          className="absolute top-4 right-4 p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600"
-        >
-          <X className="w-4 h-4" />
-        </button>
         <div className="flex flex-col items-center mb-6">
           <div className="bg-blue-800 p-3 rounded-xl mb-4">
             <KeyRound className="w-8 h-8 text-white" />

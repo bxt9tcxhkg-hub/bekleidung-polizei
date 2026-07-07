@@ -13,6 +13,9 @@ type DeliveryOrder = Order & {
   products?: { name: string; article_number: string; category: string; needs_tailoring: boolean }
 }
 
+// Status, in denen eine Position bereits als erhalten/weiterverarbeitet gilt
+const DONE_ORDER_STATUSES = ['ready_for_issue', 'at_tailor', 'issued']
+
 interface Delivery {
   id: string
   created_at: string
@@ -35,6 +38,7 @@ export default function Lieferungen() {
   const [saving, setSaving] = useState<string | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState('')
+  const [actionError, setActionError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingDeliveryId = useRef<string | null>(null)
 
@@ -78,10 +82,13 @@ export default function Lieferungen() {
   }
 
   function toggleAll(delivery: Delivery) {
-    const ids = delivery.orders?.map(o => o.id) ?? []
+    // Nur noch offene (anhakbare) Positionen selektieren — nie bereits erhaltene/ausgegebene
+    const openIds = (delivery.orders ?? [])
+      .filter(o => !DONE_ORDER_STATUSES.includes(o.status))
+      .map(o => o.id)
     const current = checked[delivery.id] ?? new Set()
-    const allChecked = ids.every(id => current.has(id))
-    setChecked(prev => ({ ...prev, [delivery.id]: allChecked ? new Set() : new Set(ids) }))
+    const allChecked = openIds.length > 0 && openIds.every(id => current.has(id))
+    setChecked(prev => ({ ...prev, [delivery.id]: allChecked ? new Set() : new Set(openIds) }))
   }
 
   async function confirmReceived(delivery: Delivery) {
@@ -97,7 +104,8 @@ export default function Lieferungen() {
       }).eq('id', o.id)
     ))
 
-    const allReceived = delivery.orders?.every(o => receivedIds.has(o.id)) ?? false
+    // Bereits zuvor bestätigte Positionen zählen ebenfalls als erhalten
+    const allReceived = delivery.orders?.every(o => receivedIds.has(o.id) || DONE_ORDER_STATUSES.includes(o.status)) ?? false
     await (supabase.from('deliveries') as any)
       .update({ status: allReceived ? 'received' : 'partially_received' })
       .eq('id', delivery.id)
@@ -107,9 +115,11 @@ export default function Lieferungen() {
   }
 
   async function markAsPaid(deliveryId: string) {
-    await (supabase.from('deliveries') as any)
+    setActionError('')
+    const { error } = await (supabase.from('deliveries') as any)
       .update({ paid: true, paid_at: new Date().toISOString() })
       .eq('id', deliveryId)
+    if (error) { setActionError('Zahlung konnte nicht gespeichert werden.'); return }
     await load()
   }
 
@@ -152,7 +162,7 @@ export default function Lieferungen() {
       if (analysis) {
         update.vorrechnung_analysis = analysis
         if (analysis.rechnungsnummer) update.vorrechnung_number = analysis.rechnungsnummer
-        if (analysis.gesamtbetrag) update.vorrechnung_amount = analysis.gesamtbetrag
+        if (analysis.gesamtbetrag != null) update.vorrechnung_amount = analysis.gesamtbetrag
       }
 
       await (supabase.from('deliveries') as any).update(update).eq('id', deliveryId)
@@ -171,6 +181,7 @@ export default function Lieferungen() {
       <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={handleFileChange} />
 
       {uploadError && <div className="mb-4 bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl">{uploadError}</div>}
+      {actionError && <div className="mb-4 bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl">{actionError}</div>}
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
@@ -189,7 +200,8 @@ export default function Lieferungen() {
             const date = new Date(d.created_at).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })
             const orders = d.orders ?? []
             const checkedSet = checked[d.id] ?? new Set()
-            const allChecked = orders.length > 0 && orders.every(o => checkedSet.has(o.id))
+            const openOrders = orders.filter(o => !DONE_ORDER_STATUSES.includes(o.status))
+            const allChecked = openOrders.length > 0 && openOrders.every(o => checkedSet.has(o.id))
             const isDone = d.status === 'received'
 
             return (

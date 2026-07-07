@@ -7,21 +7,32 @@ export default function AuditLog() {
   const [logs, setLogs] = useState<AuditLogType[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [error, setError] = useState('')
   const PAGE_SIZE = 50
 
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const { data } = await supabase
+      const { data, error, count } = await supabase
         .from('audit_log')
-        .select('*, profiles(id,name,username)')
+        .select('*, profiles(id,name,username)', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-      setLogs(data ?? [])
+      if (error) {
+        setError('Audit-Log konnte nicht geladen werden. Bitte später erneut versuchen.')
+        setLogs([])
+      } else {
+        setError('')
+        setLogs(data ?? [])
+        setTotalCount(count ?? 0)
+      }
       setLoading(false)
     }
     load()
   }, [page])
+
+  const hasNext = (page + 1) * PAGE_SIZE < totalCount
 
   return (
     <div>
@@ -30,11 +41,13 @@ export default function AuditLog() {
         <p className="text-gray-500 text-sm mt-1">Protokoll aller Systemaktionen</p>
       </div>
 
+      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
+
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-          {logs.length === 0 ? (
+          {logs.length === 0 && page === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">
               <ClipboardList className="w-12 h-12 mb-3 text-gray-300" />
               <p className="font-semibold text-gray-500">Keine Einträge vorhanden</p>
@@ -69,8 +82,8 @@ export default function AuditLog() {
                 <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="text-sm text-blue-700 disabled:text-gray-300 hover:underline disabled:no-underline">
                   ← Vorherige
                 </button>
-                <span className="text-xs text-gray-400">Seite {page + 1}</span>
-                <button disabled={logs.length < PAGE_SIZE} onClick={() => setPage(p => p + 1)} className="text-sm text-blue-700 disabled:text-gray-300 hover:underline disabled:no-underline">
+                <span className="text-xs text-gray-400">Seite {page + 1} von {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}</span>
+                <button disabled={!hasNext || logs.length < PAGE_SIZE} onClick={() => setPage(p => p + 1)} className="text-sm text-blue-700 disabled:text-gray-300 hover:underline disabled:no-underline">
                   Nächste →
                 </button>
               </div>

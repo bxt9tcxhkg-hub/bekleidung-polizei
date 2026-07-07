@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { TrendingUp, BarChart3, AlertTriangle, CheckCircle, Info, ShoppingBag, X, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 
 type AnalyseTab = 'ranking' | 'groessen' | 'trend'
 
@@ -196,7 +197,7 @@ export default function Analyse() {
         const quartersWithData = Object.keys(qtrMap).length
         const totalRecentQty = Object.values(qtrMap).reduce((s, v) => s + v, 0)
         // Average over the full window (not just quarters with data) — more conservative
-        const avgQtrDemand = totalRecentQty / actualRecentCount
+        const avgQtrDemand = actualRecentCount === 0 ? 0 : totalRecentQty / actualRecentCount
         const currentStock = invMap[key] ?? 0
         const pendingQty = pendingMap[key] ?? 0
         const calcMin = Math.ceil(avgQtrDemand)
@@ -241,7 +242,7 @@ export default function Analyse() {
 
       setLoading(false)
     }
-    load().catch(() => setError('Analyse konnten nicht geladen werden.'))
+    load().catch(() => { setError('Analyse konnte nicht geladen werden.'); setLoading(false) })
   }, [periodPreset, fromDate, toDate])
 
   const totalOrders = stats.reduce((s, p) => s + p.orderCount, 0)
@@ -255,6 +256,13 @@ export default function Analyse() {
 
   // For ranking tab: a product "needs restock" if any of its sizes do
   const productNeedsRestock = new Set(urgentRecs.map(r => r.product_id))
+
+  // Anzeige-Label für eine Größe eines Produkts (Roh-Wert bleibt intern erhalten)
+  function displaySize(productId: string, size: string) {
+    const stat = stats.find(s => s.product_id === productId)
+    const sizes = stat ? Object.keys(stat.sizeCounts) : [size]
+    return sizeLabel(size, groupSizes(sizes) !== null)
+  }
 
   return (
     <div>
@@ -382,7 +390,7 @@ export default function Analyse() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">{r.name}</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          Gr. {r.size} · Ø {r.avgQtrDemand.toFixed(1)}×/Q · Min: {r.minStock}×
+                          Gr. {displaySize(r.product_id, r.size)} · Ø {r.avgQtrDemand.toFixed(1)}×/Q · Min: {r.minStock}×
                         </p>
                       </div>
                       <span className={`text-xs font-semibold flex-shrink-0 ${r.currentStock === 0 ? 'text-red-600' : 'text-amber-600'}`}>
@@ -555,9 +563,11 @@ export default function Analyse() {
 
                   {/* Size rows */}
                   <div className="space-y-4">
-                    {Object.entries(selected.sizeCounts)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([size, allTimeQty]) => {
+                    {(() => {
+                      const sizeOrder = sortedSizes(Object.keys(selected.sizeCounts))
+                      const isGrouped = groupSizes(sizeOrder) !== null
+                      return sizeOrder.map(size => {
+                        const allTimeQty = selected.sizeCounts[size]
                         const rec = selectedRecs.find(r => r.size === size)
                         const pct = Math.round((allTimeQty / selected.totalQty) * 100)
                         const stock = selected.stockBySizes[size] ?? 0
@@ -566,7 +576,7 @@ export default function Analyse() {
                           <div key={size} className={`rounded-xl p-3 ${rec?.needsRestock ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold text-gray-900">Gr. {size}</span>
+                                <span className="text-sm font-bold text-gray-900">Gr. {sizeLabel(size, isGrouped)}</span>
                                 {rec?.needsRestock && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
                               </div>
                               <div className="flex items-center gap-3 text-xs">
@@ -667,7 +677,8 @@ export default function Analyse() {
                             )}
                           </div>
                         )
-                      })}
+                      })
+                    })()}
                   </div>
 
                   <div className="mt-4 flex items-center gap-4 text-xs text-gray-400">
@@ -709,7 +720,6 @@ export default function Analyse() {
                     </div>
                     <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
                       <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-blue-600 inline-block" /> In Analyse berücksichtigt</span>
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-gray-300 inline-block" /> Ältere Quartale</span>
                     </div>
                   </div>
                   <table className="w-full text-sm">

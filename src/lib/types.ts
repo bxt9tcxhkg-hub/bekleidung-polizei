@@ -95,6 +95,7 @@ export interface Order {
   cancel_reason: string | null
   shifted_from: string | null
   tailor_job_id: string | null
+  delivery_id: string | null
   created_at: string | null
   updated_at: string | null
   profiles?: Profile

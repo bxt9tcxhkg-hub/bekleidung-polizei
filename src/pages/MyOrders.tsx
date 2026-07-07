@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order } from '../lib/types'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
-import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
+import { getCurrentBudget, getUsedBudget, DEFAULT_BUDGET } from '../lib/budget'
+import { fmtEUR } from '../lib/format'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -37,6 +38,8 @@ function Timeline({ order }: { order: MyOrder }) {
     s.key !== 'at_tailor' || order.products?.needs_tailoring
   ).filter(s =>
     s.key !== 'pending_approval' || order.status === 'pending_approval'
+  ).filter(s =>
+    s.key !== 'partially_issued' || order.status === 'partially_issued'
   )
 
   const currentIdx = steps.findIndex(s => s.key === order.status)
@@ -81,24 +84,21 @@ export default function MyOrders() {
     async function load() {
       if (!profile) return
       setLoading(true)
-      const [ordersRes, totalBud, usedRes] = await Promise.all([
+      const [ordersRes, totalBud, used] = await Promise.all([
         supabase.from('orders')
           .select('*, products(name,category,needs_tailoring), quarters(name)')
           .eq('user_id', profile.id)
           .not('status', 'eq', 'pending')
           .order('created_at', { ascending: false }),
         getCurrentBudget(profile.id, CURRENT_YEAR),
-        supabase.from('orders').select('unit_price, quantity')
-          .eq('user_id', profile.id)
-          .not('status', 'in', '(pending,cancelled)')
-          .gte('created_at', `${CURRENT_YEAR}-01-01`),
+        getUsedBudget(profile.id, CURRENT_YEAR),
       ])
       setOrders((ordersRes.data ?? []) as MyOrder[])
       setTotalBudgetAmt(totalBud)
-      setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
+      setUsedBudget(used)
       setLoading(false)
     }
-    load().catch(() => setError('Bestellungen konnten nicht geladen werden.'))
+    load().catch(() => { setError('Bestellungen konnten nicht geladen werden.'); setLoading(false) })
   }, [profile])
 
   const totalBudget = totalBudgetAmt
@@ -120,7 +120,7 @@ export default function MyOrders() {
       <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-6">
         <div className="flex items-center justify-between mb-2">
           <p className="font-semibold text-gray-900">Jahresbudget {CURRENT_YEAR}</p>
-          <p className="text-sm font-bold text-gray-700">€ {usedBudget.toFixed(2)} / € {totalBudget.toFixed(2)}</p>
+          <p className="text-sm font-bold text-gray-700">{fmtEUR(usedBudget)} / {fmtEUR(totalBudget)}</p>
         </div>
         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
@@ -129,7 +129,7 @@ export default function MyOrders() {
         <p className={`text-sm mt-2 font-medium ${remaining <= 0 ? 'text-red-600' : 'text-gray-600'}`}>
           {remaining <= 0
             ? 'Budget aufgebraucht – weitere Bestellungen benötigen Genehmigung'
-            : `€ ${remaining.toFixed(2)} verbleibend`}
+            : `${fmtEUR(remaining)} verbleibend`}
         </p>
       </div>
 
@@ -162,7 +162,7 @@ export default function MyOrders() {
                         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
                           {ORDER_STATUS_LABELS[o.status]}
                         </span>
-                        <p className="text-xs text-gray-500 mt-1">€ {(o.unit_price * o.quantity).toFixed(2)}</p>
+                        <p className="text-xs text-gray-500 mt-1">{fmtEUR(o.unit_price * o.quantity)}</p>
                       </div>
                     </div>
                     <Timeline order={o} />
@@ -186,7 +186,7 @@ export default function MyOrders() {
                     <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0 ${ORDER_STATUS_COLORS[o.status]}`}>
                       {ORDER_STATUS_LABELS[o.status]}
                     </span>
-                    <p className="text-sm font-semibold text-gray-700 flex-shrink-0">€ {(o.unit_price * o.quantity).toFixed(2)}</p>
+                    <p className="text-sm font-semibold text-gray-700 flex-shrink-0">{fmtEUR(o.unit_price * o.quantity)}</p>
                   </div>
                 ))}
               </div>

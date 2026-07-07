@@ -96,6 +96,24 @@ export default function UserProfile() {
     })
   }
 
+  function fieldValues(field: SizeField): string[] {
+    return field.options.flatMap(opt => (typeof opt === 'string' ? [opt] : opt.sizes))
+  }
+
+  // Beim Geschlechterwechsel Größen entfernen, die es im neuen Geschlecht nicht gibt
+  function changeGender(g: 'male' | 'female') {
+    setForm(f => ({ ...f, gender: g }))
+    const fields = g === 'female' ? FEMALE_SIZE_FIELDS : MALE_SIZE_FIELDS
+    setSizePref(p => {
+      const next: Record<string, string> = {}
+      for (const [key, val] of Object.entries(p)) {
+        const field = fields.find(fl => fl.key === key)
+        if (field && fieldValues(field).includes(val)) next[key] = val
+      }
+      return next
+    })
+  }
+
   const sizeFields = form.gender === 'female' ? FEMALE_SIZE_FIELDS : MALE_SIZE_FIELDS
 
   return (
@@ -141,7 +159,7 @@ export default function UserProfile() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>
                 <div className="flex gap-2">
                   {(['male', 'female'] as const).map(g => (
-                    <button key={g} type="button" onClick={() => setForm(f => ({ ...f, gender: g }))}
+                    <button key={g} type="button" onClick={() => changeGender(g)}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.gender === g ? (g === 'male' ? 'bg-blue-700 text-white border-blue-700' : 'bg-pink-600 text-white border-pink-600') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
                       {g === 'male' ? 'Männlich' : 'Weiblich'}
                     </button>

@@ -3,6 +3,10 @@ import { CheckCircle, XCircle, AlertTriangle, User, Package } from 'lucide-react
 import { supabase } from '../lib/supabase'
 import type { Order, StockOrder } from '../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../lib/types'
+import { getCurrentBudget, getUsedBudget } from '../lib/budget'
+import { fmtEUR } from '../lib/format'
+
+const CURRENT_YEAR = new Date().getFullYear()
 
 type PendingOrder = Order & {
   products?: { name: string; category: string; price: number }
@@ -13,6 +17,7 @@ type PendingOrder = Order & {
 export default function Approvals() {
   const [orders, setOrders] = useState<PendingOrder[]>([])
   const [stockOrders, setStockOrders] = useState<StockOrder[]>([])
+  const [budgets, setBudgets] = useState<Record<string, { total: number; used: number }>>({})
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' } | null>(null)
@@ -32,8 +37,19 @@ export default function Approvals() {
         .eq('status', 'pending_approval')
         .order('created_at', { ascending: true }),
     ])
-    setOrders((ordersRes.data ?? []) as PendingOrder[])
+    const pending = (ordersRes.data ?? []) as PendingOrder[]
+    setOrders(pending)
     setStockOrders((stockRes.data ?? []) as StockOrder[])
+    // Budget-Kontext pro Benutzer laden (Jahresbudget + bereits verbraucht)
+    const userIds = Array.from(new Set(pending.map(o => o.user_id)))
+    const budgetEntries = await Promise.all(userIds.map(async uid => {
+      const [total, used] = await Promise.all([
+        getCurrentBudget(uid, CURRENT_YEAR),
+        getUsedBudget(uid, CURRENT_YEAR),
+      ])
+      return [uid, { total, used }] as const
+    }))
+    setBudgets(Object.fromEntries(budgetEntries))
     setLoading(false)
   }
 
@@ -42,42 +58,62 @@ export default function Approvals() {
   async function approve(order: PendingOrder) {
     if (processing) return
     setProcessing(order.id)
-    await supabase.from('orders').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', order.id)
+    setError('')
+    const { error: err } = await supabase.from('orders').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', order.id)
     setProcessing(null)
+    if (err) {
+      setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      return
+    }
     load()
   }
 
   async function reject(id: string, reason: string) {
     if (!reason.trim() || processing) return
     setProcessing(id)
-    await supabase.from('orders').update({ status: 'cancelled', cancel_reason: reason, updated_at: new Date().toISOString() }).eq('id', id)
-    setCancelReason(null)
+    setError('')
+    const { error: err } = await supabase.from('orders').update({ status: 'cancelled', cancel_reason: reason, updated_at: new Date().toISOString() }).eq('id', id)
     setProcessing(null)
+    if (err) {
+      setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      return
+    }
+    setCancelReason(null)
     load()
   }
 
   async function approveStockOrder(id: string) {
     if (processing) return
     setProcessing(id)
-    await supabase.from('stock_orders').update({
+    setError('')
+    const { error: err } = await supabase.from('stock_orders').update({
       status: 'approved',
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', id)
     setProcessing(null)
+    if (err) {
+      setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      return
+    }
     load()
   }
 
   async function rejectStockOrder(id: string, reason: string) {
     if (!reason.trim() || processing) return
     setProcessing(id)
-    await supabase.from('stock_orders').update({
+    setError('')
+    const { error: err } = await supabase.from('stock_orders').update({
       status: 'rejected',
       note: reason,
       updated_at: new Date().toISOString(),
     }).eq('id', id)
-    setCancelReason(null)
     setProcessing(null)
+    if (err) {
+      setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      return
+    }
+    setCancelReason(null)
     load()
   }
 
@@ -115,6 +151,7 @@ export default function Approvals() {
                 {Object.entries(byUser).map(([, userOrders]) => {
                   const user = userOrders[0].profiles
                   const totalValue = userOrders.reduce((s, o) => s + (o.unit_price * o.quantity), 0)
+                  const budget = budgets[userOrders[0].user_id]
                   return (
                     <div key={userOrders[0].user_id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       <div className="flex items-center gap-3 px-5 py-3 bg-amber-50 border-b border-amber-100">
@@ -129,7 +166,10 @@ export default function Approvals() {
                           <p className="text-xs text-amber-700 font-medium flex items-center gap-1 justify-end">
                             <AlertTriangle className="w-3.5 h-3.5" /> Budget überschritten
                           </p>
-                          <p className="text-xs text-gray-500">{userOrders.length} Artikel · € {totalValue.toFixed(2)}</p>
+                          <p className="text-xs text-gray-500">{userOrders.length} Artikel · {fmtEUR(totalValue)}</p>
+                          {budget && (
+                            <p className="text-xs text-gray-500">Budget: {fmtEUR(budget.used)} verbraucht / {fmtEUR(budget.total)} gesamt</p>
+                          )}
                         </div>
                       </div>
                       <div className="divide-y divide-gray-100">
@@ -142,7 +182,7 @@ export default function Approvals() {
                               </p>
                             </div>
                             <div className="text-sm font-semibold text-gray-700 whitespace-nowrap">
-                              € {(o.unit_price * o.quantity).toFixed(2)}
+                              {fmtEUR(o.unit_price * o.quantity)}
                             </div>
                             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
                               {ORDER_STATUS_LABELS[o.status]}

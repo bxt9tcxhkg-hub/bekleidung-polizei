@@ -87,7 +87,15 @@ export default function Lager() {
     setLoading(false)
   }
 
-  useEffect(() => { if (profile) loadAll().catch(() => setError('Lagerdaten konnten nicht geladen werden.')) }, [profile])
+  useEffect(() => { if (profile) loadAll().catch(() => { setError('Lagerdaten konnten nicht geladen werden.'); setLoading(false) }) }, [profile])
+
+  // Pagination auf gültige Seite klemmen, wenn sich die Daten ändern
+  useEffect(() => {
+    setInvPage(p => Math.min(p, Math.max(0, Math.ceil(inventory.length / PAGE_SIZE) - 1)))
+  }, [inventory.length])
+  useEffect(() => {
+    setOrdersPage(p => Math.min(p, Math.max(0, Math.ceil(stockOrders.length / PAGE_SIZE) - 1)))
+  }, [stockOrders.length])
 
   // Pre-select product+size when navigating from Analyse page
   useEffect(() => {
@@ -118,9 +126,10 @@ export default function Lager() {
     const qty = parseInt(editQty)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
-    await supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id)
-    setEditingId(null)
+    const { error: qtyError } = await supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id)
     setSaving(false)
+    if (qtyError) { setError('Bestand konnte nicht gespeichert werden.'); return }
+    setEditingId(null)
     loadAll()
   }
 
@@ -128,9 +137,10 @@ export default function Lager() {
     const val = parseInt(editMinVal)
     if (isNaN(val) || val < 1) return
     setSavingMin(true)
-    await supabase.from('products').update({ min_quantity: val }).eq('id', productId)
-    setEditingMinId(null)
+    const { error: minError } = await supabase.from('products').update({ min_quantity: val }).eq('id', productId)
     setSavingMin(false)
+    if (minError) { setError('Mindestmenge konnte nicht gespeichert werden.'); return }
+    setEditingMinId(null)
     loadAll()
   }
 
@@ -139,13 +149,15 @@ export default function Lager() {
     const qty = parseInt(addForm.quantity)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
-    await supabase.from('inventory').upsert(
-      { product_id: addForm.product_id, size: addForm.size, quantity: qty, updated_at: new Date().toISOString() },
-      { onConflict: 'product_id,size' }
-    )
+    const { error: adjError } = await (supabase.rpc as any)('adjust_inventory', {
+      p_product: addForm.product_id,
+      p_size: addForm.size,
+      p_delta: qty,
+    })
+    setSaving(false)
+    if (adjError) { setError('Bestand konnte nicht gebucht werden.'); return }
     setAddForm(null)
     setAddSearch('')
-    setSaving(false)
     loadAll()
   }
 
@@ -199,7 +211,7 @@ export default function Lager() {
   async function submitCart() {
     if (cart.length === 0) return
     setSubmitting(true)
-    await Promise.all(cart.map(item =>
+    const results = await Promise.all(cart.map(item =>
       supabase.from('stock_orders').insert({
         product_id: item.product.id,
         size: item.size,
@@ -212,9 +224,14 @@ export default function Lager() {
         received_at: null,
       })
     ))
+    setSubmitting(false)
+    if (results.some(r => r.error)) {
+      setError('Die Lagerbestellung konnte nicht vollständig eingereicht werden. Bitte erneut versuchen.')
+      await loadAll()
+      return
+    }
     setCart([])
     setCartOpen(false)
-    setSubmitting(false)
     setSubmitted(true)
     await loadAll()
     setTab('historie')
@@ -222,17 +239,28 @@ export default function Lager() {
 
   async function markReceived(order: StockOrder) {
     setSaving(true)
-    await supabase.from('stock_orders').update({
+    // Erst Bestand buchen, dann Status setzen
+    const { error: adjError } = await (supabase.rpc as any)('adjust_inventory', {
+      p_product: order.product_id,
+      p_size: order.size,
+      p_delta: order.quantity,
+    })
+    if (adjError) {
+      setSaving(false)
+      setError('Wareneingang konnte nicht gebucht werden. Bitte erneut versuchen.')
+      return
+    }
+    const { error: statusError } = await supabase.from('stock_orders').update({
       status: 'received',
       received_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', order.id)
-    const existing = invMap[`${order.product_id}__${order.size}`] ?? 0
-    await supabase.from('inventory').upsert(
-      { product_id: order.product_id, size: order.size, quantity: existing + order.quantity, updated_at: new Date().toISOString() },
-      { onConflict: 'product_id,size' }
-    )
     setSaving(false)
+    if (statusError) {
+      setError('Bestand wurde gebucht, aber der Bestellstatus konnte nicht aktualisiert werden.')
+      await loadAll()
+      return
+    }
     await loadAll()
     // Check for pending user orders for same product + size
     const { data: waiting } = await supabase
@@ -249,15 +277,22 @@ export default function Lager() {
   async function advanceWaitingOrders() {
     if (!followUp) return
     setAdvancingOrders(true)
-    await Promise.all(followUp.orders.map(o =>
+    const results = await Promise.all(followUp.orders.map(o =>
       supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id)
     ))
     setAdvancingOrders(false)
+    if (results.some(r => r.error)) {
+      setError('Nicht alle Bestellungen konnten auf „Bereit zur Ausgabe" gesetzt werden.')
+      return
+    }
     setFollowUp(null)
   }
 
-  // Pagination slices
-  const invEntries = Object.entries(invByProduct).flatMap(([, entries]) => entries)
+  // Pagination slices (Größen innerhalb eines Artikels sortiert)
+  const invEntries = Object.entries(invByProduct).flatMap(([, entries]) => {
+    const order = sortedSizes(entries.map(e => e.size))
+    return [...entries].sort((a, b) => order.indexOf(a.size) - order.indexOf(b.size))
+  })
   const invTotalPages = Math.ceil(invEntries.length / PAGE_SIZE)
   const pagedInvEntries = invEntries.slice(invPage * PAGE_SIZE, (invPage + 1) * PAGE_SIZE)
 
@@ -327,6 +362,18 @@ export default function Lager() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <>
+          {/* Erfolgsbanner – sichtbar unabhängig vom aktiven Tab */}
+          {submitted && (
+            <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-green-50 border border-green-200">
+              <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold text-sm text-green-800">Lagerbestellung eingereicht</p>
+                <p className="text-xs text-green-700 mt-0.5">Die Bestellung wartet auf Freigabe durch den Genehmiger.</p>
+              </div>
+              <button onClick={() => setSubmitted(false)} className="p-1 rounded hover:bg-green-100"><X className="w-4 h-4 text-green-600" /></button>
+            </div>
+          )}
+
           {/* ── Bestand ── */}
           {tab === 'bestand' && (
             <div className="space-y-6">
@@ -409,7 +456,7 @@ export default function Lager() {
                           <p className="font-medium text-gray-900">{entry.products?.name ?? '–'}</p>
                           <p className="text-xs text-gray-400">{entry.products?.article_number} · {entry.products?.category}</p>
                         </td>
-                        <td className="px-4 py-3 text-gray-600">{entry.size}</td>
+                        <td className="px-4 py-3 text-gray-600">{sizeLabel(entry.size, groupSizes(entry.products?.sizes ?? [entry.size]) !== null)}</td>
                         <td className="px-4 py-3 text-center">
                           {editingId === entry.id ? (
                             <div className="flex items-center justify-center gap-2">
@@ -477,17 +524,6 @@ export default function Lager() {
           {/* ── Bestellen ── */}
           {tab === 'bestellen' && (
             <div>
-              {submitted && (
-                <div className="mb-4 flex items-center gap-3 px-4 py-3 rounded-xl bg-green-50 border border-green-200">
-                  <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm text-green-800">Lagerbestellung eingereicht</p>
-                    <p className="text-xs text-green-700 mt-0.5">Die Bestellung wartet auf Freigabe durch den Genehmiger.</p>
-                  </div>
-                  <button onClick={() => setSubmitted(false)} className="p-1 rounded hover:bg-green-100"><X className="w-4 h-4 text-green-600" /></button>
-                </div>
-              )}
-
               {/* Category filter */}
               <div className="flex gap-2 flex-wrap overflow-x-auto pb-1">
                 {categories.map(cat => (
@@ -512,7 +548,8 @@ export default function Lager() {
               {/* Product grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredProducts.map(product => {
-                  const sizesWithStock = product.sizes.map(s => ({
+                  const isGrouped = groupSizes(product.sizes) !== null
+                  const sizesWithStock = sortedSizes(product.sizes).map(s => ({
                     size: s,
                     stock: stockFor(product.id, s),
                   }))
@@ -547,7 +584,7 @@ export default function Lager() {
                             <span key={size} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium ${
                               stock > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500'
                             }`}>
-                              {size}
+                              {sizeLabel(size, isGrouped)}
                               {stock > 0 && <span className="text-green-600 font-bold">·{stock}</span>}
                             </span>
                           ))}
@@ -594,7 +631,7 @@ export default function Lager() {
                           <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
                           <p className="text-xs text-gray-400">{(o as any).products?.article_number}</p>
                         </td>
-                        <td className="px-4 py-3 text-gray-700">{o.size} · {o.quantity}×</td>
+                        <td className="px-4 py-3 text-gray-700">{sizeLabel(o.size, groupSizes(products.find(p => p.id === o.product_id)?.sizes ?? [o.size]) !== null)} · {o.quantity}×</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STOCK_ORDER_STATUS_COLORS[o.status]}`}>
                             {STOCK_ORDER_STATUS_LABELS[o.status]}
@@ -887,19 +924,23 @@ export default function Lager() {
                   <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={addForm.size} onChange={e => setAddForm(f => f ? { ...f, size: e.target.value } : f)}>
                     <option value="">Größe wählen...</option>
-                    {selectedAddProduct.sizes.map(s => {
-                      const stock = stockFor(selectedAddProduct.id, s)
-                      return <option key={s} value={s}>{s}{stock > 0 ? ` (aktuell ${stock}×)` : ''}</option>
-                    })}
+                    {(() => {
+                      const isGrouped = groupSizes(selectedAddProduct.sizes) !== null
+                      return sortedSizes(selectedAddProduct.sizes).map(s => {
+                        const stock = stockFor(selectedAddProduct.id, s)
+                        return <option key={s} value={s}>{sizeLabel(s, isGrouped)}{stock > 0 ? ` (aktuell ${stock}×)` : ''}</option>
+                      })
+                    })()}
                   </select>
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Menge *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Menge hinzubuchen *</label>
                 <input type="number" min="0"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="0" value={addForm.quantity}
                   onChange={e => setAddForm(f => f ? { ...f, quantity: e.target.value } : f)} />
+                <p className="text-xs text-gray-400 mt-1">Die Menge wird zum bestehenden Bestand hinzugebucht.</p>
               </div>
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints, Search, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { fmtEUR } from '../lib/format'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -39,7 +40,7 @@ export default function Budgets() {
       .from('orders')
       .select('id, quantity, unit_price, size, created_at, products(name, article_number)')
       .eq('user_id', profile.id)
-      .not('status', 'in', '("pending","cancelled")')
+      .not('status', 'in', '(pending,cancelled)')
       .gte('created_at', `${CURRENT_YEAR}-01-01`)
       .order('created_at', { ascending: false })
     setDrilldown({ profile, orders: data ?? [] })
@@ -60,7 +61,7 @@ export default function Budgets() {
       supabase.from('user_budgets').select('*').eq('year', CURRENT_YEAR).order('valid_from', { ascending: false }),
       supabase.from('orders')
         .select('user_id, unit_price, quantity')
-        .not('status', 'in', '("pending","cancelled")')
+        .not('status', 'in', '(pending,cancelled)')
         .gte('created_at', `${CURRENT_YEAR}-01-01`),
       supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }),
     ])
@@ -76,9 +77,12 @@ export default function Budgets() {
     }
 
     setRows(profiles.map(p => {
+      // Liste ist valid_from absteigend sortiert: erster Eintrag <= heute ist der aktuelle,
+      // der LETZTE Eintrag > heute ist die nächste anstehende Änderung.
       const userBudgets = budgets.filter(b => b.user_id === p.id)
       const current = userBudgets.find(b => b.valid_from <= t) ?? null
-      const scheduled = userBudgets.find(b => b.valid_from > t) ?? null
+      const future = userBudgets.filter(b => b.valid_from > t)
+      const scheduled = future.length > 0 ? future[future.length - 1] : null
       return { profile: p, currentBudget: current, scheduledBudget: scheduled, used: usedByUser[p.id] ?? 0 }
     }))
     setLoading(false)
@@ -90,11 +94,13 @@ export default function Budgets() {
     const val = parseFloat(editForm.amount.replace(',', '.'))
     if (isNaN(val) || val < 0) return
     setSaving(true)
-    await supabase.from('user_budgets').upsert(
+    const { error } = await supabase.from('user_budgets').upsert(
       { user_id: userId, year: CURRENT_YEAR, total_budget: val, valid_from: editForm.valid_from },
       { onConflict: 'user_id,year,valid_from' }
     )
     setSaving(false)
+    if (error) { setError(`Budget konnte nicht gespeichert werden: ${error.message}`); return }
+    setError('')
     setEditId(null)
     load()
   }
@@ -103,7 +109,7 @@ export default function Budgets() {
     const val = parseFloat(bulkForm.amount.replace(',', '.'))
     if (isNaN(val) || val < 0) return
     setBulkSaving(true)
-    await Promise.all(
+    const results = await Promise.all(
       rows.map(r =>
         supabase.from('user_budgets').upsert(
           { user_id: r.profile.id, year: CURRENT_YEAR, total_budget: val, valid_from: bulkForm.valid_from },
@@ -112,6 +118,9 @@ export default function Budgets() {
       )
     )
     setBulkSaving(false)
+    const failed = results.filter(r => r.error).length
+    if (failed > 0) setError(`${failed} von ${rows.length} Budgets konnten nicht gespeichert werden.`)
+    else setError('')
     setShowBulk(false)
     setBulkForm({ amount: '', valid_from: today() })
     load()
@@ -121,20 +130,25 @@ export default function Budgets() {
     const val = parseFloat(capForm.amount.replace(',', '.'))
     if (isNaN(val) || val < 0) return
     setCapSaving(true)
-    await supabase.from('shoe_refund_caps').insert({
+    const { error } = await supabase.from('shoe_refund_caps').insert({
       cap_amount: val,
       valid_from: capForm.valid_from,
       note: capForm.note || null,
       created_by: authProfile!.id,
     })
     setCapSaving(false)
+    if (error) { setError(`Maximalbetrag konnte nicht gespeichert werden: ${error.message}`); return }
+    setError('')
     setShowCapForm(false)
     setCapForm({ amount: '', valid_from: today(), note: '' })
     load()
   }
 
+  // caps ist valid_from absteigend sortiert: erster Eintrag <= heute ist der aktuelle,
+  // der LETZTE Eintrag > heute ist die nächste anstehende Änderung.
   const currentCap = caps.find(c => c.valid_from <= today())
-  const scheduledCap = caps.find(c => c.valid_from > today())
+  const futureCaps = caps.filter(c => c.valid_from > today())
+  const scheduledCap = futureCaps.length > 0 ? futureCaps[futureCaps.length - 1] : undefined
 
   const totalBudget = rows.reduce((s, r) => s + (r.currentBudget?.total_budget ?? DEFAULT_BUDGET), 0)
   const totalUsed = rows.reduce((s, r) => s + r.used, 0)
@@ -157,11 +171,11 @@ export default function Budgets() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Gesamtbudget</p>
-              <p className="text-xl font-bold text-gray-900">€ {totalBudget.toFixed(0)}</p>
+              <p className="text-xl font-bold text-gray-900">{fmtEUR(totalBudget)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Verbraucht</p>
-              <p className="text-xl font-bold text-gray-900">€ {totalUsed.toFixed(0)}</p>
+              <p className="text-xl font-bold text-gray-900">{fmtEUR(totalUsed)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-0.5">Budget überschritten</p>
@@ -204,7 +218,7 @@ export default function Budgets() {
         </div>
         <div className="flex items-center gap-6 flex-wrap">
           <div>
-            <p className="text-3xl font-bold text-gray-900">€ {Number(currentCap?.cap_amount ?? 120).toFixed(2)}</p>
+            <p className="text-3xl font-bold text-gray-900">{fmtEUR(Number(currentCap?.cap_amount ?? 120))}</p>
             {currentCap && <p className="text-xs text-gray-400 mt-0.5">gültig seit {new Date(currentCap.valid_from).toLocaleDateString('de-AT')}</p>}
           </div>
           {scheduledCap && (
@@ -212,7 +226,7 @@ export default function Budgets() {
               <CalendarClock className="w-4 h-4 text-amber-600 flex-shrink-0" />
               <div>
                 <p className="text-xs font-semibold text-amber-800">Geplante Änderung</p>
-                <p className="text-xs text-amber-700">€ {Number(scheduledCap.cap_amount).toFixed(2)} ab {new Date(scheduledCap.valid_from).toLocaleDateString('de-AT')}</p>
+                <p className="text-xs text-amber-700">{fmtEUR(Number(scheduledCap.cap_amount))} ab {new Date(scheduledCap.valid_from).toLocaleDateString('de-AT')}</p>
                 {scheduledCap.note && <p className="text-xs text-amber-600 italic mt-0.5">{scheduledCap.note}</p>}
               </div>
             </div>
@@ -261,7 +275,7 @@ export default function Budgets() {
               }).map(({ profile, currentBudget, scheduledBudget, used }) => {
                 const total = currentBudget?.total_budget ?? DEFAULT_BUDGET
                 const remaining = total - used
-                const pct = Math.min(100, (used / total) * 100)
+                const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0
                 return (
                   <tr key={profile.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => editId !== profile.id && openDrilldown(profile)}>
                     <td className="px-4 py-3 font-medium text-gray-900">{profile.name}</td>
@@ -287,13 +301,13 @@ export default function Budgets() {
                       ) : (
                         <div className="text-right">
                           <span className={currentBudget ? 'text-gray-900 font-medium' : 'text-gray-400'}>
-                            € {total.toFixed(2)}{!currentBudget && ' *'}
+                            {fmtEUR(total)}{!currentBudget && ' *'}
                           </span>
                           {scheduledBudget && (
                             <div className="flex items-center justify-end gap-1 mt-0.5">
                               <CalendarClock className="w-3 h-3 text-amber-500" />
                               <span className="text-xs text-amber-600">
-                                € {Number(scheduledBudget.total_budget).toFixed(2)} ab {new Date(scheduledBudget.valid_from).toLocaleDateString('de-AT')}
+                                {fmtEUR(Number(scheduledBudget.total_budget))} ab {new Date(scheduledBudget.valid_from).toLocaleDateString('de-AT')}
                               </span>
                             </div>
                           )}
@@ -302,14 +316,14 @@ export default function Budgets() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className={`font-medium ${pct > 90 ? 'text-red-600' : pct > 70 ? 'text-amber-600' : 'text-gray-700'}`}>
-                        € {used.toFixed(2)}
+                        {fmtEUR(used)}
                       </span>
                       <div className="h-1.5 bg-gray-100 rounded-full mt-1 w-20 md:w-24 ml-auto">
                         <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
                       </div>
                     </td>
                     <td className={`px-4 py-3 text-right font-semibold hidden lg:table-cell ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      € {remaining.toFixed(2)}
+                      {fmtEUR(remaining)}
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={() => { setEditId(profile.id); setEditForm({ amount: total.toFixed(2), valid_from: today() }) }}
@@ -326,7 +340,7 @@ export default function Budgets() {
             </tbody>
           </table>
           </div>
-          <p className="text-xs text-gray-400 px-4 py-2 border-t">* Standardwert € {DEFAULT_BUDGET.toFixed(2)} (kein individuelles Budget gesetzt)</p>
+          <p className="text-xs text-gray-400 px-4 py-2 border-t">* Standardwert {fmtEUR(DEFAULT_BUDGET)} (kein individuelles Budget gesetzt)</p>
         </div>
       )}
 
@@ -401,7 +415,7 @@ export default function Budgets() {
                           <p className="text-xs text-gray-400">{(o as any).products?.article_number}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-600">{o.size}</td>
-                        <td className="px-4 py-3 text-right font-medium text-gray-900">€ {(o.unit_price * o.quantity).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtEUR(o.unit_price * o.quantity)}</td>
                         <td className="px-4 py-3 text-right text-gray-400 text-xs hidden sm:table-cell">
                           {new Date(o.created_at).toLocaleDateString('de-AT')}
                         </td>
@@ -412,7 +426,7 @@ export default function Budgets() {
                     <tr className="bg-gray-50 border-t-2 border-gray-200">
                       <td colSpan={2} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
                       <td className="px-4 py-3 text-right font-bold text-gray-900">
-                        € {drilldown.orders.reduce((s, o) => s + o.unit_price * o.quantity, 0).toFixed(2)}
+                        {fmtEUR(drilldown.orders.reduce((s, o) => s + o.unit_price * o.quantity, 0))}
                       </td>
                       <td className="hidden sm:table-cell" />
                     </tr>

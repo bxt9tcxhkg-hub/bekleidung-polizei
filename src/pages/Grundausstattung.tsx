@@ -56,7 +56,11 @@ export default function Grundausstattung() {
       const next = { ...prev }
       loaded.forEach(item => {
         if (item.products?.sizes?.length && !next[item.product_id]) {
-          next[item.product_id] = item.products.sizes[0]
+          // Erste Größe in sortierter Reihenfolge; bei gruppierten Größen die erste Normal-Größe
+          const sizes = sortedSizes(item.products.sizes)
+          const groups = groupSizes(sizes)
+          const normalGroup = groups?.find(g => g.label === 'Normal')
+          next[item.product_id] = normalGroup?.sizes[0] ?? groups?.[0]?.sizes[0] ?? sizes[0]
         }
       })
       // Remove selections for items no longer in the list
@@ -114,8 +118,9 @@ export default function Grundausstattung() {
 
   async function removeItem(id: string) {
     setDeleting(id)
-    await (supabase.from('grundausstattung') as any).delete().eq('id', id)
+    const { error: delError } = await (supabase.from('grundausstattung') as any).delete().eq('id', id)
     setDeleting(null)
+    if (delError) { setError('Artikel konnte nicht entfernt werden.'); return }
     load(false)
   }
 
@@ -123,10 +128,12 @@ export default function Grundausstattung() {
     if (!activeQuarter) return
     setCartError('')
     setAddingToCart(true)
-    let failed = false
+    let ok = 0
+    const failedNames: string[] = []
+    let skipped = 0
     for (const item of items) {
-      if (!item.products) continue
-      const { error } = await supabase.from('orders').insert({
+      if (!item.products) { skipped++; continue }
+      const { error: insertError } = await supabase.from('orders').insert({
         user_id: profile!.id,
         product_id: item.product_id,
         quarter_id: activeQuarter.id,
@@ -135,13 +142,22 @@ export default function Grundausstattung() {
         unit_price: item.products.price,
         status: 'pending',
       })
-      if (error) { failed = true; setCartError(`Fehler bei "${item.products.name}": ${error.message}`); break }
+      if (insertError) failedNames.push(item.products.name); else ok++
     }
     setAddingToCart(false)
-    if (!failed) {
-      setCartSuccess(true)
-      setTimeout(() => { setCartSuccess(false); navigate('/warenkorb') }, 1200)
+    const messages: string[] = []
+    if (failedNames.length > 0) {
+      messages.push(`${ok} von ${items.length} Positionen in den Warenkorb gelegt, ${failedNames.length} fehlgeschlagen: ${failedNames.join(', ')}.`)
     }
+    if (skipped > 0) {
+      messages.push(`${skipped} Position${skipped !== 1 ? 'en' : ''} ohne zugeordnetes Produkt wurde${skipped !== 1 ? 'n' : ''} übersprungen.`)
+    }
+    if (messages.length > 0) {
+      setCartError(messages.join(' '))
+      return
+    }
+    setCartSuccess(true)
+    setTimeout(() => { setCartSuccess(false); navigate('/warenkorb') }, 1200)
   }
 
   const grouped = items.reduce<Record<string, GrundItem[]>>((acc, item) => {
