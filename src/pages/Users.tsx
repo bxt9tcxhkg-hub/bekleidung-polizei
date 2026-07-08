@@ -3,6 +3,7 @@ import { Plus, Pencil, X, Shield, User, UserX, Upload, Download } from 'lucide-r
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
@@ -150,6 +151,7 @@ export default function Users() {
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
+      logAudit('Benutzer bearbeitet', username)
     } else {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -160,6 +162,7 @@ export default function Users() {
         })
         const json = await res.json()
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
+        logAudit('Benutzer angelegt', username)
       } catch {
         setError('Netzwerkfehler – bitte nochmals versuchen.'); setSaving(false); return
       }
@@ -173,6 +176,7 @@ export default function Users() {
   async function toggleActive(u: Profile) {
     const { error } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
     if (error) { setError(`Status konnte nicht geändert werden: ${error.message}`); return }
+    logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username)
     load()
   }
 
@@ -182,6 +186,7 @@ export default function Users() {
     if (!confirm(`Benutzer "${u.name}" deaktivieren?\n\nDas Konto wird nicht gelöscht, sondern nur deaktiviert. Es kann jederzeit wieder aktiviert werden.`)) return
     const { error } = await supabase.from('profiles').update({ active: false }).eq('id', u.id)
     if (error) { setError(`Benutzer konnte nicht deaktiviert werden: ${error.message}`); return }
+    logAudit('Benutzer deaktiviert', u.username)
     setError('')
     load()
   }
@@ -240,6 +245,7 @@ export default function Users() {
     setImportCreds(creds)
     setImporting(false)
     setImportRows([])
+    if (done > 0) logAudit('Benutzer importiert', `${done} Benutzer`)
     load()
   }
 

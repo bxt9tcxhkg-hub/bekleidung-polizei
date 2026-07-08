@@ -3,6 +3,7 @@ import { Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentShoeRefundCap } from '../lib/budget'
+import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import type { ShoeRefund, ShoeRefundStatus, Profile } from '../lib/types'
 
@@ -97,6 +98,8 @@ export default function ShoeRefunds() {
     })
     if (error) setError(error.message)
     else {
+      const benutzername = canManage ? (users.find(u => u.id === uid)?.name ?? '?') : (profile!.name ?? profile!.username)
+      logAudit('Schuherstattung angelegt', `${benutzername}: ${fmtEUR(amount)}`)
       setShowForm(false)
       setForm({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
       setUserSearch('')
@@ -121,7 +124,11 @@ export default function ShoeRefunds() {
     }
     const { error } = await supabase.from('shoe_refunds').update(payload).eq('id', id)
     if (error) setError(`Aktion fehlgeschlagen: ${error.message}`)
-    else setError('')
+    else {
+      const benutzername = (refunds.find(r => r.id === id) as any)?.profiles?.name ?? '?'
+      logAudit(status === 'approved' ? 'Schuherstattung genehmigt' : 'Schuherstattung abgelehnt', benutzername)
+      setError('')
+    }
     setReviewing(null)
     load()
   }

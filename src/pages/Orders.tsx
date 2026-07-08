@@ -4,7 +4,9 @@ import { X, Check, Package, Scissors, FileText, RotateCcw, Ban } from 'lucide-re
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderStatus } from '../lib/types'
+import { ORDER_STATUS_LABELS } from '../lib/types'
 import { fmtEUR } from '../lib/format'
+import { logAudit } from '../lib/audit'
 import Lieferungen from './Lieferungen'
 
 type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'ausgegeben' | 'storniert' | 'lieferungen'
@@ -114,6 +116,7 @@ export default function Orders() {
       load()
       return
     }
+    logAudit('Bestellstatus geändert', `${items.length} Position(en) → ${ORDER_STATUS_LABELS[nextStatus] ?? nextStatus}`)
     setSelectedIds(new Set()); load()
   }
 
@@ -146,6 +149,7 @@ export default function Orders() {
       load()
       return
     }
+    logAudit('Bestellstatus geändert', `${items.length} Position(en) → ${ORDER_STATUS_LABELS[nextStatus] ?? nextStatus}`)
     setSelectedIds(new Set()); load()
   }
 
@@ -190,6 +194,7 @@ export default function Orders() {
       load()
       return
     }
+    logAudit('Bestellung storniert', `${items.length} Position(en), Grund: ${cancelReason.trim()}`)
     setSelectedIds(new Set()); setCancelModal(false); setCancelReason(''); load()
   }
 
@@ -229,6 +234,7 @@ export default function Orders() {
       setError('Ausgabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    logAudit('Bestellung ausgegeben', `${(order as any).products?.name ?? 'Artikel'} an ${(order as any).profiles?.name ?? '?'}${newStatus === 'partially_issued' ? ' (Teilausgabe)' : ''}`)
     load()
   }
 
@@ -267,6 +273,7 @@ export default function Orders() {
       load()
       return
     }
+    logAudit('Sammelbestellung erstellt', `${selected.length} Positionen`)
     // Kurzbrief erst nach erfolgreichen DB-Updates drucken
     generateKurzbrief(Object.values(groups))
     setSelectedIds(new Set()); load()

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints, Search, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
 
@@ -100,6 +101,8 @@ export default function Budgets() {
     )
     setSaving(false)
     if (error) { setError(`Budget konnte nicht gespeichert werden: ${error.message}`); return }
+    const benutzername = rows.find(r => r.profile.id === userId)?.profile.name ?? '?'
+    logAudit('Budget geändert', `${benutzername}: ${fmtEUR(val)}`)
     setError('')
     setEditId(null)
     load()
@@ -121,6 +124,7 @@ export default function Budgets() {
     const failed = results.filter(r => r.error).length
     if (failed > 0) setError(`${failed} von ${rows.length} Budgets konnten nicht gespeichert werden.`)
     else setError('')
+    if (failed < rows.length) logAudit('Budget geändert', `${rows.length - failed} Benutzer: ${fmtEUR(val)}`)
     setShowBulk(false)
     setBulkForm({ amount: '', valid_from: today() })
     load()
@@ -138,6 +142,7 @@ export default function Budgets() {
     })
     setCapSaving(false)
     if (error) { setError(`Maximalbetrag konnte nicht gespeichert werden: ${error.message}`); return }
+    logAudit('Schuherstattungs-Deckel geändert', `${fmtEUR(val)} ab ${capForm.valid_from}`)
     setError('')
     setShowCapForm(false)
     setCapForm({ amount: '', valid_from: today(), note: '' })

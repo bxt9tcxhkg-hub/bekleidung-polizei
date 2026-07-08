@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { Plus, Minus, X, ShoppingBag, Tag, Send, Warehouse, ClipboardList, Check, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
 import type { Product, StockOrder } from '../lib/types'
 import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 import { STOCK_ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS } from '../lib/types'
@@ -156,6 +157,7 @@ export default function Lager() {
     })
     setSaving(false)
     if (adjError) { setError('Bestand konnte nicht gebucht werden.'); return }
+    logAudit('Bestand gebucht', `${selectedAddProduct?.name ?? ''} ${addForm.size} +${qty}`.trim())
     setAddForm(null)
     setAddSearch('')
     loadAll()
@@ -230,6 +232,7 @@ export default function Lager() {
       await loadAll()
       return
     }
+    logAudit('Lagerbestellung eingereicht', `${cart.length} Position(en)`)
     setCart([])
     setCartOpen(false)
     setSubmitted(true)
@@ -261,6 +264,7 @@ export default function Lager() {
       await loadAll()
       return
     }
+    logAudit('Wareneingang gebucht', `${(order as any).products?.name ?? ''} ${order.size} +${order.quantity}`.trim())
     await loadAll()
     // Check for pending user orders for same product + size
     const { data: waiting } = await supabase

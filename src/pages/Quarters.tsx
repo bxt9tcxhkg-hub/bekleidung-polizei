@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X, CheckCircle, CalendarRange, AlertTriangle, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { logAudit } from '../lib/audit'
 import type { Quarter } from '../lib/types'
 import { QUARTER_STATUS_COLORS, QUARTER_STATUS_LABELS } from '../lib/types'
 
@@ -79,18 +80,40 @@ export default function Quarters() {
     const next = quarters.find(q => q.quarter_num === active.quarter_num + 1 && q.status === 'planned')
     if (!confirm(`${active.name} abschließen?${next ? ` ${next.name} startet sofort.` : ' Es gibt kein weiteres geplantes Quartal.'}`)) return
     setClosing(true)
-    await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id)
-    if (next) await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
+    setLoadError('')
+    const { error: closeErr } = await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id)
+    if (closeErr) {
+      setLoadError('Quartal konnte nicht abgeschlossen werden: ' + closeErr.message)
+      setClosing(false)
+      return
+    }
+    if (next) {
+      const { error: actErr } = await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
+      if (actErr) setLoadError('Folgequartal konnte nicht aktiviert werden: ' + actErr.message)
+    }
+    logAudit('Quartal abgeschlossen', `${active.name}${next ? `, ${next.name} aktiviert` : ''}`)
     setClosing(false)
     load()
   }
 
   async function reactivate(q: Quarter) {
     if (!confirm(`${q.name} reaktivieren?`)) return
+    setLoadError('')
     // Close any currently active quarter first
     const current = quarters.find(nq => nq.status === 'active')
-    if (current) await supabase.from('quarters').update({ status: 'closed' }).eq('id', current.id)
-    await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id)
+    if (current) {
+      const { error: closeErr } = await supabase.from('quarters').update({ status: 'closed' }).eq('id', current.id)
+      if (closeErr) {
+        setLoadError('Aktives Quartal konnte nicht geschlossen werden: ' + closeErr.message)
+        return
+      }
+    }
+    const { error: actErr } = await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id)
+    if (actErr) {
+      setLoadError('Quartal konnte nicht reaktiviert werden: ' + actErr.message)
+      return
+    }
+    logAudit('Quartal reaktiviert', q.name)
     load()
   }
 

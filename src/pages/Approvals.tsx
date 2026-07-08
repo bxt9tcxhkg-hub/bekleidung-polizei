@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import type { Order, StockOrder } from '../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../lib/types'
 import { getCurrentBudget, getUsedBudget } from '../lib/budget'
+import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -65,6 +66,7 @@ export default function Approvals() {
       setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    logAudit('Bestellung genehmigt', order.profiles?.name ?? '?')
     load()
   }
 
@@ -78,6 +80,7 @@ export default function Approvals() {
       setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    logAudit('Bestellung abgelehnt', orders.find(o => o.id === id)?.profiles?.name ?? '?')
     setCancelReason(null)
     load()
   }
@@ -96,6 +99,7 @@ export default function Approvals() {
       setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    logAudit('Lagerbestellung genehmigt', (stockOrders.find(o => o.id === id) as any)?.products?.name ?? '?')
     load()
   }
 
@@ -113,6 +117,7 @@ export default function Approvals() {
       setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    logAudit('Lagerbestellung abgelehnt', (stockOrders.find(o => o.id === id) as any)?.products?.name ?? '?')
     setCancelReason(null)
     load()
   }

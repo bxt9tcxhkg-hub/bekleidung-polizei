@@ -3,6 +3,7 @@ import { Plus, Pencil, X, Check, Search, Upload, Download, Info, Trash2 } from '
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import type { Product } from '../lib/types'
 
@@ -214,6 +215,7 @@ export default function Products() {
       : await supabase.from('products').insert(payload)
     setSaving(false)
     if (result.error) { setError(result.error.message); return }
+    logAudit(editId ? 'Produkt bearbeitet' : 'Produkt angelegt', form.name)
     setShowForm(false)
     load()
   }
@@ -221,6 +223,7 @@ export default function Products() {
   async function toggleActive(p: Product) {
     const { error: toggleError } = await supabase.from('products').update({ active: !p.active }).eq('id', p.id)
     if (toggleError) { setError('Status konnte nicht geändert werden.'); return }
+    logAudit(p.active ? 'Produkt deaktiviert' : 'Produkt aktiviert', p.name)
     load()
   }
 
@@ -234,12 +237,15 @@ export default function Products() {
       if (delError) {
         if (delError.code === '23503') {
           const { error: deactError } = await supabase.from('products').update({ active: false }).eq('id', p.id)
+          if (!deactError) logAudit('Produkt deaktiviert', p.name)
           setError(deactError
             ? `„${p.name}" wird noch verwendet und konnte weder gelöscht noch deaktiviert werden.`
             : `„${p.name}" wird bereits in Bestellungen oder im Lager verwendet und kann nicht gelöscht werden – das Produkt wurde stattdessen deaktiviert.`)
         } else {
           setError(`Löschen fehlgeschlagen: ${delError.message}`)
         }
+      } else {
+        logAudit('Produkt gelöscht', p.name)
       }
     } else {
       const ids = filtered.map(p => p.id)
@@ -247,12 +253,15 @@ export default function Products() {
       if (delError) {
         if (delError.code === '23503') {
           const { error: deactError } = await supabase.from('products').update({ active: false }).in('id', ids)
+          if (!deactError) logAudit('Produkte deaktiviert', `${ids.length} Produkte`)
           setError(deactError
             ? 'Einige Produkte werden noch verwendet und konnten weder gelöscht noch deaktiviert werden.'
             : 'Einige Produkte werden bereits in Bestellungen oder im Lager verwendet und können nicht gelöscht werden – sie wurden stattdessen deaktiviert.')
         } else {
           setError(`Löschen fehlgeschlagen: ${delError.message}`)
         }
+      } else {
+        logAudit('Produkte gelöscht', `${ids.length} Produkte`)
       }
     }
     setDeleting(false)
@@ -303,6 +312,7 @@ export default function Products() {
     }
     setImporting(false)
     setImportDone({ ok, err: failures.length })
+    if (ok > 0) logAudit('Produkte importiert', `${ok} Produkte`)
     if (failures.length > 0) {
       // Bei Teilfehlern die Zeilen benennen und importRows NICHT leeren
       setImportError(`Fehler bei ${failures.length} Zeile${failures.length !== 1 ? 'n' : ''}: ${failures.join(', ')}`)
