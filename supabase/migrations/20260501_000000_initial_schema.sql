@@ -5,56 +5,8 @@
 -- Staff RLS policies that later migrations DROP+CREATE are intentionally omitted
 -- here so a late apply on production does not resurrect superseded policy names.
 
--- ---------------------------------------------------------------------------
--- Helper functions
--- ---------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION public.has_role(role_name text)
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = auth.uid()
-      AND role_name = ANY (roles)
-  );
-$$;
-
-CREATE OR REPLACE FUNCTION public.update_updated_at()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = public
-AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  INSERT INTO public.profiles (id, username, name, gender, organisation, roles, active)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
-    COALESCE(NEW.raw_user_meta_data->>'gender', 'male'),
-    COALESCE(NEW.raw_user_meta_data->>'organisation', 'Stadtpolizei'),
-    ARRAY['user']::text[],
-    true
-  )
-  ON CONFLICT (id) DO NOTHING;
-  RETURN NEW;
-END;
-$$;
+-- Tables first: SQL-language functions are parsed at CREATE time and fail
+-- if they reference relations that do not exist yet (Supabase Preview).
 
 -- ---------------------------------------------------------------------------
 -- Tables
@@ -225,6 +177,57 @@ CREATE TABLE IF NOT EXISTS public.grundausstattung (
   updated_at timestamptz DEFAULT now(),
   UNIQUE (organisation, product_id)
 );
+
+-- ---------------------------------------------------------------------------
+-- Helper functions (after tables — LANGUAGE sql is bound at CREATE time)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.has_role(role_name text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+      AND role_name = ANY (roles)
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, username, name, gender, organisation, roles, active)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'gender', 'male'),
+    COALESCE(NEW.raw_user_meta_data->>'organisation', 'Stadtpolizei'),
+    ARRAY['user']::text[],
+    true
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Triggers
