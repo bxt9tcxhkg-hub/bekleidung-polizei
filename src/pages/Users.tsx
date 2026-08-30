@@ -5,70 +5,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
+import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
+import { USERNAME_RE } from '../lib/workflow'
 
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
 Max Mustermann;mmustermann;1234;Stadtpolizei;user
 Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger`
-
-interface ImportUser { name: string; username: string; dienstnummer: string; organisation: string; roles: string[] }
-
-function rowToUser(row: Record<string, string>): ImportUser | null {
-  const get = (...keys: string[]) => {
-    for (const k of keys) {
-      const val = row[k] ?? row[k.toLowerCase()] ?? ''
-      if (val.trim()) return val.trim()
-    }
-    return ''
-  }
-  const name = get('name', 'nachname', 'vollname')
-  const username = get('benutzername', 'username', 'benutzer', 'login')
-  if (!name || !username) return null
-  const rollen = get('rollen', 'roles', 'rolle', 'role')
-  const org = get('organisation', 'org', 'abteilung', 'einheit')
-  const normOrg = org.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei'
-  return {
-    name,
-    username: username.toLowerCase(),
-    dienstnummer: get('dienstnummer', 'dg', 'dienst-nr', 'dienstnr'),
-    organisation: normOrg,
-    roles: rollen ? rollen.split('|').map(s => s.trim()).filter(Boolean) : ['user'],
-  }
-}
-
-/** Zerlegt eine CSV-Zeile inkl. einfachem Quote-Handling ("Feld;mit;Trennzeichen", "" = escaptes Anführungszeichen). */
-function splitCsvLine(line: string, sep: string): string[] {
-  const cols: string[] = []
-  let cur = ''
-  let inQuotes = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (inQuotes) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') { cur += '"'; i++ }
-        else inQuotes = false
-      } else cur += ch
-    } else if (ch === '"' && cur.trim() === '') {
-      inQuotes = true
-      cur = ''
-    } else if (ch === sep) {
-      cols.push(cur.trim())
-      cur = ''
-    } else cur += ch
-  }
-  cols.push(cur.trim())
-  return cols
-}
-
-function parseCsvUsers(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return []
-  const sep = lines[0].includes(';') ? ';' : ','
-  const headers = splitCsvLine(lines[0], sep).map(h => h.toLowerCase())
-  return lines.slice(1).map(line => {
-    const cols = splitCsvLine(line, sep)
-    return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']))
-  })
-}
 
 /** Zufälliges Initialpasswort: 10 Zeichen, mind. 1 Großbuchstabe und 1 Zahl. */
 function generateInitialPassword(): string {
@@ -84,8 +26,6 @@ function generateInitialPassword(): string {
   }
   return out.join('')
 }
-
-const USERNAME_RE = /^[a-z0-9._-]+$/
 
 const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
 const emptyForm = () => ({ name: '', username: '', initialPassword: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
@@ -216,7 +156,8 @@ export default function Users() {
         setImportError('Datei konnte nicht gelesen werden.')
       }
     }
-    isExcel ? reader.readAsArrayBuffer(file) : reader.readAsText(file, 'UTF-8')
+    if (isExcel) reader.readAsArrayBuffer(file)
+    else reader.readAsText(file, 'UTF-8')
     e.target.value = ''
   }
 

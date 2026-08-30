@@ -294,7 +294,8 @@ export default function Products() {
         setImportError('Datei konnte nicht gelesen werden.')
       }
     }
-    isExcel ? reader.readAsArrayBuffer(file) : reader.readAsText(file, 'UTF-8')
+    if (isExcel) reader.readAsArrayBuffer(file)
+    else reader.readAsText(file, 'UTF-8')
     e.target.value = ''
   }
 

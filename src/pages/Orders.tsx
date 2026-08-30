@@ -7,6 +7,7 @@ import type { Order, OrderStatus } from '../lib/types'
 import { ORDER_STATUS_LABELS } from '../lib/types'
 import { fmtEUR } from '../lib/format'
 import { logAudit } from '../lib/audit'
+import { previousOrderStatus, nextIssueStatus } from '../lib/workflow'
 import Lieferungen from './Lieferungen'
 
 type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'ausgegeben' | 'storniert' | 'lieferungen'
@@ -22,15 +23,6 @@ const ADMIN_TABS: { key: AdminTab; label: string; status?: OrderStatus }[] = [
   { key: 'storniert',   label: 'Storniert',           status: 'cancelled' },
   { key: 'lieferungen', label: 'Lieferungen' },
 ]
-
-const STATUS_BACK: Partial<Record<string, OrderStatus>> = {
-  ordered_supplier: 'approved',
-  at_tailor: 'ordered_supplier',
-  ready_for_issue: 'ordered_supplier',
-  partially_issued: 'ready_for_issue',
-  issued: 'ready_for_issue',
-  cancelled: 'approved',
-}
 
 export default function Orders() {
   const { profile } = useAuth()
@@ -100,7 +92,7 @@ export default function Orders() {
   }, [sorted.length, page])
 
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+    setSelectedIds(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s })
   }
   function toggleSelectAll() { setSelectedIds(allSelected ? new Set() : new Set(tabOrders.map(o => o.id))) }
 
@@ -159,7 +151,7 @@ export default function Orders() {
     setSaving(true)
     setError('')
     const results = await Promise.all(items.map(o => {
-      const prevStatus = STATUS_BACK[o.status]
+      const prevStatus = previousOrderStatus(o.status, !!(o as { products?: { needs_tailoring?: boolean } }).products?.needs_tailoring)
       if (!prevStatus) return Promise.resolve({ error: null })
       const base: { status: OrderStatus; updated_at: string; cancel_reason?: null } = { status: prevStatus, updated_at: new Date().toISOString() }
       if (o.status === 'cancelled') base.cancel_reason = null
@@ -225,7 +217,7 @@ export default function Orders() {
     // Ausgabemenge gegen die noch offene Menge kappen
     const qtyNow = Math.min(qtyInput, outstanding)
     const newTotal = prevIssued + qtyNow
-    const newStatus: OrderStatus = newTotal < available ? 'partially_issued' : 'issued'
+    const newStatus: OrderStatus = nextIssueStatus(newTotal, available)
     setSaving(true)
     setError('')
     const { error: err } = await supabase.from('orders').update({ status: newStatus, quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
@@ -250,7 +242,7 @@ export default function Orders() {
     setSaving(true)
     setError('')
     // Create delivery and link orders
-    const { data: delivery, error: deliveryErr } = await (supabase.from('deliveries') as any).insert({
+    const { data: delivery, error: deliveryErr } = await supabase.from('deliveries').insert({
       created_by: profile!.id,
       status: 'ordered',
     }).select('id').single()
@@ -261,7 +253,7 @@ export default function Orders() {
     }
     const deliveryId = delivery?.id ?? null
     const results = await Promise.all(selected.map(o =>
-      (supabase.from('orders') as any).update({
+      supabase.from('orders').update({
         status: 'ordered_supplier',
         updated_at: new Date().toISOString(),
         ...(deliveryId ? { delivery_id: deliveryId } : {}),
@@ -357,7 +349,7 @@ export default function Orders() {
 
   function generateAusgabeliste() {
     const ausgabeOrders = orders
-      .filter(o => o.status === 'ready_for_issue')
+      .filter(o => o.status === 'ready_for_issue' || o.status === 'partially_issued')
       .sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
 
     if (ausgabeOrders.length === 0) return

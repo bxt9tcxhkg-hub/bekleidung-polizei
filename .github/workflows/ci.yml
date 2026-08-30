@@ -15,11 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Lint ist vorerst nicht-blockierend: der Bestand hat noch ~120 Verstöße
-      # gegen die strengen react-hooks-Regeln. Nach deren Bereinigung
-      # continue-on-error entfernen.
       - run: npm run lint
-        continue-on-error: true
       - run: npm test
       - run: npm run build
         env:

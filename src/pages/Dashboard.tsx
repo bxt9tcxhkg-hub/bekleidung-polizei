@@ -22,7 +22,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
     async function load() {
       const [cartRes, quarterRes, activeRes, totalBud, usedRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('user_id', profile.id).eq('status', 'pending'),
-        supabase.from('quarters').select('*').eq('status', 'active').single(),
+        supabase.from('quarters').select('*').eq('status', 'active').maybeSingle(),
         supabase.from('orders').select('id', { count: 'exact' })
           .eq('user_id', profile.id)
           .not('status', 'in', '(pending,cancelled)'),
@@ -104,7 +104,7 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
 
   useEffect(() => {
     async function load() {
-      const quarterRes = await supabase.from('quarters').select('*').eq('status', 'active').single()
+      const quarterRes = await supabase.from('quarters').select('*').eq('status', 'active').maybeSingle()
       setActiveQuarter(quarterRes.data ?? null)
 
       const [eingRes, liefRes, schnRes, ausgRes, lagerRes] = await Promise.all([
@@ -181,7 +181,7 @@ function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof u
       const [ordersRes, refundsRes, quarterRes] = await Promise.all([
         supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
         supabase.from('shoe_refunds').select('id', { count: 'exact' }).eq('status', 'pending'),
-        supabase.from('quarters').select('*').eq('status', 'active').single(),
+        supabase.from('quarters').select('*').eq('status', 'active').maybeSingle(),
       ])
       setPendingOrders(ordersRes.count ?? 0)
       setPendingRefunds(refundsRes.count ?? 0)

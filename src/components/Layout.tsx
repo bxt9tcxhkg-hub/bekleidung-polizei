@@ -21,8 +21,85 @@ interface NavSection {
   items: NavItem[]
 }
 
-export default function Layout() {
+function SidebarNav({
+  sections,
+  onNavigate,
+  profile,
+  signOut,
+}: {
+  sections: NavSection[]
+  onNavigate: () => void
+  profile: ReturnType<typeof useAuth>['profile']
+  signOut: () => Promise<void>
+}) {
   const location = useLocation()
+  return (
+    <>
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-blue-900">
+        <div className="bg-blue-600 p-2 rounded-lg">
+          <Shield className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <p className="text-white font-bold text-sm leading-tight">Stadtpolizei</p>
+          <p className="text-blue-300 text-xs">Dornbirn</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+        {sections.map(section => (
+          <div key={section.role}>
+            <p className={`text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 ${section.color}`}>
+              {section.label}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map(({ to, label, icon: Icon }) => {
+                const active = location.pathname === to
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={onNavigate}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-blue-600 text-white'
+                        : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {label}
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="px-3 py-4 border-t border-blue-900">
+        <div className="px-3 py-2 mb-2">
+          <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
+          <p className="text-blue-300 text-xs truncate">
+            {[
+              profile?.roles?.includes('admin') ? 'Admin' : profile?.roles?.includes('sachbearbeiter') ? 'Sachbearbeiter' : null,
+              profile?.roles?.includes('admin') || profile?.roles?.includes('genehmiger') || profile?.roles?.includes('approver') ? 'Genehmiger' : null,
+              'Benutzer',
+            ].filter(Boolean).join(' · ')}
+            {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}
+          </p>
+        </div>
+        <button
+          onClick={signOut}
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-blue-200 hover:bg-blue-800 hover:text-white transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          Abmelden
+        </button>
+      </div>
+    </>
+  )
+}
+
+export default function Layout() {
   const { profile, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -66,71 +143,6 @@ export default function Layout() {
     }] : []),
   ]
 
-  const NavContent = () => (
-    <>
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-blue-900">
-        <div className="bg-blue-600 p-2 rounded-lg">
-          <Shield className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <p className="text-white font-bold text-sm leading-tight">Stadtpolizei</p>
-          <p className="text-blue-300 text-xs">Dornbirn</p>
-        </div>
-      </div>
-
-      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
-        {sections.map(section => (
-          <div key={section.role}>
-            <p className={`text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 ${section.color}`}>
-              {section.label}
-            </p>
-            <div className="space-y-0.5">
-              {section.items.map(({ to, label, icon: Icon }) => {
-                const active = location.pathname === to
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      active
-                        ? 'bg-blue-600 text-white'
-                        : 'text-blue-200 hover:bg-blue-800 hover:text-white'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 flex-shrink-0" />
-                    {label}
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      <div className="px-3 py-4 border-t border-blue-900">
-        <div className="px-3 py-2 mb-2">
-          <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
-          <p className="text-blue-300 text-xs truncate">
-            {[
-              profile?.roles?.includes('admin') ? 'Admin' : profile?.roles?.includes('sachbearbeiter') ? 'Sachbearbeiter' : null,
-              profile?.roles?.includes('admin') || profile?.roles?.includes('genehmiger') || profile?.roles?.includes('approver') ? 'Genehmiger' : null,
-              'Benutzer',
-            ].filter(Boolean).join(' · ')}
-            {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}
-          </p>
-        </div>
-        <button
-          onClick={signOut}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-blue-200 hover:bg-blue-800 hover:text-white transition-colors"
-        >
-          <LogOut className="w-4 h-4" />
-          Abmelden
-        </button>
-      </div>
-    </>
-  )
-
   return (
     <div className="flex h-screen bg-gray-50">
       {sidebarOpen && (
@@ -138,7 +150,7 @@ export default function Layout() {
       )}
 
       <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-60 bg-blue-950 flex flex-col transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <NavContent />
+        <SidebarNav sections={sections} onNavigate={() => setSidebarOpen(false)} profile={profile} signOut={signOut} />
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">

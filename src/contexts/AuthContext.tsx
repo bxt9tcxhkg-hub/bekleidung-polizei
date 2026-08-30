@@ -15,6 +15,8 @@ interface AuthContextType {
   isGenehmiger: boolean
   mustChangePassword: boolean
   availableRoles: AppRole[]
+  authError: string
+  refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -28,6 +30,8 @@ const AuthContext = createContext<AuthContextType>({
   isGenehmiger: false,
   mustChangePassword: false,
   availableRoles: [],
+  authError: '',
+  refreshProfile: async () => {},
   signOut: async () => {},
 })
 
@@ -35,30 +39,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState('')
 
-  async function loadProfile(userId: string) {
+  async function applyProfile(userId: string): Promise<boolean> {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single()
-    if (error) {
-      console.error('Profil konnte nicht geladen werden:', error.message)
-      return
+    if (error || !data) {
+      console.error('Profil konnte nicht geladen werden:', error?.message)
+      setAuthError('Kein Profil gefunden. Bitte wende dich an die Verwaltung.')
+      await supabase.auth.signOut()
+      setUser(null)
+      setProfile(null)
+      return false
     }
-    if (data) setProfile(data)
+    if (!data.active) {
+      setAuthError('Dieses Konto ist deaktiviert. Bitte wende dich an die Verwaltung.')
+      await supabase.auth.signOut()
+      setUser(null)
+      setProfile(null)
+      return false
+    }
+    setAuthError('')
+    setProfile(data)
+    return true
+  }
+
+  async function refreshProfile() {
+    const { data: { user: current } } = await supabase.auth.getUser()
+    if (current) await applyProfile(current.id)
   }
 
   useEffect(() => {
-    // Merkt sich, für welchen Benutzer das Profil bereits geladen wurde, damit das
-    // initiale SIGNED_IN/INITIAL_SESSION-Event nicht doppelt lädt.
     let loadedForUserId: string | null = null
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
         loadedForUserId = session.user.id
-        loadProfile(session.user.id).finally(() => setLoading(false))
+        applyProfile(session.user.id).finally(() => setLoading(false))
       } else setLoading(false)
     })
 
@@ -68,7 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const isInitialEvent = event === 'INITIAL_SESSION' || event === 'SIGNED_IN'
         if (isInitialEvent && loadedForUserId === session.user.id) return
         loadedForUserId = session.user.id
-        loadProfile(session.user.id)
+        setLoading(true)
+        applyProfile(session.user.id).finally(() => setLoading(false))
       } else {
         loadedForUserId = null
         setProfile(null)
@@ -98,10 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, availableRoles, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, availableRoles, authError, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- Hook gehört zum Provider
 export const useAuth = () => useContext(AuthContext)

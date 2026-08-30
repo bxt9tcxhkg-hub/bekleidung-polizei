@@ -24,7 +24,7 @@ export default function AuditLog() {
         setLogs([])
       } else {
         setError('')
-        setLogs(data ?? [])
+        setLogs((data ?? []) as AuditLogType[])
         setTotalCount(count ?? 0)
       }
       setLoading(false)

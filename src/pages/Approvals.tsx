@@ -89,8 +89,10 @@ export default function Approvals() {
     if (processing) return
     setProcessing(id)
     setError('')
+    const { data: { user } } = await supabase.auth.getUser()
     const { error: err } = await supabase.from('stock_orders').update({
       status: 'approved',
+      approved_by: user?.id ?? null,
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', id)

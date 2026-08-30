@@ -49,7 +49,7 @@ export default function ShoeRefunds() {
       .order('created_at', { ascending: false })
     if (!canManage) query.eq('user_id', profile!.id)
     const { data } = await query
-    setRefunds(data ?? [])
+    setRefunds((data ?? []) as ShoeRefund[])
     setLoading(false)
   }
 

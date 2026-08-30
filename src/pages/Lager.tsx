@@ -150,7 +150,7 @@ export default function Lager() {
     const qty = parseInt(addForm.quantity)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
-    const { error: adjError } = await (supabase.rpc as any)('adjust_inventory', {
+    const { error: adjError } = await supabase.rpc('adjust_inventory', {
       p_product: addForm.product_id,
       p_size: addForm.size,
       p_delta: qty,
@@ -243,7 +243,7 @@ export default function Lager() {
   async function markReceived(order: StockOrder) {
     setSaving(true)
     // Erst Bestand buchen, dann Status setzen
-    const { error: adjError } = await (supabase.rpc as any)('adjust_inventory', {
+    const { error: adjError } = await supabase.rpc('adjust_inventory', {
       p_product: order.product_id,
       p_size: order.size,
       p_delta: order.quantity,

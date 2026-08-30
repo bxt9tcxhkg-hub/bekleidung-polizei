@@ -162,6 +162,39 @@ export interface AuditLog {
   profiles?: Profile
 }
 
+export interface VorrechnungAnalysis {
+  rechnungsnummer: string | null
+  gesamtbetrag: number | null
+  positionen: { artikelnummer: string; bezeichnung: string; menge: number; einzelpreis: number }[]
+}
+
+export type DeliveryStatus = 'ordered' | 'partially_received' | 'received'
+
+export interface Delivery {
+  id: string
+  created_at: string
+  created_by: string | null
+  vorrechnung_url: string | null
+  vorrechnung_name: string | null
+  vorrechnung_number: string | null
+  vorrechnung_amount: number | null
+  vorrechnung_analysis: VorrechnungAnalysis | null
+  paid: boolean
+  paid_at: string | null
+  status: DeliveryStatus
+  orders?: Order[]
+}
+
+export interface Grundausstattung {
+  id: string
+  organisation: string
+  product_id: string
+  quantity: number
+  created_by: string | null
+  updated_at: string | null
+  products?: Product
+}
+
 type ProfileRow = Omit<Profile, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
 type ProductRow = Omit<Product, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
 type InventoryRow = Omit<Inventory, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
@@ -173,24 +206,60 @@ type TailorJobRow = Omit<TailorJob, 'profiles' | 'quarters' | 'orders' | 'creato
 type ShoeRefundRow = Omit<ShoeRefund, 'profiles' | 'creator'>
 type AuditLogRow = Omit<AuditLog, 'profiles' | 'creator'>
 type StockOrderRow = Omit<StockOrder, 'products' | 'requester' | 'approver'>
+type DeliveryRow = Omit<Delivery, 'orders'>
+type GrundausstattungRow = Omit<Grundausstattung, 'products'>
 
 export type Database = {
   public: {
     Tables: {
       profiles: { Row: ProfileRow; Insert: Omit<ProfileRow, 'created_at'>; Update: Partial<ProfileRow>; Relationships: [] }
       products: { Row: ProductRow; Insert: Omit<ProductRow, 'id' | 'created_at'>; Update: Partial<ProductRow>; Relationships: [] }
-      inventory: { Row: InventoryRow; Insert: Omit<InventoryRow, 'id'>; Update: Partial<InventoryRow>; Relationships: [] }
+      inventory: { Row: InventoryRow; Insert: Omit<InventoryRow, 'id'>; Update: Partial<InventoryRow>; Relationships: [
+        { foreignKeyName: 'inventory_product_id_fkey'; columns: ['product_id']; isOneToOne: false; referencedRelation: 'products'; referencedColumns: ['id'] },
+      ] }
       quarters: { Row: QuarterRow; Insert: Omit<QuarterRow, 'id' | 'created_at'>; Update: Partial<QuarterRow>; Relationships: [] }
-      orders: { Row: OrderRow; Insert: Pick<OrderRow, 'user_id' | 'product_id' | 'quarter_id' | 'size' | 'quantity' | 'status'> & Partial<Omit<OrderRow, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'product_id' | 'quarter_id' | 'size' | 'quantity' | 'status'>>; Update: Partial<OrderRow>; Relationships: [] }
-      tailor_jobs: { Row: TailorJobRow; Insert: Pick<TailorJobRow, 'quarter_id' | 'status'> & Partial<Omit<TailorJobRow, 'id' | 'created_at' | 'quarter_id' | 'status'>>; Update: Partial<TailorJobRow>; Relationships: [] }
-      shoe_refunds: { Row: ShoeRefundRow; Insert: Omit<ShoeRefundRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundRow>; Relationships: [] }
-      audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [] }
-      user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [] }
-      shoe_refund_caps: { Row: ShoeRefundCapRow; Insert: Omit<ShoeRefundCapRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundCapRow>; Relationships: [] }
-      stock_orders: { Row: StockOrderRow; Insert: Omit<StockOrderRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<StockOrderRow>; Relationships: [] }
+      orders: { Row: OrderRow; Insert: Pick<OrderRow, 'user_id' | 'product_id' | 'quarter_id' | 'size' | 'quantity' | 'status'> & Partial<Omit<OrderRow, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'product_id' | 'quarter_id' | 'size' | 'quantity' | 'status'>>; Update: Partial<OrderRow>; Relationships: [
+        { foreignKeyName: 'orders_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'orders_product_id_fkey'; columns: ['product_id']; isOneToOne: false; referencedRelation: 'products'; referencedColumns: ['id'] },
+        { foreignKeyName: 'orders_quarter_id_fkey'; columns: ['quarter_id']; isOneToOne: false; referencedRelation: 'quarters'; referencedColumns: ['id'] },
+        { foreignKeyName: 'orders_delivery_id_fkey'; columns: ['delivery_id']; isOneToOne: false; referencedRelation: 'deliveries'; referencedColumns: ['id'] },
+        { foreignKeyName: 'orders_tailor_job_id_fkey'; columns: ['tailor_job_id']; isOneToOne: false; referencedRelation: 'tailor_jobs'; referencedColumns: ['id'] },
+      ] }
+      tailor_jobs: { Row: TailorJobRow; Insert: Pick<TailorJobRow, 'quarter_id' | 'status'> & Partial<Omit<TailorJobRow, 'id' | 'created_at' | 'quarter_id' | 'status'>>; Update: Partial<TailorJobRow>; Relationships: [
+        { foreignKeyName: 'tailor_jobs_quarter_id_fkey'; columns: ['quarter_id']; isOneToOne: false; referencedRelation: 'quarters'; referencedColumns: ['id'] },
+      ] }
+      shoe_refunds: { Row: ShoeRefundRow; Insert: Omit<ShoeRefundRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundRow>; Relationships: [
+        { foreignKeyName: 'shoe_refunds_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'shoe_refunds_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'shoe_refunds_reviewed_by_fkey'; columns: ['reviewed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [
+        { foreignKeyName: 'audit_log_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [
+        { foreignKeyName: 'user_budgets_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      shoe_refund_caps: { Row: ShoeRefundCapRow; Insert: Omit<ShoeRefundCapRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundCapRow>; Relationships: [
+        { foreignKeyName: 'shoe_refund_caps_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      stock_orders: { Row: StockOrderRow; Insert: Omit<StockOrderRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<StockOrderRow>; Relationships: [
+        { foreignKeyName: 'stock_orders_product_id_fkey'; columns: ['product_id']; isOneToOne: false; referencedRelation: 'products'; referencedColumns: ['id'] },
+        { foreignKeyName: 'stock_orders_requested_by_fkey'; columns: ['requested_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'stock_orders_approved_by_fkey'; columns: ['approved_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      deliveries: { Row: DeliveryRow; Insert: Partial<Omit<DeliveryRow, 'id'>> & { status?: DeliveryStatus }; Update: Partial<DeliveryRow>; Relationships: [
+        { foreignKeyName: 'deliveries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      grundausstattung: { Row: GrundausstattungRow; Insert: Omit<GrundausstattungRow, 'id' | 'updated_at'> & Partial<Pick<GrundausstattungRow, 'id' | 'updated_at'>>; Update: Partial<GrundausstattungRow>; Relationships: [
+        { foreignKeyName: 'grundausstattung_product_id_fkey'; columns: ['product_id']; isOneToOne: false; referencedRelation: 'products'; referencedColumns: ['id'] },
+        { foreignKeyName: 'grundausstattung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      submit_cart: { Args: Record<string, never>; Returns: string | null }
+      adjust_inventory: { Args: { p_product: string; p_size: string; p_delta: number }; Returns: number }
+    }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }

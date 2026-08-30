@@ -121,15 +121,20 @@ export default function Shop() {
   async function addToCart() {
     if (!sizeModal || !activeQuarter) return
     setAdding(sizeModal.product.id)
-    const { error: err } = await supabase.from('orders').insert({
-      user_id: profile!.id,
-      product_id: sizeModal.product.id,
-      quarter_id: activeQuarter.id,
-      size: sizeModal.size,
-      quantity: sizeModal.quantity,
-      unit_price: sizeModal.product.price,
-      status: 'pending',
-    })
+    const existing = cartItems.find(o =>
+      o.product_id === sizeModal.product.id && o.size === sizeModal.size && o.quarter_id === activeQuarter.id
+    )
+    const { error: err } = existing
+      ? await supabase.from('orders').update({ quantity: existing.quantity + sizeModal.quantity }).eq('id', existing.id)
+      : await supabase.from('orders').insert({
+          user_id: profile!.id,
+          product_id: sizeModal.product.id,
+          quarter_id: activeQuarter.id,
+          size: sizeModal.size,
+          quantity: sizeModal.quantity,
+          unit_price: sizeModal.product.price,
+          status: 'pending',
+        })
     if (err) {
       setError('Artikel konnte nicht hinzugefügt werden. Bitte erneut versuchen.')
       setAdding(null)
@@ -145,27 +150,35 @@ export default function Shop() {
     const newQty = Math.max(1, item.quantity + delta)
     const { error: err } = await supabase.from('orders').update({ quantity: newQty }).eq('id', item.id)
     if (err) setError('Menge konnte nicht geändert werden.')
-    loadCart()
+    await loadCart()
   }
 
   async function removeItem(item: CartItem) {
     const { error: err } = await supabase.from('orders').delete().eq('id', item.id)
     if (err) setError('Artikel konnte nicht entfernt werden.')
-    loadCart()
+    await loadCart()
   }
 
   async function submitCart() {
     if (cartItems.length === 0) return
+    if (!activeQuarter) {
+      setError('Kein aktives Quartal – Bestellungen können derzeit nicht eingereicht werden.')
+      return
+    }
     setSubmitting(true)
-    // Serverseitig atomar einreichen – die Budget-Prüfung entscheidet die DB
     const { data, error: err } = await supabase.rpc('submit_cart')
     setSubmitting(false)
     if (err) {
       setError('Bestellung konnte nicht eingereicht werden. Bitte erneut versuchen.')
       return
     }
+    if (data !== 'approved' && data !== 'pending_approval') {
+      setError('Warenkorb ist leer oder wurde bereits eingereicht.')
+      await loadCart()
+      return
+    }
     setCartOpen(false)
-    if (data === 'approved' || data === 'pending_approval') setSubmitResult(data)
+    setSubmitResult(data)
     await Promise.all([loadCart(), loadBudget()])
   }
 
@@ -193,7 +206,7 @@ export default function Shop() {
             </p>
             <p className={`text-xs mt-0.5 ${submitResult === 'approved' ? 'text-green-700' : 'text-amber-700'}`}>
               {submitResult === 'approved'
-                ? 'Deine Bestellung wurde direkt weitergeleitet und wird vom Admin bearbeitet.'
+                ? 'Deine Bestellung wurde direkt weitergeleitet und wird vom Sachbearbeiter bearbeitet.'
                 : 'Dein Restbudget reicht nicht aus. Ein Genehmiger muss die Bestellung zuerst freigeben.'}
             </p>
           </div>

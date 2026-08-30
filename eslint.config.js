@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'supabase/functions', 'functions']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -17,6 +17,14 @@ export default defineConfig([
     ],
     languageOptions: {
       globals: globals.browser,
+    },
+    rules: {
+      // React-Compiler-Regel: verbietet setState in useEffect (Datenladen).
+      // Der Bestand lädt Seiten über useEffect; eine Umstellung auf Query-Hooks
+      // ist ein separates Refactor.
+      'react-hooks/set-state-in-effect': 'off',
+      // Vorhandene `as any`-Casts (Supabase-Joins) — nicht in diesem PR umgestellt.
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
 ])

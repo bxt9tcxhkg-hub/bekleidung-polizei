@@ -1,4 +1,4 @@
-import { isAuthenticated, unauthorized, type AuthEnv } from './_auth'
+import { isAuthenticated, unauthorized, serviceUnavailable, type AuthEnv } from './_auth'
 
 interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
@@ -16,6 +16,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
+  if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
 
   const formData = await context.request.formData()
@@ -25,6 +26,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   if (!file) {
     return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400 })
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    return new Response(JSON.stringify({ error: 'Datei zu groß (max. 20 MB)' }), { status: 400 })
   }
 
   const ext = (file.name.split('.').pop() ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
@@ -40,10 +44,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
       const base64 = arrayBufferToBase64(fileBuffer)
       const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${context.env.GEMINI_API_KEY}`,
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': context.env.GEMINI_API_KEY },
           body: JSON.stringify({
             contents: [{
               parts: [

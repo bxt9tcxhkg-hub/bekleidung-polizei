@@ -243,7 +243,7 @@ export default function Analyse() {
       setLoading(false)
     }
     load().catch(() => { setError('Analyse konnte nicht geladen werden.'); setLoading(false) })
-  }, [periodPreset, fromDate, toDate])
+  }, [periodPreset, fromDate, toDate, profile?.organisation])
 
   const totalOrders = stats.reduce((s, p) => s + p.orderCount, 0)
   const totalQty = stats.reduce((s, p) => s + p.totalQty, 0)
