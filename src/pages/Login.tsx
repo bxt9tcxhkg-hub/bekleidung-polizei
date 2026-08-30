@@ -4,6 +4,7 @@ import { Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { loginEmailFromInput } from '../lib/workflow'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
   const { user, authError } = useAuth()
@@ -72,13 +73,19 @@ export default function Login() {
             />
           </div>
 
+          {!isSupabaseConfigured && (
+            <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded-lg">
+              Die App ist nicht konfiguriert (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Bitte Umgebungsvariablen setzen und neu bauen.
+            </p>
+          )}
+
           {(error || authError) && (
             <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error || authError}</p>
           )}
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isSupabaseConfigured}
             className="w-full bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-60 text-sm"
           >
             {loading ? 'Anmelden...' : 'Anmelden'}
