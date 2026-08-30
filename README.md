@@ -98,7 +98,9 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | Datei | Inhalt |
 |---|---|
 | `20260501_000000_initial_schema.sql` | Rekonstruierte Baseline (Tabellen, Views, RPCs-Helfer, Benutzer-Policies) |
-| `20260511_*` … `20260708_*` | Bestehende Inkremente (bereits auf Produktion angewendet) |
+| `20260511000001_*` / `20260511000002_*` | Status-Hinweis / `proc_listed` (Versionen entdoppelt für Branching) |
+| `20260702000001_*` / `20260702000002_*` | Fremde Tabellen / Security-Hardening (Versionen entdoppelt) |
+| `20260707_*` … `20260708_*` | RPCs, Indizes, Rollenabdeckung |
 | `20260830_production_readiness.sql` | Genehmiger-WITH-CHECK, deliveries-RLS, `has_role` prüft `active` |
 
 Schema-Änderungen immer als neue Migrationsdatei dokumentieren.
