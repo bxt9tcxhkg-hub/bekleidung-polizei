@@ -98,17 +98,19 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | Datei | Inhalt |
 |---|---|
 | `20260501_000000_initial_schema.sql` | Rekonstruierte Baseline (Tabellen, Views, RPCs-Helfer, Benutzer-Policies) |
-| `20260511_approved_status.sql` | Status-Hinweis (Version `20260511` — bereits in Preview-Historie) |
-| `20260511000002_proc_listed.sql` | `proc_listed` (eigene Version, kein zweites `20260511`) |
-| `20260702_drop_foreign_project_tables.sql` | Fremde Tabellen entfernen (Version `20260702`) |
-| `20260702000002_security_hardening.sql` | Security-Hardening (eigene Version, kein zweites `20260702`) |
+| `20260511_approved_status.sql` | Status-Hinweis |
+| `20260512_proc_listed.sql` | `proc_listed` (eigene 8-stellige Version, nicht `20260511…`) |
+| `20260702_drop_foreign_project_tables.sql` | Fremde Tabellen entfernen |
+| `20260703_security_hardening.sql` | Security-Hardening (eigene 8-stellige Version, nicht `20260702…`) |
 | `20260707_*` … `20260708_*` | RPCs, Indizes, Rollenabdeckung |
 | `20260830_production_readiness.sql` | Genehmiger-WITH-CHECK, deliveries-RLS, `has_role` prüft `active` |
 
-Hosted Branching nimmt den Präfix vor dem ersten `_` als `schema_migrations.version`.
-Zwei Dateien mit gleichem Präfix erzeugen `duplicate key`. Umbenennen bereits
-angewendeter Versionen erzeugt `Remote migration versions not found`. Deshalb
-bleibt je ein Originalpräfix erhalten, der zweite Inhalt hat eine eigene Version.
+Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
+mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
+14-stellige mit demselben Präfix (`20260511` + `20260511000002`) löst im CLI
+einen Sortierfehler aus ([supabase/cli#6036](https://github.com/supabase/cli/issues/6036)):
+`Remote migration versions not found`. Neue Dateien daher mit eigener
+8-stelliger Version ohne gemeinsames Präfix.
 
 Schema-Änderungen immer als neue Migrationsdatei dokumentieren.
 
