@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentShoeRefundCap } from '../lib/budget'
+import { getCurrentShoeRefundCap, DEFAULT_SHOE_CAP } from '../lib/budget'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import type { ShoeRefund, ShoeRefundStatus, Profile } from '../lib/types'
@@ -32,7 +33,7 @@ export default function ShoeRefunds() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [maxRefund, setMaxRefund] = useState(120)
+  const [maxRefund, setMaxRefund] = useState(DEFAULT_SHOE_CAP)
   const [form, setForm] = useState({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
   const [userSearch, setUserSearch] = useState('')
   const [userDropdown, setUserDropdown] = useState(false)
@@ -49,7 +50,7 @@ export default function ShoeRefunds() {
       .order('created_at', { ascending: false })
     if (!canManage) query.eq('user_id', profile!.id)
     const { data } = await query
-    setRefunds(data ?? [])
+    setRefunds((data ?? []) as ShoeRefund[])
     setLoading(false)
   }
 
@@ -125,7 +126,7 @@ export default function ShoeRefunds() {
     const { error } = await supabase.from('shoe_refunds').update(payload).eq('id', id)
     if (error) setError(`Aktion fehlgeschlagen: ${error.message}`)
     else {
-      const benutzername = (refunds.find(r => r.id === id) as any)?.profiles?.name ?? '?'
+      const benutzername = refunds.find(r => r.id === id)?.profiles?.name ?? '?'
       logAudit(status === 'approved' ? 'Schuherstattung genehmigt' : 'Schuherstattung abgelehnt', benutzername)
       setError('')
     }
@@ -156,6 +157,13 @@ export default function ShoeRefunds() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Schuherstattungen</h1>
           <p className="text-gray-500 text-sm mt-1">{canManage ? 'Alle Schuhkostenerstattungen' : 'Meine Schuhkostenerstattungen'}</p>
+          {canManage && (
+            <p className="text-sm text-gray-500 mt-1">
+              Maximalbetrag {fmtEUR(maxRefund)}
+              {' · '}
+              <Link to="/budgets" className="text-blue-700 hover:underline font-medium">unter Budgetverwaltung anpassen</Link>
+            </p>
+          )}
         </div>
         <button
           onClick={() => { resetForm(); setShowForm(true) }}
@@ -212,8 +220,8 @@ export default function ShoeRefunds() {
                   <tr key={r.id} className="hover:bg-gray-50">
                     {canManage && (
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{(r as any).profiles?.name}</p>
-                        <p className="text-xs text-gray-400">{(r as any).profiles?.dienstnummer ? `DG ${(r as any).profiles.dienstnummer}` : ''}</p>
+                        <p className="font-medium text-gray-900">{r.profiles?.name}</p>
+                        <p className="text-xs text-gray-400">{r.profiles?.dienstnummer ? `DG ${r.profiles.dienstnummer}` : ''}</p>
                       </td>
                     )}
                     <td className="px-4 py-3 text-gray-700">{new Date(r.refund_date).toLocaleDateString('de-AT')}</td>
@@ -252,7 +260,7 @@ export default function ShoeRefunds() {
                         )}
                         {r.status !== 'pending' && (
                           <p className="text-xs text-gray-400 text-right whitespace-nowrap">
-                            {(r as any).reviewer?.name ?? '–'}
+                            {r.reviewer?.name ?? '–'}
                           </p>
                         )}
                       </td>

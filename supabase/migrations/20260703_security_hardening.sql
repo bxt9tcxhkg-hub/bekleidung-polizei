@@ -3,8 +3,10 @@
 
 -- 1. shoe_refund_caps: RLS aktivieren (lesen: alle Angemeldeten, schreiben: Genehmiger/Admin)
 ALTER TABLE public.shoe_refund_caps ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Angemeldete lesen Caps" ON public.shoe_refund_caps;
 CREATE POLICY "Angemeldete lesen Caps" ON public.shoe_refund_caps
   FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Genehmiger verwalten Caps" ON public.shoe_refund_caps;
 CREATE POLICY "Genehmiger verwalten Caps" ON public.shoe_refund_caps
   FOR ALL TO authenticated
   USING (has_role('admin') OR has_role('genehmiger') OR has_role('approver'))
@@ -12,8 +14,10 @@ CREATE POLICY "Genehmiger verwalten Caps" ON public.shoe_refund_caps
 
 -- 2. grundausstattung: RLS aktivieren (lesen: alle Angemeldeten, schreiben: Sachbearbeiter/Admin)
 ALTER TABLE public.grundausstattung ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Angemeldete lesen Grundausstattung" ON public.grundausstattung;
 CREATE POLICY "Angemeldete lesen Grundausstattung" ON public.grundausstattung
   FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Sachbearbeiter verwalten Grundausstattung" ON public.grundausstattung;
 CREATE POLICY "Sachbearbeiter verwalten Grundausstattung" ON public.grundausstattung
   FOR ALL TO authenticated
   USING (has_role('admin') OR has_role('sachbearbeiter'))

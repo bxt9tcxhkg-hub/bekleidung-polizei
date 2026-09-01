@@ -45,7 +45,7 @@ export default function Grundausstattung() {
 
   async function load(isInitial = false) {
     if (isInitial) setLoading(true); else setRefreshing(true)
-    const { data } = await (supabase.from('grundausstattung') as any)
+    const { data } = await supabase.from('grundausstattung')
       .select('*, products(*)')
       .eq('organisation', org)
       .order('updated_at', { ascending: true })
@@ -104,7 +104,7 @@ export default function Grundausstattung() {
     setAddError('')
     if (!addProductId) { setAddError('Bitte Artikel auswählen.'); return }
     setSaving(true)
-    const { error } = await (supabase.from('grundausstattung') as any).upsert({
+    const { error } = await supabase.from('grundausstattung').upsert({
       organisation: org,
       product_id: addProductId,
       quantity: parseInt(addQty) || 1,
@@ -118,7 +118,7 @@ export default function Grundausstattung() {
 
   async function removeItem(id: string) {
     setDeleting(id)
-    const { error: delError } = await (supabase.from('grundausstattung') as any).delete().eq('id', id)
+    const { error: delError } = await supabase.from('grundausstattung').delete().eq('id', id)
     setDeleting(null)
     if (delError) { setError('Artikel konnte nicht entfernt werden.'); return }
     load(false)

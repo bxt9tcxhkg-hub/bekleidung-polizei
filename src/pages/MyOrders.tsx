@@ -1,126 +1,82 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Package } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import type { Order } from '../lib/types'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '../lib/types'
 import { getCurrentBudget, getUsedBudget, DEFAULT_BUDGET } from '../lib/budget'
 import { fmtEUR } from '../lib/format'
+import { groupOrdersByQuarter, orderLineMengeLabel, type OrderListLine } from '../lib/orderList'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
-type MyOrder = Order & {
-  products?: { name: string; category: string; needs_tailoring: boolean }
-  quarters?: { name: string }
-}
-
-const STATUS_STEPS = [
-  { key: 'pending_approval', label: 'Wartet auf Freigabe' },
-  { key: 'approved',         label: 'Freigegeben' },
-  { key: 'ordered_supplier', label: 'In Bestellung' },
-  { key: 'at_tailor',        label: 'Beim Schneider' },
-  { key: 'ready_for_issue',  label: 'Bereit zur Ausgabe' },
-  { key: 'partially_issued', label: 'Teilweise ausgegeben' },
-  { key: 'issued',           label: 'Ausgegeben' },
-]
-
-function Timeline({ order }: { order: MyOrder }) {
-  if (order.status === 'cancelled') {
-    return (
-      <div className="mt-3 flex items-center gap-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
-        <span className="font-medium">Storniert</span>
-        {order.cancel_reason && <span className="text-red-500">– {order.cancel_reason}</span>}
-      </div>
-    )
-  }
-
-  const steps = STATUS_STEPS.filter(s =>
-    s.key !== 'at_tailor' || order.products?.needs_tailoring
-  ).filter(s =>
-    s.key !== 'pending_approval' || order.status === 'pending_approval'
-  ).filter(s =>
-    s.key !== 'partially_issued' || order.status === 'partially_issued'
-  )
-
-  const currentIdx = steps.findIndex(s => s.key === order.status)
-
-  return (
-    <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1">
-      {steps.map((step, i) => {
-        const isDone = i < currentIdx
-        const isActive = step.key === order.status
-        return (
-          <div key={step.key} className="flex items-center gap-1 flex-shrink-0">
-            <div className="flex flex-col items-center gap-1">
-              <div className={`w-2.5 h-2.5 rounded-full border-2 flex-shrink-0 ${
-                isDone ? 'bg-green-500 border-green-500' :
-                isActive ? 'bg-blue-600 border-blue-600' :
-                'bg-white border-gray-300'
-              }`} />
-              <span className={`text-xs whitespace-nowrap ${
-                isActive ? 'text-blue-700 font-semibold' :
-                isDone ? 'text-green-600' : 'text-gray-400'
-              }`}>{step.label}</span>
-            </div>
-            {i < steps.length - 1 && (
-              <div className={`h-0.5 w-6 flex-shrink-0 mb-3.5 ${isDone ? 'bg-green-400' : 'bg-gray-200'}`} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export default function MyOrders() {
   const { profile } = useAuth()
-  const [orders, setOrders] = useState<MyOrder[]>([])
+  const [orders, setOrders] = useState<OrderListLine[]>([])
   const [totalBudgetAmt, setTotalBudgetAmt] = useState(DEFAULT_BUDGET)
   const [usedBudget, setUsedBudget] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    async function load() {
-      if (!profile) return
-      setLoading(true)
-      const [ordersRes, totalBud, used] = await Promise.all([
-        supabase.from('orders')
-          .select('*, products(name,category,needs_tailoring), quarters(name)')
-          .eq('user_id', profile.id)
-          .not('status', 'eq', 'pending')
-          .order('created_at', { ascending: false }),
-        getCurrentBudget(profile.id, CURRENT_YEAR),
-        getUsedBudget(profile.id, CURRENT_YEAR),
-      ])
-      setOrders((ordersRes.data ?? []) as MyOrder[])
-      setTotalBudgetAmt(totalBud)
-      setUsedBudget(used)
-      setLoading(false)
-    }
-    load().catch(() => { setError('Bestellungen konnten nicht geladen werden.'); setLoading(false) })
+  const load = useCallback(async () => {
+    if (!profile) return
+    const [ordersRes, totalBud, used] = await Promise.all([
+      supabase.from('orders')
+        .select('*, products(name,category,needs_tailoring), quarters(name,year,quarter_num)')
+        .eq('user_id', profile.id)
+        .not('status', 'eq', 'pending')
+        .order('created_at', { ascending: false }),
+      getCurrentBudget(profile.id, CURRENT_YEAR),
+      getUsedBudget(profile.id, CURRENT_YEAR),
+    ])
+    if (ordersRes.error) throw ordersRes.error
+    setError('')
+    setOrders((ordersRes.data ?? []) as OrderListLine[])
+    setTotalBudgetAmt(totalBud)
+    setUsedBudget(used)
   }, [profile])
 
-  const totalBudget = totalBudgetAmt
-  const remaining = totalBudget - usedBudget
-  const budgetPct = Math.min(100, (usedBudget / totalBudget) * 100)
+  useEffect(() => {
+    if (!profile) return
+    setLoading(true)
+    load()
+      .catch(() => setError('Bestellungen konnten nicht geladen werden.'))
+      .finally(() => setLoading(false))
+  }, [profile, load])
 
-  const active = orders.filter(o => o.status !== 'issued' && o.status !== 'cancelled')
-  const done = orders.filter(o => o.status === 'issued' || o.status === 'cancelled')
+  useEffect(() => {
+    if (!profile) return
+    const channel = supabase
+      .channel(`sammelliste-${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `user_id=eq.${profile.id}` },
+        () => { load().catch(() => {}) },
+      )
+      .subscribe()
+    const onFocus = () => { load().catch(() => {}) }
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      supabase.removeChannel(channel)
+    }
+  }, [profile, load])
+
+  const remaining = totalBudgetAmt - usedBudget
+  const budgetPct = Math.min(100, (usedBudget / totalBudgetAmt) * 100)
+  const groups = groupOrdersByQuarter(orders)
 
   return (
     <div>
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Meine Bestellungen</h1>
-        <p className="text-gray-500 text-sm mt-1">Status und Verlauf deiner Bestellungen</p>
+        <p className="text-gray-500 text-sm mt-1">Sammelliste deiner eingereichten Artikel, nach Quartal</p>
       </div>
 
-      {/* Budget */}
       <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-6">
         <div className="flex items-center justify-between mb-2">
           <p className="font-semibold text-gray-900">Jahresbudget {CURRENT_YEAR}</p>
-          <p className="text-sm font-bold text-gray-700">{fmtEUR(usedBudget)} / {fmtEUR(totalBudget)}</p>
+          <p className="text-sm font-bold text-gray-700">{fmtEUR(usedBudget)} / {fmtEUR(totalBudgetAmt)}</p>
         </div>
         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
@@ -143,55 +99,52 @@ export default function MyOrders() {
         </div>
       ) : (
         <div className="space-y-6">
-          {active.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Laufende Bestellungen</h2>
-              <div className="space-y-3">
-                {active.map(o => (
-                  <div key={o.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900">{o.products?.name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {o.products?.category} · Gr. {o.size} · {o.quantity}×
-                          {o.products?.needs_tailoring && <span className="text-purple-600"> · Wappenänderung</span>}
-                        </p>
-                        <p className="text-xs text-gray-400">{o.quarters?.name}</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
-                          {ORDER_STATUS_LABELS[o.status]}
-                        </span>
-                        <p className="text-xs text-gray-500 mt-1">{fmtEUR(o.unit_price * o.quantity)}</p>
-                      </div>
-                    </div>
-                    <Timeline order={o} />
-                  </div>
-                ))}
+          {groups.map(group => (
+            <div key={group.quarterId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
+                <h2 className="font-semibold text-gray-900">{group.quarterName}</h2>
+                <span className="text-xs text-gray-500">
+                  {group.lines.length} {group.lines.length === 1 ? 'Position' : 'Positionen'}
+                </span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Name</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Größe</th>
+                      <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Menge</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {group.lines.map(o => (
+                      <tr key={o.id} className={o.status === 'cancelled' ? 'opacity-70' : ''}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p>
+                          {o.products?.needs_tailoring && (
+                            <p className="text-xs text-purple-600 mt-0.5">Wappenänderung</p>
+                          )}
+                          {o.cancel_reason && (
+                            <p className="text-xs text-red-500 mt-0.5">Grund: {o.cancel_reason}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{o.size || '–'}</td>
+                        <td className="px-4 py-3 text-right text-gray-700 tabular-nums">
+                          {orderLineMengeLabel(o.quantity, o.quantity_issued, o.status)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ORDER_STATUS_COLORS[o.status]}`}>
+                            {ORDER_STATUS_LABELS[o.status]}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
-
-          {done.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Abgeschlossen</h2>
-              <div className="space-y-2">
-                {done.map(o => (
-                  <div key={o.id} className={`bg-white rounded-xl border px-5 py-3 flex items-center gap-4 ${o.status === 'cancelled' ? 'border-red-100 opacity-70' : 'border-gray-200'}`}>
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">{o.products?.name}</p>
-                      <p className="text-xs text-gray-400">Gr. {o.size} · {o.quantity}× · {o.quarters?.name}</p>
-                      {o.cancel_reason && <p className="text-xs text-red-500 mt-0.5">Grund: {o.cancel_reason}</p>}
-                    </div>
-                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0 ${ORDER_STATUS_COLORS[o.status]}`}>
-                      {ORDER_STATUS_LABELS[o.status]}
-                    </span>
-                    <p className="text-sm font-semibold text-gray-700 flex-shrink-0">{fmtEUR(o.unit_price * o.quantity)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          ))}
         </div>
       )}
     </div>

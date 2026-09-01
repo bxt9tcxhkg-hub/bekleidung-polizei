@@ -1,0 +1,5 @@
+# Supabase-Projekt (öffentliche Referenz aus dem bestehenden Client-Bundle).
+project_id = "qqkxlkrkbctexwnqjitx"
+
+[functions.create-user]
+verify_jwt = true

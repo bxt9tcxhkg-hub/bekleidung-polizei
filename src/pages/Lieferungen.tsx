@@ -1,34 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Upload, FileText, Check, ChevronDown, ChevronUp, Truck, Package, CheckSquare, Square, AlertCircle, Euro } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { Order } from '../lib/types'
-
-interface VorrechnungAnalysis {
-  rechnungsnummer: string | null
-  gesamtbetrag: number | null
-  positionen: { artikelnummer: string; bezeichnung: string; menge: number; einzelpreis: number }[]
-}
+import type { Delivery, Order } from '../lib/types'
+import { planGoodsIn } from '../lib/inventory'
+import { ensureOpenTailorJob } from '../lib/tailorJobs'
 
 type DeliveryOrder = Order & {
   products?: { name: string; article_number: string; category: string; needs_tailoring: boolean }
 }
 
 // Status, in denen eine Position bereits als erhalten/weiterverarbeitet gilt
-const DONE_ORDER_STATUSES = ['ready_for_issue', 'at_tailor', 'issued']
-
-interface Delivery {
-  id: string
-  created_at: string
-  vorrechnung_url: string | null
-  vorrechnung_name: string | null
-  vorrechnung_number: string | null
-  vorrechnung_amount: number | null
-  vorrechnung_analysis: VorrechnungAnalysis | null
-  paid: boolean
-  paid_at: string | null
-  status: 'ordered' | 'partially_received' | 'received'
-  orders?: DeliveryOrder[]
-}
+const DONE_ORDER_STATUSES = ['ready_for_issue', 'at_tailor', 'partially_issued', 'issued']
 
 export default function Lieferungen() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([])
@@ -44,20 +26,23 @@ export default function Lieferungen() {
 
   async function load() {
     setLoading(true)
-    const { data } = await (supabase.from('deliveries') as any)
+    const { data } = await supabase
+      .from('deliveries')
       .select('*')
       .order('created_at', { ascending: false })
     const deliveryList = (data ?? []) as Delivery[]
 
     if (deliveryList.length > 0) {
       const ids = deliveryList.map(d => d.id)
-      const { data: ordersData } = await (supabase.from('orders') as any)
+      const { data: ordersData } = await supabase
+        .from('orders')
         .select('*, products(name,article_number,category,needs_tailoring)')
         .in('delivery_id', ids)
       const ordersByDelivery: Record<string, DeliveryOrder[]> = {}
-      ;(ordersData ?? []).forEach((o: any) => {
+      ;(ordersData ?? []).forEach((o) => {
+        if (!o.delivery_id) return
         if (!ordersByDelivery[o.delivery_id]) ordersByDelivery[o.delivery_id] = []
-        ordersByDelivery[o.delivery_id].push(o)
+        ordersByDelivery[o.delivery_id].push(o as DeliveryOrder)
       })
       deliveryList.forEach(d => { d.orders = ordersByDelivery[d.id] ?? [] })
     }
@@ -70,13 +55,13 @@ export default function Lieferungen() {
   useEffect(() => { load() }, [])
 
   function toggleExpand(id: string) {
-    setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setExpanded(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   }
 
   function toggleOrder(deliveryId: string, orderId: string) {
     setChecked(prev => {
       const set = new Set(prev[deliveryId] ?? [])
-      set.has(orderId) ? set.delete(orderId) : set.add(orderId)
+      if (set.has(orderId)) set.delete(orderId); else set.add(orderId)
       return { ...prev, [deliveryId]: set }
     })
   }
@@ -97,18 +82,57 @@ export default function Lieferungen() {
     setSaving(delivery.id)
 
     const receivedOrders = delivery.orders?.filter(o => receivedIds.has(o.id)) ?? []
-    await Promise.all(receivedOrders.map(o =>
-      supabase.from('orders').update({
-        status: (o as any).products?.needs_tailoring ? 'at_tailor' : 'ready_for_issue',
+    for (const o of receivedOrders) {
+      const plan = planGoodsIn({
+        id: o.id,
+        quantity: o.quantity,
+        needsTailoring: !!o.products?.needs_tailoring,
+      })
+      if (plan.inventoryDelta !== 0) {
+        const adj = await supabase.rpc('adjust_inventory', {
+          p_product: o.product_id,
+          p_size: o.size,
+          p_delta: plan.inventoryDelta,
+        })
+        if (adj.error) {
+          setSaving(null)
+          setActionError('Wareneingang: Bestand konnte nicht gebucht werden.')
+          return
+        }
+      }
+      let tailorJobId: string | null = null
+      if (plan.needsTailorJob) {
+        const job = await ensureOpenTailorJob(o.quarter_id)
+        if (job.error || !job.id) {
+          setSaving(null)
+          setActionError('Schneider-Auftrag konnte nicht angelegt werden.')
+          return
+        }
+        tailorJobId = job.id
+      }
+      const { error: updErr } = await supabase.from('orders').update({
+        status: plan.status,
+        quantity_received: plan.quantityReceived,
         updated_at: new Date().toISOString(),
+        ...(tailorJobId ? { tailor_job_id: tailorJobId } : {}),
       }).eq('id', o.id)
-    ))
+      if (updErr) {
+        setSaving(null)
+        setActionError('Wareneingang konnte nicht vollständig gespeichert werden.')
+        return
+      }
+    }
 
-    // Bereits zuvor bestätigte Positionen zählen ebenfalls als erhalten
     const allReceived = delivery.orders?.every(o => receivedIds.has(o.id) || DONE_ORDER_STATUSES.includes(o.status)) ?? false
-    await (supabase.from('deliveries') as any)
+    const { error: delErr } = await supabase
+      .from('deliveries')
       .update({ status: allReceived ? 'received' : 'partially_received' })
       .eq('id', delivery.id)
+    if (delErr) {
+      setSaving(null)
+      setActionError('Lieferstatus konnte nicht aktualisiert werden.')
+      return
+    }
 
     setSaving(null)
     await load()
@@ -116,7 +140,8 @@ export default function Lieferungen() {
 
   async function markAsPaid(deliveryId: string) {
     setActionError('')
-    const { error } = await (supabase.from('deliveries') as any)
+    const { error } = await supabase
+      .from('deliveries')
       .update({ paid: true, paid_at: new Date().toISOString() })
       .eq('id', deliveryId)
     if (error) { setActionError('Zahlung konnte nicht gespeichert werden.'); return }
@@ -132,7 +157,17 @@ export default function Lieferungen() {
   async function openFile(url: string) {
     const { data: sess } = await supabase.auth.getSession()
     const token = sess.session?.access_token
-    window.open(token ? `${url}?token=${encodeURIComponent(token)}` : url, '_blank', 'noopener')
+    if (!token) { setActionError('Datei konnte nicht geöffnet werden.'); return }
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) throw new Error()
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    } catch {
+      setActionError('Datei konnte nicht geöffnet werden.')
+    }
   }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -158,14 +193,15 @@ export default function Lieferungen() {
       if (!res.ok) throw new Error()
       const { key, name, analysis } = await res.json()
 
-      const update: Record<string, unknown> = { vorrechnung_url: `/files/${key}`, vorrechnung_name: name }
-      if (analysis) {
-        update.vorrechnung_analysis = analysis
-        if (analysis.rechnungsnummer) update.vorrechnung_number = analysis.rechnungsnummer
-        if (analysis.gesamtbetrag != null) update.vorrechnung_amount = analysis.gesamtbetrag
-      }
-
-      await (supabase.from('deliveries') as any).update(update).eq('id', deliveryId)
+      await supabase.from('deliveries').update({
+        vorrechnung_url: `/files/${key}`,
+        vorrechnung_name: name,
+        ...(analysis ? {
+          vorrechnung_analysis: analysis,
+          ...(analysis.rechnungsnummer ? { vorrechnung_number: analysis.rechnungsnummer } : {}),
+          ...(analysis.gesamtbetrag != null ? { vorrechnung_amount: analysis.gesamtbetrag } : {}),
+        } : {}),
+      }).eq('id', deliveryId)
       await load()
     } catch {
       setUploadError('Upload fehlgeschlagen – bitte nochmals versuchen')
@@ -306,7 +342,7 @@ export default function Lieferungen() {
                       </div>
                       {orders.map(o => {
                         const isChecked = checkedSet.has(o.id)
-                        const alreadyDone = isDone || o.status === 'ready_for_issue' || o.status === 'at_tailor' || o.status === 'issued'
+                        const alreadyDone = isDone || DONE_ORDER_STATUSES.includes(o.status)
                         return (
                           <div key={o.id}
                             onClick={() => !alreadyDone && toggleOrder(d.id, o.id)}
@@ -319,9 +355,9 @@ export default function Lieferungen() {
                             <Package className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className={`text-sm truncate ${alreadyDone ? 'text-gray-400' : 'text-gray-800'}`}>
-                                {(o as any).products?.name ?? '–'}
+                                {o.products?.name ?? '–'}
                               </p>
-                              <p className="text-xs text-gray-400 font-mono">{(o as any).products?.article_number}</p>
+                              <p className="text-xs text-gray-400 font-mono">{o.products?.article_number}</p>
                             </div>
                             <span className="text-xs text-gray-500 flex-shrink-0">Gr. {o.size} · {o.quantity}×</span>
                           </div>

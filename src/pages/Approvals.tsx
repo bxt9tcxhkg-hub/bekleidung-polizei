@@ -89,8 +89,10 @@ export default function Approvals() {
     if (processing) return
     setProcessing(id)
     setError('')
+    const { data: { user } } = await supabase.auth.getUser()
     const { error: err } = await supabase.from('stock_orders').update({
       status: 'approved',
+      approved_by: user?.id ?? null,
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', id)
@@ -99,7 +101,7 @@ export default function Approvals() {
       setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
-    logAudit('Lagerbestellung genehmigt', (stockOrders.find(o => o.id === id) as any)?.products?.name ?? '?')
+    logAudit('Lagerbestellung genehmigt', stockOrders.find(o => o.id === id)?.products?.name ?? '?')
     load()
   }
 
@@ -117,7 +119,7 @@ export default function Approvals() {
       setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
-    logAudit('Lagerbestellung abgelehnt', (stockOrders.find(o => o.id === id) as any)?.products?.name ?? '?')
+    logAudit('Lagerbestellung abgelehnt', stockOrders.find(o => o.id === id)?.products?.name ?? '?')
     setCancelReason(null)
     load()
   }
@@ -237,11 +239,11 @@ export default function Approvals() {
                     {stockOrders.map(o => (
                       <tr key={o.id} className="hover:bg-gray-50">
                         <td className="px-5 py-4">
-                          <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
-                          <p className="text-xs text-gray-400">{(o as any).products?.article_number} · {(o as any).products?.category}</p>
+                          <p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400">{o.products?.article_number} · {o.products?.category}</p>
                         </td>
                         <td className="px-5 py-4 text-gray-700">{o.size} · {o.quantity}×</td>
-                        <td className="px-5 py-4 text-gray-500 hidden sm:table-cell">{(o as any).requester?.name ?? '–'}</td>
+                        <td className="px-5 py-4 text-gray-500 hidden sm:table-cell">{o.requester?.name ?? '–'}</td>
                         <td className="px-5 py-4 text-gray-400 text-xs hidden sm:table-cell">{o.note ?? '–'}</td>
                         <td className="px-5 py-4">
                           <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STOCK_ORDER_STATUS_COLORS[o.status]}`}>

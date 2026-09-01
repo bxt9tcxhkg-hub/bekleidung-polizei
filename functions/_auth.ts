@@ -1,8 +1,6 @@
 // Verifiziert Supabase-Access-Tokens für Pages Functions.
-// URL/Key können per Env überschrieben werden; die Defaults sind die
-// öffentlichen Projektwerte (der Anon-Key ist ohnehin im Client-Bundle).
-const DEFAULT_SUPABASE_URL = 'https://qqkxlkrkbctexwnqjitx.supabase.co'
-const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxa3hsa3JrYmN0ZXh3bnFqaXR4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0Njg1MzksImV4cCI6MjA5NDA0NDUzOX0.WLoCJYLrWRIH6tA6FPHJiJpCOGuPxeBIN5gWiP3mRQU'
+// URL/Key müssen per Env gesetzt sein (Cloudflare Pages → Settings → Environment variables).
+// Kein Fallback-JWT im Quellcode — ohne Env schlägt die Prüfung fehl.
 
 export interface AuthEnv {
   SUPABASE_URL?: string
@@ -10,18 +8,17 @@ export interface AuthEnv {
 }
 
 /**
- * Liest den Access-Token aus dem Authorization-Header (Bearer) oder dem
- * ?token= Query-Parameter (für direkte Datei-Links) und prüft ihn gegen
- * Supabase Auth. Gibt true zurück, wenn ein gültiger Benutzer dahintersteckt.
+ * Liest den Access-Token aus dem Authorization-Header (Bearer)
+ * und prüft ihn gegen Supabase Auth. Query-Parameter werden nicht akzeptiert.
  */
 export async function isAuthenticated(request: Request, env: AuthEnv): Promise<boolean> {
   const authHeader = request.headers.get('Authorization')
-  let token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-  if (!token) token = new URL(request.url).searchParams.get('token')
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
   if (!token) return false
 
-  const supabaseUrl = env.SUPABASE_URL || DEFAULT_SUPABASE_URL
-  const anonKey = env.SUPABASE_ANON_KEY || DEFAULT_ANON_KEY
+  const supabaseUrl = env.SUPABASE_URL
+  const anonKey = env.SUPABASE_ANON_KEY
+  if (!supabaseUrl || !anonKey) return false
 
   try {
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -36,6 +33,13 @@ export async function isAuthenticated(request: Request, env: AuthEnv): Promise<b
 export function unauthorized(): Response {
   return new Response(JSON.stringify({ error: 'Unauthorized' }), {
     status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+export function serviceUnavailable(): Response {
+  return new Response(JSON.stringify({ error: 'Upload/Dateien nicht konfiguriert (SUPABASE_URL, SUPABASE_ANON_KEY)' }), {
+    status: 503,
     headers: { 'Content-Type': 'application/json' },
   })
 }

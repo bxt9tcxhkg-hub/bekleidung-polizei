@@ -3,9 +3,11 @@ import { Navigate } from 'react-router-dom'
 import { Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { loginEmailFromInput } from '../lib/workflow'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
-  const { user } = useAuth()
+  const { user, authError } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -17,10 +19,20 @@ export default function Login() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const input = username.trim()
-    const email = input.includes('@') ? input : `${input.toLowerCase()}@stadtpolizei-dornbirn.local`
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError('Ungültiger Benutzername oder Passwort')
+    const email = loginEmailFromInput(username)
+    const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
+    if (signErr || !data.user) {
+      setError('Ungültiger Benutzername oder Passwort')
+      setLoading(false)
+      return
+    }
+    const { data: prof } = await supabase.from('profiles').select('active').eq('id', data.user.id).single()
+    if (!prof || !prof.active) {
+      await supabase.auth.signOut()
+      setError(prof ? 'Dieses Konto ist deaktiviert. Bitte wende dich an die Verwaltung.' : 'Kein Profil gefunden. Bitte wende dich an die Verwaltung.')
+      setLoading(false)
+      return
+    }
     setLoading(false)
   }
 
@@ -61,13 +73,19 @@ export default function Login() {
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+          {!isSupabaseConfigured && (
+            <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded-lg">
+              Die App ist nicht konfiguriert (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY). Bitte Umgebungsvariablen setzen und neu bauen.
+            </p>
+          )}
+
+          {(error || authError) && (
+            <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error || authError}</p>
           )}
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isSupabaseConfigured}
             className="w-full bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-60 text-sm"
           >
             {loading ? 'Anmelden...' : 'Anmelden'}

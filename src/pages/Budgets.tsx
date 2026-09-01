@@ -1,13 +1,22 @@
 import { useEffect, useState } from 'react'
-import { Pencil, Check, X, RefreshCw, Plus, CalendarClock, Footprints, Search, ChevronRight } from 'lucide-react'
+import { Pencil, Check, X, RefreshCw, CalendarClock, Footprints, Search, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
+import { DEFAULT_BUDGET, DEFAULT_SHOE_CAP, existingCapIdForDate } from '../lib/budget'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
 
+type BudgetDrillOrder = {
+  id: string
+  quantity: number
+  unit_price: number
+  size: string
+  created_at: string | null
+  products: { name: string; article_number: string } | null
+}
+
 const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_BUDGET = 350
 const today = () => new Date().toISOString().split('T')[0]
 
 interface UserRow {
@@ -31,7 +40,7 @@ export default function Budgets() {
   const [error, setError] = useState('')
 
   // Drill-down
-  const [drilldown, setDrilldown] = useState<{ profile: Profile; orders: any[] } | null>(null)
+  const [drilldown, setDrilldown] = useState<{ profile: Profile; orders: BudgetDrillOrder[] } | null>(null)
   const [drilldownLoading, setDrilldownLoading] = useState(false)
 
   async function openDrilldown(profile: Profile) {
@@ -44,7 +53,7 @@ export default function Budgets() {
       .not('status', 'in', '(pending,cancelled)')
       .gte('created_at', `${CURRENT_YEAR}-01-01`)
       .order('created_at', { ascending: false })
-    setDrilldown({ profile, orders: data ?? [] })
+    setDrilldown({ profile, orders: (data ?? []) as BudgetDrillOrder[] })
     setDrilldownLoading(false)
   }
 
@@ -64,7 +73,7 @@ export default function Budgets() {
         .select('user_id, unit_price, quantity')
         .not('status', 'in', '(pending,cancelled)')
         .gte('created_at', `${CURRENT_YEAR}-01-01`),
-      supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }),
+      supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }).order('created_at', { ascending: false }),
     ])
 
     const profiles = profilesRes.data ?? []
@@ -134,12 +143,18 @@ export default function Budgets() {
     const val = parseFloat(capForm.amount.replace(',', '.'))
     if (isNaN(val) || val < 0) return
     setCapSaving(true)
-    const { error } = await supabase.from('shoe_refund_caps').insert({
-      cap_amount: val,
-      valid_from: capForm.valid_from,
-      note: capForm.note || null,
-      created_by: authProfile!.id,
-    })
+    const existingId = existingCapIdForDate(caps, capForm.valid_from)
+    const { error } = existingId
+      ? await supabase.from('shoe_refund_caps').update({
+          cap_amount: val,
+          note: capForm.note || null,
+        }).eq('id', existingId)
+      : await supabase.from('shoe_refund_caps').insert({
+          cap_amount: val,
+          valid_from: capForm.valid_from,
+          note: capForm.note || null,
+          created_by: authProfile!.id,
+        })
     setCapSaving(false)
     if (error) { setError(`Maximalbetrag konnte nicht gespeichert werden: ${error.message}`); return }
     logAudit('Schuherstattungs-Deckel geändert', `${fmtEUR(val)} ab ${capForm.valid_from}`)
@@ -216,15 +231,17 @@ export default function Budgets() {
               <p className="text-xs text-gray-500">Globale Obergrenze für alle Benutzer</p>
             </div>
           </div>
-          <button onClick={() => { setShowCapForm(true); setCapForm({ amount: String(currentCap?.cap_amount ?? 120), valid_from: today(), note: '' }) }}
+          <button onClick={() => { setShowCapForm(true); setCapForm({ amount: String(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP), valid_from: today(), note: currentCap?.note ?? '' }) }}
             className="flex items-center gap-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg transition-colors">
-            <Plus className="w-4 h-4" /> Änderung planen
+            <Pencil className="w-4 h-4" /> Anpassen
           </button>
         </div>
         <div className="flex items-center gap-6 flex-wrap">
           <div>
-            <p className="text-3xl font-bold text-gray-900">{fmtEUR(Number(currentCap?.cap_amount ?? 120))}</p>
-            {currentCap && <p className="text-xs text-gray-400 mt-0.5">gültig seit {new Date(currentCap.valid_from).toLocaleDateString('de-AT')}</p>}
+            <p className="text-3xl font-bold text-gray-900">{fmtEUR(Number(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP))}</p>
+            {currentCap
+              ? <p className="text-xs text-gray-400 mt-0.5">gültig seit {new Date(currentCap.valid_from).toLocaleDateString('de-AT')}</p>
+              : <p className="text-xs text-gray-400 mt-0.5">kein Eintrag — Standard {fmtEUR(DEFAULT_SHOE_CAP)}</p>}
           </div>
           {scheduledCap && (
             <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -287,7 +304,7 @@ export default function Budgets() {
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{profile.dienstnummer ?? '–'}</td>
                     <td className="px-4 py-3 text-right">
                       {editId === profile.id ? (
-                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                        <div className="flex items-center justify-end gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
                           <span className="text-gray-500 text-xs">€</span>
                           <input type="number" step="0.01" min="0" autoFocus
                             className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -331,7 +348,7 @@ export default function Budgets() {
                       {fmtEUR(remaining)}
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => { setEditId(profile.id); setEditForm({ amount: total.toFixed(2), valid_from: today() }) }}
+                      <button onClick={e => { e.stopPropagation(); setEditId(profile.id); setEditForm({ amount: total.toFixed(2), valid_from: today() }) }}
                         className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900 float-right">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -416,13 +433,13 @@ export default function Budgets() {
                     {drilldown.orders.map(o => (
                       <tr key={o.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
-                          <p className="text-xs text-gray-400">{(o as any).products?.article_number}</p>
+                          <p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400">{o.products?.article_number}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-600">{o.size}</td>
                         <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtEUR(o.unit_price * o.quantity)}</td>
                         <td className="px-4 py-3 text-right text-gray-400 text-xs hidden sm:table-cell">
-                          {new Date(o.created_at).toLocaleDateString('de-AT')}
+                          {o.created_at ? new Date(o.created_at).toLocaleDateString('de-AT') : '–'}
                         </td>
                       </tr>
                     ))}

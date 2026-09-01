@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children, adminOnly = false, sachbearbeiterOnly = false, genehmigerOnly = false, staffOnly = false }: Props) {
-  const { user, loading, isSachbearbeiter, isGenehmiger } = useAuth()
+  const { user, profile, loading, isAdmin, isSachbearbeiter, isGenehmiger } = useAuth()
 
   if (loading) {
     return (
@@ -20,8 +20,9 @@ export default function ProtectedRoute({ children, adminOnly = false, sachbearbe
     )
   }
 
-  if (!user) return <Navigate to="/login" replace />
-  if ((adminOnly || sachbearbeiterOnly) && !isSachbearbeiter) return <Navigate to="/" replace />
+  if (!user || !profile || !profile.active) return <Navigate to="/login" replace />
+  if (adminOnly && !isAdmin) return <Navigate to="/" replace />
+  if (sachbearbeiterOnly && !isSachbearbeiter) return <Navigate to="/" replace />
   if (genehmigerOnly && !isGenehmiger) return <Navigate to="/" replace />
   if (staffOnly && !isSachbearbeiter && !isGenehmiger) return <Navigate to="/" replace />
 

@@ -21,52 +21,19 @@ interface NavSection {
   items: NavItem[]
 }
 
-export default function Layout() {
+function SidebarNav({
+  sections,
+  onNavigate,
+  profile,
+  signOut,
+}: {
+  sections: NavSection[]
+  onNavigate: () => void
+  profile: ReturnType<typeof useAuth>['profile']
+  signOut: () => Promise<void>
+}) {
   const location = useLocation()
-  const { profile, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-
-  const sections: NavSection[] = [
-    {
-      role: 'user',
-      label: 'Mein Bereich',
-      color: 'text-blue-300',
-      items: [
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-        { to: '/warenkorb', label: 'Bekleidung bestellen', icon: ShoppingCart },
-        { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
-        { to: '/profil', label: 'Mein Profil', icon: UserCircle },
-      ],
-    },
-    ...(isSachbearbeiter ? [{
-      role: 'sachbearbeiter',
-      label: 'Sachbearbeiter',
-      color: 'text-orange-300',
-      items: [
-        { to: '/bestellungen', label: 'Bestellungen', icon: Package },
-        { to: '/lager', label: 'Lagerverwaltung', icon: Warehouse },
-        { to: '/analyse', label: 'Analyse', icon: BarChart3 },
-        { to: '/grundausstattung', label: 'Grundausstattung', icon: BookOpen },
-        { to: '/produkte', label: 'Produkte', icon: Package },
-        { to: '/quartale', label: 'Quartale', icon: CalendarRange },
-        { to: '/benutzer', label: 'Benutzer', icon: Users },
-        { to: '/auditlog', label: 'Audit-Log', icon: ClipboardList },
-      ],
-    }] : []),
-    ...(isGenehmiger ? [{
-      role: 'genehmiger',
-      label: 'Genehmiger',
-      color: 'text-green-300',
-      items: [
-        { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
-        { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
-        { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
-        ...(!isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
-      ],
-    }] : []),
-  ]
-
-  const NavContent = () => (
+  return (
     <>
       <div className="flex items-center gap-3 px-4 py-5 border-b border-blue-900">
         <div className="bg-blue-600 p-2 rounded-lg">
@@ -91,7 +58,7 @@ export default function Layout() {
                   <Link
                     key={to}
                     to={to}
-                    onClick={() => setSidebarOpen(false)}
+                    onClick={onNavigate}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       active
                         ? 'bg-blue-600 text-white'
@@ -130,6 +97,52 @@ export default function Layout() {
       </div>
     </>
   )
+}
+
+export default function Layout() {
+  const { profile, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const sections: NavSection[] = [
+    {
+      role: 'user',
+      label: 'Mein Bereich',
+      color: 'text-blue-300',
+      items: [
+        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/warenkorb', label: 'Bekleidung bestellen', icon: ShoppingCart },
+        { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
+        { to: '/profil', label: 'Mein Profil', icon: UserCircle },
+      ],
+    },
+    ...(isSachbearbeiter ? [{
+      role: 'sachbearbeiter',
+      label: 'Sachbearbeiter',
+      color: 'text-orange-300',
+      items: [
+        { to: '/bestellungen', label: 'Bestellungen', icon: Package },
+        { to: '/lager', label: 'Lagerverwaltung', icon: Warehouse },
+        { to: '/analyse', label: 'Analyse', icon: BarChart3 },
+        { to: '/grundausstattung', label: 'Grundausstattung', icon: BookOpen },
+        { to: '/produkte', label: 'Produkte', icon: Package },
+        { to: '/quartale', label: 'Quartale', icon: CalendarRange },
+        { to: '/benutzer', label: 'Benutzer', icon: Users },
+        { to: '/auditlog', label: 'Audit-Log', icon: ClipboardList },
+      ],
+    }] : []),
+    ...(isGenehmiger ? [{
+      role: 'genehmiger',
+      label: 'Genehmiger',
+      color: 'text-green-300',
+      items: [
+        { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
+        { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
+        { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
+        ...(!isSachbearbeiter ? [{ to: '/benutzer', label: 'Benutzer', icon: Users }] : []),
+        ...(!isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
+      ],
+    }] : []),
+  ]
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -138,7 +151,7 @@ export default function Layout() {
       )}
 
       <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-60 bg-blue-950 flex flex-col transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <NavContent />
+        <SidebarNav sections={sections} onNavigate={() => setSidebarOpen(false)} profile={profile} signOut={signOut} />
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">

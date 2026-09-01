@@ -54,7 +54,7 @@ const FEMALE_SIZE_FIELDS: SizeField[] = [
 ]
 
 export default function UserProfile() {
-  const { profile, isStrictAdmin } = useAuth()
+  const { profile, isStrictAdmin, refreshProfile } = useAuth()
   const [form, setForm] = useState({ name: '', dienstnummer: '', gender: 'male' as 'male' | 'female' })
   const [sizePref, setSizePref] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -83,7 +83,10 @@ export default function UserProfile() {
       })
       .eq('id', profile!.id)
     if (error) setError(error.message)
-    else setSuccess(true)
+    else {
+      setSuccess(true)
+      await refreshProfile()
+    }
     setSaving(false)
   }
 
