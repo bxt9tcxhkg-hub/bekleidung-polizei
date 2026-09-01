@@ -2,8 +2,9 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
+import { availableRolesFromFlags, flagsFromRoles, type AppRole } from '../lib/authRoles'
 
-export type AppRole = 'user' | 'sachbearbeiter' | 'genehmiger'
+export type { AppRole }
 
 interface AuthContextType {
   user: User | null
@@ -101,17 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const roles = profile?.roles ?? []
-  const isSachbearbeiter = roles.includes('admin') || roles.includes('sachbearbeiter')
-  const isGenehmiger = roles.includes('admin') || roles.includes('genehmiger') || roles.includes('approver')
-  const isAdmin = isSachbearbeiter
-  const isStrictAdmin = roles.includes('admin')
+  const { isAdmin, isSachbearbeiter, isGenehmiger, isStrictAdmin } = flagsFromRoles(roles)
   const mustChangePassword = user?.user_metadata?.force_password_change === true
-
-  const availableRoles: AppRole[] = [
-    'user',
-    ...(isSachbearbeiter ? ['sachbearbeiter' as AppRole] : []),
-    ...(isGenehmiger ? ['genehmiger' as AppRole] : []),
-  ]
+  const availableRoles: AppRole[] = availableRolesFromFlags({ isAdmin, isSachbearbeiter, isGenehmiger, isStrictAdmin })
 
   const signOut = async () => {
     await supabase.auth.signOut()

@@ -3,18 +3,49 @@
 // Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Keep in sync with src/lib/appOrigins.ts — never Access-Control-Allow-Origin: *
+const STATIC_APP_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:4173',
+  'https://bekleidung-polizei.pages.dev',
+]
+
+function extraAllowedOrigins(): string[] {
+  return (Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+function isAllowedOrigin(origin: string): boolean {
+  if (!origin) return false
+  if (STATIC_APP_ORIGINS.includes(origin)) return true
+  if (extraAllowedOrigins().includes(origin)) return true
+  try {
+    const u = new URL(origin)
+    return u.protocol === 'https:' && u.hostname.endsWith('.bekleidung-polizei.pages.dev')
+  } catch {
+    return false
+  }
+}
+
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    Vary: 'Origin',
+  }
+  if (isAllowedOrigin(origin)) headers['Access-Control-Allow-Origin'] = origin
+  return headers
 }
 
 const USERNAME_RE = /^[a-z0-9._-]+$/
 const LOCAL_DOMAIN = 'stadtpolizei-dornbirn.local'
 
-function json(body: unknown, status = 200) {
+function json(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   })
 }
 
@@ -38,32 +69,32 @@ function canAssign(callerRoles: string[], role: string): boolean {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
+  if (req.method !== 'POST') return json(req, { error: 'Method not allowed' }, 405)
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!supabaseUrl || !serviceKey) {
-    return json({ error: 'Server nicht konfiguriert (SUPABASE_SERVICE_ROLE_KEY)' }, 500)
+    return json(req, { error: 'Server nicht konfiguriert (SUPABASE_SERVICE_ROLE_KEY)' }, 500)
   }
 
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader?.startsWith('Bearer ')) return json({ error: 'Unauthorized' }, 401)
+  if (!authHeader?.startsWith('Bearer ')) return json(req, { error: 'Unauthorized' }, 401)
 
   const admin = createClient(supabaseUrl, serviceKey)
   const token = authHeader.slice(7)
   const { data: authData, error: authErr } = await admin.auth.getUser(token)
-  if (authErr || !authData.user) return json({ error: 'Unauthorized' }, 401)
+  if (authErr || !authData.user) return json(req, { error: 'Unauthorized' }, 401)
 
   const { data: caller, error: callerErr } = await admin
     .from('profiles')
     .select('roles, active')
     .eq('id', authData.user.id)
     .single()
-  if (callerErr || !caller?.active) return json({ error: 'Keine Berechtigung' }, 403)
+  if (callerErr || !caller?.active) return json(req, { error: 'Keine Berechtigung' }, 403)
   const callerRoles: string[] = caller.roles ?? []
   if (!canCreateUsers(callerRoles)) {
-    return json({ error: 'Keine Berechtigung' }, 403)
+    return json(req, { error: 'Keine Berechtigung' }, 403)
   }
 
   let body: {
@@ -79,18 +110,18 @@ Deno.serve(async (req) => {
   try {
     body = await req.json()
   } catch {
-    return json({ error: 'Ungültiger JSON-Body' }, 400)
+    return json(req, { error: 'Ungültiger JSON-Body' }, 400)
   }
 
   const name = (body.name ?? '').trim()
   const username = (body.username ?? '').trim().toLowerCase()
   const password = body.initial_password ?? ''
-  if (!name || !username) return json({ error: 'Name und Benutzername sind Pflicht.' }, 400)
+  if (!name || !username) return json(req, { error: 'Name und Benutzername sind Pflicht.' }, 400)
   if (!USERNAME_RE.test(username)) {
-    return json({ error: 'Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.' }, 400)
+    return json(req, { error: 'Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.' }, 400)
   }
   if (password.length < 8 || !/[0-9]/.test(password) || !/[A-Z]/.test(password)) {
-    return json({ error: 'Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.' }, 400)
+    return json(req, { error: 'Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.' }, 400)
   }
 
   const requested = Array.isArray(body.roles) && body.roles.length > 0 ? body.roles : ['user']
@@ -118,7 +149,7 @@ Deno.serve(async (req) => {
   if (createErr || !created.user) {
     const msg = createErr?.message ?? 'Benutzer konnte nicht angelegt werden'
     const status = /already|exists|registered/i.test(msg) ? 409 : 400
-    return json({ error: msg }, status)
+    return json(req, { error: msg }, status)
   }
 
   const { error: profileErr } = await admin.from('profiles').upsert({
@@ -133,8 +164,8 @@ Deno.serve(async (req) => {
   })
   if (profileErr) {
     await admin.auth.admin.deleteUser(created.user.id)
-    return json({ error: profileErr.message }, 400)
+    return json(req, { error: profileErr.message }, 400)
   }
 
-  return json({ id: created.user.id, username })
+  return json(req, { id: created.user.id, username })
 })

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Upload, FileText, Check, ChevronDown, ChevronUp, Truck, Package, CheckSquare, Square, AlertCircle, Euro } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type { Delivery, Order } from '../lib/types'
-import { receivedNextStatus } from '../lib/workflow'
+import { planGoodsIn } from '../lib/inventory'
+import { ensureOpenTailorJob } from '../lib/tailorJobs'
 
 type DeliveryOrder = Order & {
   products?: { name: string; article_number: string; category: string; needs_tailoring: boolean }
@@ -81,17 +82,45 @@ export default function Lieferungen() {
     setSaving(delivery.id)
 
     const receivedOrders = delivery.orders?.filter(o => receivedIds.has(o.id)) ?? []
-    const results = await Promise.all(receivedOrders.map(o =>
-      supabase.from('orders').update({
-        status: receivedNextStatus(!!o.products?.needs_tailoring),
-        quantity_received: o.quantity,
+    for (const o of receivedOrders) {
+      const plan = planGoodsIn({
+        id: o.id,
+        quantity: o.quantity,
+        needsTailoring: !!o.products?.needs_tailoring,
+      })
+      if (plan.inventoryDelta !== 0) {
+        const adj = await supabase.rpc('adjust_inventory', {
+          p_product: o.product_id,
+          p_size: o.size,
+          p_delta: plan.inventoryDelta,
+        })
+        if (adj.error) {
+          setSaving(null)
+          setActionError('Wareneingang: Bestand konnte nicht gebucht werden.')
+          return
+        }
+      }
+      let tailorJobId: string | null = null
+      if (plan.needsTailorJob) {
+        const job = await ensureOpenTailorJob(o.quarter_id)
+        if (job.error || !job.id) {
+          setSaving(null)
+          setActionError('Schneider-Auftrag konnte nicht angelegt werden.')
+          return
+        }
+        tailorJobId = job.id
+      }
+      const { error: updErr } = await supabase.from('orders').update({
+        status: plan.status,
+        quantity_received: plan.quantityReceived,
         updated_at: new Date().toISOString(),
+        ...(tailorJobId ? { tailor_job_id: tailorJobId } : {}),
       }).eq('id', o.id)
-    ))
-    if (results.some(r => r.error)) {
-      setSaving(null)
-      setActionError('Wareneingang konnte nicht vollständig gespeichert werden.')
-      return
+      if (updErr) {
+        setSaving(null)
+        setActionError('Wareneingang konnte nicht vollständig gespeichert werden.')
+        return
+      }
     }
 
     const allReceived = delivery.orders?.every(o => receivedIds.has(o.id) || DONE_ORDER_STATUSES.includes(o.status)) ?? false
@@ -326,9 +355,9 @@ export default function Lieferungen() {
                             <Package className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
                             <div className="flex-1 min-w-0">
                               <p className={`text-sm truncate ${alreadyDone ? 'text-gray-400' : 'text-gray-800'}`}>
-                                {(o as any).products?.name ?? '–'}
+                                {o.products?.name ?? '–'}
                               </p>
-                              <p className="text-xs text-gray-400 font-mono">{(o as any).products?.article_number}</p>
+                              <p className="text-xs text-gray-400 font-mono">{o.products?.article_number}</p>
                             </div>
                             <span className="text-xs text-gray-500 flex-shrink-0">Gr. {o.size} · {o.quantity}×</span>
                           </div>

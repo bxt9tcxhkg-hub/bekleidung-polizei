@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { X, Check, Package, Scissors, FileText, RotateCcw, Ban } from 'lucide-react'
+import { X, Check, Package, FileText, RotateCcw, Ban, Mail, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, OrderStatus } from '../lib/types'
@@ -8,6 +8,13 @@ import { ORDER_STATUS_LABELS } from '../lib/types'
 import { fmtEUR } from '../lib/format'
 import { logAudit } from '../lib/audit'
 import { previousOrderStatus, nextIssueStatus } from '../lib/workflow'
+import {
+  canShortcutToReadyForIssue,
+  inventoryDeltaOnIssue,
+  planGoodsIn,
+} from '../lib/inventory'
+import { ensureOpenTailorJob } from '../lib/tailorJobs'
+import { buildMassaDraft, sendMassaOrder, type MassaOrderDraft, type MassaSendResult } from '../lib/massaOrder'
 import Lieferungen from './Lieferungen'
 
 type AdminTab = 'eingereicht' | 'lieferant' | 'schneider' | 'ausgabe' | 'ausgegeben' | 'storniert' | 'lieferungen'
@@ -42,6 +49,8 @@ export default function Orders() {
   const [error, setError] = useState('')
   const [cancelModal, setCancelModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [massaDraft, setMassaDraft] = useState<MassaOrderDraft | null>(null)
+  const [massaResult, setMassaResult] = useState<MassaSendResult | null>(null)
 
   async function load() {
     setLoading(true)
@@ -60,7 +69,9 @@ export default function Orders() {
     setReceivedInputs(rec)
     setIssuedInputs({})
     const inv: Record<string, number> = {}
-    ;(invRes.data ?? []).forEach((e: any) => { inv[`${e.product_id}__${e.size}`] = e.quantity })
+    for (const e of invRes.data ?? []) {
+      inv[`${e.product_id}__${e.size}`] = e.quantity
+    }
     setInventoryMap(inv)
     setLoading(false)
   }
@@ -74,7 +85,7 @@ export default function Orders() {
     return ADMIN_TABS.find(t => t.key === activeTab)?.status === o.status
   })
   const sorted = (activeTab === 'ausgabe' || activeTab === 'ausgegeben')
-    ? [...tabOrders].sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
+    ? [...tabOrders].sort((a, b) => (a.profiles?.name ?? '').localeCompare(b.profiles?.name ?? ''))
     : tabOrders
   const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
   const allSelected = tabOrders.length > 0 && tabOrders.every(o => selectedIds.has(o.id))
@@ -112,53 +123,32 @@ export default function Orders() {
     setSelectedIds(new Set()); load()
   }
 
-  async function advanceWithReceived(nextStatus: OrderStatus) {
-    const items = tabOrders.filter(o => selectedIds.has(o.id))
-    if (!items.length) return
-    setError('')
-    // Eingaben validieren: leer = volle Menge, sonst muss eine gültige, nicht-negative Zahl vorliegen
-    const quantities: Record<string, number> = {}
-    for (const o of items) {
-      const raw = receivedInputs[o.id]
-      if (raw === undefined || raw.trim() === '') {
-        quantities[o.id] = o.quantity
-        continue
-      }
-      const qr = parseInt(raw)
-      if (isNaN(qr) || qr < 0) {
-        setError('Ungültige Erhalten-Menge. Bitte eine Zahl größer oder gleich 0 eingeben.')
-        return
-      }
-      quantities[o.id] = qr
-    }
-    setSaving(true)
-    const results = await Promise.all(items.map(o =>
-      supabase.from('orders').update({ status: nextStatus, quantity_received: quantities[o.id], updated_at: new Date().toISOString() }).eq('id', o.id)
-    ))
-    setSaving(false)
-    if (results.some(r => r.error)) {
-      setError('Statusänderung konnte nicht gespeichert werden. Bitte erneut versuchen.')
-      load()
-      return
-    }
-    logAudit('Bestellstatus geändert', `${items.length} Position(en) → ${ORDER_STATUS_LABELS[nextStatus] ?? nextStatus}`)
-    setSelectedIds(new Set()); load()
-  }
-
   async function stepBack() {
     const items = sorted.filter(o => selectedIds.has(o.id))
     if (!items.length) return
     setSaving(true)
     setError('')
     const results = await Promise.all(items.map(o => {
-      const prevStatus = previousOrderStatus(o.status, !!(o as { products?: { needs_tailoring?: boolean } }).products?.needs_tailoring)
+      const prevStatus = previousOrderStatus(o.status, !!o.products?.needs_tailoring)
       if (!prevStatus) return Promise.resolve({ error: null })
       const base: { status: OrderStatus; updated_at: string; cancel_reason?: null } = { status: prevStatus, updated_at: new Date().toISOString() }
       if (o.status === 'cancelled') base.cancel_reason = null
       if (o.status === 'ordered_supplier')
         return supabase.from('orders').update({ ...base, quantity_received: null }).eq('id', o.id)
-      if (o.status === 'partially_issued' || o.status === 'issued')
+      if (o.status === 'partially_issued' || o.status === 'issued') {
+        const restore = o.quantity_issued ?? 0
+        if (restore > 0) {
+          return supabase.rpc('adjust_inventory', {
+            p_product: o.product_id,
+            p_size: o.size,
+            p_delta: restore,
+          }).then(adj => {
+            if (adj.error) return adj
+            return supabase.from('orders').update({ ...base, quantity_issued: null }).eq('id', o.id)
+          })
+        }
         return supabase.from('orders').update({ ...base, quantity_issued: null }).eq('id', o.id)
+      }
       return supabase.from('orders').update(base).eq('id', o.id)
     }))
     setSaving(false)
@@ -220,13 +210,23 @@ export default function Orders() {
     const newStatus: OrderStatus = nextIssueStatus(newTotal, available)
     setSaving(true)
     setError('')
+    const { error: adjErr } = await supabase.rpc('adjust_inventory', {
+      p_product: order.product_id,
+      p_size: order.size,
+      p_delta: inventoryDeltaOnIssue(qtyNow),
+    })
+    if (adjErr) {
+      setSaving(false)
+      setError('Bestand konnte nicht abgebucht werden. Ausgabe abgebrochen.')
+      return
+    }
     const { error: err } = await supabase.from('orders').update({ status: newStatus, quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
     setSaving(false)
     if (err) {
       setError('Ausgabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
-    logAudit('Bestellung ausgegeben', `${(order as any).products?.name ?? 'Artikel'} an ${(order as any).profiles?.name ?? '?'}${newStatus === 'partially_issued' ? ' (Teilausgabe)' : ''}`)
+    logAudit('Bestellung ausgegeben', `${order.products?.name ?? 'Artikel'} an ${order.profiles?.name ?? '?'}${newStatus === 'partially_issued' ? ' (Teilausgabe)' : ''}`)
     load()
   }
 
@@ -236,7 +236,7 @@ export default function Orders() {
     const groups: Record<string, { artNr: string; productName: string; size: string; totalQty: number }> = {}
     selected.forEach(o => {
       const key = `${o.product_id}__${o.size}`
-      if (!groups[key]) groups[key] = { artNr: (o as any).products?.article_number ?? '–', productName: (o as any).products?.name ?? '–', size: o.size, totalQty: 0 }
+      if (!groups[key]) groups[key] = { artNr: o.products?.article_number ?? '–', productName: o.products?.name ?? '–', size: o.size, totalQty: 0 }
       groups[key].totalQty += o.quantity
     })
     setSaving(true)
@@ -260,7 +260,7 @@ export default function Orders() {
       }).eq('id', o.id)
     ))
     setSaving(false)
-    if (results.some((r: any) => r.error)) {
+    if (results.some(r => r.error)) {
       setError('Sammelbestellung konnte nicht vollständig gespeichert werden. Bitte erneut versuchen.')
       load()
       return
@@ -269,6 +269,141 @@ export default function Orders() {
     // Kurzbrief erst nach erfolgreichen DB-Updates drucken
     generateKurzbrief(Object.values(groups))
     setSelectedIds(new Set()); load()
+  }
+
+  async function readyFromStock() {
+    const items = tabOrders.filter(o => selectedIds.has(o.id))
+    const eligible = items.filter(o =>
+      canShortcutToReadyForIssue(
+        inventoryMap[`${o.product_id}__${o.size}`] ?? 0,
+        o.quantity,
+        !!o.products?.needs_tailoring,
+      ),
+    )
+    if (!eligible.length) {
+      setError('Aus Lager nur bei verfügbarem Bestand und ohne Schneiderpflicht. Sonst Sammelbestellung / Schneiderweg.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    const results = await Promise.all(eligible.map(o =>
+      supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id),
+    ))
+    setSaving(false)
+    if (results.some(r => r.error)) {
+      setError('Statusänderung konnte nicht gespeichert werden. Bitte erneut versuchen.')
+      load()
+      return
+    }
+    const skipped = items.length - eligible.length
+    logAudit('Bestellstatus geändert', `${eligible.length} Position(en) → Bereit zur Ausgabe (Lager)`)
+    if (skipped > 0) {
+      setError(`${eligible.length} aus Lager bereitgestellt. ${skipped} Position(en) ohne ausreichenden Bestand oder mit Schneiderpflicht bleiben eingereicht.`)
+    }
+    setSelectedIds(new Set())
+    load()
+  }
+
+  async function confirmSupplierGoodsIn() {
+    const items = tabOrders.filter(o => selectedIds.has(o.id))
+    if (!items.length) return
+    setError('')
+    const quantities: Record<string, number> = {}
+    for (const o of items) {
+      const raw = receivedInputs[o.id]
+      if (raw === undefined || raw.trim() === '') {
+        quantities[o.id] = o.quantity
+        continue
+      }
+      const qr = parseInt(raw)
+      if (isNaN(qr) || qr < 0) {
+        setError('Ungültige Erhalten-Menge. Bitte eine Zahl größer oder gleich 0 eingeben.')
+        return
+      }
+      quantities[o.id] = qr
+    }
+    setSaving(true)
+    for (const o of items) {
+      const plan = planGoodsIn({
+        id: o.id,
+        quantity: o.quantity,
+        quantityReceived: quantities[o.id],
+        needsTailoring: !!o.products?.needs_tailoring,
+      })
+      if (plan.inventoryDelta !== 0) {
+        const adj = await supabase.rpc('adjust_inventory', {
+          p_product: o.product_id,
+          p_size: o.size,
+          p_delta: plan.inventoryDelta,
+        })
+        if (adj.error) {
+          setSaving(false)
+          setError('Wareneingang: Bestand konnte nicht gebucht werden.')
+          load()
+          return
+        }
+      }
+      let tailorJobId: string | null = null
+      if (plan.needsTailorJob) {
+        const job = await ensureOpenTailorJob(o.quarter_id)
+        if (job.error || !job.id) {
+          setSaving(false)
+          setError('Schneider-Auftrag konnte nicht angelegt werden.')
+          load()
+          return
+        }
+        tailorJobId = job.id
+      }
+      const { error: updErr } = await supabase.from('orders').update({
+        status: plan.status,
+        quantity_received: plan.quantityReceived,
+        updated_at: new Date().toISOString(),
+        ...(tailorJobId ? { tailor_job_id: tailorJobId } : {}),
+      }).eq('id', o.id)
+      if (updErr) {
+        setSaving(false)
+        setError('Wareneingang konnte nicht vollständig gespeichert werden.')
+        load()
+        return
+      }
+    }
+    setSaving(false)
+    logAudit('Wareneingang Lieferant', `${items.length} Position(en)`)
+    setSelectedIds(new Set())
+    load()
+  }
+
+  function openMassaPreview() {
+    const selected = tabOrders.filter(o => selectedIds.has(o.id))
+    if (!selected.length) return
+    setMassaResult(null)
+    setMassaDraft(buildMassaDraft(
+      selected.map(o => ({
+        articleNumber: o.products?.article_number ?? '',
+        name: o.products?.name ?? '–',
+        size: o.size,
+        quantity: o.quantity,
+      })),
+      { senderName: profile?.name ?? undefined },
+    ))
+  }
+
+  function downloadMassaCsv(draft: MassaOrderDraft) {
+    const blob = new Blob([draft.csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'massa-sammelbestellung.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function confirmMassaSend(draft: MassaOrderDraft) {
+    const mailto = import.meta.env.VITE_MASSA_MAILTO
+    const result = sendMassaOrder(draft, mailto)
+    setMassaResult(result)
+    if (result.mode === 'mailto') window.location.href = result.href
+    logAudit('Massa-Sammelmail', result.mode === 'simulated' ? 'Simulation (kein Versand)' : 'mailto-Entwurf')
   }
 
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -350,7 +485,7 @@ export default function Orders() {
   function generateAusgabeliste() {
     const ausgabeOrders = orders
       .filter(o => o.status === 'ready_for_issue' || o.status === 'partially_issued')
-      .sort((a, b) => ((a as any).profiles?.name ?? '').localeCompare((b as any).profiles?.name ?? ''))
+      .sort((a, b) => (a.profiles?.name ?? '').localeCompare(b.profiles?.name ?? ''))
 
     if (ausgabeOrders.length === 0) return
 
@@ -359,8 +494,8 @@ export default function Orders() {
     ausgabeOrders.forEach(o => {
       const uid = o.user_id
       if (!byUser[uid]) byUser[uid] = {
-        name: esc((o as any).profiles?.name ?? '–'),
-        dienstnummer: (o as any).profiles?.dienstnummer ? esc((o as any).profiles.dienstnummer) : null,
+        name: esc(o.profiles?.name ?? '–'),
+        dienstnummer: o.profiles?.dienstnummer ? esc(o.profiles.dienstnummer) : null,
         orders: [],
       }
       byUser[uid].orders.push(o)
@@ -376,8 +511,8 @@ export default function Orders() {
         const issued = o.quantity_issued ?? 0
         const outstanding = avail - issued
         return `<tr>
-          <td>${esc((o as any).products?.name ?? '–')}</td>
-          <td>${esc((o as any).products?.category ?? '')}</td>
+          <td>${esc(o.products?.name ?? '–')}</td>
+          <td>${esc(o.products?.category ?? '')}</td>
           <td class="center">${esc(o.size)}</td>
           <td class="center">${o.quantity}</td>
           <td class="center">${avail}</td>
@@ -498,9 +633,9 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : (o as any).profiles?.username}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{(o as any).quarters?.name}</td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : o.profiles?.username}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{o.quarters?.name}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center hidden sm:table-cell">
                         {stock >= o.quantity ? (
@@ -538,8 +673,8 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><div className="flex justify-center">
@@ -576,8 +711,8 @@ export default function Orders() {
                 {paginated.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-600">{o.quantity_received ?? '–'}</td>
@@ -616,8 +751,8 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                       <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                      <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity}</td>
                       <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity_received ?? '–'}</td>
@@ -658,12 +793,12 @@ export default function Orders() {
                 {paginated.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity}</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity_issued ?? o.quantity}</td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{(o as any).quarters?.name}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{o.quarters?.name}</td>
                   </tr>
                 ))}
               </tbody>
@@ -685,11 +820,11 @@ export default function Orders() {
                 {paginated.map(o => (
                   <tr key={o.id} className={`hover:bg-gray-50 opacity-75 ${selectedIds.has(o.id) ? 'bg-blue-50 !opacity-100' : ''}`}>
                     <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).profiles?.name}</p><p className="text-xs text-gray-400">{(o as any).profiles?.dienstnummer ? `DG ${(o as any).profiles.dienstnummer}` : ''}</p></td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{(o as any).products?.name}</p><p className="text-xs text-gray-400">{(o as any).products?.category}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
                     <td className="px-3 py-2.5 md:px-4 md:py-3 text-red-600">{o.cancel_reason ?? '–'}</td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{(o as any).quarters?.name}</td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500">{o.quarters?.name}</td>
                   </tr>
                 ))}
               </tbody>
@@ -717,6 +852,16 @@ export default function Orders() {
             <FileText className="w-4 h-4" />
             {saving ? 'Wird gespeichert...' : 'Sammelbestellung erstellen'}
           </button>
+          <button onClick={readyFromStock} disabled={saving}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
+            <Warehouse className="w-4 h-4" />
+            Aus Lager bereitstellen
+          </button>
+          <button onClick={openMassaPreview} disabled={saving}
+            className="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
+            <Mail className="w-4 h-4" />
+            Massa Wien
+          </button>
           <button onClick={() => setCancelModal(true)}
             className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-sm font-medium px-3 py-2 rounded-xl">
             <Ban className="w-3.5 h-3.5" /> Stornieren
@@ -729,13 +874,14 @@ export default function Orders() {
         <div className="fixed bottom-4 md:bottom-6 inset-x-4 md:inset-x-auto md:left-1/2 md:-translate-x-1/2 z-40 flex flex-wrap items-center gap-2 bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl max-w-[calc(100vw-2rem)] md:max-w-none">
           <span className="text-sm font-medium">{selectedIds.size} ausgewählt</span>
           <div className="w-px h-5 bg-white/20" />
-          <button onClick={() => advanceWithReceived('at_tailor')} disabled={saving}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
-            <Scissors className="w-4 h-4" /> Zum Schneider
-          </button>
-          <button onClick={() => advanceWithReceived('ready_for_issue')} disabled={saving}
+          <button onClick={confirmSupplierGoodsIn} disabled={saving}
             className="flex items-center gap-2 bg-green-600 hover:bg-green-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
-            <Check className="w-4 h-4" /> Bereit zur Ausgabe
+            <Check className="w-4 h-4" /> Wareneingang buchen
+          </button>
+          <button onClick={openMassaPreview} disabled={saving}
+            className="flex items-center gap-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-60 text-sm font-medium px-4 py-2 rounded-xl">
+            <Mail className="w-4 h-4" />
+            Massa Wien
           </button>
           <div className="w-px h-5 bg-white/20" />
           <button onClick={stepBack} disabled={saving}
@@ -830,6 +976,40 @@ export default function Orders() {
               <button onClick={cancelSelected} disabled={saving || !cancelReason.trim()}
                 className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-xl">
                 {saving ? 'Wird storniert...' : 'Stornieren'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {massaDraft && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Sammelbestellung Massa Wien</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Wird nur auf deine Bestätigung hin vorbereitet. Ohne hinterlegte Mail-Adresse kein Versand, nur Simulation.
+            </p>
+            <p className="text-xs font-semibold text-gray-500 mb-1">{massaDraft.subject}</p>
+            <pre className="text-xs bg-gray-50 border border-gray-200 rounded-xl p-3 overflow-x-auto mb-4 whitespace-pre-wrap">{massaDraft.csv}</pre>
+            {massaResult && (
+              <p className="text-sm mb-3 font-medium text-green-700">
+                {massaResult.mode === 'simulated'
+                  ? 'Simulation: Es wurde keine E-Mail nach Wien gesendet.'
+                  : 'mailto-Entwurf geöffnet. Bitte im Mailprogramm prüfen und erst dann senden.'}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => downloadMassaCsv(massaDraft)}
+                className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50">
+                CSV herunterladen
+              </button>
+              <button onClick={() => confirmMassaSend(massaDraft)}
+                className="flex-1 bg-teal-700 hover:bg-teal-800 text-white text-sm font-medium py-2.5 rounded-xl">
+                {import.meta.env.VITE_MASSA_MAILTO ? 'mailto-Entwurf öffnen' : 'Simuliert senden'}
+              </button>
+              <button onClick={() => { setMassaDraft(null); setMassaResult(null) }}
+                className="w-full border border-gray-200 text-gray-600 text-sm font-medium py-2.5 rounded-xl hover:bg-gray-50">
+                Schließen
               </button>
             </div>
           </div>

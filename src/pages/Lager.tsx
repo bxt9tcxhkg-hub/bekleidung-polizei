@@ -4,9 +4,11 @@ import { Plus, Minus, X, ShoppingBag, Tag, Send, Warehouse, ClipboardList, Check
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
-import type { Product, StockOrder } from '../lib/types'
+import type { Order, Product, StockOrder } from '../lib/types'
 import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
 import { STOCK_ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS } from '../lib/types'
+import { inventoryDeltaOnGoodsIn, routeWaitingOrder } from '../lib/inventory'
+import { ensureOpenTailorJob } from '../lib/tailorJobs'
 
 const PAGE_SIZE = 50
 
@@ -31,6 +33,11 @@ interface SizeModal {
   product: Product
   size: string
   quantity: number
+}
+
+type WaitingUserOrder = Pick<Order, 'id' | 'quantity' | 'size' | 'product_id' | 'quarter_id'> & {
+  profiles?: { name: string } | null
+  products?: { name: string; needs_tailoring?: boolean } | null
 }
 
 export default function Lager() {
@@ -61,7 +68,7 @@ export default function Lager() {
   const [saving, setSaving] = useState(false)
 
   // Wareneingang follow-up
-  const [followUp, setFollowUp] = useState<{ orders: any[]; stockOrder: StockOrder } | null>(null)
+  const [followUp, setFollowUp] = useState<{ orders: WaitingUserOrder[]; stockOrder: StockOrder } | null>(null)
   const [advancingOrders, setAdvancingOrders] = useState(false)
 
   // Bestellen
@@ -79,7 +86,7 @@ export default function Lager() {
       supabase.from('products').select('*').eq('active', true).eq('organisation', profile?.organisation ?? 'Stadtpolizei').order('category').order('name'),
       supabase.from('inventory').select('*, products(*)').order('updated_at', { ascending: false }),
       supabase.from('stock_orders')
-        .select('*, products(id,name,article_number,category), requester:profiles!stock_orders_requested_by_fkey(id,name), approver:profiles!stock_orders_approved_by_fkey(id,name)')
+        .select('*, products(id,name,article_number,category,needs_tailoring), requester:profiles!stock_orders_requested_by_fkey(id,name), approver:profiles!stock_orders_approved_by_fkey(id,name)')
         .order('created_at', { ascending: false }),
     ])
     setProducts(prodsRes.data ?? [])
@@ -242,16 +249,19 @@ export default function Lager() {
 
   async function markReceived(order: StockOrder) {
     setSaving(true)
-    // Erst Bestand buchen, dann Status setzen
-    const { error: adjError } = await supabase.rpc('adjust_inventory', {
-      p_product: order.product_id,
-      p_size: order.size,
-      p_delta: order.quantity,
-    })
-    if (adjError) {
-      setSaving(false)
-      setError('Wareneingang konnte nicht gebucht werden. Bitte erneut versuchen.')
-      return
+    const needsTailoring = !!order.products?.needs_tailoring
+    const delta = inventoryDeltaOnGoodsIn(order.quantity, needsTailoring)
+    if (delta !== 0) {
+      const { error: adjError } = await supabase.rpc('adjust_inventory', {
+        p_product: order.product_id,
+        p_size: order.size,
+        p_delta: delta,
+      })
+      if (adjError) {
+        setSaving(false)
+        setError('Wareneingang konnte nicht gebucht werden. Bitte erneut versuchen.')
+        return
+      }
     }
     const { error: statusError } = await supabase.from('stock_orders').update({
       status: 'received',
@@ -264,31 +274,60 @@ export default function Lager() {
       await loadAll()
       return
     }
-    logAudit('Wareneingang gebucht', `${(order as any).products?.name ?? ''} ${order.size} +${order.quantity}`.trim())
+    logAudit('Wareneingang gebucht', `${order.products?.name ?? ''} ${order.size} ${needsTailoring ? '(Schneider, nicht frei lagernd)' : `+${order.quantity}`}`.trim())
     await loadAll()
-    // Check for pending user orders for same product + size
     const { data: waiting } = await supabase
       .from('orders')
-      .select('id, quantity, size, profiles(name), products(name)')
+      .select('id, quantity, size, product_id, quarter_id, profiles(name), products(name, needs_tailoring)')
       .eq('product_id', order.product_id)
       .eq('size', order.size)
       .eq('status', 'approved')
     if (waiting && waiting.length > 0) {
-      setFollowUp({ orders: waiting, stockOrder: order })
+      setFollowUp({ orders: waiting as WaitingUserOrder[], stockOrder: order })
     }
   }
 
   async function advanceWaitingOrders() {
     if (!followUp) return
     setAdvancingOrders(true)
-    const results = await Promise.all(followUp.orders.map(o =>
-      supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id)
-    ))
-    setAdvancingOrders(false)
-    if (results.some(r => r.error)) {
-      setError('Nicht alle Bestellungen konnten auf „Bereit zur Ausgabe" gesetzt werden.')
-      return
+    setError('')
+    for (const o of followUp.orders) {
+      const route = routeWaitingOrder(
+        stockFor(o.product_id, o.size),
+        o.quantity,
+        !!o.products?.needs_tailoring,
+      )
+      if (route === 'keep_approved') continue
+      if (route === 'at_tailor') {
+        const job = await ensureOpenTailorJob(o.quarter_id)
+        if (job.error || !job.id) {
+          setAdvancingOrders(false)
+          setError('Schneider-Auftrag konnte nicht angelegt werden.')
+          return
+        }
+        const { error: updErr } = await supabase.from('orders').update({
+          status: 'at_tailor',
+          tailor_job_id: job.id,
+          updated_at: new Date().toISOString(),
+        }).eq('id', o.id)
+        if (updErr) {
+          setAdvancingOrders(false)
+          setError('Nicht alle Bestellungen konnten weitergeleitet werden.')
+          return
+        }
+        continue
+      }
+      const { error: readyErr } = await supabase.from('orders').update({
+        status: 'ready_for_issue',
+        updated_at: new Date().toISOString(),
+      }).eq('id', o.id)
+      if (readyErr) {
+        setAdvancingOrders(false)
+        setError('Nicht alle Bestellungen konnten auf „Bereit zur Ausgabe" gesetzt werden.')
+        return
+      }
     }
+    setAdvancingOrders(false)
     setFollowUp(null)
   }
 
@@ -632,8 +671,8 @@ export default function Lager() {
                     {pagedStockOrders.map(o => (
                       <tr key={o.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
-                          <p className="text-xs text-gray-400">{(o as any).products?.article_number}</p>
+                          <p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400">{o.products?.article_number}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-700">{sizeLabel(o.size, groupSizes(products.find(p => p.id === o.product_id)?.sizes ?? [o.size]) !== null)} · {o.quantity}×</td>
                         <td className="px-4 py-3">
@@ -641,7 +680,7 @@ export default function Lager() {
                             {STOCK_ORDER_STATUS_LABELS[o.status]}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{(o as any).requester?.name ?? '–'}</td>
+                        <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{o.requester?.name ?? '–'}</td>
                         <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                           {new Date(o.created_at).toLocaleDateString('de-AT')}
                         </td>
@@ -856,20 +895,20 @@ export default function Lager() {
                 </div>
                 <div>
                   <h2 className="font-bold text-gray-900">Wareneingang gebucht</h2>
-                  <p className="text-xs text-gray-500">{(followUp.stockOrder as any).products?.name} · Gr. {followUp.stockOrder.size} · {followUp.stockOrder.quantity}×</p>
+                  <p className="text-xs text-gray-500">{followUp.stockOrder.products?.name} · Gr. {followUp.stockOrder.size} · {followUp.stockOrder.quantity}×</p>
                 </div>
               </div>
             </div>
             <div className="px-6 py-4">
               <p className="text-sm text-gray-700 mb-3">
                 <span className="font-semibold">{followUp.orders.length} Benutzerbestellung{followUp.orders.length !== 1 ? 'en' : ''}</span> warten auf diesen Artikel.
-                Direkt auf „Bereit zur Ausgabe" setzen?
+                Schneider-pflichtige Positionen gehen zum Schneider (nicht ins freie Lager). Andere nur bei verfügbarem Bestand auf „Bereit zur Ausgabe“.
               </p>
               <div className="space-y-1.5 mb-4 max-h-40 overflow-y-auto">
                 {followUp.orders.map(o => (
                   <div key={o.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
-                    <span className="font-medium text-gray-800">{(o as any).profiles?.name ?? '–'}</span>
-                    <span className="text-gray-500">Gr. {o.size} · {o.quantity}×</span>
+                    <span className="font-medium text-gray-800">{o.profiles?.name ?? '–'}</span>
+                    <span className="text-gray-500">Gr. {o.size} · {o.quantity}×{o.products?.needs_tailoring ? ' · Schneider' : ''}</span>
                   </div>
                 ))}
               </div>
@@ -881,7 +920,7 @@ export default function Lager() {
               </button>
               <button onClick={advanceWaitingOrders} disabled={advancingOrders}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
-                {advancingOrders ? 'Wird gesetzt...' : 'Ja, bereit zur Ausgabe'}
+                {advancingOrders ? 'Wird gesetzt...' : 'Weiterleiten'}
               </button>
             </div>
           </div>

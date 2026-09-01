@@ -28,17 +28,21 @@ Die Rolle `approver` wird weiterhin als Synonym für `Genehmiger` akzeptiert.
 Warenkorb (pending)
   → eingereicht (approved | pending_approval wenn Budget überschritten)
   → Genehmiger gibt frei (approved)
-  → beim Lieferanten bestellt (ordered_supplier)
-  → ggf. Schneider (at_tailor)
-  → bereit zur Ausgabe (ready_for_issue)
+  → beim Lieferanten bestellt (ordered_supplier)  ODER  aus Lager bereit zur Ausgabe,
+    nur wenn Bestand reicht und der Artikel nicht Schneider-pflichtig ist
+  → Wareneingang Massa: normale Artikel erhöhen den Lagerbestand und sind bereit zur Ausgabe;
+    Schneider-pflichtige Artikel (needs_tailoring) gehen in einen Schneider-Auftrag, nicht ins freie Lager
+  → nach Schneider: bereit zur Ausgabe (ready_for_issue)
+  → Ausgabe senkt den Bestand der Größe, auch wenn eine Nachbestellung bei Massa noch unterwegs ist
   → optional teilweise ausgegeben (partially_issued)
   → ausgegeben (issued) | storniert (cancelled, mit Grund)
 ```
 
-Zusätzlich im Code (nicht extra in der ursprünglichen README, aber bereits implementiert):
+Zusätzlich im Code:
 
 - **Sammelbestellung / Lieferungen**: `approved` → `ordered_supplier` mit `deliveries`-Datensatz, Vorrechnung (R2), Wareneingang.
-- **Lager-Shortcut**: Warteende `approved`-Bestellungen können nach Lager-Wareneingang direkt auf `ready_for_issue` gesetzt werden.
+- **Massa Wien**: Sachbearbeiter löst Export/Mail bewusst aus (CSV + Vorschau). Standard und Tests senden keine E-Mail; mit `VITE_MASSA_MAILTO` nur ein mailto-Entwurf.
+- **Lager-Shortcut**: `approved` → `ready_for_issue` nur bei verfügbarem Bestand und ohne Schneiderpflicht.
 - **Standardbudget**: 350 €/Jahr, falls kein `user_budgets`-Eintrag existiert.
 - **Schuherstattungs-Cap**: Fallback 120 €, falls kein `shoe_refund_caps`-Eintrag existiert. Genehmiger setzt den Betrag unter Budgetverwaltung (nicht fest 80 €).
 
@@ -59,6 +63,7 @@ Siehe `.env.example`. Frontend (Vite, Build-Zeit):
 ```
 VITE_SUPABASE_URL=https://<projekt>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-key>
+VITE_MASSA_MAILTO=            # optional, mailto-Entwurf Massa Wien; leer = nur Simulation
 ```
 
 Cloudflare Pages Functions (Runtime, **nicht** `VITE_`):
@@ -91,6 +96,10 @@ Die Function braucht die Service-Role (von Supabase automatisch als
 `SUPABASE_SERVICE_ROLE_KEY` bereitgestellt). Anlegen: aktive Sachbearbeiter,
 Genehmiger und Admins. Deaktivieren (`active = false`, kein Löschen): nur
 Genehmiger und Admins. Rollenvergabe entspricht der UI (`admin` nur durch Admins).
+
+CORS: `Access-Control-Allow-Origin` ist nicht `*`. Erlaubt sind localhost (Vite),
+`https://bekleidung-polizei.pages.dev` und Preview-Hosts `*.bekleidung-polizei.pages.dev`.
+Weitere Origins über Edge-Function-Secret `ALLOWED_ORIGINS` (kommagetrennt).
 
 ### Datenbank
 
@@ -134,15 +143,13 @@ Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
 1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`) auf das Supabase-Projekt.
-2. **`create-user` deployen** (`supabase functions deploy create-user`).
+2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig auch wegen CORS (kein `*`).
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
    funktionieren Upload/Dateizugriff nicht mehr (kein JWT mehr im Repo).
 4. **Optional** `GEMINI_API_KEY` für Vorrechnungs-Analyse.
-5. **Fachentscheidungen** (nicht im Code/README eindeutig):
+5. **Optional** `VITE_MASSA_MAILTO` für einen mailto-Entwurf an Massa Wien
+   (ohne Variable: nur Simulation, kein Versand).
+6. **Fachentscheidungen** (nicht im Code/README eindeutig):
    - Dürfen Benutzer selbst Schuherstattungen beantragen? Die Seite enthält
      dafür UI, Route und RLS erlauben das nur Genehmigern.
-   - Soll der Lager-Shortcut (`approved` → `ready_for_issue`) der offizielle
-     Weg bleiben?
-   - Sollen `tailor_jobs` / `proc_listed` / `shifted_from` in der UI genutzt
-     werden? Felder existieren, die Oberfläche setzt sie nicht.
-   - Inventurabzug bei Ausgabe: `issueOrder` bucht derzeit keinen Bestand.
+   - Sollen `proc_listed` / `shifted_from` in der UI genutzt werden?

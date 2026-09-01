@@ -153,7 +153,7 @@ const emptyProduct = (): Omit<Product, 'id' | 'created_at'> => ({
 })
 
 export default function Products() {
-  const { isAdmin, isStrictAdmin } = useAuth()
+  const { isSachbearbeiter, isAdmin } = useAuth()
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
   const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
@@ -346,18 +346,18 @@ export default function Products() {
           <p className="text-gray-500 text-sm mt-1">Bekleidungskatalog</p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          {isStrictAdmin && filtered.length > 0 && (
+          {isAdmin && filtered.length > 0 && (
             <button onClick={() => setConfirmDelete({ mode: 'all' })} className="flex items-center gap-2 border border-red-300 text-red-600 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-red-50 transition-colors" title="Löschen">
               <Trash2 className="w-4 h-4 flex-shrink-0" />
               <span className="hidden sm:inline">{orgFilter === 'all' ? 'Alle löschen' : `${orgFilter} löschen`}</span>
             </button>
           )}
-          {isStrictAdmin && (
+          {isAdmin && (
             <button onClick={() => { setShowImport(true); setImportRows([]); setImportDone(null); setImportError(''); setImportOrg('Stadtpolizei') }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
               <Upload className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Import</span>
             </button>
           )}
-          {isAdmin && (
+          {isSachbearbeiter && (
             <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neues Produkt">
               <Plus className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Neues Produkt</span>
             </button>
@@ -400,12 +400,12 @@ export default function Products() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Preis</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Schneider</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
-                {isAdmin && <th className="px-4 py-3" />}
+                {isSachbearbeiter && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.length === 0 ? (
-                <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
+                <tr><td colSpan={isSachbearbeiter ? 9 : 8} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
               ) : filtered.map(p => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-mono text-xs text-gray-600 hidden sm:table-cell">{p.article_number}</td>
@@ -436,7 +436,7 @@ export default function Products() {
                     {p.needs_tailoring ? <Check className="w-4 h-4 text-green-600" /> : <span className="text-gray-300">–</span>}
                   </td>
                   <td className="px-4 py-3"><Badge active={p.active} /></td>
-                  {isAdmin && (
+                  {isSachbearbeiter && (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 justify-end">
                         <button onClick={() => openEdit(p)} className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
