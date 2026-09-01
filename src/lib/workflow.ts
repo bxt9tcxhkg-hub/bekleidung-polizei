@@ -57,3 +57,22 @@ export function filterAssignableRoles(callerRoles: string[], requested: string[]
   })
   return out.length > 0 ? out : ['user']
 }
+
+/** Anlegen: Sachbearbeiter und Genehmiger. Admin bleibt alle Bereiche. */
+export function canCreateUsers(callerRoles: string[]): boolean {
+  return (
+    callerRoles.includes('admin') ||
+    callerRoles.includes('sachbearbeiter') ||
+    callerRoles.includes('genehmiger') ||
+    callerRoles.includes('approver')
+  )
+}
+
+/** Entfernen = deaktivieren (active=false). Nur Genehmiger; Admin bleibt alle Bereiche. */
+export function canDeactivateUsers(callerRoles: string[]): boolean {
+  return (
+    callerRoles.includes('admin') ||
+    callerRoles.includes('genehmiger') ||
+    callerRoles.includes('approver')
+  )
+}

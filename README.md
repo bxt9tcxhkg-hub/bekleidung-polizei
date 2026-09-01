@@ -16,8 +16,8 @@ Budget, Lager, Schneider-Aufträge und Schuherstattungen.
 | Rolle | Bereich |
 |---|---|
 | Benutzer | Bekleidung bestellen, eigene Bestellungen, Profil (inkl. Größen) |
-| Sachbearbeiter | Bestellungen abwickeln, Lager, Produkte, Quartale, Benutzer, Analyse |
-| Genehmiger | Freigaben, Budgetverwaltung, Schuherstattungen |
+| Sachbearbeiter | Bestellungen abwickeln, Lager, Produkte, Quartale, Benutzer anlegen, Analyse |
+| Genehmiger | Freigaben, Budgetverwaltung, Schuherstattungen, Benutzer anlegen und deaktivieren |
 | Admin | Alle Bereiche |
 
 Die Rolle `approver` wird weiterhin als Synonym für `Genehmiger` akzeptiert.
@@ -88,8 +88,9 @@ supabase functions deploy create-user
 ```
 
 Die Function braucht die Service-Role (von Supabase automatisch als
-`SUPABASE_SERVICE_ROLE_KEY` bereitgestellt). Nur aktive Sachbearbeiter/Admins
-dürfen anlegen; Rollenvergabe entspricht der UI (`admin` nur durch Admins).
+`SUPABASE_SERVICE_ROLE_KEY` bereitgestellt). Anlegen: aktive Sachbearbeiter,
+Genehmiger und Admins. Deaktivieren (`active = false`, kein Löschen): nur
+Genehmiger und Admins. Rollenvergabe entspricht der UI (`admin` nur durch Admins).
 
 ### Datenbank
 
@@ -104,6 +105,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260703_security_hardening.sql` | Security-Hardening (eigene 8-stellige Version, nicht `20260702…`) |
 | `20260707_*` … `20260708_*` | RPCs, Indizes, Rollenabdeckung |
 | `20260830_production_readiness.sql` | Genehmiger-WITH-CHECK, deliveries-RLS, `has_role` prüft `active` |
+| `20260901_user_admin_rights.sql` | Genehmiger darf Profile aktualisieren; Status nur Genehmiger/Admin |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
@@ -131,7 +133,7 @@ neu erzeugt).
 Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
-1. **Migrationen anwenden** (`20260501`, `20260830`) auf das Supabase-Projekt.
+1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`) auf das Supabase-Projekt.
 2. **`create-user` deployen** (`supabase functions deploy create-user`).
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
    funktionieren Upload/Dateizugriff nicht mehr (kein JWT mehr im Repo).

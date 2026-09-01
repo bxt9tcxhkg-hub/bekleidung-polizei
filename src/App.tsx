@@ -63,7 +63,7 @@ export default function App() {
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
             <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
             <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
-            <Route path="benutzer" element={<ProtectedRoute sachbearbeiterOnly><Users /></ProtectedRoute>} />
+            <Route path="benutzer" element={<ProtectedRoute staffOnly><Users /></ProtectedRoute>} />
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />

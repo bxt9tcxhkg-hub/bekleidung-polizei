@@ -6,7 +6,7 @@ import { useAuth as _useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
-import { USERNAME_RE } from '../lib/workflow'
+import { USERNAME_RE, canCreateUsers, canDeactivateUsers } from '../lib/workflow'
 
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
 Max Mustermann;mmustermann;1234;Stadtpolizei;user
@@ -48,6 +48,9 @@ export default function Users() {
   const [importCreds, setImportCreds] = useState<{ username: string; password: string }[]>([])
   const [credsCopied, setCredsCopied] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const callerRoles = authProfile?.roles ?? []
+  const canCreate = canCreateUsers(callerRoles)
+  const canDeactivate = canDeactivateUsers(callerRoles)
 
   async function load() {
     setLoading(true)
@@ -86,13 +89,16 @@ export default function Users() {
     const existingRoles = editId ? (users.find(u => u.id === editId)?.roles ?? []) : []
     let safeRoles = form.roles.filter(r => existingRoles.includes(r) || canAssignRole(r))
     if (safeRoles.length === 0) safeRoles = ['user']
-    const dbPayload = { name: form.name, username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active: form.active }
+    const existingActive = editId ? (users.find(u => u.id === editId)?.active ?? true) : form.active
+    const active = editId && !canDeactivate ? existingActive : form.active
+    const dbPayload = { name: form.name, username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
       logAudit('Benutzer bearbeitet', username)
     } else {
+      if (!canCreate) { setError('Keine Berechtigung zum Anlegen.'); setSaving(false); return }
       try {
         const { data: { session } } = await supabase.auth.getSession()
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
@@ -114,6 +120,7 @@ export default function Users() {
   }
 
   async function toggleActive(u: Profile) {
+    if (!canDeactivate) return
     const { error } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
     if (error) { setError(`Status konnte nicht geändert werden: ${error.message}`); return }
     logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username)
@@ -123,6 +130,7 @@ export default function Users() {
   // Es existiert keine 'delete-user' Edge Function – ein Löschen der profiles-Zeile
   // würde den Auth-Account verwaisen lassen. Daher wird der Benutzer nur deaktiviert.
   async function deactivateUser(u: Profile) {
+    if (!canDeactivate) return
     if (!confirm(`Benutzer "${u.name}" deaktivieren?\n\nDas Konto wird nicht gelöscht, sondern nur deaktiviert. Es kann jederzeit wieder aktiviert werden.`)) return
     const { error } = await supabase.from('profiles').update({ active: false }).eq('id', u.id)
     if (error) { setError(`Benutzer konnte nicht deaktiviert werden: ${error.message}`); return }
@@ -162,6 +170,7 @@ export default function Users() {
   }
 
   async function runImport() {
+    if (!canCreate) return
     setImporting(true)
     setImportCreds([])
     setCredsCopied(false)
@@ -227,14 +236,16 @@ export default function Users() {
           <p className="text-gray-500 text-sm mt-1">Benutzerverwaltung</p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          {isStrictAdmin && (
+          {canCreate && (
             <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
               <Upload className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Import</span>
             </button>
           )}
-          <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neuer Benutzer">
-            <Plus className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Neuer Benutzer</span>
-          </button>
+          {canCreate && (
+            <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neuer Benutzer">
+              <Plus className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Neuer Benutzer</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -303,18 +314,26 @@ export default function Users() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => toggleActive(u)} className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${u.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                      {u.active ? 'Aktiv' : 'Inaktiv'}
-                    </button>
+                    {canDeactivate ? (
+                      <button onClick={() => toggleActive(u)} className={`text-xs font-medium px-2 py-0.5 rounded-full transition-colors ${u.active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                        {u.active ? 'Aktiv' : 'Inaktiv'}
+                      </button>
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {u.active ? 'Aktiv' : 'Inaktiv'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
                       <button onClick={() => openEdit(u)} className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deactivateUser(u)} title="Deaktivieren" className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 disabled:opacity-30" disabled={!u.active}>
-                        <UserX className="w-3.5 h-3.5" />
-                      </button>
+                      {canDeactivate && (
+                        <button onClick={() => deactivateUser(u)} title="Deaktivieren" className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 disabled:opacity-30" disabled={!u.active}>
+                          <UserX className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -487,10 +506,15 @@ export default function Users() {
                   <p className="text-xs text-gray-400 mt-1">Die Admin-Rolle kann nur von Admins vergeben werden{!isGenehmiger ? ', die Genehmiger-Rolle nur von Admins oder Genehmigern' : ''}.</p>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
-                <label htmlFor="active" className="text-sm text-gray-700">Aktiv</label>
-              </div>
+              {(!editId || canDeactivate) && (
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
+                  <label htmlFor="active" className="text-sm text-gray-700">Aktiv</label>
+                </div>
+              )}
+              {!canDeactivate && editId && (
+                <p className="text-xs text-gray-400">Benutzer deaktivieren können nur Genehmiger.</p>
+              )}
               {!editId && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
                   Das Profil wird angelegt. Der Benutzer muss sich danach mit diesem Benutzernamen einloggen – die Authentifizierung wird über Supabase Auth verknüpft.

@@ -138,6 +138,7 @@ export default function Layout() {
         { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
         { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
         { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
+        ...(!isSachbearbeiter ? [{ to: '/benutzer', label: 'Benutzer', icon: Users }] : []),
         ...(!isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
       ],
     }] : []),

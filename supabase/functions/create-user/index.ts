@@ -1,5 +1,6 @@
 // Edge Function: legt Auth-User + Profil an (Service Role).
-// Wird von src/pages/Users.tsx aufgerufen. Nur Sachbearbeiter/Admin.
+// Wird von src/pages/Users.tsx aufgerufen.
+// Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
@@ -15,6 +16,15 @@ function json(body: unknown, status = 200) {
     status,
     headers: { ...CORS, 'Content-Type': 'application/json' },
   })
+}
+
+function canCreateUsers(callerRoles: string[]): boolean {
+  return (
+    callerRoles.includes('admin') ||
+    callerRoles.includes('sachbearbeiter') ||
+    callerRoles.includes('genehmiger') ||
+    callerRoles.includes('approver')
+  )
 }
 
 function canAssign(callerRoles: string[], role: string): boolean {
@@ -52,7 +62,7 @@ Deno.serve(async (req) => {
     .single()
   if (callerErr || !caller?.active) return json({ error: 'Keine Berechtigung' }, 403)
   const callerRoles: string[] = caller.roles ?? []
-  if (!callerRoles.includes('admin') && !callerRoles.includes('sachbearbeiter')) {
+  if (!canCreateUsers(callerRoles)) {
     return json({ error: 'Keine Berechtigung' }, 403)
   }
 

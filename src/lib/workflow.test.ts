@@ -7,6 +7,8 @@ import {
   receivedNextStatus,
   isValidInitialPassword,
   filterAssignableRoles,
+  canCreateUsers,
+  canDeactivateUsers,
   USERNAME_RE,
 } from './workflow'
 
@@ -91,5 +93,25 @@ describe('filterAssignableRoles', () => {
     expect(filterAssignableRoles(['sachbearbeiter'], ['genehmiger'])).toEqual(['user'])
     expect(filterAssignableRoles(['genehmiger'], ['genehmiger'])).toEqual(['genehmiger'])
     expect(filterAssignableRoles(['admin'], ['admin', 'genehmiger'])).toEqual(['admin', 'genehmiger'])
+  })
+})
+
+describe('canCreateUsers / canDeactivateUsers', () => {
+  it('erlaubt Anlegen für Sachbearbeiter, Genehmiger und Admin', () => {
+    expect(canCreateUsers(['sachbearbeiter'])).toBe(true)
+    expect(canCreateUsers(['genehmiger'])).toBe(true)
+    expect(canCreateUsers(['approver'])).toBe(true)
+    expect(canCreateUsers(['admin'])).toBe(true)
+    expect(canCreateUsers(['user'])).toBe(false)
+    expect(canCreateUsers([])).toBe(false)
+  })
+
+  it('erlaubt Deaktivieren nur Genehmiger und Admin, nicht Sachbearbeiter allein', () => {
+    expect(canDeactivateUsers(['sachbearbeiter'])).toBe(false)
+    expect(canDeactivateUsers(['user', 'sachbearbeiter'])).toBe(false)
+    expect(canDeactivateUsers(['genehmiger'])).toBe(true)
+    expect(canDeactivateUsers(['approver'])).toBe(true)
+    expect(canDeactivateUsers(['admin'])).toBe(true)
+    expect(canDeactivateUsers(['user'])).toBe(false)
   })
 })
