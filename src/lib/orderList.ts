@@ -1,6 +1,6 @@
 import type { Order, OrderStatus } from './types'
 
-export type OrderListLine = Order & {
+export type OrderListLine = Omit<Order, 'products' | 'quarters'> & {
   products?: { name: string; category?: string; needs_tailoring?: boolean } | null
   quarters?: { name: string; year?: number; quarter_num?: number } | null
 }
