@@ -40,7 +40,7 @@ Zusätzlich im Code (nicht extra in der ursprünglichen README, aber bereits imp
 - **Sammelbestellung / Lieferungen**: `approved` → `ordered_supplier` mit `deliveries`-Datensatz, Vorrechnung (R2), Wareneingang.
 - **Lager-Shortcut**: Warteende `approved`-Bestellungen können nach Lager-Wareneingang direkt auf `ready_for_issue` gesetzt werden.
 - **Standardbudget**: 350 €/Jahr, falls kein `user_budgets`-Eintrag existiert.
-- **Schuherstattungs-Cap**: 120 €, falls kein `shoe_refund_caps`-Eintrag existiert.
+- **Schuherstattungs-Cap**: Fallback 120 €, falls kein `shoe_refund_caps`-Eintrag existiert. Genehmiger setzt den Betrag unter Budgetverwaltung (nicht fest 80 €).
 
 ## Entwicklung
 

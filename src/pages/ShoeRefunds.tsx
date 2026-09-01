@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentShoeRefundCap } from '../lib/budget'
+import { getCurrentShoeRefundCap, DEFAULT_SHOE_CAP } from '../lib/budget'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import type { ShoeRefund, ShoeRefundStatus, Profile } from '../lib/types'
@@ -32,7 +33,7 @@ export default function ShoeRefunds() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [maxRefund, setMaxRefund] = useState(120)
+  const [maxRefund, setMaxRefund] = useState(DEFAULT_SHOE_CAP)
   const [form, setForm] = useState({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
   const [userSearch, setUserSearch] = useState('')
   const [userDropdown, setUserDropdown] = useState(false)
@@ -156,6 +157,13 @@ export default function ShoeRefunds() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Schuherstattungen</h1>
           <p className="text-gray-500 text-sm mt-1">{canManage ? 'Alle Schuhkostenerstattungen' : 'Meine Schuhkostenerstattungen'}</p>
+          {canManage && (
+            <p className="text-sm text-gray-500 mt-1">
+              Maximalbetrag {fmtEUR(maxRefund)}
+              {' · '}
+              <Link to="/budgets" className="text-blue-700 hover:underline font-medium">unter Budgetverwaltung anpassen</Link>
+            </p>
+          )}
         </div>
         <button
           onClick={() => { resetForm(); setShowForm(true) }}

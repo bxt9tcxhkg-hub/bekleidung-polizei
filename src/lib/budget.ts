@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 
-const DEFAULT_BUDGET = 350
+export const DEFAULT_BUDGET = 350
+export const DEFAULT_SHOE_CAP = 120
 const today = () => new Date().toISOString().split('T')[0]
 
 export async function getCurrentBudget(userId: string, year: number): Promise<number> {
@@ -32,9 +33,16 @@ export async function getCurrentShoeRefundCap(): Promise<number> {
     .select('cap_amount')
     .lte('valid_from', today())
     .order('valid_from', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  return data?.cap_amount ?? 120
+  return data?.cap_amount ?? DEFAULT_SHOE_CAP
 }
 
-export { DEFAULT_BUDGET }
+/** Gleiches Gültig-ab-Datum → bestehenden Cap-Eintrag überschreiben, sonst neu anlegen. */
+export function existingCapIdForDate(
+  caps: { id: string; valid_from: string }[],
+  validFrom: string,
+): string | null {
+  return caps.find(c => c.valid_from.slice(0, 10) === validFrom.slice(0, 10))?.id ?? null
+}
