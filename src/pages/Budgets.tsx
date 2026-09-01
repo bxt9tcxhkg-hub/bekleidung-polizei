@@ -7,6 +7,15 @@ import { fmtEUR } from '../lib/format'
 import { DEFAULT_BUDGET, DEFAULT_SHOE_CAP, existingCapIdForDate } from '../lib/budget'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
 
+type BudgetDrillOrder = {
+  id: string
+  quantity: number
+  unit_price: number
+  size: string
+  created_at: string | null
+  products: { name: string; article_number: string } | null
+}
+
 const CURRENT_YEAR = new Date().getFullYear()
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -31,7 +40,7 @@ export default function Budgets() {
   const [error, setError] = useState('')
 
   // Drill-down
-  const [drilldown, setDrilldown] = useState<{ profile: Profile; orders: any[] } | null>(null)
+  const [drilldown, setDrilldown] = useState<{ profile: Profile; orders: BudgetDrillOrder[] } | null>(null)
   const [drilldownLoading, setDrilldownLoading] = useState(false)
 
   async function openDrilldown(profile: Profile) {
@@ -44,7 +53,7 @@ export default function Budgets() {
       .not('status', 'in', '(pending,cancelled)')
       .gte('created_at', `${CURRENT_YEAR}-01-01`)
       .order('created_at', { ascending: false })
-    setDrilldown({ profile, orders: data ?? [] })
+    setDrilldown({ profile, orders: (data ?? []) as BudgetDrillOrder[] })
     setDrilldownLoading(false)
   }
 
@@ -424,13 +433,13 @@ export default function Budgets() {
                     {drilldown.orders.map(o => (
                       <tr key={o.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <p className="font-medium text-gray-900">{(o as any).products?.name ?? '–'}</p>
-                          <p className="text-xs text-gray-400">{(o as any).products?.article_number}</p>
+                          <p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p>
+                          <p className="text-xs text-gray-400">{o.products?.article_number}</p>
                         </td>
                         <td className="px-4 py-3 text-gray-600">{o.size}</td>
                         <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtEUR(o.unit_price * o.quantity)}</td>
                         <td className="px-4 py-3 text-right text-gray-400 text-xs hidden sm:table-cell">
-                          {new Date(o.created_at).toLocaleDateString('de-AT')}
+                          {o.created_at ? new Date(o.created_at).toLocaleDateString('de-AT') : '–'}
                         </td>
                       </tr>
                     ))}

@@ -209,6 +209,25 @@ type StockOrderRow = Omit<StockOrder, 'products' | 'requester' | 'approver'>
 type DeliveryRow = Omit<Delivery, 'orders'>
 type GrundausstattungRow = Omit<Grundausstattung, 'products'>
 
+/** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
+export type OrdersFullRow = OrderRow & {
+  product_name: string
+  article_number: string
+  category: string
+  needs_tailoring: boolean
+  user_name: string
+  dienstnummer: string | null
+  username: string
+  quarter_name: string
+}
+
+/** View public.budget_usage: Verbrauch je Benutzer und Kalenderjahr. */
+export type BudgetUsageRow = {
+  user_id: string
+  year: number
+  used: number
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -255,7 +274,10 @@ export type Database = {
         { foreignKeyName: 'grundausstattung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
     }
-    Views: Record<string, never>
+    Views: {
+      orders_full: { Row: OrdersFullRow; Relationships: [] }
+      budget_usage: { Row: BudgetUsageRow; Relationships: [] }
+    }
     Functions: {
       submit_cart: { Args: Record<string, never>; Returns: string | null }
       adjust_inventory: { Args: { p_product: string; p_size: string; p_delta: number }; Returns: number }

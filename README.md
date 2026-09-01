@@ -74,6 +74,10 @@ SUPABASE_ANON_KEY=<anon-key>
 GEMINI_API_KEY=            # optional, PDF-Analyse der Vorrechnungen
 ```
 
+Ohne `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` bleibt der Client fail-closed
+(`https://unavailable.invalid` als Platzhalter, damit die UI den Hinweis zeigen
+kann — kein stiller Fallback auf Produktionsdaten).
+
 Ohne `SUPABASE_URL` / `SUPABASE_ANON_KEY` liefern `/upload` und `/files/*` HTTP 503.
 
 ### Cloudflare Pages Functions
@@ -114,6 +118,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260703_security_hardening.sql` | Security-Hardening (eigene 8-stellige Version, nicht `20260702…`) |
 | `20260707_*` … `20260708_*` | RPCs, Indizes, Rollenabdeckung |
 | `20260830_production_readiness.sql` | Genehmiger-WITH-CHECK, deliveries-RLS, `has_role` prüft `active` |
+| `20260831_preview_rebuild.sql` | No-op (`SELECT 1`) — nur Preview-Rebuild nach der 20260501-Korrektur, keine Schemaänderung |
 | `20260901_user_admin_rights.sql` | Genehmiger darf Profile aktualisieren; Status nur Genehmiger/Admin |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien

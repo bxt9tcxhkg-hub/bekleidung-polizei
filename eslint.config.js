@@ -23,8 +23,7 @@ export default defineConfig([
       // Der Bestand lädt Seiten über useEffect; eine Umstellung auf Query-Hooks
       // ist ein separates Refactor.
       'react-hooks/set-state-in-effect': 'off',
-      // Vorhandene `as any`-Casts (Supabase-Joins) — nicht in diesem PR umgestellt.
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 ])

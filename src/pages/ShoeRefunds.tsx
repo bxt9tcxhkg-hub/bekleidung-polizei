@@ -126,7 +126,7 @@ export default function ShoeRefunds() {
     const { error } = await supabase.from('shoe_refunds').update(payload).eq('id', id)
     if (error) setError(`Aktion fehlgeschlagen: ${error.message}`)
     else {
-      const benutzername = (refunds.find(r => r.id === id) as any)?.profiles?.name ?? '?'
+      const benutzername = refunds.find(r => r.id === id)?.profiles?.name ?? '?'
       logAudit(status === 'approved' ? 'Schuherstattung genehmigt' : 'Schuherstattung abgelehnt', benutzername)
       setError('')
     }
@@ -220,8 +220,8 @@ export default function ShoeRefunds() {
                   <tr key={r.id} className="hover:bg-gray-50">
                     {canManage && (
                       <td className="px-4 py-3">
-                        <p className="font-medium text-gray-900">{(r as any).profiles?.name}</p>
-                        <p className="text-xs text-gray-400">{(r as any).profiles?.dienstnummer ? `DG ${(r as any).profiles.dienstnummer}` : ''}</p>
+                        <p className="font-medium text-gray-900">{r.profiles?.name}</p>
+                        <p className="text-xs text-gray-400">{r.profiles?.dienstnummer ? `DG ${r.profiles.dienstnummer}` : ''}</p>
                       </td>
                     )}
                     <td className="px-4 py-3 text-gray-700">{new Date(r.refund_date).toLocaleDateString('de-AT')}</td>
@@ -260,7 +260,7 @@ export default function ShoeRefunds() {
                         )}
                         {r.status !== 'pending' && (
                           <p className="text-xs text-gray-400 text-right whitespace-nowrap">
-                            {(r as any).reviewer?.name ?? '–'}
+                            {r.reviewer?.name ?? '–'}
                           </p>
                         )}
                       </td>

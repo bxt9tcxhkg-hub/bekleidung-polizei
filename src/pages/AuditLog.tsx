@@ -72,7 +72,7 @@ export default function AuditLog() {
                       <td className="px-4 py-3 font-medium text-gray-900">{log.action}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell max-w-sm truncate">{log.details ?? '–'}</td>
                       <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
-                        {(log as any).profiles?.name || (log as any).profiles?.username || '–'}
+                        {log.profiles?.name || log.profiles?.username || '–'}
                       </td>
                     </tr>
                   ))}

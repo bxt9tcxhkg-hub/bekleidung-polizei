@@ -52,6 +52,26 @@ interface QuarterStat {
   totalQty: number
 }
 
+type AnalyseProduct = { id: string; min_quantity: number }
+type AnalyseInventory = { product_id: string; size: string; quantity: number }
+type AnalyseQuarter = {
+  id: string
+  name: string
+  year: number
+  quarter_num: number
+  start_date: string
+  end_date: string
+}
+type AnalysePendingStock = { product_id: string; size: string; quantity: number; status: string }
+type AnalyseOrder = {
+  product_id: string
+  size: string
+  quantity: number
+  quarter_id: string
+  products: { id: string; name: string; article_number: string; category: string; organisation: string } | null
+  quarters: { id: string; name: string; year: number; quarter_num: number; end_date: string } | null
+}
+
 export default function Analyse() {
   const navigate = useNavigate()
   const { isSachbearbeiter, profile } = useAuth()
@@ -100,58 +120,58 @@ export default function Analyse() {
         supabase.from('products').select('id,min_quantity').eq('organisation', org).eq('active', true),
       ])
 
-      const orgProducts = (orgProductsRes.data ?? []) as any[]
-      const orgProductIds = new Set(orgProducts.map((p: any) => p.id))
+      const orgProducts = (orgProductsRes.data ?? []) as AnalyseProduct[]
+      const orgProductIds = new Set(orgProducts.map(p => p.id))
       const minQtyMap: Record<string, number> = {}
-      orgProducts.forEach((p: any) => { minQtyMap[p.id] = p.min_quantity ?? 0 })
+      orgProducts.forEach(p => { minQtyMap[p.id] = p.min_quantity ?? 0 })
       setProductMinQty(minQtyMap)
-      const orders = ((ordersRes.data ?? []) as any[]).filter(o => orgProductIds.has(o.product_id))
-      const inventory = (invRes.data ?? []).filter((e: any) => orgProductIds.has(e.product_id))
-      const allQuarters = (quartersRes.data ?? []) as any[]
-      const pendingStock = ((pendingStockRes.data ?? []) as any[]).filter(e => orgProductIds.has(e.product_id))
+      const orders = ((ordersRes.data ?? []) as AnalyseOrder[]).filter(o => orgProductIds.has(o.product_id))
+      const inventory = ((invRes.data ?? []) as AnalyseInventory[]).filter(e => orgProductIds.has(e.product_id))
+      const allQuarters = (quartersRes.data ?? []) as AnalyseQuarter[]
+      const pendingStock = ((pendingStockRes.data ?? []) as AnalysePendingStock[]).filter(e => orgProductIds.has(e.product_id))
 
       // Determine which quarters fall in the selected period
       const currentYear = new Date().getFullYear()
-      let recentQuarters: any[]
+      let recentQuarters: AnalyseQuarter[]
       switch (periodPreset) {
         case 'last1':    recentQuarters = allQuarters.slice(0, 1); break
         case 'last2':    recentQuarters = allQuarters.slice(0, 2); break
         case 'last4':    recentQuarters = allQuarters.slice(0, 4); break
-        case 'thisYear': recentQuarters = allQuarters.filter((q: any) => q.year === currentYear); break
-        case 'lastYear': recentQuarters = allQuarters.filter((q: any) => q.year === currentYear - 1); break
+        case 'thisYear': recentQuarters = allQuarters.filter(q => q.year === currentYear); break
+        case 'lastYear': recentQuarters = allQuarters.filter(q => q.year === currentYear - 1); break
         case 'custom':
-          recentQuarters = allQuarters.filter((q: any) =>
+          recentQuarters = allQuarters.filter(q =>
             (!fromDate || q.end_date >= fromDate) &&
             (!toDate || q.start_date <= toDate)
           )
           break
         default: recentQuarters = allQuarters // 'all'
       }
-      const recentQIds = new Set(recentQuarters.map((q: any) => q.id))
+      const recentQIds = new Set(recentQuarters.map(q => q.id))
       const actualRecentCount = recentQuarters.length
       setRecentQuarterCount(actualRecentCount)
 
       // Orders filtered to the selected period
-      const periodOrders = periodPreset === 'all' ? orders : orders.filter((o: any) => recentQIds.has(o.quarter_id))
+      const periodOrders = periodPreset === 'all' ? orders : orders.filter(o => recentQIds.has(o.quarter_id))
 
       // ── Inventory maps ──────────────────────────────────────────────────
       const invMap: Record<string, number> = {}   // product__size → qty
       const invByProduct: Record<string, number> = {}
-      inventory.forEach((e: any) => {
+      inventory.forEach(e => {
         invMap[`${e.product_id}__${e.size}`] = e.quantity
         invByProduct[e.product_id] = (invByProduct[e.product_id] ?? 0) + e.quantity
       })
 
       // ── Pending stock orders map ─────────────────────────────────────────
       const pendingMap: Record<string, number> = {}  // product__size → qty
-      pendingStock.forEach((e: any) => {
+      pendingStock.forEach(e => {
         const key = `${e.product_id}__${e.size}`
         pendingMap[key] = (pendingMap[key] ?? 0) + e.quantity
       })
 
       // ── Product stats for selected period ───────────────────────────────
       const productMap: Record<string, ProductStat> = {}
-      periodOrders.forEach((o: any) => {
+      periodOrders.forEach(o => {
         const pid = o.product_id
         if (!productMap[pid]) {
           productMap[pid] = {
@@ -170,7 +190,7 @@ export default function Analyse() {
         productMap[pid].orderCount += 1
         productMap[pid].sizeCounts[o.size] = (productMap[pid].sizeCounts[o.size] ?? 0) + o.quantity
       })
-      inventory.forEach((e: any) => {
+      inventory.forEach(e => {
         if (productMap[e.product_id]) {
           productMap[e.product_id].stockBySizes[e.size] = e.quantity
         }
@@ -182,7 +202,7 @@ export default function Analyse() {
       // ── Per-size demand for selected period ─────────────────────────────
       const perQtr: Record<string, Record<string, number>> = {}
 
-      periodOrders.forEach((o: any) => {
+      periodOrders.forEach(o => {
           const key = `${o.product_id}__${o.size}`
           if (!perQtr[key]) perQtr[key] = {}
           perQtr[key][o.quarter_id] = (perQtr[key][o.quarter_id] ?? 0) + o.quantity
@@ -227,7 +247,7 @@ export default function Analyse() {
 
       // ── Quarter trend ────────────────────────────────────────────────────
       const quarterMap: Record<string, QuarterStat> = {}
-      periodOrders.forEach((o: any) => {
+      periodOrders.forEach(o => {
         const q = o.quarters
         if (!q) return
         if (!quarterMap[o.quarter_id]) {

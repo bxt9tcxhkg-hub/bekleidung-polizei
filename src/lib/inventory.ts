@@ -1,6 +1,16 @@
 import { receivedNextStatus } from './workflow'
 import type { OrderStatus } from './types'
 
+export function inventoryKey(productId: string, size: string): string {
+  return `${productId}__${size}`
+}
+
+export function buildInventoryMap(rows: { product_id: string; size: string; quantity: number }[]): Record<string, number> {
+  const map: Record<string, number> = {}
+  for (const e of rows) map[inventoryKey(e.product_id, e.size)] = e.quantity
+  return map
+}
+
 /** Bestand nach Buchung, nie negativ (wie adjust_inventory in der DB). */
 export function applyInventoryDelta(currentQty: number, delta: number): number {
   return Math.max(0, currentQty + delta)

@@ -1,12 +1,24 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyInventoryDelta,
+  buildInventoryMap,
+  inventoryKey,
   inventoryDeltaOnIssue,
   inventoryDeltaOnGoodsIn,
   canShortcutToReadyForIssue,
   routeWaitingOrder,
   planGoodsIn,
 } from './inventory'
+
+describe('inventoryKey / buildInventoryMap', () => {
+  it('baut die product+size-Map wie in Lager und Bestellungen', () => {
+    expect(inventoryKey('p1', 'M')).toBe('p1__M')
+    expect(buildInventoryMap([
+      { product_id: 'p1', size: 'M', quantity: 4 },
+      { product_id: 'p1', size: 'L', quantity: 1 },
+    ])).toEqual({ p1__M: 4, p1__L: 1 })
+  })
+})
 
 describe('Ausgabe vor Nachbestellung (Massa noch unterwegs)', () => {
   it('senkt den Bestand bei Ausgabe, auch wenn eine Nachbestellung noch nicht da ist', () => {
