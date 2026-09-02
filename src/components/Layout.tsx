@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package,
   CalendarRange, Footprints, Users, ClipboardList,
-  LogOut, Shield, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen,
+  LogOut, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
@@ -36,8 +36,12 @@ function SidebarNav({
   return (
     <>
       <div className="flex items-center gap-3 px-4 py-5 border-b border-blue-900">
-        <div className="bg-blue-600 p-2 rounded-lg">
-          <Shield className="w-6 h-6 text-white" />
+        <div className="flex-shrink-0 h-10 w-10 rounded-md bg-white p-[3px] flex items-center justify-center">
+          <img
+            src="/wappen-dornbirn.svg"
+            alt="Wappen der Stadt Dornbirn"
+            className="h-full w-auto"
+          />
         </div>
         <div>
           <p className="text-white font-bold text-sm leading-tight">Stadtpolizei</p>
@@ -160,7 +164,11 @@ export default function Layout() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-blue-800" />
+            <img
+              src="/wappen-dornbirn.svg"
+              alt="Wappen der Stadt Dornbirn"
+              className="h-8 w-auto"
+            />
             <span className="font-semibold text-gray-900 text-sm">Stadtpolizei Dornbirn</span>
           </div>
           {sidebarOpen && (

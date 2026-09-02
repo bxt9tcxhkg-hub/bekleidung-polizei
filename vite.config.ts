@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon.svg', 'icon-192.svg', 'icon-512.svg'],
+      includeAssets: ['wappen-dornbirn.svg', 'icon-192.svg', 'icon-512.svg', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'Bekleidungsverwaltung Stadtpolizei Dornbirn',
         short_name: 'Bekleidung',
@@ -19,6 +19,8 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
           { src: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
         ],
