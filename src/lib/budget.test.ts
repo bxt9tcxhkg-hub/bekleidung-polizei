@@ -32,6 +32,13 @@ describe('isBudgetParticipant', () => {
     expect(isBudgetParticipant(['genehmiger', 'sachbearbeiter'])).toBe(true)
     expect(isBudgetParticipant([])).toBe(true)
   })
+
+  it('persönliches Jahresbudget (Dashboard Mein Bereich) nur ohne Rolle admin', () => {
+    expect(isBudgetParticipant(['admin'])).toBe(false)
+    expect(isBudgetParticipant(['admin', 'sachbearbeiter', 'genehmiger'])).toBe(false)
+    expect(isBudgetParticipant(['sachbearbeiter'])).toBe(true)
+    expect(isBudgetParticipant(['genehmiger'])).toBe(true)
+  })
 })
 
 describe('withoutAdminProfiles', () => {

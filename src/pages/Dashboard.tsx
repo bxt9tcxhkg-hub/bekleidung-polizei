@@ -4,12 +4,13 @@ import { ShoppingCart, CalendarRange, CheckSquare, ShoppingBag, Euro, Truck, Sci
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Quarter } from '../lib/types'
-import { getCurrentBudget, DEFAULT_BUDGET } from '../lib/budget'
+import { getCurrentBudget, DEFAULT_BUDGET, isBudgetParticipant } from '../lib/budget'
 import { fmtEUR } from '../lib/format'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
 function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
+  const showJahresbudget = isBudgetParticipant(profile.roles)
   const [cartCount, setCartCount] = useState(0)
   const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
   const [activeOrderCount, setActiveOrderCount] = useState(0)
@@ -26,11 +27,13 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
         supabase.from('orders').select('id', { count: 'exact' })
           .eq('user_id', profile.id)
           .not('status', 'in', '(pending,cancelled)'),
-        getCurrentBudget(profile.id, CURRENT_YEAR),
-        supabase.from('orders').select('unit_price, quantity')
-          .eq('user_id', profile.id)
-          .not('status', 'in', '(pending,cancelled)')
-          .gte('created_at', `${CURRENT_YEAR}-01-01`),
+        showJahresbudget ? getCurrentBudget(profile.id, CURRENT_YEAR) : Promise.resolve(DEFAULT_BUDGET),
+        showJahresbudget
+          ? supabase.from('orders').select('unit_price, quantity')
+            .eq('user_id', profile.id)
+            .not('status', 'in', '(pending,cancelled)')
+            .gte('created_at', `${CURRENT_YEAR}-01-01`)
+          : Promise.resolve({ data: [] as { unit_price: number; quantity: number }[] }),
       ])
       setCartCount(cartRes.count ?? 0)
       setActiveQuarter(quarterRes.data ?? null)
@@ -40,7 +43,7 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
       setLoading(false)
     }
     load().catch(() => setError('Daten konnten nicht geladen werden.'))
-  }, [profile.id])
+  }, [profile.id, showJahresbudget])
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
 
@@ -57,24 +60,26 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
           <span className="text-xs text-blue-500 ml-auto">{new Date(activeQuarter.start_date).toLocaleDateString('de-AT')} – {new Date(activeQuarter.end_date).toLocaleDateString('de-AT')}</span>
         </div>
       )}
-      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Euro className="w-4 h-4 text-gray-400" />
-            <p className="font-semibold text-gray-900">Jahresbudget {CURRENT_YEAR}</p>
+      {showJahresbudget && (
+        <div className="bg-white border border-gray-200 rounded-xl px-5 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Euro className="w-4 h-4 text-gray-400" />
+              <p className="font-semibold text-gray-900">Jahresbudget {CURRENT_YEAR}</p>
+            </div>
+            <p className="text-sm font-bold text-gray-700">{fmtEUR(usedBudget)} / {fmtEUR(totalBudget)}</p>
           </div>
-          <p className="text-sm font-bold text-gray-700">{fmtEUR(usedBudget)} / {fmtEUR(totalBudget)}</p>
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
+              style={{ width: `${budgetPct}%` }} />
+          </div>
+          <p className={`text-sm mt-2 font-medium ${remaining <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
+            {remaining <= 0
+              ? 'Budget aufgebraucht – weitere Bestellungen benötigen Genehmigung'
+              : `${fmtEUR(remaining)} verbleibend`}
+          </p>
         </div>
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${budgetPct > 90 ? 'bg-red-500' : budgetPct > 70 ? 'bg-amber-400' : 'bg-green-500'}`}
-            style={{ width: `${budgetPct}%` }} />
-        </div>
-        <p className={`text-sm mt-2 font-medium ${remaining <= 0 ? 'text-red-600' : 'text-gray-500'}`}>
-          {remaining <= 0
-            ? 'Budget aufgebraucht – weitere Bestellungen benötigen Genehmigung'
-            : `${fmtEUR(remaining)} verbleibend`}
-        </p>
-      </div>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <Link to="/warenkorb" className="rounded-xl p-5 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
           <div className="flex items-center justify-between mb-3">
