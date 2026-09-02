@@ -13,9 +13,15 @@ const DEDUP_MS = 2000
 
 type AppErrorInsert = Database['public']['Tables']['app_errors']['Insert']
 
-const reportedObjects = new WeakSet<object>()
+let reportedObjects = new WeakSet<object>()
 const recentKeys = new Map<string, number>()
 let handlersInstalled = false
+
+/** Nur für Unit-Tests: Dedup-Zustand zurücksetzen. */
+export function resetAppErrorReporterForTests(): void {
+  reportedObjects = new WeakSet<object>()
+  recentKeys.clear()
+}
 
 export function truncateText(value: string, max: number): string {
   if (max <= 0) return ''

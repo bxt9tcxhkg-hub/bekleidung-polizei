@@ -1,12 +1,43 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   APP_ERROR_MESSAGE_MAX,
   APP_ERROR_STACK_MAX,
   buildAppErrorInsert,
   redactSecrets,
+  reportAppError,
+  resetAppErrorReporterForTests,
   sanitizeErrorText,
   truncateText,
 } from './appErrors'
+import type { Database } from './types'
+
+const { insert, maybeSingle, getUser } = vi.hoisted(() => ({
+  insert: vi.fn(),
+  maybeSingle: vi.fn(),
+  getUser: vi.fn(),
+}))
+
+vi.mock('./supabase', () => ({
+  supabase: {
+    auth: { getUser },
+    from: (table: string) => {
+      if (table === 'profiles') {
+        return { select: () => ({ eq: () => ({ maybeSingle }) }) }
+      }
+      if (table === 'app_errors') {
+        return { insert }
+      }
+      throw new Error(`unerwartete Tabelle ${table}`)
+    },
+  },
+}))
+
+afterEach(() => {
+  resetAppErrorReporterForTests()
+  insert.mockReset()
+  maybeSingle.mockReset()
+  getUser.mockReset()
+})
 
 describe('truncateText', () => {
   it('lässt kurze Texte unverändert und schneidet lange ab', () => {
@@ -80,5 +111,50 @@ describe('buildAppErrorInsert', () => {
     expect(row.stack).toBeNull()
     expect(row.user_id).toBeNull()
     expect(row.role_snapshot).toEqual([])
+  })
+})
+
+describe('reportAppError', () => {
+  it('schreibt fire-and-forget eine eigene Zeile ohne Geheimnisse', async () => {
+    getUser.mockResolvedValue({ data: { user: { id: 'user-1' } } })
+    maybeSingle.mockResolvedValue({ data: { roles: ['sachbearbeiter'] } })
+    insert.mockResolvedValue({ error: null })
+
+    reportAppError({
+      message: 'Kaputt password=geheim',
+      stack: 'Bearer tokensecret',
+      source: 'boundary',
+    })
+
+    await vi.waitFor(() => {
+      expect(insert).toHaveBeenCalledTimes(1)
+    })
+
+    const row = insert.mock.calls[0]?.[0] as Database['public']['Tables']['app_errors']['Insert']
+    expect(row.user_id).toBe('user-1')
+    expect(row.role_snapshot).toEqual(['sachbearbeiter'])
+    expect(row.source).toBe('boundary')
+    expect(row.path).toBe('/')
+    expect(row.message).not.toContain('geheim')
+    expect(row.stack).not.toContain('tokensecret')
+    expect(row.message).toContain('[REDACTED]')
+  })
+
+  it('schreibt nichts ohne Sitzung und wirft nicht bei Insert-Fehler', async () => {
+    getUser.mockResolvedValue({ data: { user: null } })
+    expect(() => reportAppError({ message: 'ohne session', source: 'window' })).not.toThrow()
+    await vi.waitFor(() => {
+      expect(getUser).toHaveBeenCalled()
+    })
+    expect(insert).not.toHaveBeenCalled()
+
+    resetAppErrorReporterForTests()
+    getUser.mockResolvedValue({ data: { user: { id: 'user-2' } } })
+    maybeSingle.mockResolvedValue({ data: { roles: ['admin'] } })
+    insert.mockResolvedValue({ error: { message: 'RLS' } })
+    expect(() => reportAppError({ message: 'insert fail', source: 'unhandledrejection' })).not.toThrow()
+    await vi.waitFor(() => {
+      expect(insert).toHaveBeenCalledTimes(1)
+    })
   })
 })
