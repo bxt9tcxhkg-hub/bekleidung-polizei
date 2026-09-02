@@ -23,11 +23,13 @@ describe('flagsFromRoles', () => {
 })
 
 describe('sidebarRoleLabels', () => {
-  it('listet für Admin alle Bereiche inklusive Sachbearbeiter', () => {
+  it('zeigt für Admin nur Admin, obwohl alle Nav-Bereiche offen bleiben', () => {
     const flags = flagsFromRoles(['admin'])
     expect(flags.isSachbearbeiter).toBe(true)
-    expect(sidebarRoleLabels(flags)).toEqual(['Admin', 'Sachbearbeiter', 'Genehmiger', 'Benutzer'])
-    expect(sidebarRoleLabels(flags).join(' · ')).toBe('Admin · Sachbearbeiter · Genehmiger · Benutzer')
+    expect(flags.isGenehmiger).toBe(true)
+    expect(sidebarRoleLabels(flags)).toEqual(['Admin'])
+    expect(sidebarRoleLabels(flags).join(' · ')).toBe('Admin')
+    expect(sidebarRoleLabels(flagsFromRoles(['admin', 'sachbearbeiter', 'genehmiger', 'user']))).toEqual(['Admin'])
   })
 
   it('listet für reinen Sachbearbeiter nur Sachbearbeiter und Benutzer', () => {
