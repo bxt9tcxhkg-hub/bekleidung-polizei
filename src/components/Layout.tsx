@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package,
-  CalendarRange, Footprints, Users, ClipboardList,
+  CalendarRange, Footprints, Users, ClipboardList, AlertTriangle,
   LogOut, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -135,6 +135,7 @@ export default function Layout() {
         { to: '/quartale', label: 'Quartale', icon: CalendarRange },
         { to: '/benutzer', label: 'Benutzer', icon: Users },
         { to: '/auditlog', label: 'Audit-Log', icon: ClipboardList },
+        ...(isAdmin ? [{ to: '/fehler', label: 'Fehler', icon: AlertTriangle }] : []),
       ],
     }] : []),
     ...(isGenehmiger ? [{
