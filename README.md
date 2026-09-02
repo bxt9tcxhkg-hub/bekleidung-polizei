@@ -3,6 +3,8 @@
 Interne Web-App zur Verwaltung von Dienstbekleidung: Bestellungen, Genehmigungen,
 Budget, Lager, Schneider-Aufträge und Schuherstattungen.
 
+Stadtwappen (Birnbaum): Wikimedia Commons, [File:Wappendornbirn.svg](https://commons.wikimedia.org/wiki/File:Wappendornbirn.svg).
+
 ## Stack
 
 - **Frontend**: React 19 + TypeScript + Vite + Tailwind CSS
