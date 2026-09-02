@@ -40,6 +40,8 @@ function SidebarNav({
   isGenehmiger: boolean
 }) {
   const location = useLocation()
+  const roleLine = sidebarRoleLabels({ isAdmin, isSachbearbeiter, isGenehmiger }).join(' · ')
+  const footerLine = profile?.dienstnummer ? `${roleLine} · DG ${profile.dienstnummer}` : roleLine
   return (
     <>
       <div className="flex items-center gap-3 px-4 py-5 border-b border-blue-900">
@@ -89,9 +91,8 @@ function SidebarNav({
       <div className="px-3 py-4 border-t border-blue-900">
         <div className="px-3 py-2 mb-2">
           <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
-          <p className="text-blue-300 text-xs truncate">
-            {sidebarRoleLabels({ isAdmin, isSachbearbeiter, isGenehmiger }).join(' · ')}
-            {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}
+          <p className="text-blue-300 text-xs leading-snug" title={footerLine}>
+            {footerLine}
           </p>
         </div>
         <button
