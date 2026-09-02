@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
-import { DEFAULT_BUDGET, DEFAULT_SHOE_CAP, existingCapIdForDate } from '../lib/budget'
+import { DEFAULT_BUDGET, DEFAULT_SHOE_CAP, existingCapIdForDate, summarizeBudgetRows, withoutAdminProfiles } from '../lib/budget'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
 
 type BudgetDrillOrder = {
@@ -76,7 +76,7 @@ export default function Budgets() {
       supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }).order('created_at', { ascending: false }),
     ])
 
-    const profiles = profilesRes.data ?? []
+    const profiles = withoutAdminProfiles(profilesRes.data ?? [])
     const budgets = budgetsRes.data ?? []
     const orders = ordersRes.data ?? []
     setCaps((capsRes.data ?? []) as ShoeRefundCap[])
@@ -170,11 +170,12 @@ export default function Budgets() {
   const futureCaps = caps.filter(c => c.valid_from > today())
   const scheduledCap = futureCaps.length > 0 ? futureCaps[futureCaps.length - 1] : undefined
 
-  const totalBudget = rows.reduce((s, r) => s + (r.currentBudget?.total_budget ?? DEFAULT_BUDGET), 0)
-  const totalUsed = rows.reduce((s, r) => s + r.used, 0)
-  const utilizationPct = totalBudget > 0 ? Math.min(100, (totalUsed / totalBudget) * 100) : 0
-  const overBudgetCount = rows.filter(r => r.used > (r.currentBudget?.total_budget ?? DEFAULT_BUDGET)).length
-  const unusedCount = rows.filter(r => r.used === 0).length
+  const { totalBudget, totalUsed, utilizationPct, overBudgetCount, unusedCount } = summarizeBudgetRows(
+    rows.map(r => ({
+      used: r.used,
+      totalBudget: r.currentBudget?.total_budget ?? DEFAULT_BUDGET,
+    })),
+  )
 
   return (
     <div className="space-y-6">
