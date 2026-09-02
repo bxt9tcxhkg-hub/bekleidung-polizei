@@ -162,6 +162,21 @@ export interface AuditLog {
   profiles?: Profile
 }
 
+export type AppErrorSource = 'boundary' | 'window' | 'unhandledrejection'
+
+export interface AppError {
+  id: string
+  created_at: string | null
+  user_id: string | null
+  role_snapshot: string[]
+  path: string
+  message: string
+  stack: string | null
+  source: AppErrorSource
+  user_agent: string | null
+  profiles?: Profile
+}
+
 export interface VorrechnungAnalysis {
   rechnungsnummer: string | null
   gesamtbetrag: number | null
@@ -205,6 +220,7 @@ type ShoeRefundCapRow = Omit<ShoeRefundCap, 'profiles' | 'creator'>
 type TailorJobRow = Omit<TailorJob, 'profiles' | 'quarters' | 'orders' | 'creator'>
 type ShoeRefundRow = Omit<ShoeRefund, 'profiles' | 'creator'>
 type AuditLogRow = Omit<AuditLog, 'profiles' | 'creator'>
+type AppErrorRow = Omit<AppError, 'profiles'>
 type StockOrderRow = Omit<StockOrder, 'products' | 'requester' | 'approver'>
 type DeliveryRow = Omit<Delivery, 'orders'>
 type GrundausstattungRow = Omit<Grundausstattung, 'products'>
@@ -254,6 +270,9 @@ export type Database = {
       ] }
       audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [
         { foreignKeyName: 'audit_log_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      app_errors: { Row: AppErrorRow; Insert: Omit<AppErrorRow, 'id' | 'created_at'>; Update: Partial<AppErrorRow>; Relationships: [
+        { foreignKeyName: 'app_errors_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [
         { foreignKeyName: 'user_budgets_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

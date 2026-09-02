@@ -18,6 +18,7 @@ const Quarters = lazy(() => import('./pages/Quarters'))
 const ShoeRefunds = lazy(() => import('./pages/ShoeRefunds'))
 const Users = lazy(() => import('./pages/Users'))
 const AuditLog = lazy(() => import('./pages/AuditLog'))
+const Fehler = lazy(() => import('./pages/Fehler'))
 const Approvals = lazy(() => import('./pages/Approvals'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const Lager = lazy(() => import('./pages/Lager'))
@@ -65,6 +66,7 @@ export default function App() {
             <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
             <Route path="benutzer" element={<ProtectedRoute staffOnly><Users /></ProtectedRoute>} />
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
+            <Route path="fehler" element={<ProtectedRoute adminOnly><Fehler /></ProtectedRoute>} />
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />
             <Route path="grundausstattung" element={<ProtectedRoute sachbearbeiterOnly><Grundausstattung /></ProtectedRoute>} />
