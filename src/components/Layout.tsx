@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { sidebarRoleLabels } from '../lib/authRoles'
 import ChangePasswordModal from './ChangePasswordModal'
 
 interface NavItem {
@@ -26,11 +27,17 @@ function SidebarNav({
   onNavigate,
   profile,
   signOut,
+  isAdmin,
+  isSachbearbeiter,
+  isGenehmiger,
 }: {
   sections: NavSection[]
   onNavigate: () => void
   profile: ReturnType<typeof useAuth>['profile']
   signOut: () => Promise<void>
+  isAdmin: boolean
+  isSachbearbeiter: boolean
+  isGenehmiger: boolean
 }) {
   const location = useLocation()
   return (
@@ -83,11 +90,7 @@ function SidebarNav({
         <div className="px-3 py-2 mb-2">
           <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
           <p className="text-blue-300 text-xs truncate">
-            {[
-              profile?.roles?.includes('admin') ? 'Admin' : profile?.roles?.includes('sachbearbeiter') ? 'Sachbearbeiter' : null,
-              profile?.roles?.includes('admin') || profile?.roles?.includes('genehmiger') || profile?.roles?.includes('approver') ? 'Genehmiger' : null,
-              'Benutzer',
-            ].filter(Boolean).join(' · ')}
+            {sidebarRoleLabels({ isAdmin, isSachbearbeiter, isGenehmiger }).join(' · ')}
             {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}
           </p>
         </div>
@@ -104,7 +107,7 @@ function SidebarNav({
 }
 
 export default function Layout() {
-  const { profile, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
+  const { profile, isAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const sections: NavSection[] = [
@@ -155,7 +158,15 @@ export default function Layout() {
       )}
 
       <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-60 bg-blue-950 flex flex-col transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-        <SidebarNav sections={sections} onNavigate={() => setSidebarOpen(false)} profile={profile} signOut={signOut} />
+        <SidebarNav
+          sections={sections}
+          onNavigate={() => setSidebarOpen(false)}
+          profile={profile}
+          signOut={signOut}
+          isAdmin={isAdmin}
+          isSachbearbeiter={isSachbearbeiter}
+          isGenehmiger={isGenehmiger}
+        />
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
