@@ -23,6 +23,7 @@ const Budgets = lazy(() => import('./pages/Budgets'))
 const Lager = lazy(() => import('./pages/Lager'))
 const Analyse = lazy(() => import('./pages/Analyse'))
 const Grundausstattung = lazy(() => import('./pages/Grundausstattung'))
+const Hilfe = lazy(() => import('./pages/Hilfe'))
 
 const PageSpinner = () => (
   <div className="flex justify-center py-16">
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="warenkorb" element={<Shop />} />
             <Route path="meine-bestellungen" element={<MyOrders />} />
             <Route path="profil" element={<UserProfile />} />
+            <Route path="hilfe" element={<Hilfe />} />
 
             {/* Genehmiger */}
             <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />

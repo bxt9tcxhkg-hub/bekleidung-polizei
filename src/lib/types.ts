@@ -195,6 +195,29 @@ export interface Grundausstattung {
   products?: Product
 }
 
+export type SupportTicketStatus = 'open' | 'answered' | 'closed'
+
+export interface SupportTicket {
+  id: string
+  created_at: string
+  updated_at: string
+  user_id: string
+  subject: string
+  status: SupportTicketStatus
+  last_message_at: string
+  profiles?: Profile
+}
+
+export interface SupportMessage {
+  id: string
+  created_at: string
+  ticket_id: string
+  author_id: string
+  body: string
+  from_admin: boolean
+  profiles?: Profile
+}
+
 type ProfileRow = Omit<Profile, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
 type ProductRow = Omit<Product, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
 type InventoryRow = Omit<Inventory, 'profiles' | 'products' | 'quarters' | 'orders' | 'creator'>
@@ -208,6 +231,8 @@ type AuditLogRow = Omit<AuditLog, 'profiles' | 'creator'>
 type StockOrderRow = Omit<StockOrder, 'products' | 'requester' | 'approver'>
 type DeliveryRow = Omit<Delivery, 'orders'>
 type GrundausstattungRow = Omit<Grundausstattung, 'products'>
+type SupportTicketRow = Omit<SupportTicket, 'profiles'>
+type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -272,6 +297,13 @@ export type Database = {
       grundausstattung: { Row: GrundausstattungRow; Insert: Omit<GrundausstattungRow, 'id' | 'updated_at'> & Partial<Pick<GrundausstattungRow, 'id' | 'updated_at'>>; Update: Partial<GrundausstattungRow>; Relationships: [
         { foreignKeyName: 'grundausstattung_product_id_fkey'; columns: ['product_id']; isOneToOne: false; referencedRelation: 'products'; referencedColumns: ['id'] },
         { foreignKeyName: 'grundausstattung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      support_tickets: { Row: SupportTicketRow; Insert: Pick<SupportTicketRow, 'user_id' | 'subject'> & Partial<Omit<SupportTicketRow, 'user_id' | 'subject'>>; Update: Partial<Pick<SupportTicketRow, 'status' | 'updated_at' | 'last_message_at'>>; Relationships: [
+        { foreignKeyName: 'support_tickets_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      support_messages: { Row: SupportMessageRow; Insert: Pick<SupportMessageRow, 'ticket_id' | 'author_id' | 'body'> & Partial<Omit<SupportMessageRow, 'ticket_id' | 'author_id' | 'body'>>; Update: Partial<SupportMessageRow>; Relationships: [
+        { foreignKeyName: 'support_messages_ticket_id_fkey'; columns: ['ticket_id']; isOneToOne: false; referencedRelation: 'support_tickets'; referencedColumns: ['id'] },
+        { foreignKeyName: 'support_messages_author_id_fkey'; columns: ['author_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
     }
     Views: {

@@ -2,7 +2,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, ShoppingCart, ShoppingBag, Package,
   CalendarRange, Footprints, Users, ClipboardList,
-  LogOut, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen,
+  LogOut, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen, LifeBuoy,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
@@ -120,6 +120,7 @@ export default function Layout() {
         { to: '/warenkorb', label: 'Bekleidung bestellen', icon: ShoppingCart },
         { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
         { to: '/profil', label: 'Mein Profil', icon: UserCircle },
+        { to: '/hilfe', label: 'Hilfe', icon: LifeBuoy },
       ],
     },
     ...(isSachbearbeiter ? [{
