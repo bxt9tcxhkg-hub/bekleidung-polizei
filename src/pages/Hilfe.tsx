@@ -138,6 +138,7 @@ export default function Hilfe() {
       setReply('')
     }
 
+    setFilter('all')
     resetForm()
     try {
       await loadTickets()
