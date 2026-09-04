@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
-  LayoutDashboard, ShoppingCart, ShoppingBag, Package,
+  LayoutDashboard, LayoutGrid, ShoppingCart, ShoppingBag, Package,
   CalendarRange, Footprints, Users, ClipboardList,
   LogOut, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen, LifeBuoy,
 } from 'lucide-react'
@@ -116,7 +116,8 @@ export default function Layout() {
       label: 'Mein Bereich',
       color: 'text-blue-300',
       items: [
-        { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { to: '/', label: 'Portal', icon: LayoutGrid },
+        { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { to: '/warenkorb', label: 'Bekleidung bestellen', icon: ShoppingCart },
         { to: '/meine-bestellungen', label: 'Meine Bestellungen', icon: ShoppingBag },
         { to: '/profil', label: 'Mein Profil', icon: UserCircle },
