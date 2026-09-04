@@ -47,7 +47,7 @@ export default function Login() {
             />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Stadtpolizei Dornbirn</h1>
-          <p className="text-gray-500 text-sm mt-1">Bekleidungsverwaltung</p>
+          <p className="text-gray-500 text-sm mt-1">Portal</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

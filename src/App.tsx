@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
+import Portal from './pages/Portal'
 import Dashboard from './pages/Dashboard'
 import Shop from './pages/Shop'
 import MyOrders from './pages/MyOrders'
@@ -43,12 +44,19 @@ export default function App() {
             path="/"
             element={
               <ProtectedRoute>
+                <Portal />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            element={
+              <ProtectedRoute>
                 <Layout />
               </ProtectedRoute>
             }
           >
-            {/* Alle Rollen */}
-            <Route index element={<Dashboard />} />
+            {/* Alle Rollen — Bekleidung */}
+            <Route path="dashboard" element={<Dashboard />} />
 
             {/* Benutzer */}
             <Route path="warenkorb" element={<Shop />} />
