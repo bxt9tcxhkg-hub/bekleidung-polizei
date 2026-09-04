@@ -23,7 +23,7 @@ function AppTile({ app }: { app: PortalApp }) {
           <div className="bg-gray-100 p-2.5 rounded-lg">
             <Icon className="w-5 h-5 text-gray-500" />
           </div>
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+          <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
             folgt
           </span>
         </div>
