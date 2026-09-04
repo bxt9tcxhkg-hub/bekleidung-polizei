@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Shield } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { loginEmailFromInput } from '../lib/workflow'
@@ -40,8 +39,12 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
         <div className="flex flex-col items-center mb-8">
-          <div className="bg-blue-800 p-3 rounded-xl mb-4">
-            <Shield className="w-8 h-8 text-white" />
+          <div className="mb-4 h-14 w-14 rounded-xl bg-white p-1 flex items-center justify-center">
+            <img
+              src="/wappen-dornbirn.svg"
+              alt="Wappen der Stadt Dornbirn"
+              className="h-full w-auto"
+            />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Stadtpolizei Dornbirn</h1>
           <p className="text-gray-500 text-sm mt-1">Bekleidungsverwaltung</p>
