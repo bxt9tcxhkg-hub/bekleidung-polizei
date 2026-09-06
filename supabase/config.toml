@@ -1,10 +1,10 @@
 # Supabase-Projekt (öffentliche Referenz aus dem bestehenden Client-Bundle).
 project_id = "qqkxlkrkbctexwnqjitx"
 
-# Startpasswort 1234 (Owner): Auth-Mindestlänge 4. Hosted separat im Dashboard
+# Startpasswort 123456 (Owner): Auth-Mindestlänge 6, wie Hosted Supabase.
 # (Authentication → Providers → Email → Minimum password length).
 [auth]
-minimum_password_length = 4
+minimum_password_length = 6
 
 [functions.create-user]
 verify_jwt = true

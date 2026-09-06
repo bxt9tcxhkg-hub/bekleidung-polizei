@@ -124,10 +124,10 @@ supabase functions deploy create-user
 
 **Anlegen / Import:** Body wie bisher (`name`, `initial_password`, optional
 `username` / `vorname` / `nachname` …). Import und «Neuer Benutzer» vorbelegen
-das gemeinsame **Startpasswort `1234`** (Owner-Vorgabe, bewusst schwach und
-nur bis zum Erstlogin). Die UI prüft Startpasswörter nur auf «nicht leer» —
-keine 8-Zeichen-/Großbuchstaben-Regel. Zufällige Einzelpasswörter nur nach
-explizitem Schalter «Zufällig pro Person».
+das gemeinsame **Startpasswort `123456`** (Owner-Vorgabe, bewusst schwach und
+nur bis zum Erstlogin; 6 Zeichen wegen der Hosted-Auth-Mindestlänge). Die UI
+prüft Startpasswörter nur auf «nicht leer» — keine 8-Zeichen-/Großbuchstaben-Regel.
+Zufällige Einzelpasswörter nur nach explizitem Schalter «Zufällig pro Person».
 
 **Persönliches Passwort** (ChangePasswordModal nach Erstlogin) bleibt streng:
 mindestens 8 Zeichen, eine Zahl und einen Großbuchstaben.
@@ -138,22 +138,18 @@ mindestens 8 Zeichen, eine Zahl und einen Großbuchstaben.
 {
   "action": "reset_password",
   "user_id": "<profiles.id>",
-  "initial_password": "1234"
+  "initial_password": "123456"
 }
 ```
 
 Setzt das Auth-Passwort, `force_password_change: true`. `force_username_set`
 bleibt `true`, wenn `profiles.username` fehlt oder noch `dn{N}` ist. Die UI
-zeigt das neue Passwort einmal zum Kopieren.
+zeigt das neue Passwort einmal zum Kopieren. Das gebundene Admin-Konto
+(`admin` / `admin@stadtpolizei-dornbirn.local`) wird nicht zurückgesetzt.
 
-**Auth-Mindestlänge:** GoTrue/Supabase default ist 6 Zeichen. `1234` (4 Zeichen)
-wird abgelehnt, solange die Projekt-Mindestlänge ≥ 6 ist. Im Dashboard:
-Authentication → Providers → Email → **Minimum password length = 4**
-(und keine Pflicht-Zeichensätze / leaked-password-Protection für dieses
-temporäre Startpasswort). Lokal: `supabase/config.toml`
-`[auth] minimum_password_length = 4`. Kein Fallback auf `123456` im Code —
-wenn Auth `1234` ablehnt, die Mindestlänge senken, nicht das Startpasswort
-komplizieren.
+**Auth-Mindestlänge:** GoTrue/Supabase default und Hosted sind 6 Zeichen.
+`123456` erfüllt das. Lokal: `supabase/config.toml`
+`[auth] minimum_password_length = 6`. Das Admin-Passwort bleibt unverändert.
 
 Login-E-Mail (Auth-Identität, nicht `profiles.username`):
 
@@ -174,8 +170,10 @@ Datenfix): vorhandene `profiles.username` / Auth-Metadata die
 `^dn[0-9]+$` entsprechen werden auf NULL gesetzt (idempotent). Live war
 `username` NOT NULL — ohne `DROP NOT NULL` schlägt der Wipe fehl.
 
-Bestehende Admins können weiterhin ihre volle E-Mail eingeben (auch andere Domain).
-Ohne `@` hängt die Login-Seite `@dornbirn.at` an.
+Login nur mit voller E-Mail (kein Anhängen von `@dornbirn.at` an Local-Parts).
+PC-Anmeldename und `dn{N}` sind kein Login.
+**Eine Ausnahme:** Benutzername `admin` wird auf die bestehende Auth-Adresse
+`admin@stadtpolizei-dornbirn.local` aufgelöst (Passwort unverändert).
 
 Die Function braucht die Service-Role (von Supabase automatisch als
 `SUPABASE_SERVICE_ROLE_KEY` bereitgestellt). Anlegen: aktive Sachbearbeiter,

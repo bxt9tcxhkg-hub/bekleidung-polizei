@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import {
-  loginEmailFromInput,
+  resolveLoginEmail,
+  LOGIN_EMAIL_REQUIRED_ERROR,
+  ADMIN_AUTH_EMAIL,
+  ADMIN_LOGIN_USERNAME,
+  isBoundAdminIdentity,
+  isBoundAdminLoginInput,
+  shouldForcePasswordChange,
+  shouldForceUsernameSet,
   decideSubmitStatus,
   previousOrderStatus,
   nextIssueStatus,
@@ -17,17 +24,78 @@ import {
   sanitizePcUsername,
 } from './workflow'
 
-describe('loginEmailFromInput', () => {
-  it('hängt dornbirn.at an Local-Parts ohne @', () => {
-    expect(loginEmailFromInput('mmustermann')).toBe('mmustermann@dornbirn.at')
-    expect(loginEmailFromInput('  Max.User  ')).toBe('max.user@dornbirn.at')
-    expect(loginEmailFromInput('Hans-Peter.Schwendinger')).toBe('hans-peter.schwendinger@dornbirn.at')
+describe('resolveLoginEmail', () => {
+  it('lehnt Local-Parts, PC-Namen und dn-Platzhalter ab', () => {
+    for (const input of ['mmustermann', 'dn7', '  Max.User  ', 'Hans-Peter.Schwendinger', '', 'user@', '@dornbirn.at']) {
+      expect(resolveLoginEmail(input)).toEqual({
+        ok: false,
+        error: LOGIN_EMAIL_REQUIRED_ERROR,
+      })
+    }
   })
 
-  it('lässt volle E-Mail-Adressen unverändert (trim), auch bestehende Admins', () => {
-    expect(loginEmailFromInput('name@beispiel.at')).toBe('name@beispiel.at')
-    expect(loginEmailFromInput('Hans-Peter.Schwendinger@dornbirn.at')).toBe('Hans-Peter.Schwendinger@dornbirn.at')
-    expect(loginEmailFromInput('admin@stadtpolizei-dornbirn.local')).toBe('admin@stadtpolizei-dornbirn.local')
+  it('nimmt volle E-Mail-Adressen (trim), auch bestehende Admins', () => {
+    expect(resolveLoginEmail('name@beispiel.at')).toEqual({ ok: true, email: 'name@beispiel.at' })
+    expect(resolveLoginEmail('  Hans-Peter.Schwendinger@dornbirn.at  ')).toEqual({
+      ok: true,
+      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+    })
+    expect(resolveLoginEmail('Martin.Feurstein2@dornbirn.at')).toEqual({
+      ok: true,
+      email: 'Martin.Feurstein2@dornbirn.at',
+    })
+    expect(resolveLoginEmail(ADMIN_AUTH_EMAIL)).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
+  })
+
+  it('löst nur den gebundenen Admin-Benutzernamen auf', () => {
+    expect(isBoundAdminLoginInput('Admin')).toBe(true)
+    expect(isBoundAdminLoginInput(' admin ')).toBe(true)
+    expect(isBoundAdminLoginInput('administrator')).toBe(false)
+    expect(resolveLoginEmail('admin')).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
+    expect(resolveLoginEmail('  ADMIN  ')).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
+    expect(ADMIN_LOGIN_USERNAME).toBe('admin')
+  })
+})
+
+describe('bound Admin Erstlogin', () => {
+  it('erkennt das gebundene Admin-Konto', () => {
+    expect(isBoundAdminIdentity({ username: 'admin' })).toBe(true)
+    expect(isBoundAdminIdentity({ email: ADMIN_AUTH_EMAIL })).toBe(true)
+    expect(isBoundAdminIdentity({ email: 'Hans-Peter.Schwendinger@dornbirn.at' })).toBe(false)
+    expect(isBoundAdminIdentity({ username: 'hschwendinger' })).toBe(false)
+  })
+
+  it('nimmt dem gebundenen Admin kein Passwort- oder Username-Erstlogin ab', () => {
+    expect(shouldForcePasswordChange({
+      forcePasswordChange: true,
+      username: 'admin',
+      email: ADMIN_AUTH_EMAIL,
+    })).toBe(false)
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: true,
+      username: 'admin',
+      email: ADMIN_AUTH_EMAIL,
+    })).toBe(false)
+  })
+
+  it('lässt Erstlogin für Beamte unverändert', () => {
+    expect(shouldForcePasswordChange({
+      forcePasswordChange: true,
+      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+    })).toBe(true)
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: true,
+      username: null,
+      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+    })).toBe(true)
+    expect(shouldForceUsernameSet({
+      username: '',
+      email: 'Irmgard.Faessler@dornbirn.at',
+    })).toBe(true)
+    expect(shouldForceUsernameSet({
+      username: 'hschwendinger',
+      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+    })).toBe(false)
   })
 })
 
@@ -79,7 +147,7 @@ describe('isValidInitialPassword / USERNAME_RE', () => {
   it('prüft die persönliche Passwortregel (Erstlogin-Modal), nicht das Startpasswort', () => {
     expect(isValidPersonalPassword('Abcdefg1')).toBe(true)
     expect(isValidInitialPassword('Abcdefg1')).toBe(true)
-    expect(isValidPersonalPassword('1234')).toBe(false)
+    expect(isValidPersonalPassword('123456')).toBe(false)
     expect(isValidInitialPassword('short1A')).toBe(false)
     expect(isValidInitialPassword('abcdefgh')).toBe(false)
     expect(isValidInitialPassword('ABCDEFGH1')).toBe(true)

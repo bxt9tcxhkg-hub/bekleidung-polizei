@@ -41,37 +41,37 @@ describe('shouldKeepForceUsernameSet', () => {
 })
 
 describe('isValidStartPassword / DEFAULT_START_PASSWORD', () => {
-  it('akzeptiert das Owner-Startpasswort 1234 und andere kurze Werte', () => {
-    expect(DEFAULT_START_PASSWORD).toBe('1234')
-    expect(isValidStartPassword('1234')).toBe(true)
-    expect(isValidStartPassword(' 1234 ')).toBe(true)
+  it('akzeptiert das Owner-Startpasswort 123456 und andere nicht-leere Werte', () => {
+    expect(DEFAULT_START_PASSWORD).toBe('123456')
+    expect(isValidStartPassword('123456')).toBe(true)
+    expect(isValidStartPassword(' 123456 ')).toBe(true)
     expect(isValidStartPassword('abc')).toBe(true)
     expect(isValidStartPassword('')).toBe(false)
     expect(isValidStartPassword('   ')).toBe(false)
   })
 
   it('unterscheidet Startpasswort von der persönlichen Passwortregel', () => {
-    expect(isValidPersonalPassword('1234')).toBe(false)
-    expect(isValidInitialPassword('1234')).toBe(false)
+    expect(isValidPersonalPassword('123456')).toBe(false)
+    expect(isValidInitialPassword('123456')).toBe(false)
     expect(isValidPersonalPassword('Abcdefg1')).toBe(true)
   })
 })
 
 describe('resolveImportStartPassword', () => {
-  it('verwendet das gemeinsame Startpasswort 1234 für jede Zeile', () => {
+  it('verwendet das gemeinsame Startpasswort 123456 für jede Zeile', () => {
     const resolved = resolveImportStartPassword({ mode: 'shared', startPassword: DEFAULT_START_PASSWORD })
     expect(resolved.ok).toBe(true)
     if (!resolved.ok) return
-    expect(resolved.passwordFor(0)).toBe('1234')
-    expect(resolved.passwordFor(1)).toBe('1234')
-    expect(resolved.passwordFor(9)).toBe('1234')
+    expect(resolved.passwordFor(0)).toBe('123456')
+    expect(resolved.passwordFor(1)).toBe('123456')
+    expect(resolved.passwordFor(9)).toBe('123456')
   })
 
   it('trimmt das gemeinsame Startpasswort', () => {
-    const resolved = resolveImportStartPassword({ mode: 'shared', startPassword: '  1234  ' })
+    const resolved = resolveImportStartPassword({ mode: 'shared', startPassword: '  123456  ' })
     expect(resolved.ok).toBe(true)
     if (!resolved.ok) return
-    expect(resolved.passwordFor(0)).toBe('1234')
+    expect(resolved.passwordFor(0)).toBe('123456')
   })
 
   it('lehnt nur ein leeres gemeinsames Startpasswort ab', () => {
@@ -111,8 +111,8 @@ describe('buildResetPasswordRequest', () => {
     expect(buildResetPasswordRequest('user-1', DEFAULT_START_PASSWORD)).toEqual({
       action: 'reset_password',
       user_id: 'user-1',
-      initial_password: '1234',
+      initial_password: '123456',
     })
-    expect(buildResetPasswordRequest('user-1', '  1234  ').initial_password).toBe('1234')
+    expect(buildResetPasswordRequest('user-1', '  123456  ').initial_password).toBe('123456')
   })
 })
