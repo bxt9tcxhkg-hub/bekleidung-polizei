@@ -8,6 +8,10 @@ import {
   canShortcutToReadyForIssue,
   routeWaitingOrder,
   planGoodsIn,
+  inventoryLineLabel,
+  inventoryDeleteConfirm,
+  isInventoryDeleteBlocked,
+  planInventoryDeleteResult,
 } from './inventory'
 
 describe('inventoryKey / buildInventoryMap', () => {
@@ -79,5 +83,49 @@ describe('Shortcut approved → ready_for_issue', () => {
     expect(routeWaitingOrder(5, 1, true)).toBe('at_tailor')
     expect(routeWaitingOrder(5, 1, false)).toBe('ready_for_issue')
     expect(routeWaitingOrder(0, 1, false)).toBe('keep_approved')
+  })
+})
+
+describe('Bestandseintrag löschen', () => {
+  it('benennt Artikel und Größe für Bestätigung und Audit', () => {
+    expect(inventoryLineLabel('Diensthose', '52', ['50', '52'])).toBe('Diensthose · Gr. 52')
+    expect(inventoryLineLabel('  Hemd  ', 'M', ['S', 'M', 'L'])).toBe('Hemd · Gr. M')
+    expect(inventoryLineLabel(null, '44I', ['44I', '44II'])).toBe('Artikel · Gr. 44')
+    expect(inventoryDeleteConfirm('Diensthose', '52', 3, ['50', '52'])).toBe(
+      'Soll «Diensthose» Gr. 52 wirklich aus dem Bestand gelöscht werden? Aktueller Bestand: 3×.',
+    )
+    expect(inventoryDeleteConfirm('', 'M', 0, ['M'])).toBe(
+      'Soll «Artikel» Gr. M wirklich aus dem Bestand gelöscht werden? Aktueller Bestand: 0×.',
+    )
+  })
+
+  it('erkennt Foreign-Key-Sperren und plant hartes Löschen oder Nullsetzen', () => {
+    expect(isInventoryDeleteBlocked({ code: '23503', message: 'violates foreign key constraint' })).toBe(true)
+    expect(isInventoryDeleteBlocked({
+      code: 'PGRST116',
+      message: 'update or delete on table "inventory" violates foreign key constraint on inventory_movements',
+    })).toBe(true)
+    expect(isInventoryDeleteBlocked({ code: '42501', message: 'permission denied' })).toBe(false)
+
+    expect(planInventoryDeleteResult(null, 'Diensthose · Gr. 52')).toEqual({
+      kind: 'deleted',
+      error: null,
+      auditAction: 'Bestand gelöscht',
+    })
+    expect(planInventoryDeleteResult({ code: '23503' }, 'Diensthose · Gr. 52')).toEqual({
+      kind: 'zeroed',
+      error: '«Diensthose · Gr. 52» kann nicht vollständig entfernt werden, weil noch Buchungen oder Bestellungen darauf verweisen – der Bestand wurde auf 0 gesetzt.',
+      auditAction: 'Bestand auf 0 gesetzt',
+    })
+    expect(planInventoryDeleteResult({ code: '23503' }, 'Diensthose · Gr. 52', { message: 'denied' })).toEqual({
+      kind: 'blocked',
+      error: '«Diensthose · Gr. 52» kann nicht gelöscht werden.',
+      auditAction: null,
+    })
+    expect(planInventoryDeleteResult({ code: '42501', message: 'permission denied' }, 'Diensthose · Gr. 52')).toEqual({
+      kind: 'failed',
+      error: 'permission denied',
+      auditAction: null,
+    })
   })
 })
