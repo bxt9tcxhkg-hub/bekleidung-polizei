@@ -246,7 +246,7 @@ export interface PersonalEinsatzmittel {
   created_at: string | null
   updated_at: string | null
   created_by: string | null
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'> | null
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'> | null
 }
 
 export type PoolEmCategory =

@@ -9,8 +9,15 @@
  * Lesen: jede einsatz_mt-Rolle (user = nur Lesen).
  */
 
+import { isParkaufsichtMember, isStadtpolizeiMember, TRAINING_APPLIES_TO, TRAINING_APPLIES_TO_LABELS, type TrainingAppliesTo } from './einsatztraining'
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
+import { ET_ROSTER_ORGANISATION } from './usersSeed'
 import { isVerwahrungsort, VERWAHRUNGSORT_LABELS, type Verwahrungsort } from './verwahrungsort'
+
+/** Polizei / Parkaufsicht / Alle — gleiche Werte wie Einsatztraining-Geltung. */
+export const PERSONAL_EM_ORG_FILTERS = TRAINING_APPLIES_TO
+export type PersonalEmOrgFilter = TrainingAppliesTo
+export const PERSONAL_EM_ORG_FILTER_LABELS = TRAINING_APPLIES_TO_LABELS
 
 export const PERSONAL_EM_CATEGORIES = [
   'schutzweste',
@@ -381,4 +388,106 @@ export function canManagePersonalEinsatzmittel(input: {
   if (input.rows === null) return false
   const role = parseEinsatzMtRole(rolesForArea(input.rows, 'einsatz_mt'))
   return role === 'sachbearbeiter' || role === 'admin'
+}
+
+export function officerMatchesPersonalEmOrgFilter(
+  officer: { organisation?: string | null },
+  filter: PersonalEmOrgFilter,
+): boolean {
+  if (filter === 'parkaufsicht') return isParkaufsichtMember(officer)
+  const asPolizei = {
+    organisation: (officer.organisation ?? '').trim() || ET_ROSTER_ORGANISATION,
+  }
+  if (filter === 'polizei') return isStadtpolizeiMember(asPolizei)
+  return isStadtpolizeiMember(asPolizei) || isParkaufsichtMember(officer)
+}
+
+export function filterActiveOfficersForPersonalEmMatrix<T extends {
+  active?: boolean | null
+  organisation?: string | null
+  name?: string | null
+  dienstnummer?: string | null
+  username?: string | null
+}>(officers: readonly T[], filter: PersonalEmOrgFilter): T[] {
+  return officers
+    .filter(officer => officer.active !== false && officerMatchesPersonalEmOrgFilter(officer, filter))
+    .slice()
+    .sort((a, b) => officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'))
+}
+
+export type PersonalEmDetailRecord = {
+  category: PersonalEmCategory
+  groesse: string | null
+  ablaufdatum: string | null
+  schutzfristen: string | null
+  waffennummer: string | null
+  service: string | null
+  magazinanzahl: number | null
+  marke: string | null
+  kaliber: string | null
+  art: string | null
+  patronen: number | null
+  ablauf_mm_yyyy: string | null
+}
+
+export type PersonalEmMatrixRecord = PersonalEmDetailRecord & {
+  officer_id?: string | null
+  verwahrungsort?: string | null
+  removed_at?: string | null
+}
+
+/** Erstes Feld aus personalEmDetailText — kurz genug für die Matrixzelle. */
+export function personalEmKeyDetail(record: PersonalEmDetailRecord): string {
+  const full = personalEmDetailText(record)
+  if (!full) return ''
+  const first = full.split(' · ')[0]
+  return first ?? ''
+}
+
+export type PersonalEmMatrixCellStatus = {
+  count: number
+  text: string
+  hint: string
+  inLager: boolean
+}
+
+export function personalEmMatrixCellStatus(
+  items: readonly PersonalEmMatrixRecord[],
+): PersonalEmMatrixCellStatus {
+  const active = items.filter(item => !item.removed_at)
+  if (active.length === 0) {
+    return { count: 0, text: '—', hint: '', inLager: false }
+  }
+
+  const inLager = active.some(isPersonalEmInLager)
+  const firstHint = personalEmKeyDetail(active[0])
+  const single = firstHint || 'zugewiesen'
+  const lagerSuffix = inLager ? ' · Lager' : ''
+
+  if (active.length === 1) {
+    return { count: 1, text: `${single}${lagerSuffix}`, hint: firstHint, inLager }
+  }
+
+  const hint = firstHint
+  const base = hint ? `${active.length}× ${hint}` : `${active.length}×`
+  return { count: active.length, text: `${base}${lagerSuffix}`, hint, inLager }
+}
+
+export function personalEmItemsForMatrixCell<T extends PersonalEmMatrixRecord>(
+  items: readonly T[],
+  officerId: string,
+  category: PersonalEmCategory,
+): T[] {
+  return items.filter(item =>
+    !item.removed_at
+    && item.officer_id === officerId
+    && item.category === category,
+  )
+}
+
+export function unassignedActivePersonalEm<T extends {
+  officer_id?: string | null
+  removed_at?: string | null
+}>(items: readonly T[]): T[] {
+  return items.filter(item => !item.removed_at && !item.officer_id)
 }

@@ -8,8 +8,11 @@ import {
   PERSONAL_EM_CATEGORIES,
   PERSONAL_EM_CATEGORY_LABELS,
   PERSONAL_EM_FIELDS,
+  PERSONAL_EM_ORG_FILTERS,
+  PERSONAL_EM_ORG_FILTER_LABELS,
   canManagePersonalEinsatzmittel,
   emptyPersonalEmFormValues,
+  filterActiveOfficersForPersonalEmMatrix,
   formValuesFromRecord,
   formatIsoDate,
   isPersonalEmCategory,
@@ -18,12 +21,15 @@ import {
   personalEmDetailText,
   personalEmFieldKind,
   personalEmFieldLabel,
+  personalEmItemsForMatrixCell,
   personalEmLocationLabel,
+  personalEmMatrixCellStatus,
   personalEmOfficerLabel,
   toPersonalLagerAssignment,
   validatePersonalEm,
   type PersonalEmCategory,
   type PersonalEmFormValues,
+  type PersonalEmOrgFilter,
 } from '../../lib/personalEinsatzmittel'
 import { VERWAHRUNGSORTE, VERWAHRUNGSORT_LABELS } from '../../lib/verwahrungsort'
 import {
@@ -38,11 +44,32 @@ import AusbuchungDialog from './AusbuchungDialog'
 import ZuteilungImportDialog from './ZuteilungImportDialog'
 import PdfExportButton from './PdfExportButton'
 
-type CategoryFilter = 'all' | 'lager' | 'ausgebucht' | PersonalEmCategory
+type ViewFilter = 'matrix' | 'lager' | 'ausgebucht'
 
-type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
+
+const chipClass = (active: boolean) =>
+  `text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
+    active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+  }`
+
+function OfficerIdentity({ officer }: { officer: OfficerOption }) {
+  const name = officer.name?.trim() || officer.username?.trim() || '—'
+  const dn = officer.dienstnummer?.trim() || '—'
+  const username = officer.username?.trim() || '—'
+  return (
+    <div className="min-w-[13rem] max-w-[16rem]">
+      <div className="font-medium text-gray-900 truncate">{name}</div>
+      <div className="text-xs text-gray-500 truncate">
+        DN {dn}
+        {' · '}
+        {username}
+      </div>
+    </div>
+  )
+}
 
 export default function PersonalEinsatzmittelPanel() {
   const { profile, isStrictAdmin, areaRoles } = useAuth()
@@ -50,7 +77,8 @@ export default function PersonalEinsatzmittelPanel() {
 
   const [items, setItems] = useState<PersonalEinsatzmittel[]>([])
   const [officers, setOfficers] = useState<OfficerOption[]>([])
-  const [filter, setFilter] = useState<CategoryFilter>('all')
+  const [orgFilter, setOrgFilter] = useState<PersonalEmOrgFilter>('polizei')
+  const [view, setView] = useState<ViewFilter>('matrix')
   const [pdfOfficerId, setPdfOfficerId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -65,17 +93,22 @@ export default function PersonalEinsatzmittelPanel() {
   const [ausbuchungItem, setAusbuchungItem] = useState<PersonalEinsatzmittel | null>(null)
   const [ausbuchungReason, setAusbuchungReason] = useState('')
   const [ausbuchungSaving, setAusbuchungSaving] = useState(false)
+  const [cellPicker, setCellPicker] = useState<{
+    officer: OfficerOption
+    category: PersonalEmCategory
+    items: PersonalEinsatzmittel[]
+  } | null>(null)
 
   async function load() {
     setLoading(true)
     const [{ data, error: loadError }, { data: profileRows }] = await Promise.all([
       supabase
         .from('personal_einsatzmittel')
-        .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active)')
+        .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
         .order('created_at', { ascending: false }),
       supabase
         .from('profiles')
-        .select('id,name,dienstnummer,username,active')
+        .select('id,name,dienstnummer,username,active,organisation')
         .order('name'),
     ])
     if (loadError) {
@@ -96,13 +129,20 @@ export default function PersonalEinsatzmittelPanel() {
     })
   }, [])
 
-  const visible = useMemo(() => {
-    if (filter === 'ausgebucht') return removedEinsatzmittel(items)
-    const active = activeEinsatzmittel(items)
-    if (filter === 'all') return active
-    if (filter === 'lager') return active.filter(isPersonalEmInLager)
-    return active.filter(item => item.category === filter)
-  }, [items, filter])
+  const activeItems = useMemo(() => activeEinsatzmittel(items), [items])
+
+  const matrixOfficers = useMemo(
+    () => filterActiveOfficersForPersonalEmMatrix(officers, orgFilter),
+    [officers, orgFilter],
+  )
+
+  const listItems = useMemo(() => {
+    if (view === 'ausgebucht') return removedEinsatzmittel(items)
+    if (view === 'lager') {
+      return activeItems.filter(item => isPersonalEmInLager(item) || !item.officer_id)
+    }
+    return []
+  }, [items, activeItems, view])
 
   const officerChoices = useMemo(() => {
     const active = officers.filter(o => o.active)
@@ -112,10 +152,9 @@ export default function PersonalEinsatzmittelPanel() {
   }, [officers, officerId])
 
   const pdfOfficerChoices = useMemo(() => {
-    const active = activeEinsatzmittel(items)
     const byId = new Map<string, OfficerOption>()
     let hasUnassigned = false
-    for (const item of active) {
+    for (const item of activeItems) {
       if (!item.officer_id) {
         hasUnassigned = true
         continue
@@ -129,13 +168,14 @@ export default function PersonalEinsatzmittelPanel() {
         dienstnummer: fromItem?.dienstnummer ?? null,
         username: fromItem?.username ?? '',
         active: fromItem?.active ?? true,
+        organisation: fromItem?.organisation ?? '',
       })
     }
     const list = [...byId.values()].sort((a, b) =>
       officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'),
     )
     return { list, hasUnassigned }
-  }, [items, officers])
+  }, [activeItems, officers])
 
   function exportPersonalPdf() {
     const officer = pdfOfficerChoices.list.find(o => o.id === pdfOfficerId)
@@ -149,10 +189,11 @@ export default function PersonalEinsatzmittelPanel() {
     })
   }
 
-  function openNew() {
+  function openNew(preset?: { officerId?: string; category?: PersonalEmCategory }) {
+    setCellPicker(null)
     setEditId(null)
-    setCategory('schutzweste')
-    setOfficerId('')
+    setCategory(preset?.category ?? 'schutzweste')
+    setOfficerId(preset?.officerId ?? '')
     setVerwahrungsort('')
     setValues(emptyPersonalEmFormValues())
     setError('')
@@ -161,6 +202,7 @@ export default function PersonalEinsatzmittelPanel() {
 
   function openEdit(item: PersonalEinsatzmittel) {
     if (isEinsatzmittelRemoved(item)) return
+    setCellPicker(null)
     setEditId(item.id)
     setCategory(item.category)
     setOfficerId(item.officer_id ?? '')
@@ -174,6 +216,20 @@ export default function PersonalEinsatzmittelPanel() {
     setShowForm(false)
     setEditId(null)
     setSaving(false)
+  }
+
+  function openCell(officer: OfficerOption, cellCategory: PersonalEmCategory) {
+    if (!canManage) return
+    const cellItems = personalEmItemsForMatrixCell(activeItems, officer.id, cellCategory)
+    if (cellItems.length === 0) {
+      openNew({ officerId: officer.id, category: cellCategory })
+      return
+    }
+    if (cellItems.length === 1) {
+      openEdit(cellItems[0])
+      return
+    }
+    setCellPicker({ officer, category: cellCategory, items: cellItems })
   }
 
   async function save() {
@@ -217,6 +273,8 @@ export default function PersonalEinsatzmittelPanel() {
 
   function openAusbuchung(item: PersonalEinsatzmittel) {
     if (!canManage || isEinsatzmittelRemoved(item)) return
+    setCellPicker(null)
+    closeForm()
     setAusbuchungItem(item)
     setAusbuchungReason('')
     setError('')
@@ -255,6 +313,8 @@ export default function PersonalEinsatzmittelPanel() {
     if (!canManage || isEinsatzmittelRemoved(item)) return
     if (isPersonalEmInLager(item) && !item.officer_id) return
     if (!window.confirm(`«${PERSONAL_EM_CATEGORY_LABELS[item.category]}» ins Lager stellen? Die Zuweisung an den Polizisten wird aufgehoben.`)) return
+    setCellPicker(null)
+    closeForm()
     const { error: updateError } = await supabase
       .from('personal_einsatzmittel')
       .update(toPersonalLagerAssignment())
@@ -277,6 +337,19 @@ export default function PersonalEinsatzmittelPanel() {
     setVerwahrungsort(item.verwahrungsort ?? '')
   }
 
+  function cellTitle(cellItems: PersonalEinsatzmittel[]): string {
+    if (cellItems.length === 0) return canManage ? 'Zuweisen' : 'Keine Zuweisung'
+    return cellItems
+      .map(item => {
+        const detail = personalEmDetailText(item) || 'zugewiesen'
+        const lager = isPersonalEmInLager(item) ? ' · Lager' : ''
+        return `${detail}${lager}`
+      })
+      .join('\n')
+  }
+
+  const editingItem = editId ? items.find(item => item.id === editId) ?? null : null
+
   return (
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -284,7 +357,7 @@ export default function PersonalEinsatzmittelPanel() {
           <h2 className="text-lg font-semibold text-gray-900">Persönliche Einsatzmittel</h2>
           <p className="text-sm text-gray-500 mt-1">
             {canManage
-              ? 'Zuweisung an Polizistinnen und Polizisten oder Einlagerung (z. B. nach Austritt)'
+              ? 'Matrix: Offizier × Kategorie. Zuweisung oder Einlagerung (z. B. nach Austritt).'
               : 'Nur Leserecht'}
           </p>
         </div>
@@ -317,72 +390,114 @@ export default function PersonalEinsatzmittelPanel() {
           {canManage && (
             <button
               type="button"
-              onClick={openNew}
+              onClick={() => openNew()}
               className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Neue Zuweisung</span>
+              <span className="hidden sm:inline">Zuweisen</span>
             </button>
           )}
         </div>
       </div>
 
-      {error && !showForm && (
+      {error && !showForm && !ausbuchungItem && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>
       )}
 
-      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap">
-        <button
-          type="button"
-          onClick={() => setFilter('all')}
-          className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-            filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Alle
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilter('lager')}
-          className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-            filter === 'lager' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Im Lager
-        </button>
-        <button
-          type="button"
-          onClick={() => setFilter('ausgebucht')}
-          className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-            filter === 'ausgebucht' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Ausgebucht
-        </button>
-        {PERSONAL_EM_CATEGORIES.map(id => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setFilter(id)}
-            className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-              filter === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {PERSONAL_EM_CATEGORY_LABELS[id]}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap" role="group" aria-label="Organisation">
+          {PERSONAL_EM_ORG_FILTERS.map(id => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setOrgFilter(id)}
+              className={chipClass(orgFilter === id)}
+            >
+              {PERSONAL_EM_ORG_FILTER_LABELS[id]}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap" role="group" aria-label="Ansicht">
+          <button type="button" onClick={() => setView('matrix')} className={chipClass(view === 'matrix')}>
+            Übersicht
           </button>
-        ))}
+          <button type="button" onClick={() => setView('lager')} className={chipClass(view === 'lager')}>
+            Lager / ohne Zuweisung
+          </button>
+          <button type="button" onClick={() => setView('ausgebucht')} className={chipClass(view === 'ausgebucht')}>
+            Ausgebucht
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
         </div>
-      ) : visible.length === 0 ? (
+      ) : view === 'matrix' ? (
+        matrixOfficers.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
+            <p className="text-sm text-gray-500">Keine aktiven Personen für diesen Filter.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="overflow-auto max-h-[70vh]">
+              <table className="text-sm border-separate border-spacing-0">
+                <thead>
+                  <tr>
+                    <th className="sticky left-0 top-0 z-30 bg-gray-50 border-b border-gray-200 text-left px-4 py-3 font-semibold text-gray-600 shadow-[1px_0_0_0_rgba(229,231,235,1)]">
+                      Person
+                    </th>
+                    {PERSONAL_EM_CATEGORIES.map(id => (
+                      <th
+                        key={id}
+                        className="sticky top-0 z-20 bg-gray-50 border-b border-gray-200 text-left px-2 py-3 font-semibold text-gray-600 min-w-[8.5rem] max-w-[10.5rem] whitespace-normal leading-snug"
+                      >
+                        {PERSONAL_EM_CATEGORY_LABELS[id]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixOfficers.map(officer => (
+                    <tr key={officer.id} className="group">
+                      <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 px-4 py-2 border-b border-gray-100 shadow-[1px_0_0_0_rgba(229,231,235,1)] align-top">
+                        <OfficerIdentity officer={officer} />
+                      </td>
+                      {PERSONAL_EM_CATEGORIES.map(id => {
+                        const cellItems = personalEmItemsForMatrixCell(activeItems, officer.id, id)
+                        const status = personalEmMatrixCellStatus(cellItems)
+                        return (
+                          <td key={id} className="px-1 py-1 border-b border-gray-100 align-top">
+                            <button
+                              type="button"
+                              onClick={() => openCell(officer, id)}
+                              title={cellTitle(cellItems)}
+                              aria-label={`${officerDisplayName(officer)}, ${PERSONAL_EM_CATEGORY_LABELS[id]}: ${status.text}`}
+                              className={`w-full min-h-[2.75rem] text-left px-2 py-2 rounded-md text-xs leading-snug ${
+                                canManage ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'
+                              } ${status.count === 0 ? 'text-gray-400' : 'text-gray-800'} ${
+                                status.inLager ? 'bg-amber-50' : ''
+                              }`}
+                            >
+                              {status.text}
+                            </button>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : listItems.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
           <p className="text-sm text-gray-500">
-            {filter === 'ausgebucht'
+            {view === 'ausgebucht'
               ? 'Keine ausgebuchten persönlichen Einsatzmittel.'
-              : 'Keine persönlichen Einsatzmittel erfasst.'}
+              : 'Keine persönlichen Einsatzmittel im Lager oder ohne Zuweisung.'}
           </p>
         </div>
       ) : (
@@ -394,13 +509,13 @@ export default function PersonalEinsatzmittelPanel() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Polizist</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Verwahrungsort</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">
-                  {filter === 'ausgebucht' ? 'Ausbuchung' : 'Angaben'}
+                  {view === 'ausgebucht' ? 'Ausbuchung' : 'Angaben'}
                 </th>
-                {canManage && filter !== 'ausgebucht' && <th className="px-4 py-3" />}
+                {canManage && view !== 'ausgebucht' && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {visible.map(item => (
+              {listItems.map(item => (
                 <tr key={item.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                     {PERSONAL_EM_CATEGORY_LABELS[item.category]}
@@ -410,11 +525,11 @@ export default function PersonalEinsatzmittelPanel() {
                     {personalEmLocationLabel(item.verwahrungsort)}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
-                    {filter === 'ausgebucht'
+                    {view === 'ausgebucht'
                       ? `${formatIsoDate(item.removed_at)} · ${formatRemovalReason(item.removal_reason)}`
                       : (personalEmDetailText(item) || '–')}
                   </td>
-                  {canManage && filter !== 'ausgebucht' && (
+                  {canManage && view !== 'ausgebucht' && (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
                         {!(isPersonalEmInLager(item) && !item.officer_id) && (
@@ -460,6 +575,71 @@ export default function PersonalEinsatzmittelPanel() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {cellPicker && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="font-bold text-gray-900">{PERSONAL_EM_CATEGORY_LABELS[cellPicker.category]}</h2>
+                <p className="text-sm text-gray-500 mt-0.5">{officerDisplayName(cellPicker.officer)}</p>
+              </div>
+              <button type="button" onClick={() => setCellPicker(null)} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="Schließen">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {cellPicker.items.map(item => (
+                <li key={item.id} className="px-6 py-3 flex items-start justify-between gap-3">
+                  <div className="text-sm text-gray-700">
+                    <p>{personalEmDetailText(item) || 'zugewiesen'}</p>
+                    {isPersonalEmInLager(item) && <p className="text-xs text-amber-700 mt-1">Lager</p>}
+                  </div>
+                  {canManage && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(item)}
+                        className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900"
+                        title="Bearbeiten"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void moveToLager(item) }}
+                        className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900"
+                        title="Ins Lager stellen"
+                      >
+                        <Warehouse className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openAusbuchung(item)}
+                        className="px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 rounded-md"
+                      >
+                        Ausbuchen
+                      </button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {canManage && (
+              <div className="px-6 py-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => openNew({ officerId: cellPicker.officer.id, category: cellPicker.category })}
+                  className="flex items-center gap-2 text-sm font-medium text-blue-800 hover:text-blue-900"
+                >
+                  <Plus className="w-4 h-4" />
+                  Weitere zuweisen
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -547,15 +727,35 @@ export default function PersonalEinsatzmittelPanel() {
                 <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
               )}
             </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
-              <button type="button" onClick={closeForm} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">
+            <div className="flex flex-wrap gap-3 px-6 py-4 border-t">
+              {canManage && editingItem && (
+                <div className="flex items-center gap-2 mr-auto">
+                  {!(isPersonalEmInLager(editingItem) && !editingItem.officer_id) && (
+                    <button
+                      type="button"
+                      onClick={() => { void moveToLager(editingItem) }}
+                      className="text-sm font-medium text-gray-600 hover:text-gray-900 px-2 py-2"
+                    >
+                      Ins Lager
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openAusbuchung(editingItem)}
+                    className="text-sm font-medium text-red-700 hover:text-red-800 px-2 py-2"
+                  >
+                    Ausbuchen
+                  </button>
+                </div>
+              )}
+              <button type="button" onClick={closeForm} className="flex-1 min-w-[7rem] border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">
                 Abbrechen
               </button>
               <button
                 type="button"
                 onClick={() => { void save() }}
                 disabled={saving}
-                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60"
+                className="flex-1 min-w-[7rem] bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60"
               >
                 {saving ? 'Speichern...' : editId ? 'Speichern' : 'Anlegen'}
               </button>
