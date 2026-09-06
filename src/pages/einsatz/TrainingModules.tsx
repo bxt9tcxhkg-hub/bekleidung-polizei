@@ -11,6 +11,9 @@ import {
   validateTrainingModule,
   type TrainingKind,
 } from '../../lib/einsatztraining'
+import { officerDisplayName } from '../../lib/personalEinsatzmittel'
+import { generateTrainingModulesPdf } from '../../lib/einsatzPdf'
+import PdfExportButton from './PdfExportButton'
 
 type KindFilter = 'all' | TrainingKind
 
@@ -34,7 +37,9 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     setLoading(true)
     const [{ data, error: loadError }, { data: completionRows }] = await Promise.all([
       supabase.from('einsatz_training_modules').select('*').order('name'),
-      supabase.from('einsatz_training_completions').select('officer_id, module_id, completed_on'),
+      supabase
+        .from('einsatz_training_completions')
+        .select('officer_id, module_id, completed_on, officer:profiles!officer_id(id,name,dienstnummer,username)'),
     ])
     if (loadError) {
       setError('Module konnten nicht geladen werden.')
@@ -136,16 +141,40 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
         <p className="text-sm text-gray-500">
           Kein hinterlegter Lehrplan. Module werden hier angelegt (Name, intern/extern).
         </p>
-        {canManage && (
-          <button
-            type="button"
-            onClick={openNew}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Neues Modul</span>
-          </button>
-        )}
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <PdfExportButton
+            disabled={loading}
+            onClick={() => generateTrainingModulesPdf({
+              modules: visible.map(item => ({
+                name: item.name,
+                kind: item.kind,
+                active: item.active,
+                completionCount: completionCount.get(item.id) ?? 0,
+              })),
+              completions: completions.flatMap(row => {
+                const module = items.find(m => m.id === row.module_id)
+                if (!module) return []
+                if (filter !== 'all' && module.kind !== filter) return []
+                return [{
+                  officerName: officerDisplayName(row.officer),
+                  moduleName: module.name,
+                  kind: module.kind,
+                  completedOn: row.completed_on,
+                }]
+              }),
+            })}
+          />
+          {canManage && (
+            <button
+              type="button"
+              onClick={openNew}
+              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Neues Modul</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {error && !showForm && (

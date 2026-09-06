@@ -32,8 +32,10 @@ import {
 } from '../../lib/einsatztraining'
 import { poolEmLocationLabel } from '../../lib/poolEinsatzmittel'
 import { isVerwahrungsort } from '../../lib/verwahrungsort'
+import { generateTrainingProtocolPdf } from '../../lib/einsatzPdf'
 import MunitionVerbrauchFields, { type PoolMunitionChoice } from './MunitionVerbrauchFields'
 import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
+import PdfExportButton from './PdfExportButton'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
 
@@ -351,14 +353,23 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
           <ArrowLeft className="w-4 h-4" />
           Alle internen Trainingstage
         </button>
-        <div className="mb-4">
-          <h3 className="text-base font-semibold text-gray-900">
-            Protokoll {formatCompletedOn(selected.session_date)}
-          </h3>
-          {selected.note && <p className="text-sm text-gray-500 mt-1">{selected.note}</p>}
-          <p className="text-sm text-gray-500 mt-1">
-            Anwesend/Abwesend und Intervall je Person. Ein abgeschlossenes Modul kann nicht erneut zugewiesen werden.
-          </p>
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">
+              Protokoll {formatCompletedOn(selected.session_date)}
+            </h3>
+            {selected.note && <p className="text-sm text-gray-500 mt-1">{selected.note}</p>}
+            <p className="text-sm text-gray-500 mt-1">
+              Anwesend/Abwesend und Intervall je Person. Ein abgeschlossenes Modul kann nicht erneut zugewiesen werden.
+            </p>
+          </div>
+          <PdfExportButton
+            onClick={() => generateTrainingProtocolPdf({
+              session: selected,
+              attendance,
+              participations,
+            })}
+          />
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-4">

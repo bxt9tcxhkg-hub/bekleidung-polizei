@@ -28,6 +28,7 @@ import {
 } from '../../lib/einsatztraining'
 import { poolEmLocationLabel } from '../../lib/poolEinsatzmittel'
 import { isVerwahrungsort } from '../../lib/verwahrungsort'
+import { generateTrainingProtocolPdf } from '../../lib/einsatzPdf'
 import MunitionVerbrauchFields, { type PoolMunitionChoice } from './MunitionVerbrauchFields'
 import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 
@@ -306,7 +307,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Modul</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Intervall</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Munition</th>
-                {canManage && <th className="px-4 py-3" />}
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -321,28 +322,45 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                     {formatMunitionVerbrauch(sessionById.get(row.session_id) ?? {}) || '–'}
                   </td>
-                  {canManage && (
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => openMunitionEdit(row.session_id)}
-                          className="px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-50 rounded-md"
-                          title="Munition verbraucht"
-                        >
-                          Munition
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { void remove(row) }}
-                          className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
-                          title="Entfernen"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const session = sessionById.get(row.session_id)
+                          if (!session) return
+                          generateTrainingProtocolPdf({
+                            session,
+                            participations: participations.filter(p => p.session_id === row.session_id),
+                          })
+                        }}
+                        className="px-2 py-1 text-xs font-medium text-green-800 hover:bg-green-50 rounded-md"
+                        title="Als PDF exportieren"
+                      >
+                        PDF
+                      </button>
+                      {canManage && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openMunitionEdit(row.session_id)}
+                            className="px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-50 rounded-md"
+                            title="Munition verbraucht"
+                          >
+                            Munition
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { void remove(row) }}
+                            className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
+                            title="Entfernen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
