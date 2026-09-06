@@ -121,6 +121,28 @@ Quellcode: `supabase/functions/create-user/`.
 supabase functions deploy create-user
 ```
 
+Login-E-Mail (Auth-Identität, nicht `profiles.username`):
+
+`{Vorname}.{Nachname}@dornbirn.at`
+
+Umlaute im Local-Part werden ASCII-gefaltet (`Ä→Ae`, `Ö→Oe`, `Ü→Ue`, `ß→ss`).
+Bindestriche bleiben (`Hans-Peter.Schwendinger@dornbirn.at`).
+**Eine Ausnahme:** Feurstein Martin / DN 3 → `Martin.Feurstein2@dornbirn.at`.
+
+`profiles.username` ist der **Windows-/PC-Anmeldename** (sAMAccountName, ohne
+Domäne, Kleinbuchstaben, `USERNAME_RE`). Beim Anlegen bleibt er **leer**
+(`NULL`) — nicht die Dienstnummer, nicht `dn{N}`, nicht der E-Mail-Local-Part.
+`create-user` setzt `force_password_change` und `force_username_set`. Der
+Erstlogin fordert neues Passwort und PC-Benutzername.
+
+Migration `20260917` (zuerst `ALTER COLUMN username DROP NOT NULL`, dann
+Datenfix): vorhandene `profiles.username` / Auth-Metadata die
+`^dn[0-9]+$` entsprechen werden auf NULL gesetzt (idempotent). Live war
+`username` NOT NULL — ohne `DROP NOT NULL` schlägt der Wipe fehl.
+
+Bestehende Admins können weiterhin ihre volle E-Mail eingeben (auch andere Domain).
+Ohne `@` hängt die Login-Seite `@dornbirn.at` an.
+
 Die Function braucht die Service-Role (von Supabase automatisch als
 `SUPABASE_SERVICE_ROLE_KEY` bereitgestellt). Anlegen: aktive Sachbearbeiter,
 Genehmiger und Admins. Deaktivieren (`active = false`, kein Löschen): nur
@@ -155,6 +177,9 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260912_pool_verwahrungsorte_lager.sql` | Pool-Orte Spind/Waffentresor + Lager-Notiz |
 | `20260913_munition_verbrauch_ausbuchung.sql` | Munitionsverbrauch am Trainingstag, Ausbuchung `removed_at` |
 | `20260914_official_et_roles.sql` | Offizielle ET-Module + Rollen aus users-seed.json |
+| `20260915_et_roster_stadtpolizei.sql` | Stadtpolizei-Organisation für ET-Liste |
+| `20260916_parkaufsicht_roster.sql` | Parkaufsicht-Organisation für Owner-Liste |
+| `20260917_force_username_set.sql` | `username` nullable (`DROP NOT NULL`), Wipe `dn{N}`, `force_username_set`, Erstlogin setzt PC-Namen |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
@@ -182,7 +207,7 @@ neu erzeugt).
 Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
-1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260914`) auf das Supabase-Projekt.
+1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260917`) auf das Supabase-Projekt.
 2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig auch wegen CORS (kein `*`).
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
    funktionieren Upload/Dateizugriff nicht mehr (kein JWT mehr im Repo).

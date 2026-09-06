@@ -37,7 +37,7 @@ export interface UserBudget {
 
 export interface Profile {
   id: string
-  username: string
+  username: string | null
   name: string
   dienstnummer: string | null
   gender: 'male' | 'female'
@@ -46,6 +46,8 @@ export interface Profile {
   active: boolean
   created_at: string | null
   size_preferences: Record<string, string> | null
+  /** Erstlogin: PC-Anmeldename muss gesetzt/bestätigt werden. */
+  force_username_set?: boolean
 }
 
 export interface Product {
@@ -395,7 +397,7 @@ export type OrdersFullRow = OrderRow & {
   needs_tailoring: boolean
   user_name: string
   dienstnummer: string | null
-  username: string
+  username: string | null
   quarter_name: string
 }
 

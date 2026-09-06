@@ -27,6 +27,7 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     expect(users[0]).toMatchObject({
       name: 'Max Mustermann',
       username: 'mmustermann',
+      email: 'Max.Mustermann@dornbirn.at',
       dienstnummer: '1234',
       organisation: 'Stadtpolizei',
       roles: ['user'],
@@ -39,16 +40,23 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     expect(parseCsvUsers('name;benutzername')).toEqual([])
   })
 
-  it('ignoriert Zeilen ohne Name/Benutzername', () => {
+  it('ignoriert Zeilen ohne Name', () => {
     expect(rowToUser({ name: '', benutzername: 'x' })).toBeNull()
     expect(rowToUser({ name: 'A', username: 'a' })?.username).toBe('a')
   })
 
-  it('erzeugt aus Vorname/Nachname/DN den Platzhalter-Login dn{DN}', () => {
+  it('übernimmt keinen DN-Platzhalter als Username', () => {
+    const user = rowToUser({ vorname: 'Stefanie', nachname: 'Albrecht', dienstnummer: '32', benutzername: 'dn32' })
+    expect(user?.email).toBe('Stefanie.Albrecht@dornbirn.at')
+    expect(user?.username).toBeNull()
+  })
+
+  it('erzeugt aus Vorname/Nachname die Login-E-Mail @dornbirn.at', () => {
     const user = rowToUser({ vorname: 'Stefanie', nachname: 'Albrecht', dienstnummer: '32' })
     expect(user).toMatchObject({
       name: 'Stefanie Albrecht',
-      username: 'dn32',
+      email: 'Stefanie.Albrecht@dornbirn.at',
+      username: null,
       dienstnummer: '32',
       organisation: 'Stadtpolizei',
       roles: ['user', 'sachbearbeiter'],
@@ -64,17 +72,25 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
       organisation: 'Parkaufsicht',
     })
     expect(user?.organisation).toBe('Stadtpolizei')
-    expect(user?.username).toBe('dn1')
+    expect(user?.email).toBe('Hans-Peter.Schwendinger@dornbirn.at')
+    expect(user?.username).toBeNull()
   })
 
   it('setzt Parkaufsicht-Seedzeilen auf Parkaufsicht, auch ohne Org-Spalte', () => {
     const user = rowToUser({ vorname: 'Irmgard', nachname: 'Fässler', dienstnummer: '70' })
     expect(user).toMatchObject({
-      username: 'dn70',
+      email: 'Irmgard.Faessler@dornbirn.at',
+      username: null,
       organisation: 'Parkaufsicht',
       roles: ['user'],
       gender: 'female',
     })
+  })
+
+  it('setzt Feurstein Martin / DN 3 auf Martin.Feurstein2@dornbirn.at', () => {
+    const user = rowToUser({ vorname: 'Martin', nachname: 'Feurstein', dienstnummer: '3' })
+    expect(user?.email).toBe('Martin.Feurstein2@dornbirn.at')
+    expect(user?.username).toBeNull()
   })
 
   it('leitet Parkaufsicht nicht aus park im Benutzernamen ab', () => {

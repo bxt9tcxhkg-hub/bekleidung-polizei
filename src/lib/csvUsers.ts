@@ -1,6 +1,8 @@
-import { inferOfficerGender, isJunkRosterRow, usernameFromDienstnummer } from './officerRoster'
+import { officerAuthEmail, splitOfficerName } from './officerAuthEmail'
+import { inferOfficerGender, isJunkRosterRow } from './officerRoster'
 import { planRoleMatrixAssignment } from './roleMatrix'
 import { findUserSeedByDienstnummer, organisationFromSeedValue } from './usersSeed'
+import { USERNAME_RE, isDnPlaceholderUsername } from './workflow'
 
 /** Seed-DN gewinnt. Sonst nur explizite Parkaufsicht-Spalte — nicht aus „park“ im Namen. */
 export function organisationFromImportRow(explicit: string, dienstnummer: string): string {
@@ -11,7 +13,10 @@ export function organisationFromImportRow(explicit: string, dienstnummer: string
 
 export interface ImportUser {
   name: string
-  username: string
+  vorname?: string
+  nachname?: string
+  email: string
+  username: string | null
   dienstnummer: string
   organisation: string
   roles: string[]
@@ -31,16 +36,29 @@ export function rowToUser(row: Record<string, string>): ImportUser | null {
   const nachname = get('nachname')
   const name = get('name', 'vollname') || [vorname, nachname].filter(Boolean).join(' ')
   const dienstnummer = get('dienstnummer', 'dn', 'dg', 'dienst-nr', 'dienstnr')
-  const explicitUsername = get('benutzername', 'username', 'benutzer', 'login')
-  const username = explicitUsername || usernameFromDienstnummer(dienstnummer)
-  if (!name || !username) return null
+  const names = vorname && nachname ? { vorname, nachname } : splitOfficerName(name)
+  const email = officerAuthEmail({
+    vorname: names.vorname || vorname,
+    nachname: names.nachname || nachname,
+    name,
+    dienstnummer,
+  })
+  const explicitUsername = get('benutzername', 'username', 'benutzer', 'login').toLowerCase()
+  const username = explicitUsername && USERNAME_RE.test(explicitUsername) && !isDnPlaceholderUsername(explicitUsername)
+    ? explicitUsername
+    : null
+  if (!name) return null
   if (!explicitUsername && isJunkRosterRow({ name, vorname, nachname, dienstnummer })) return null
+  if (!email && !username) return null
   const rollen = get('rollen', 'roles', 'rolle', 'role')
   const org = get('organisation', 'org')
   const planned = planRoleMatrixAssignment({ id: '', name, dienstnummer, roles: ['user'] })
   return {
     name,
-    username: username.toLowerCase(),
+    vorname: names.vorname || vorname || undefined,
+    nachname: names.nachname || nachname || undefined,
+    email,
+    username,
     dienstnummer,
     organisation: organisationFromImportRow(org, dienstnummer),
     roles: rollen ? rollen.split('|').map((s) => s.trim()).filter(Boolean) : planned.bekleidungRoles,

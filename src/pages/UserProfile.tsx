@@ -177,9 +177,9 @@ export default function UserProfile() {
               <p className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded-lg">{profile?.organisation ?? 'Stadtpolizei'}</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Benutzername</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">PC-Benutzername</label>
               <p className="text-sm text-gray-500 px-3 py-2 bg-gray-50 rounded-lg">{profile?.username}</p>
-              <p className="text-xs text-gray-400 mt-1">Benutzername kann nicht geändert werden</p>
+              <p className="text-xs text-gray-400 mt-1">Windows-Anmeldename ohne Domäne. Änderung nur durch die Verwaltung.</p>
             </div>
 
             <div>

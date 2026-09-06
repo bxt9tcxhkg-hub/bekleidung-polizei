@@ -7,7 +7,7 @@ import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
 import { OFFICER_ROSTER_CSV_TEMPLATE, importUsersFromSeedJson, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
-import { USERNAME_RE, canCreateUsers, canDeactivateUsers } from '../lib/workflow'
+import { USERNAME_RE, canCreateUsers, canDeactivateUsers, isDnPlaceholderUsername } from '../lib/workflow'
 import {
   AREA_ROLE_LABELS,
   defaultEinsatzMtRoleForNewUser,
@@ -110,7 +110,7 @@ export default function Users() {
   const [importError, setImportError] = useState('')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; err: number } | null>(null)
-  const [importCreds, setImportCreds] = useState<{ username: string; password: string }[]>([])
+  const [importCreds, setImportCreds] = useState<{ email: string; username: string | null; password: string }[]>([])
   const [credsCopied, setCredsCopied] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const callerRoles = authProfile?.roles ?? []
@@ -154,7 +154,7 @@ export default function Users() {
   function openEdit(u: Profile) {
     setForm({
       name: u.name,
-      username: u.username,
+      username: u.username ?? '',
       initialPassword: '',
       dienstnummer: u.dienstnummer ?? '',
       roles: u.roles,
@@ -170,9 +170,11 @@ export default function Users() {
 
   async function save() {
     setError('')
-    if (!form.name || !form.username.trim()) { setError('Name und Benutzername sind Pflicht.'); return }
+    if (!form.name) { setError('Name ist Pflicht.'); return }
     const username = form.username.trim().toLowerCase()
-    if (!USERNAME_RE.test(username)) { setError('Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.'); return }
+    if (username && isDnPlaceholderUsername(username)) { setError('PC-Benutzername darf nicht die Dienstnummer (dn…) sein.'); return }
+    if (username && !USERNAME_RE.test(username)) { setError('PC-Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.'); return }
+    if (editId && !username) { setError('PC-Benutzername ist Pflicht.'); return }
     if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
     if (!editId && (form.initialPassword.length < 8 || !/[0-9]/.test(form.initialPassword) || !/[A-Z]/.test(form.initialPassword))) {
       setError('Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.'); return
@@ -184,7 +186,7 @@ export default function Users() {
     if (safeRoles.length === 0) safeRoles = ['user']
     const existingActive = editId ? (users.find(u => u.id === editId)?.active ?? true) : form.active
     const active = editId && !canDeactivate ? existingActive : form.active
-    const dbPayload = { name: form.name, username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active }
+    const dbPayload = { name: form.name, username: username || null, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -209,7 +211,7 @@ export default function Users() {
           const areaErr = await persistAreaRoles(json.id, safeRoles, form.einsatzMtRole)
           if (areaErr) { setError(areaErr); setSaving(false); return }
         }
-        logAudit('Benutzer angelegt', username)
+        logAudit('Benutzer angelegt', username || form.name)
       } catch {
         setError('Netzwerkfehler – bitte nochmals versuchen.'); setSaving(false); return
       }
@@ -224,7 +226,7 @@ export default function Users() {
     if (!canDeactivate) return
     const { error } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
     if (error) { setError(`Status konnte nicht geändert werden: ${error.message}`); return }
-    logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username)
+    logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username ?? u.name)
     load()
   }
 
@@ -235,7 +237,7 @@ export default function Users() {
     if (!confirm(`Benutzer "${u.name}" deaktivieren?\n\nDas Konto wird nicht gelöscht, sondern nur deaktiviert. Es kann jederzeit wieder aktiviert werden.`)) return
     const { error } = await supabase.from('profiles').update({ active: false }).eq('id', u.id)
     if (error) { setError(`Benutzer konnte nicht deaktiviert werden: ${error.message}`); return }
-    logAudit('Benutzer deaktiviert', u.username)
+    logAudit('Benutzer deaktiviert', u.username ?? u.name)
     setError('')
     load()
   }
@@ -289,7 +291,7 @@ export default function Users() {
     setCredsCopied(false)
     const { data: { session } } = await supabase.auth.getSession()
     let done = 0, err = 0
-    const creds: { username: string; password: string }[] = []
+    const creds: { email: string; username: string | null; password: string }[] = []
     setImportProgress({ done: 0, total: importRows.length, err: 0 })
     for (const row of importRows) {
       const password = generateInitialPassword()
@@ -299,7 +301,9 @@ export default function Users() {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
           body: JSON.stringify({
             name: row.name,
-            username: row.username,
+            vorname: row.vorname,
+            nachname: row.nachname,
+            username: row.username || null,
             dienstnummer: row.dienstnummer || null,
             organisation: row.organisation,
             roles: row.roles,
@@ -308,7 +312,15 @@ export default function Users() {
             initial_password: password,
           }),
         })
-        if (res.ok) { done++; creds.push({ username: row.username, password }) } else err++
+        const json = await res.json() as { error?: string; email?: string; username?: string | null }
+        if (res.ok) {
+          done++
+          creds.push({
+            email: json.email ?? row.email,
+            username: json.username ?? row.username ?? null,
+            password,
+          })
+        } else err++
       } catch {
         err++
       }
@@ -322,7 +334,7 @@ export default function Users() {
   }
 
   async function copyCreds() {
-    const text = importCreds.map(c => `${c.username}\t${c.password}`).join('\n')
+    const text = importCreds.map(c => `${c.email}\t${c.password}`).join('\n')
     try {
       await navigator.clipboard.writeText(text)
       setCredsCopied(true)
@@ -379,7 +391,7 @@ export default function Users() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Benutzername</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">PC-Benutzername</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstnummer</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
@@ -400,7 +412,7 @@ export default function Users() {
                       <span className="font-medium text-gray-900 truncate max-w-xs">{u.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username}</td>
+                  <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username || '—'}</td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -483,7 +495,7 @@ export default function Users() {
                 <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Offiziersliste (Vorname, Nachname, Dienstnummer):</p>
                 <p>vorname;nachname;dienstnummer</p>
                 <p>Stefanie;Albrecht;32</p>
-                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login wird als dn{'{DN}'}@stadtpolizei-dornbirn.local angelegt (keine erfundenen E-Mails). Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
+                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login-E-Mail: Vorname.Nachname@dornbirn.at (Umlaute als ae/oe/ue/ss). Ausnahme: Martin Feurstein / DN 3 → Martin.Feurstein2@dornbirn.at. PC-Benutzername setzt jede Person beim Erstlogin. Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
@@ -521,14 +533,14 @@ export default function Users() {
               {importCreds.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
                   <p className="text-sm font-semibold text-amber-800">Initialpasswörter – werden nur einmal angezeigt!</p>
-                  <p className="text-xs text-amber-700">Bitte jetzt kopieren oder notieren und an die Benutzer verteilen. Jeder Benutzer muss das Passwort beim ersten Login ändern.</p>
+                  <p className="text-xs text-amber-700">Bitte jetzt kopieren oder notieren und an die Benutzer verteilen. Login ist die E-Mail. Beim ersten Anmelden müssen Passwort und PC-Benutzername gesetzt werden.</p>
                   <div className="border border-amber-200 rounded-lg overflow-hidden overflow-x-auto bg-white">
                     <table className="w-full text-xs font-mono">
-                      <thead><tr className="bg-amber-100/60 border-b border-amber-200 font-sans"><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">Initialpasswort</th></tr></thead>
+                      <thead><tr className="bg-amber-100/60 border-b border-amber-200 font-sans"><th className="text-left px-3 py-2">Login (E-Mail)</th><th className="text-left px-3 py-2">Initialpasswort</th></tr></thead>
                       <tbody className="divide-y divide-amber-100">
                         {importCreds.map(c => (
-                          <tr key={c.username}>
-                            <td className="px-3 py-1.5">{c.username}</td>
+                          <tr key={c.email}>
+                            <td className="px-3 py-1.5">{c.email}</td>
                             <td className="px-3 py-1.5 font-semibold">{c.password}</td>
                           </tr>
                         ))}
@@ -545,12 +557,12 @@ export default function Users() {
                   <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Benutzer erkannt – Vorschau:</p>
                   <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Benutzername</th><th className="text-left px-3 py-2">Organisation</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
+                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Login-E-Mail</th><th className="text-left px-3 py-2">Organisation</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {importRows.map((r, i) => (
                           <tr key={i} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-medium">{r.name}</td>
-                            <td className="px-3 py-2">{r.username}</td>
+                            <td className="px-3 py-2">{r.email}</td>
                             <td className="px-3 py-2">{r.organisation}</td>
                             <td className="px-3 py-2">{r.dienstnummer || '–'}</td>
                             <td className="px-3 py-2">{r.roles.join(', ')}</td>
@@ -584,12 +596,13 @@ export default function Users() {
             <div className="px-6 py-4 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
-                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Vorname Nachname" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Benutzername *</label>
-                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{editId ? 'PC-Benutzername *' : 'PC-Benutzername'}</label>
+                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder={editId ? '' : 'leer — setzt die Person beim Erstlogin'} />
+                  {!editId && <p className="text-xs text-gray-400 mt-1">Windows-Anmeldename ohne Domäne. Leer lassen: wird beim ersten Anmelden gesetzt. Nicht die Dienstnummer.</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Dienstnummer</label>
@@ -682,7 +695,7 @@ export default function Users() {
               )}
               {!editId && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-                  Das Profil wird angelegt. Der Benutzer muss sich danach mit diesem Benutzernamen einloggen – die Authentifizierung wird über Supabase Auth verknüpft.
+                  Login erfolgt mit Vorname.Nachname@dornbirn.at. Beim ersten Anmelden setzt die Person Passwort und PC-Benutzername (Windows-Anmeldename ohne Domäne).
                 </p>
               )}
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}

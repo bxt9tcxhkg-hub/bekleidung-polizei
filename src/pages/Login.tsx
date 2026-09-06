@@ -21,7 +21,7 @@ export default function Login() {
     const email = loginEmailFromInput(username)
     const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
     if (signErr || !data.user) {
-      setError('Ungültiger Benutzername oder Passwort')
+      setError('Ungültige E-Mail oder Passwort')
       setLoading(false)
       return
     }
@@ -52,7 +52,7 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Benutzername</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
             <input
               type="text"
               required
@@ -60,7 +60,7 @@ export default function Login() {
               value={username}
               onChange={e => setUsername(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              placeholder="mmustermann oder name@beispiel.at"
+              placeholder="vorname.nachname@dornbirn.at"
             />
           </div>
           <div>
