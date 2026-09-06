@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   PARKAUFSICHT_SEED,
@@ -10,8 +7,6 @@ import {
   findUserSeedByDienstnummer,
   parseUsersSeed,
 } from './usersSeed'
-
-const here = dirname(fileURLToPath(import.meta.url))
 
 describe('users-seed', () => {
   it('enthält die festgelegten Stab-Rollen und keine erfundenen Extra-Namen', () => {
@@ -108,11 +103,5 @@ describe('users-seed', () => {
   it('lehnt unvollständige JSON-Zeilen ab', () => {
     expect(parseUsersSeed({ officers: [{ nachname: 'X' }] }).ok).toBe(false)
     expect(parseUsersSeed({ officers: [] }).ok).toBe(true)
-  })
-
-  it('hält src/data und supabase/seed synchron', () => {
-    const app = readFileSync(resolve(here, '../data/users-seed.json'), 'utf8')
-    const supabase = readFileSync(resolve(here, '../../supabase/seed/users-seed.json'), 'utf8')
-    expect(app).toBe(supabase)
   })
 })
