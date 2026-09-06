@@ -1,4 +1,5 @@
 import { Check, Minus, Plus, Send, ShoppingBag, Trash2, Warehouse, X } from 'lucide-react'
+import { inventoryDeleteConfirm } from '../../lib/inventory'
 import { groupSizes, sizeLabel, sortedSizes } from '../../lib/sizes'
 import type { LagerController } from './useLager'
 
@@ -9,6 +10,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
     followUp, setFollowUp, advanceWaitingOrders, advancingOrders,
     addForm, setAddForm, addSearch, setAddSearch, addDropdown, setAddDropdown,
     addFilteredProducts, selectedAddProduct, createInventory, saving,
+    confirmDelete, setConfirmDelete, deleting, confirmAndDelete,
   } = lager
 
   return (
@@ -216,6 +218,49 @@ export function LagerModals({ lager }: { lager: LagerController }) {
               <button onClick={advanceWaitingOrders} disabled={advancingOrders}
                 className="flex-1 bg-green-700 hover:bg-green-800 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
                 {advancingOrders ? 'Wird gesetzt...' : 'Weiterleiten'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bestand löschen ── */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Bestandseintrag löschen</h3>
+                <p className="text-sm text-gray-500">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              {inventoryDeleteConfirm(
+                confirmDelete.products?.name,
+                confirmDelete.size,
+                confirmDelete.quantity,
+                confirmDelete.products?.sizes,
+              )}
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                disabled={deleting}
+                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-60"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={() => { void confirmAndDelete() }}
+                disabled={deleting}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60"
+              >
+                {deleting ? 'Löschen...' : 'Löschen'}
               </button>
             </div>
           </div>

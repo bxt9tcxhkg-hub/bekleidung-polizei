@@ -5,7 +5,15 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import type { Product, StockOrder } from '../../lib/types'
 import { sortedSizes } from '../../lib/sizes'
-import { buildInventoryMap, inventoryDeltaOnGoodsIn, inventoryKey, routeWaitingOrder } from '../../lib/inventory'
+import {
+  buildInventoryMap,
+  inventoryDeltaOnGoodsIn,
+  inventoryKey,
+  inventoryLineLabel,
+  isInventoryDeleteBlocked,
+  planInventoryDeleteResult,
+  routeWaitingOrder,
+} from '../../lib/inventory'
 import { ensureOpenTailorJob } from '../../lib/tailorJobs'
 import type { CartItem, InventoryItem, SizeModal, Tab, WaitingUserOrder } from './types'
 
@@ -37,6 +45,8 @@ export function useLager() {
   const [addSearch, setAddSearch] = useState('')
   const [addDropdown, setAddDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<InventoryItem | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Wareneingang follow-up
   const [followUp, setFollowUp] = useState<{ orders: WaitingUserOrder[]; stockOrder: StockOrder } | null>(null)
@@ -119,6 +129,32 @@ export function useLager() {
     if (minError) { setError('Mindestmenge konnte nicht gespeichert werden.'); return }
     setEditingMinId(null)
     loadAll()
+  }
+
+  async function confirmAndDelete() {
+    if (!confirmDelete) return
+    const entry = confirmDelete
+    const label = inventoryLineLabel(entry.products?.name, entry.size, entry.products?.sizes)
+    setError('')
+    setDeleting(true)
+    const { error: delError } = await supabase.from('inventory').delete().eq('id', entry.id)
+    if (delError && isInventoryDeleteBlocked(delError)) {
+      const { error: zeroError } = await supabase
+        .from('inventory')
+        .update({ quantity: 0, updated_at: new Date().toISOString() })
+        .eq('id', entry.id)
+      const result = planInventoryDeleteResult(delError, label, zeroError)
+      if (result.auditAction) logAudit(result.auditAction, label)
+      if (result.error) setError(result.error)
+    } else {
+      const result = planInventoryDeleteResult(delError, label)
+      if (result.auditAction) logAudit(result.auditAction, label)
+      if (result.error) setError(result.error)
+    }
+    setDeleting(false)
+    setConfirmDelete(null)
+    setEditingId(id => (id === entry.id ? null : id))
+    await loadAll()
   }
 
   async function createInventory() {
@@ -324,6 +360,7 @@ export function useLager() {
     followUp, setFollowUp, advancingOrders,
     selectedCategory, setSelectedCategory, selectedSubCategory, setSelectedSubCategory,
     cart, cartOpen, setCartOpen, sizeModal, setSizeModal, submitting, submitted, setSubmitted,
+    confirmDelete, setConfirmDelete, deleting, confirmAndDelete,
     stockFor, minStockProducts, saveQty, saveMinQty, createInventory,
     addFilteredProducts, selectedAddProduct, invByProduct,
     categories, subCategories, filteredProducts, openSizeModal,

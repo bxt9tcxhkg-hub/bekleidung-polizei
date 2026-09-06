@@ -1,4 +1,4 @@
-import { Check, Warehouse, X } from 'lucide-react'
+import { Check, Trash2, Warehouse, X } from 'lucide-react'
 import { groupSizes, sizeLabel } from '../../lib/sizes'
 import type { LagerController } from './useLager'
 
@@ -15,6 +15,7 @@ export function BestandTab({ lager }: { lager: LagerController }) {
     saveQty, saving,
     invTotalPages, invPage, setInvPage,
     invEntries, pageSize,
+    setConfirmDelete,
   } = lager
 
   return (
@@ -89,6 +90,7 @@ export function BestandTab({ lager }: { lager: LagerController }) {
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Größe</th>
               <th className="text-center px-4 py-3 font-semibold text-gray-600">Bestand</th>
               <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Zuletzt aktualisiert</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -138,6 +140,18 @@ export function BestandTab({ lager }: { lager: LagerController }) {
                 </td>
                 <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">
                   {entry.updated_at ? new Date(entry.updated_at).toLocaleDateString('de-AT') : '–'}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(entry)}
+                      className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
+                      title="Löschen"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
