@@ -28,6 +28,8 @@ import {
   isTrainingModuleInUseDbError,
   isTrainingModuleType,
   officerMatchesAppliesTo,
+  officerMatchesSearch,
+  officersForAusschreibungPicker,
   trainingModuleDeleteConfirm,
   trainingModuleDeleteUserMessage,
   moduleAssignmentBlockReason,
@@ -426,6 +428,56 @@ describe('Offene Liste und Selbstanmeldung', () => {
       officerOrganisation: 'Parkaufsicht',
       module: { ...pflicht, applies_to: 'alle' },
     })).toBeNull()
+  })
+
+  it('erlaubt Sachbearbeiter-Anmeldung anderer trotz isOwnRegistration false', () => {
+    const manager = {
+      officerId: 'o2',
+      moduleId: 'm1',
+      moduleName: 'Internes ET',
+      module: pflicht,
+      completions,
+      announced: true,
+      capacity: 2,
+      registrationCount: 0,
+      alreadyRegistered: false,
+      isOwnRegistration: false,
+      isManagerEnrollment: true,
+    }
+    expect(selfRegisterBlockReason(manager)).toBeNull()
+    expect(canSelfRegister(manager)).toBe(true)
+    expect(selfRegisterBlockReason({ ...manager, officerId: '' })).toMatch(/Person/)
+    expect(selfRegisterBlockReason({ ...manager, officerId: 'o1' })).toMatch(/abgeschlossen/)
+    expect(selfRegisterBlockReason({ ...manager, capacity: 1, registrationCount: 1 })).toMatch(/Plätze/)
+    expect(selfRegisterBlockReason({ ...manager, alreadyRegistered: true })).toMatch(/bereits angemeldet/)
+    expect(selfRegisterBlockReason({
+      ...manager,
+      officerOrganisation: 'Parkaufsicht',
+      module: { ...pflicht, applies_to: 'polizei' },
+    })).toMatch(/Organisation/)
+    expect(selfRegisterBlockReason({
+      ...manager,
+      officerOrganisation: 'Parkaufsicht',
+      module: { ...pflicht, applies_to: 'alle' },
+    })).toBeNull()
+  })
+
+  it('filtert die Ausschreibungs-Suche nach Geltung, Aktiv und Name/Dienstnummer', () => {
+    const registered = new Set(['o2'])
+    expect(officersForAusschreibungPicker({
+      module: { applies_to: 'polizei' },
+      officers,
+      registeredIds: registered,
+    }).map(row => row.id)).toEqual(['o1'])
+    expect(officersForAusschreibungPicker({
+      module: { applies_to: 'alle' },
+      officers,
+      registeredIds: new Set(),
+    }).map(row => row.id)).toEqual(['o1', 'o2', 'o3'])
+    expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, 'mus')).toBe(true)
+    expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, '1234')).toBe(true)
+    expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, 'anna')).toBe(false)
+    expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, '')).toBe(true)
   })
 })
 

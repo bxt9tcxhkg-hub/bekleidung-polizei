@@ -634,6 +634,26 @@ export type SelfRegisterInput = {
   registrationCount: number
   alreadyRegistered: boolean
   isOwnRegistration: boolean
+  /** Sachbearbeiter darf andere anmelden; Abschluss und Kapazität gelten weiter. */
+  isManagerEnrollment?: boolean
+}
+
+export function officerMatchesSearch(
+  officer: Pick<TrainingOfficerRef, 'name' | 'dienstnummer' | 'username'>,
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return [officer.name, officer.dienstnummer, officer.username]
+    .some(field => (field ?? '').toLowerCase().includes(q))
+}
+
+export function officersForAusschreibungPicker<T extends TrainingOfficerRef>(input: {
+  module: Pick<TrainingModulePeriodRef, 'applies_to'>
+  officers: readonly T[]
+  registeredIds: ReadonlySet<string>
+}): T[] {
+  return officersEligibleForModule(input).filter(officer => !input.registeredIds.has(officer.id))
 }
 
 export function selfRegisterBlockReason(input: SelfRegisterInput): string | null {
@@ -644,16 +664,20 @@ export function selfRegisterBlockReason(input: SelfRegisterInput): string | null
     return 'Dieses Trainingsprogramm ist noch nicht ausgeschrieben.'
   }
   if (!input.officerId.trim()) {
-    return 'Bitte anmelden, um sich einzutragen.'
+    return input.isManagerEnrollment
+      ? 'Bitte eine Person wählen.'
+      : 'Bitte anmelden, um sich einzutragen.'
   }
-  if (!input.isOwnRegistration) {
+  if (!input.isOwnRegistration && !input.isManagerEnrollment) {
     return 'Anmeldung nur für das eigene Konto.'
   }
   if (
     input.officerOrganisation !== undefined
     && !officerMatchesAppliesTo({ organisation: input.officerOrganisation }, input.module?.applies_to)
   ) {
-    return 'Dieses Modul gilt nicht für Ihre Organisation.'
+    return input.isManagerEnrollment
+      ? 'Dieses Modul gilt nicht für diese Organisation.'
+      : 'Dieses Modul gilt nicht für Ihre Organisation.'
   }
   const lock = moduleAssignmentBlockReason({
     officerId: input.officerId,
