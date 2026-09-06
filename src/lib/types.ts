@@ -266,6 +266,63 @@ export interface PoolEinsatzmittel {
   created_by: string | null
 }
 
+export type TrainingKind = 'intern' | 'extern'
+export type TrainingAttendanceStatus = 'present' | 'absent'
+
+export interface EinsatzTrainingModule {
+  id: string
+  name: string
+  kind: TrainingKind
+  active: boolean
+  created_at: string | null
+  updated_at: string | null
+  created_by: string | null
+}
+
+export interface EinsatzTrainingSession {
+  id: string
+  kind: TrainingKind
+  session_date: string
+  note: string | null
+  created_at: string | null
+  updated_at: string | null
+  created_by: string | null
+}
+
+export interface EinsatzTrainingAttendance {
+  id: string
+  session_id: string
+  officer_id: string
+  status: TrainingAttendanceStatus
+  created_at: string | null
+  updated_at: string | null
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+}
+
+export interface EinsatzTrainingParticipation {
+  id: string
+  session_id: string
+  officer_id: string
+  module_id: string
+  interval_label: string | null
+  created_at: string | null
+  created_by: string | null
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'active'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+}
+
+export interface EinsatzTrainingCompletion {
+  id: string
+  officer_id: string
+  module_id: string
+  session_id: string
+  participation_id: string
+  completed_on: string
+  created_at: string | null
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'active'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 
 export interface SupportTicket {
@@ -307,6 +364,11 @@ type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
+type EinsatzTrainingModuleRow = Omit<EinsatzTrainingModule, never>
+type EinsatzTrainingSessionRow = Omit<EinsatzTrainingSession, never>
+type EinsatzTrainingAttendanceRow = Omit<EinsatzTrainingAttendance, 'officer'>
+type EinsatzTrainingParticipationRow = Omit<EinsatzTrainingParticipation, 'module' | 'officer'>
+type EinsatzTrainingCompletionRow = Omit<EinsatzTrainingCompletion, 'module' | 'officer'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -388,6 +450,28 @@ export type Database = {
       ] }
       pool_einsatzmittel: { Row: PoolEinsatzmittelRow; Insert: Pick<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'> & Partial<Omit<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'>>; Update: Partial<Omit<PoolEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'pool_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_training_modules: { Row: EinsatzTrainingModuleRow; Insert: Pick<EinsatzTrainingModuleRow, 'name' | 'kind'> & Partial<Omit<EinsatzTrainingModuleRow, 'name' | 'kind'>>; Update: Partial<Omit<EinsatzTrainingModuleRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_modules_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_training_sessions: { Row: EinsatzTrainingSessionRow; Insert: Pick<EinsatzTrainingSessionRow, 'kind' | 'session_date'> & Partial<Omit<EinsatzTrainingSessionRow, 'kind' | 'session_date'>>; Update: Partial<Omit<EinsatzTrainingSessionRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_sessions_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_training_attendance: { Row: EinsatzTrainingAttendanceRow; Insert: Pick<EinsatzTrainingAttendanceRow, 'session_id' | 'officer_id' | 'status'> & Partial<Omit<EinsatzTrainingAttendanceRow, 'session_id' | 'officer_id' | 'status'>>; Update: Partial<Omit<EinsatzTrainingAttendanceRow, 'id' | 'created_at' | 'session_id'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_attendance_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_attendance_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_training_participations: { Row: EinsatzTrainingParticipationRow; Insert: Pick<EinsatzTrainingParticipationRow, 'session_id' | 'officer_id' | 'module_id'> & Partial<Omit<EinsatzTrainingParticipationRow, 'session_id' | 'officer_id' | 'module_id'>>; Update: Partial<Omit<EinsatzTrainingParticipationRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_participations_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_participations_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_participations_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'einsatz_training_modules'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_participations_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_training_completions: { Row: EinsatzTrainingCompletionRow; Insert: Pick<EinsatzTrainingCompletionRow, 'officer_id' | 'module_id' | 'session_id' | 'participation_id' | 'completed_on'> & Partial<Omit<EinsatzTrainingCompletionRow, 'officer_id' | 'module_id' | 'session_id' | 'participation_id' | 'completed_on'>>; Update: Partial<Omit<EinsatzTrainingCompletionRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_completions_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_completions_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'einsatz_training_modules'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_completions_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_completions_participation_id_fkey'; columns: ['participation_id']; isOneToOne: false; referencedRelation: 'einsatz_training_participations'; referencedColumns: ['id'] },
       ] }
     }
     Views: {
