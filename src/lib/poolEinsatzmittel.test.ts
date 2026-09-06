@@ -7,6 +7,7 @@ import {
   VERWAHRUNGSORT_LABELS,
   aggregateLagerbestand,
   canManagePoolEinsatzmittel,
+  filterPoolItemsForViewer,
   emptyOrtCounts,
   emptyPoolEmFormValues,
   formValuesFromPoolRecord,
@@ -17,7 +18,9 @@ import {
   poolEmLocationLabel,
   poolEmStockQuantity,
   resolveLagerNotiz,
+  sanitizePoolCategoryFilter,
   validatePoolEm,
+  visiblePoolEmCategories,
 } from './poolEinsatzmittel'
 
 const empty = emptyPoolEmFormValues()
@@ -306,5 +309,29 @@ describe('canManagePoolEinsatzmittel', () => {
       isStrictAdmin: false,
       rows: [{ area: 'bekleidung', roles: ['sachbearbeiter'] }],
     })).toBe(false)
+  })
+})
+
+describe('Pool-Munition für Benutzer', () => {
+  const items = [
+    { id: '1', category: 'schild' },
+    { id: '2', category: 'munition' },
+    { id: '3', category: 'magazine' },
+    { id: '4', category: 'munition' },
+  ]
+
+  it('blendet Munition in Kategorien und Liste für Nicht-Manager aus', () => {
+    expect(visiblePoolEmCategories(true)).toEqual(POOL_EM_CATEGORIES)
+    expect(visiblePoolEmCategories(false)).not.toContain('munition')
+    expect(visiblePoolEmCategories(false)).toContain('magazine')
+    expect(filterPoolItemsForViewer(items, true).map(i => i.id)).toEqual(['1', '2', '3', '4'])
+    expect(filterPoolItemsForViewer(items, false).map(i => i.id)).toEqual(['1', '3'])
+  })
+
+  it('setzt den Munitions-Filter ohne Manage-Recht auf Alle', () => {
+    expect(sanitizePoolCategoryFilter('munition', false)).toBe('all')
+    expect(sanitizePoolCategoryFilter('munition', true)).toBe('munition')
+    expect(sanitizePoolCategoryFilter('magazine', false)).toBe('magazine')
+    expect(sanitizePoolCategoryFilter('all', false)).toBe('all')
   })
 })

@@ -12,6 +12,7 @@ import {
   VERWAHRUNGSORT_LABELS,
   canManagePoolEinsatzmittel,
   emptyPoolEmFormValues,
+  filterPoolItemsForViewer,
   formValuesFromPoolRecord,
   isLagerOrt,
   isPoolEmCategory,
@@ -19,7 +20,9 @@ import {
   poolEmFieldKind,
   poolEmFieldLabel,
   poolEmLocationLabel,
+  sanitizePoolCategoryFilter,
   validatePoolEm,
+  visiblePoolEmCategories,
   type PoolEmCategory,
   type PoolEmFormValues,
 } from '../../lib/poolEinsatzmittel'
@@ -64,16 +67,20 @@ export default function PoolEinsatzmittelPanel() {
 
   async function load() {
     setLoading(true)
-    const { data, error: loadError } = await supabase
+    let query = supabase
       .from('pool_einsatzmittel')
       .select('*')
       .order('created_at', { ascending: false })
+    if (!canManage) {
+      query = query.neq('category', 'munition')
+    }
+    const { data, error: loadError } = await query
     if (loadError) {
       setError('Pool-Einsatzmittel konnten nicht geladen werden.')
       setItems([])
     } else {
       setError('')
-      setItems((data ?? []) as PoolEinsatzmittel[])
+      setItems(filterPoolItemsForViewer((data ?? []) as PoolEinsatzmittel[], canManage))
     }
     setLoading(false)
   }
@@ -83,18 +90,22 @@ export default function PoolEinsatzmittelPanel() {
       setError('Pool-Einsatzmittel konnten nicht geladen werden.')
       setLoading(false)
     })
-  }, [])
+  }, [canManage])
+
+  const scopedItems = useMemo(() => filterPoolItemsForViewer(items, canManage), [items, canManage])
+  const categoryChips = visiblePoolEmCategories(canManage)
+  const safeFilter = sanitizePoolCategoryFilter(filter, canManage)
 
   const visible = useMemo(() => {
-    if (filter === 'ausgebucht') return removedEinsatzmittel(items)
-    const active = activeEinsatzmittel(items)
-    return filter === 'all' ? active : active.filter(item => item.category === filter)
-  }, [items, filter])
+    if (safeFilter === 'ausgebucht') return removedEinsatzmittel(scopedItems)
+    const active = activeEinsatzmittel(scopedItems)
+    return safeFilter === 'all' ? active : active.filter(item => item.category === safeFilter)
+  }, [scopedItems, safeFilter])
 
   const pdfOrtChoices = useMemo(() => {
-    const used = new Set(activeEinsatzmittel(items).map(item => item.verwahrungsort))
+    const used = new Set(activeEinsatzmittel(scopedItems).map(item => item.verwahrungsort))
     return VERWAHRUNGSORTE.filter(ort => used.has(ort))
-  }, [items])
+  }, [scopedItems])
 
   function openNew() {
     setEditId(null)
@@ -238,7 +249,7 @@ export default function PoolEinsatzmittelPanel() {
               <option key={ort} value={ort}>{VERWAHRUNGSORT_LABELS[ort]}</option>
             ))}
           </select>
-          <PdfExportButton onClick={() => generatePoolEmPdf(items, { verwahrungsort: pdfOrt || null })} />
+          <PdfExportButton onClick={() => generatePoolEmPdf(scopedItems, { verwahrungsort: pdfOrt || null })} />
           {canManage && (
             <button
               type="button"
@@ -261,7 +272,7 @@ export default function PoolEinsatzmittelPanel() {
           type="button"
           onClick={() => setFilter('all')}
           className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-            filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            safeFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Alle
@@ -270,18 +281,18 @@ export default function PoolEinsatzmittelPanel() {
           type="button"
           onClick={() => setFilter('ausgebucht')}
           className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-            filter === 'ausgebucht' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            safeFilter === 'ausgebucht' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Ausgebucht
         </button>
-        {POOL_EM_CATEGORIES.map(id => (
+        {categoryChips.map(id => (
           <button
             key={id}
             type="button"
             onClick={() => setFilter(id)}
             className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
-              filter === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              safeFilter === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             {POOL_EM_CATEGORY_LABELS[id]}
@@ -296,7 +307,7 @@ export default function PoolEinsatzmittelPanel() {
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
           <p className="text-sm text-gray-500">
-            {filter === 'ausgebucht' ? 'Keine ausgebuchten Pool-Einsatzmittel.' : 'Keine Pool-Einsatzmittel erfasst.'}
+            {safeFilter === 'ausgebucht' ? 'Keine ausgebuchten Pool-Einsatzmittel.' : 'Keine Pool-Einsatzmittel erfasst.'}
           </p>
         </div>
       ) : (
@@ -307,9 +318,9 @@ export default function PoolEinsatzmittelPanel() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Kategorie</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Verwahrungsort</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">
-                  {filter === 'ausgebucht' ? 'Ausbuchung' : 'Angaben'}
+                  {safeFilter === 'ausgebucht' ? 'Ausbuchung' : 'Angaben'}
                 </th>
-                {canManage && filter !== 'ausgebucht' && <th className="px-4 py-3" />}
+                {canManage && safeFilter !== 'ausgebucht' && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -322,11 +333,11 @@ export default function PoolEinsatzmittelPanel() {
                     {poolEmLocationLabel(item.verwahrungsort, item.lager_notiz)}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
-                    {filter === 'ausgebucht'
+                    {safeFilter === 'ausgebucht'
                       ? `${formatIsoDate(item.removed_at)} · ${formatRemovalReason(item.removal_reason)}`
                       : (poolEmDetailText(item) || '–')}
                   </td>
-                  {canManage && filter !== 'ausgebucht' && (
+                  {canManage && safeFilter !== 'ausgebucht' && (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
                         <button
@@ -355,7 +366,7 @@ export default function PoolEinsatzmittelPanel() {
         </div>
       )}
 
-      {showForm && (
+      {showForm && canManage && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -450,7 +461,7 @@ export default function PoolEinsatzmittelPanel() {
         </div>
       )}
 
-      {ausbuchungItem && (
+      {ausbuchungItem && canManage && (
         <AusbuchungDialog
           itemLabel={POOL_EM_CATEGORY_LABELS[ausbuchungItem.category]}
           reason={ausbuchungReason}

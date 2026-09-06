@@ -6,27 +6,30 @@ import PersonalEinsatzmittelPanel from './einsatz/PersonalEinsatzmittel'
 import PoolEinsatzmittelPanel from './einsatz/PoolEinsatzmittel'
 import LagerbestandPanel from './einsatz/Lagerbestand'
 import EinsatztrainingPanel from './einsatz/Einsatztraining'
+import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
+import {
+  sanitizeEmSubTab,
+  visibleEmSubTabs,
+  type EmSubTab,
+} from '../lib/einsatzmittelVisibility'
 
 type EinsatzTab = 'einsatzmittel' | 'einsatztraining'
-type EmSubTab = 'persoenlich' | 'pool' | 'lagerbestand'
 
 const TABS: { id: EinsatzTab; label: string }[] = [
   { id: 'einsatzmittel', label: 'Einsatzmittel' },
   { id: 'einsatztraining', label: 'Einsatztraining' },
 ]
 
-const EM_SUB_TABS: { id: EmSubTab; label: string }[] = [
-  { id: 'persoenlich', label: 'Persönlich' },
-  { id: 'pool', label: 'Pool' },
-  { id: 'lagerbestand', label: 'Lagerbestand' },
-]
-
 export default function Einsatz() {
-  const { hasAreaAccess } = useAuth()
+  const { hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
   const [tab, setTab] = useState<EinsatzTab>('einsatzmittel')
   const [emTab, setEmTab] = useState<EmSubTab>('persoenlich')
 
   if (!hasAreaAccess('einsatz_mt')) return <Navigate to="/" replace />
+
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+  const subTabs = visibleEmSubTabs(canManage)
+  const visibleEmTab = sanitizeEmSubTab(emTab, canManage)
 
   return (
     <PortalChrome wide>
@@ -53,25 +56,27 @@ export default function Einsatz() {
       {tab === 'einsatzmittel' ? (
         <div>
           <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap">
-            {EM_SUB_TABS.map(item => (
+            {subTabs.map(item => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setEmTab(item.id)}
                 className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${
-                  emTab === item.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  visibleEmTab === item.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 {item.label}
               </button>
             ))}
           </div>
-          {emTab === 'persoenlich' ? (
+          {visibleEmTab === 'persoenlich' ? (
             <PersonalEinsatzmittelPanel />
-          ) : emTab === 'pool' ? (
+          ) : visibleEmTab === 'pool' ? (
             <PoolEinsatzmittelPanel />
-          ) : (
+          ) : canManage ? (
             <LagerbestandPanel />
+          ) : (
+            <PersonalEinsatzmittelPanel />
           )}
         </div>
       ) : (

@@ -18,6 +18,7 @@ import {
   isPersonalEmCategory,
   isPersonalEmInLager,
   officerDisplayName,
+  ownPersonalEinsatzmittel,
   personalEmDetailText,
   personalEmFieldKind,
   personalEmFieldLabel,
@@ -101,11 +102,44 @@ export default function PersonalEinsatzmittelPanel() {
 
   async function load() {
     setLoading(true)
+    if (!canManage && !profile?.id) {
+      setItems([])
+      setOfficers([])
+      setLoading(false)
+      return
+    }
+
+    let emQuery = supabase
+      .from('personal_einsatzmittel')
+      .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
+      .order('created_at', { ascending: false })
+    if (!canManage && profile?.id) {
+      emQuery = emQuery.eq('officer_id', profile.id)
+    }
+
+    if (!canManage) {
+      const { data, error: loadError } = await emQuery
+      if (loadError) {
+        setError('Einsatzmittel konnten nicht geladen werden.')
+        setItems([])
+      } else {
+        setError('')
+        setItems(ownPersonalEinsatzmittel((data ?? []) as PersonalEinsatzmittel[], profile?.id))
+      }
+      setOfficers(profile ? [{
+        id: profile.id,
+        name: profile.name,
+        dienstnummer: profile.dienstnummer,
+        username: profile.username,
+        active: profile.active,
+        organisation: profile.organisation,
+      }] : [])
+      setLoading(false)
+      return
+    }
+
     const [{ data, error: loadError }, { data: profileRows }] = await Promise.all([
-      supabase
-        .from('personal_einsatzmittel')
-        .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
-        .order('created_at', { ascending: false }),
+      emQuery,
       supabase
         .from('profiles')
         .select('id,name,dienstnummer,username,active,organisation')
@@ -127,9 +161,14 @@ export default function PersonalEinsatzmittelPanel() {
       setError('Einsatzmittel konnten nicht geladen werden.')
       setLoading(false)
     })
-  }, [])
+  }, [canManage, profile?.id])
 
-  const activeItems = useMemo(() => activeEinsatzmittel(items), [items])
+  const scopedItems = useMemo(
+    () => (canManage ? items : ownPersonalEinsatzmittel(items, profile?.id)),
+    [canManage, items, profile?.id],
+  )
+
+  const activeItems = useMemo(() => activeEinsatzmittel(scopedItems), [scopedItems])
 
   const matrixOfficers = useMemo(
     () => filterActiveOfficersForPersonalEmMatrix(officers, orgFilter),
@@ -137,12 +176,18 @@ export default function PersonalEinsatzmittelPanel() {
   )
 
   const listItems = useMemo(() => {
-    if (view === 'ausgebucht') return removedEinsatzmittel(items)
+    if (view === 'ausgebucht') return removedEinsatzmittel(scopedItems)
     if (view === 'lager') {
+      if (!canManage) return []
       return activeItems.filter(item => isPersonalEmInLager(item) || !item.officer_id)
     }
     return []
-  }, [items, activeItems, view])
+  }, [scopedItems, activeItems, view, canManage])
+
+  const ownListItems = useMemo(() => {
+    if (view === 'ausgebucht') return removedEinsatzmittel(scopedItems)
+    return activeItems
+  }, [scopedItems, activeItems, view])
 
   const officerChoices = useMemo(() => {
     const active = officers.filter(o => o.active)
@@ -178,8 +223,15 @@ export default function PersonalEinsatzmittelPanel() {
   }, [activeItems, officers])
 
   function exportPersonalPdf() {
+    if (!canManage) {
+      generatePersonalEmPdf(scopedItems, {
+        officerId: profile?.id ?? null,
+        officerLabel: profile ? officerDisplayName(profile) : null,
+      })
+      return
+    }
     const officer = pdfOfficerChoices.list.find(o => o.id === pdfOfficerId)
-    generatePersonalEmPdf(items, {
+    generatePersonalEmPdf(scopedItems, {
       officerId: pdfOfficerId || null,
       officerLabel: pdfOfficerId === PDF_UNASSIGNED_OFFICER
         ? 'nicht zugewiesen'
@@ -358,24 +410,26 @@ export default function PersonalEinsatzmittelPanel() {
           <p className="text-sm text-gray-500 mt-1">
             {canManage
               ? 'Matrix: Offizier × Kategorie. Zuweisung oder Einlagerung (z. B. nach Austritt).'
-              : 'Nur Leserecht'}
+              : 'Ihre zugewiesenen Einsatzmittel'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end">
-          <select
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
-            value={pdfOfficerId}
-            onChange={e => setPdfOfficerId(e.target.value)}
-            aria-label="PDF nach Polizist filtern"
-          >
-            <option value="">Alle Polizisten</option>
-            {pdfOfficerChoices.hasUnassigned && (
-              <option value={PDF_UNASSIGNED_OFFICER}>nicht zugewiesen</option>
-            )}
-            {pdfOfficerChoices.list.map(o => (
-              <option key={o.id} value={o.id}>{officerDisplayName(o)}</option>
-            ))}
-          </select>
+          {canManage && (
+            <select
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
+              value={pdfOfficerId}
+              onChange={e => setPdfOfficerId(e.target.value)}
+              aria-label="PDF nach Polizist filtern"
+            >
+              <option value="">Alle Polizisten</option>
+              {pdfOfficerChoices.hasUnassigned && (
+                <option value={PDF_UNASSIGNED_OFFICER}>nicht zugewiesen</option>
+              )}
+              {pdfOfficerChoices.list.map(o => (
+                <option key={o.id} value={o.id}>{officerDisplayName(o)}</option>
+              ))}
+            </select>
+          )}
           <PdfExportButton onClick={exportPersonalPdf} />
           {canManage && (
             <button
@@ -405,25 +459,29 @@ export default function PersonalEinsatzmittelPanel() {
       )}
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap" role="group" aria-label="Organisation">
-          {PERSONAL_EM_ORG_FILTERS.map(id => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setOrgFilter(id)}
-              className={chipClass(orgFilter === id)}
-            >
-              {PERSONAL_EM_ORG_FILTER_LABELS[id]}
-            </button>
-          ))}
-        </div>
+        {canManage && (
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap" role="group" aria-label="Organisation">
+            {PERSONAL_EM_ORG_FILTERS.map(id => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setOrgFilter(id)}
+                className={chipClass(orgFilter === id)}
+              >
+                {PERSONAL_EM_ORG_FILTER_LABELS[id]}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap" role="group" aria-label="Ansicht">
-          <button type="button" onClick={() => setView('matrix')} className={chipClass(view === 'matrix')}>
-            Übersicht
+          <button type="button" onClick={() => setView('matrix')} className={chipClass(view === 'matrix' || (!canManage && view === 'lager'))}>
+            {canManage ? 'Übersicht' : 'Meine Einsatzmittel'}
           </button>
-          <button type="button" onClick={() => setView('lager')} className={chipClass(view === 'lager')}>
-            Lager / ohne Zuweisung
-          </button>
+          {canManage && (
+            <button type="button" onClick={() => setView('lager')} className={chipClass(view === 'lager')}>
+              Lager / ohne Zuweisung
+            </button>
+          )}
           <button type="button" onClick={() => setView('ausgebucht')} className={chipClass(view === 'ausgebucht')}>
             Ausgebucht
           </button>
@@ -434,6 +492,30 @@ export default function PersonalEinsatzmittelPanel() {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
         </div>
+      ) : !canManage ? (
+        ownListItems.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
+            <p className="text-sm text-gray-500">
+              {view === 'ausgebucht'
+                ? 'Keine ausgebuchten persönlichen Einsatzmittel.'
+                : 'Keine persönlichen Einsatzmittel zugewiesen.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {ownListItems.map(item => (
+              <article key={item.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+                <h3 className="font-medium text-gray-900">{PERSONAL_EM_CATEGORY_LABELS[item.category]}</h3>
+                <p className="text-sm text-gray-500 mt-1">{personalEmLocationLabel(item.verwahrungsort)}</p>
+                <p className="text-sm text-gray-700 mt-1">
+                  {view === 'ausgebucht'
+                    ? `${formatIsoDate(item.removed_at)} · ${formatRemovalReason(item.removal_reason)}`
+                    : (personalEmDetailText(item) || 'zugewiesen')}
+                </p>
+              </article>
+            ))}
+          </div>
+        )
       ) : view === 'matrix' ? (
         matrixOfficers.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
@@ -643,7 +725,7 @@ export default function PersonalEinsatzmittelPanel() {
         </div>
       )}
 
-      {showForm && (
+      {showForm && canManage && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b">
@@ -764,7 +846,7 @@ export default function PersonalEinsatzmittelPanel() {
         </div>
       )}
 
-      {showImport && (
+      {showImport && canManage && (
         <ZuteilungImportDialog
           officers={officers}
           existing={items}
@@ -774,7 +856,7 @@ export default function PersonalEinsatzmittelPanel() {
         />
       )}
 
-      {ausbuchungItem && (
+      {ausbuchungItem && canManage && (
         <AusbuchungDialog
           itemLabel={PERSONAL_EM_CATEGORY_LABELS[ausbuchungItem.category]}
           reason={ausbuchungReason}

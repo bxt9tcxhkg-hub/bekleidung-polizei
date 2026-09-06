@@ -5,7 +5,7 @@
  * Spalten (gleiches Modell wie persönliche EM). Verwahrungsort ist ein
  * festes Lookup (CHECK), keine Extra-Tabelle.
  * Schreiben: einsatz_mt Sachbearbeiter/Admin oder globales profiles.admin.
- * Lesen: jede einsatz_mt-Rolle (user = nur Lesen).
+ * Lesen: SB/Admin alle Kategorien; Benutzer Pool ohne Munition.
  * Lagerbestand ist eine abgeleitete Übersicht, keine eigene Tabelle.
  */
 
@@ -328,4 +328,32 @@ export function canManagePoolEinsatzmittel(input: {
   if (input.rows === null) return false
   const role = parseEinsatzMtRole(rolesForArea(input.rows, 'einsatz_mt'))
   return role === 'sachbearbeiter' || role === 'admin'
+}
+
+export const POOL_EM_RESTRICTED_CATEGORY: PoolEmCategory = 'munition'
+
+export function isPoolMunitionCategory(category: string): boolean {
+  return category === POOL_EM_RESTRICTED_CATEGORY
+}
+
+/** Benutzer sieht alle Pool-Kategorien außer Munitionsbestand. */
+export function visiblePoolEmCategories(canManage: boolean): readonly PoolEmCategory[] {
+  if (canManage) return POOL_EM_CATEGORIES
+  return POOL_EM_CATEGORIES.filter(category => category !== POOL_EM_RESTRICTED_CATEGORY)
+}
+
+export function filterPoolItemsForViewer<T extends { category: string }>(
+  items: readonly T[],
+  canManage: boolean,
+): T[] {
+  if (canManage) return items.slice()
+  return items.filter(item => item.category !== POOL_EM_RESTRICTED_CATEGORY)
+}
+
+export function sanitizePoolCategoryFilter<T extends string>(
+  filter: T,
+  canManage: boolean,
+): T | 'all' {
+  if (!canManage && filter === POOL_EM_RESTRICTED_CATEGORY) return 'all'
+  return filter
 }

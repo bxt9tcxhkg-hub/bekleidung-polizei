@@ -16,6 +16,7 @@ import {
   normalizeAblaufMmYyyy,
   officerDisplayName,
   officerMatchesPersonalEmOrgFilter,
+  ownPersonalEinsatzmittel,
   personalEmDetailText,
   personalEmFieldLabel,
   personalEmItemsForMatrixCell,
@@ -446,5 +447,23 @@ describe('canManagePersonalEinsatzmittel', () => {
       isStrictAdmin: false,
       rows: [{ area: 'bekleidung', roles: ['sachbearbeiter'] }],
     })).toBe(false)
+  })
+})
+
+describe('ownPersonalEinsatzmittel', () => {
+  it('liefert nur Zeilen des angemeldeten Offiziers', () => {
+    const items = [
+      { id: 'a', officer_id: 'me' },
+      { id: 'b', officer_id: 'other' },
+      { id: 'c', officer_id: null },
+      { id: 'd', officer_id: 'me' },
+    ]
+    expect(ownPersonalEinsatzmittel(items, 'me').map(i => i.id)).toEqual(['a', 'd'])
+  })
+
+  it('ist leer ohne eigene ID und filtert keine fremden Lagerstücke', () => {
+    expect(ownPersonalEinsatzmittel([{ officer_id: 'x' }], null)).toEqual([])
+    expect(ownPersonalEinsatzmittel([{ officer_id: 'x' }], '')).toEqual([])
+    expect(ownPersonalEinsatzmittel([{ officer_id: null, verwahrungsort: 'lager' }], 'me')).toEqual([])
   })
 })

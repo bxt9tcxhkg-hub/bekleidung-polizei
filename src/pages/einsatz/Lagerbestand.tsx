@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import type { PersonalEinsatzmittel, PoolEinsatzmittel } from '../../lib/types'
 import {
   POOL_EM_CATEGORY_LABELS,
@@ -10,6 +11,7 @@ import {
 import {
   PERSONAL_EM_CATEGORY_LABELS,
   aggregatePersonalLagerbestand,
+  canManagePersonalEinsatzmittel,
   personalEmDetailText,
   personalItemsInLager,
 } from '../../lib/personalEinsatzmittel'
@@ -17,12 +19,21 @@ import { generateLagerbestandPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
 
 export default function LagerbestandPanel() {
+  const { isStrictAdmin, areaRoles } = useAuth()
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
   const [poolItems, setPoolItems] = useState<PoolEinsatzmittel[]>([])
   const [personalItems, setPersonalItems] = useState<PersonalEinsatzmittel[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   async function load() {
+    if (!canManage) {
+      setPoolItems([])
+      setPersonalItems([])
+      setError('')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     const [poolRes, personalRes] = await Promise.all([
       supabase.from('pool_einsatzmittel').select('category,verwahrungsort,anzahl,removed_at').is('removed_at', null),
@@ -55,12 +66,18 @@ export default function LagerbestandPanel() {
       setError('Lagerbestand konnte nicht geladen werden.')
       setLoading(false)
     })
-  }, [])
+  }, [canManage])
 
   const poolRows = useMemo(() => aggregateLagerbestand(poolItems), [poolItems])
   const personalCounts = useMemo(() => aggregatePersonalLagerbestand(personalItems), [personalItems])
   const personalInLager = useMemo(() => personalItemsInLager(personalItems), [personalItems])
   const personalTotal = personalInLager.length
+
+  if (!canManage) {
+    return (
+      <p className="text-sm text-gray-500">Kein Zugriff auf den Lagerbestand.</p>
+    )
+  }
 
   return (
     <div>
