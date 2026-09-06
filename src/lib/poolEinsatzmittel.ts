@@ -12,13 +12,20 @@
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
 import { formatIsoDate } from './personalEinsatzmittel'
 import {
+  isLagerOrt,
   isVerwahrungsort,
   VERWAHRUNGSORTE,
   VERWAHRUNGSORT_LABELS,
   type Verwahrungsort,
 } from './verwahrungsort'
 
-export { isVerwahrungsort, VERWAHRUNGSORTE, VERWAHRUNGSORT_LABELS, type Verwahrungsort }
+export {
+  isLagerOrt,
+  isVerwahrungsort,
+  VERWAHRUNGSORTE,
+  VERWAHRUNGSORT_LABELS,
+  type Verwahrungsort,
+}
 
 export const POOL_EM_CATEGORIES = [
   'langwaffe_stg77',
@@ -118,6 +125,7 @@ export function emptyPoolEmFormValues(): PoolEmFormValues {
 export type PoolEmPayload = {
   category: PoolEmCategory
   verwahrungsort: Verwahrungsort
+  lager_notiz: string | null
   marke: string | null
   typ: string | null
   waffennummer: string | null
@@ -146,10 +154,27 @@ function optionalText(raw: string): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+/** Lager-Notiz nur bei Ort Lager; sonst null (auch leerer Freitext). */
+export function resolveLagerNotiz(verwahrungsort: string, raw: string | null | undefined): string | null {
+  if (!isLagerOrt(verwahrungsort)) return null
+  return optionalText(raw ?? '')
+}
+
+export function poolEmLocationLabel(
+  verwahrungsort: Verwahrungsort,
+  lagerNotiz?: string | null,
+): string {
+  const label = VERWAHRUNGSORT_LABELS[verwahrungsort]
+  if (!isLagerOrt(verwahrungsort)) return label
+  const note = lagerNotiz?.trim()
+  return note ? `${label} · ${note}` : label
+}
+
 export function validatePoolEm(input: {
   category: string
   verwahrungsort: string
   values: PoolEmFormValues
+  lagerNotiz?: string
 }): PoolEmValidateResult {
   if (!isPoolEmCategory(input.category)) {
     return { ok: false, error: 'Bitte eine Kategorie wählen.' }
@@ -162,6 +187,7 @@ export function validatePoolEm(input: {
   const payload: PoolEmPayload = {
     category: input.category,
     verwahrungsort: input.verwahrungsort,
+    lager_notiz: resolveLagerNotiz(input.verwahrungsort, input.lagerNotiz),
     marke: null,
     typ: null,
     waffennummer: null,
@@ -265,13 +291,7 @@ export type LagerbestandRow = {
 }
 
 export function emptyOrtCounts(): Record<Verwahrungsort, number> {
-  return {
-    lager: 0,
-    innendienst: 0,
-    peter_1: 0,
-    peter_2: 0,
-    peter_30: 0,
-  }
+  return Object.fromEntries(VERWAHRUNGSORTE.map(ort => [ort, 0])) as Record<Verwahrungsort, number>
 }
 
 export function aggregateLagerbestand(

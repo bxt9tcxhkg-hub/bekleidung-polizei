@@ -7,13 +7,16 @@ import {
   VERWAHRUNGSORT_LABELS,
   aggregateLagerbestand,
   canManagePoolEinsatzmittel,
+  emptyOrtCounts,
   emptyPoolEmFormValues,
   formValuesFromPoolRecord,
   isPoolEmCategory,
   isVerwahrungsort,
   poolEmDetailText,
   poolEmFieldLabel,
+  poolEmLocationLabel,
   poolEmStockQuantity,
+  resolveLagerNotiz,
   validatePoolEm,
 } from './poolEinsatzmittel'
 
@@ -38,16 +41,15 @@ describe('Kategorien und Verwahrungsorte', () => {
     expect(POOL_EM_CATEGORY_LABELS.munition).toBe('Munition (Pool)')
   })
 
-  it('kennt nur die festgelegten Verwahrungsorte', () => {
-    expect([...VERWAHRUNGSORTE]).toEqual(['lager', 'innendienst', 'peter_1', 'peter_2', 'peter_30'])
-    expect(VERWAHRUNGSORT_LABELS).toEqual({
-      lager: 'Lager',
-      innendienst: 'Innendienst',
-      peter_1: 'Peter 1',
-      peter_2: 'Peter 2',
-      peter_30: 'Peter 30',
-    })
+  it('kennt die erweiterten Verwahrungsorte inkl. Spind und Waffentresor', () => {
+    expect(VERWAHRUNGSORTE).toContain('spind_1')
+    expect(VERWAHRUNGSORTE).toContain('spind_2')
+    expect(VERWAHRUNGSORTE).toContain('waffentresor_zentrale')
+    expect(VERWAHRUNGSORTE).toContain('waffentresor_keller')
+    expect(VERWAHRUNGSORT_LABELS.spind_1).toBe('Spind 1')
+    expect(VERWAHRUNGSORT_LABELS.waffentresor_keller).toBe('Waffentresor Keller')
     expect(isVerwahrungsort('lager')).toBe(true)
+    expect(isVerwahrungsort('waffentresor_zentrale')).toBe(true)
     expect(isVerwahrungsort('peter_3')).toBe(false)
     expect(isVerwahrungsort('fuhrpark')).toBe(false)
   })
@@ -90,6 +92,7 @@ describe('validatePoolEm', () => {
     expect(result.payload).toMatchObject({
       category: 'langwaffe_stg77',
       verwahrungsort: 'peter_1',
+      lager_notiz: null,
       marke: 'Steyr',
       typ: 'A1',
       waffennummer: 'ST-12',
@@ -130,6 +133,52 @@ describe('validatePoolEm', () => {
     expect(result.payload.verwahrungsort).toBe('innendienst')
     expect(result.payload.anzahl).toBeNull()
     expect(result.payload.marke).toBeNull()
+    expect(result.payload.lager_notiz).toBeNull()
+  })
+
+  it('nimmt die neuen Orte und speichert Lager-Notiz nur bei Lager', () => {
+    const spind = validatePoolEm({
+      category: 'magazine',
+      verwahrungsort: 'spind_1',
+      lagerNotiz: 'Regal A',
+      values: { ...empty, anzahl: '4' },
+    })
+    expect(spind.ok).toBe(true)
+    if (spind.ok) {
+      expect(spind.payload.verwahrungsort).toBe('spind_1')
+      expect(spind.payload.lager_notiz).toBeNull()
+    }
+
+    const tresor = validatePoolEm({
+      category: 'langwaffe_stg77',
+      verwahrungsort: 'waffentresor_keller',
+      values: { ...empty, waffennummer: 'ST-9' },
+    })
+    expect(tresor.ok).toBe(true)
+    if (tresor.ok) {
+      expect(tresor.payload.verwahrungsort).toBe('waffentresor_keller')
+      expect(tresor.payload.lager_notiz).toBeNull()
+    }
+
+    const lager = validatePoolEm({
+      category: 'schild',
+      verwahrungsort: 'lager',
+      lagerNotiz: '  Fach 3  ',
+      values: { ...empty, anzahl: '2' },
+    })
+    expect(lager.ok).toBe(true)
+    if (lager.ok) {
+      expect(lager.payload.lager_notiz).toBe('Fach 3')
+    }
+
+    const leer = validatePoolEm({
+      category: 'schild',
+      verwahrungsort: 'lager',
+      lagerNotiz: '   ',
+      values: empty,
+    })
+    expect(leer.ok).toBe(true)
+    if (leer.ok) expect(leer.payload.lager_notiz).toBeNull()
   })
 })
 
@@ -184,21 +233,39 @@ describe('Anzeige und Lagerbestand', () => {
       { category: 'munition', verwahrungsort: 'lager', anzahl: 50 },
       { category: 'munition', verwahrungsort: 'peter_30', anzahl: 20 },
       { category: 'magazine', verwahrungsort: 'innendienst', anzahl: null },
+      { category: 'pfefferspray_gross', verwahrungsort: 'spind_2', anzahl: 6 },
+      { category: 'langwaffe_stg77', verwahrungsort: 'waffentresor_zentrale', anzahl: null },
     ])
     expect(rows).toHaveLength(8)
     const stg = rows.find(r => r.category === 'langwaffe_stg77')
     expect(stg?.byOrt.peter_1).toBe(2)
     expect(stg?.byOrt.lager).toBe(1)
-    expect(stg?.total).toBe(3)
+    expect(stg?.byOrt.waffentresor_zentrale).toBe(1)
+    expect(stg?.total).toBe(4)
     const mun = rows.find(r => r.category === 'munition')
     expect(mun?.byOrt.lager).toBe(150)
     expect(mun?.byOrt.peter_30).toBe(20)
     expect(mun?.total).toBe(170)
     const mag = rows.find(r => r.category === 'magazine')
     expect(mag?.total).toBe(0)
+    const spray = rows.find(r => r.category === 'pfefferspray_gross')
+    expect(spray?.byOrt.spind_2).toBe(6)
+    expect(spray?.total).toBe(6)
     const helm = rows.find(r => r.category === 'ballistischer_helm')
     expect(helm?.total).toBe(0)
     expect(helm?.byOrt.lager).toBe(0)
+    expect(Object.keys(emptyOrtCounts())).toEqual([...VERWAHRUNGSORTE])
+    expect(helm?.byOrt.spind_1).toBe(0)
+    expect(helm?.byOrt.waffentresor_zentrale).toBe(0)
+  })
+
+  it('hängt die Lager-Notiz nur an das Lager-Label', () => {
+    expect(poolEmLocationLabel('lager', null)).toBe('Lager')
+    expect(poolEmLocationLabel('lager', ' Fach 2 ')).toBe('Lager · Fach 2')
+    expect(poolEmLocationLabel('spind_2', 'soll-weg')).toBe('Spind 2')
+    expect(resolveLagerNotiz('lager', '  Kiste  ')).toBe('Kiste')
+    expect(resolveLagerNotiz('innendienst', 'Kiste')).toBeNull()
+    expect(resolveLagerNotiz('waffentresor_zentrale', 'Kiste')).toBeNull()
   })
 })
 
