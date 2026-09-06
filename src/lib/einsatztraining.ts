@@ -283,6 +283,48 @@ export function isModuleLockDbError(message: string | null | undefined): boolean
   return /modul bereits abgeschlossen/i.test(message)
 }
 
+export function trainingModuleDeleteConfirm(moduleName?: string | null): string {
+  const name = moduleName?.trim()
+  if (name) {
+    return `Modul «${name}» wirklich löschen?`
+  }
+  return 'Dieses Modul wirklich löschen?'
+}
+
+export type TrainingModuleDeleteDbError = {
+  code?: string | null
+  message?: string | null
+}
+
+export function isTrainingModuleInUseDbError(
+  error: TrainingModuleDeleteDbError | string | null | undefined,
+): boolean {
+  const code = typeof error === 'string' ? '' : (error?.code ?? '')
+  const message = typeof error === 'string' ? error : (error?.message ?? '')
+  if (code === '23503') return true
+  if (!message) return false
+  if (/23503/.test(message)) return true
+  if (/foreign key|foreign_key|referential integrity/i.test(message)) return true
+  return /einsatz_training_(participations|completions|sessions)/i.test(message)
+    && /violat|constraint|referenc/i.test(message)
+}
+
+export function trainingModuleDeleteUserMessage(
+  error: TrainingModuleDeleteDbError | string | null | undefined,
+  moduleName?: string | null,
+): string {
+  const name = moduleName?.trim()
+  if (isTrainingModuleInUseDbError(error)) {
+    if (name) {
+      return `Modul «${name}» kann nicht gelöscht werden, weil noch Teilnahmen, Abschlüsse oder Trainingstage vorhanden sind.`
+    }
+    return 'Das Modul kann nicht gelöscht werden, weil noch Teilnahmen, Abschlüsse oder Trainingstage vorhanden sind.'
+  }
+  const fallback = (typeof error === 'string' ? error : error?.message)?.trim()
+  if (fallback) return fallback
+  return 'Löschen fehlgeschlagen.'
+}
+
 export function formatCompletedOn(value: string | null | undefined): string {
   if (!value) return ''
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)

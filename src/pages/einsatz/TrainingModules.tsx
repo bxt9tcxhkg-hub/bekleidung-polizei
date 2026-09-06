@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, Plus, X } from 'lucide-react'
+import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -16,6 +16,8 @@ import {
   moduleFilterLabel,
   officerHasCompletedModule,
   periodLabel,
+  trainingModuleDeleteConfirm,
+  trainingModuleDeleteUserMessage,
   validateTrainingModule,
   type TrainingKind,
   type TrainingModuleType,
@@ -49,6 +51,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
   const [periodHalf, setPeriodHalf] = useState<'1' | '2'>(String(current.half) as '1' | '2')
   const [saving, setSaving] = useState(false)
   const [ensuring, setEnsuring] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -226,6 +229,30 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     }
   }
 
+  async function remove(item: EinsatzTrainingModule) {
+    if (!canManage) return
+    if (!window.confirm(trainingModuleDeleteConfirm(item.name))) return
+    setDeletingId(item.id)
+    setError('')
+    const { error: deleteError } = await supabase
+      .from('einsatz_training_modules')
+      .delete()
+      .eq('id', item.id)
+    if (deleteError) {
+      setError(trainingModuleDeleteUserMessage(deleteError, item.name))
+      setDeletingId(null)
+      return
+    }
+    logAudit('Einsatztraining-Modul gelöscht', `${item.name} (${item.module_type})`)
+    if (editId === item.id) closeForm()
+    setDeletingId(null)
+    try {
+      await load()
+    } catch {
+      setError('Gelöscht, Liste konnte nicht aktualisiert werden.')
+    }
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -390,6 +417,15 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
                             title="Bearbeiten"
                           >
                             <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { void remove(item) }}
+                            disabled={deletingId === item.id}
+                            className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 disabled:opacity-60"
+                            title="Löschen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>

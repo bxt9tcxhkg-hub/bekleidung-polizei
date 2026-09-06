@@ -16,7 +16,10 @@ import {
   isModuleLockDbError,
   isStadtpolizeiMember,
   isTrainingKind,
+  isTrainingModuleInUseDbError,
   isTrainingModuleType,
+  trainingModuleDeleteConfirm,
+  trainingModuleDeleteUserMessage,
   moduleAssignmentBlockReason,
   moduleAssignmentOptions,
   moduleLockUserMessage,
@@ -105,6 +108,37 @@ describe('validateTrainingModule', () => {
         period_half: null,
       },
     })
+  })
+})
+
+describe('Modul löschen', () => {
+  it('stellt die Bestätigung mit Modulnamen', () => {
+    expect(trainingModuleDeleteConfirm('  Combat  ')).toBe('Modul «Combat» wirklich löschen?')
+    expect(trainingModuleDeleteConfirm('')).toBe('Dieses Modul wirklich löschen?')
+    expect(trainingModuleDeleteConfirm(null)).toBe('Dieses Modul wirklich löschen?')
+  })
+
+  it('erkennt Foreign-Key-Sperren ohne Soft-Delete', () => {
+    expect(isTrainingModuleInUseDbError({ code: '23503', message: 'violates foreign key constraint' })).toBe(true)
+    expect(isTrainingModuleInUseDbError({
+      code: 'PGRST116',
+      message: 'update or delete on table "einsatz_training_modules" violates foreign key constraint on einsatz_training_participations',
+    })).toBe(true)
+    expect(isTrainingModuleInUseDbError({ code: '42501', message: 'permission denied' })).toBe(false)
+    expect(isTrainingModuleInUseDbError('duplicate key')).toBe(false)
+  })
+
+  it('liefert eine klare deutsche Fehlermeldung bei abhängigen Zeilen', () => {
+    expect(trainingModuleDeleteUserMessage({ code: '23503' }, 'Combat')).toBe(
+      'Modul «Combat» kann nicht gelöscht werden, weil noch Teilnahmen, Abschlüsse oder Trainingstage vorhanden sind.',
+    )
+    expect(trainingModuleDeleteUserMessage({ message: 'violates foreign key constraint' }, null)).toMatch(
+      /Teilnahmen, Abschlüsse oder Trainingstage/,
+    )
+    expect(trainingModuleDeleteUserMessage({ code: '42501', message: 'permission denied' }, 'Combat')).toBe(
+      'permission denied',
+    )
+    expect(trainingModuleDeleteUserMessage(null, 'Combat')).toBe('Löschen fehlgeschlagen.')
   })
 })
 
