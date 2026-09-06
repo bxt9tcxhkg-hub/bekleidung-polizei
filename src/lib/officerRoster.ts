@@ -64,7 +64,7 @@ export function isJunkRosterRow(input: { name?: string; vorname?: string; nachna
 }
 
 export function inferOfficerGender(name: string): 'male' | 'female' {
-  if (/\b(stefanie|irmgard|karin)\b/i.test(name)) return 'female'
+  if (/\b(stefanie|irmgard|karin|jessica|melissa|lea|jeanine|sonja|verona)\b/i.test(name)) return 'female'
   return 'male'
 }
 

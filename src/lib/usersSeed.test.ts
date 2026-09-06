@@ -10,7 +10,8 @@ import {
 
 describe('users-seed', () => {
   it('enthält die festgelegten Stab-Rollen und keine erfundenen Extra-Namen', () => {
-    expect(STADTPOLIZEI_SEED.map(row => `${row.dienstnummer}:${row.bekleidung}:${row.einsatz_mt}`)).toEqual([
+    const staff = STADTPOLIZEI_SEED.filter(row => row.bekleidung !== 'user' || row.einsatz_mt !== 'user')
+    expect(staff.map(row => `${row.dienstnummer}:${row.bekleidung}:${row.einsatz_mt}`)).toEqual([
       '1:genehmiger:user',
       '7:sachbearbeiter:user',
       '18:user:sachbearbeiter',
@@ -20,6 +21,46 @@ describe('users-seed', () => {
     expect(findUserSeedByDienstnummer('07')?.nachname).toBe('Fenkart')
     expect(bekleidungRolesFromSeed('sachbearbeiter')).toEqual(['user', 'sachbearbeiter'])
     expect(STADTPOLIZEI_SEED.every(row => row.organisation === 'Stadtpolizei')).toBe(true)
+    expect(STADTPOLIZEI_SEED).toHaveLength(34)
+    expect(STADTPOLIZEI_SEED.map(row => `${row.dienstnummer}:${row.nachname}:${row.vorname}`)).toEqual([
+      '1:Schwendinger:Hans-Peter',
+      '2:Gisinger:Andreas',
+      '3:Feurstein:Martin',
+      '7:Fenkart:Matthias',
+      '8:Klien:Thomas',
+      '9:Greber:Elias',
+      '11:Bachmann:Andreas',
+      '12:Steidl:Alexander',
+      '13:Einetter:Robert',
+      '14:Huber:Jessica',
+      '15:Kaschka:Otto',
+      '16:Wiesner:Matthias',
+      '17:Aydinli:Melissa',
+      '18:Petternel:Heinz',
+      '19:Borihan:Direnc',
+      '20:Müller:Julian',
+      '21:Herburger:Stefanie',
+      '22:Sonderegger:Lea',
+      '23:Dreher:Jeanine',
+      '24:Dolliner:Sonja',
+      '25:Aukenthaler:Silvano',
+      '26:Bäuchl:Aaron',
+      '27:Hummer:Hannes',
+      '28:Ellensohn:Jörg',
+      '29:Schwendinger:Dietmar',
+      '30:Wibmer:David',
+      '31:Schwendinger:Verona',
+      '32:Albrecht:Stefanie',
+      '33:Kaiser:Philipp',
+      '34:Alge-Faißt:Ludwig',
+      '35:Nenning:Bernhard',
+      '36:Rusch:Johannes',
+      '37:Soyucok:Muhammet',
+      '38:Hiller:Gabriel',
+    ])
+    const rankAndFile = STADTPOLIZEI_SEED.filter(row => row.bekleidung === 'user' && row.einsatz_mt === 'user')
+    expect(rankAndFile).toHaveLength(29)
+    expect(['4', '5', '6', '10'].every(dn => !STADTPOLIZEI_SEED.some(row => row.dienstnummer === dn))).toBe(true)
   })
 
   it('nimmt die acht Parkaufsicht-Personen nur als Bekleidung-Benutzer', () => {
@@ -37,7 +78,7 @@ describe('users-seed', () => {
     expect(PARKAUFSICHT_SEED.every(row => row.organisation === 'Parkaufsicht')).toBe(true)
     expect(PARKAUFSICHT_SEED.every(row => row.bekleidung === 'user')).toBe(true)
     expect(PARKAUFSICHT_SEED.every(row => row.einsatz_mt === 'user')).toBe(true)
-    expect(USERS_SEED).toHaveLength(13)
+    expect(USERS_SEED).toHaveLength(42)
   })
 
   it('respektiert Parkaufsicht in der JSON-Zeile und senkt keine höheren Rollen herbei', () => {

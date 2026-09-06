@@ -23,6 +23,8 @@ describe('Rollenmatrix aus users-seed', () => {
       .toBe('sachbearbeiter')
     expect(roleMatrixStaff().some(row => row.dienstnummer === '7')).toBe(true)
     expect(matchRoleMatrixStaff({ dienstnummer: '70', name: 'Irmgard Fässler' })).toBeNull()
+    expect(matchRoleMatrixStaff({ dienstnummer: '2', name: 'Andreas Gisinger' })).toBeNull()
+    expect(roleMatrixStaff()).toHaveLength(5)
   })
 
   it('lässt vorhandene Admins unverändert und setzt Unbekannte auf Benutzer', () => {
