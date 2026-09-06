@@ -43,7 +43,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     const [sessRes, modRes, compRes, regRes] = await Promise.all([
       supabase
         .from('einsatz_training_sessions')
-        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,period_year,period_half,active)')
+        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,applies_to,period_year,period_half,active)')
         .eq('announced', true)
         .order('session_date', { ascending: true }),
       supabase.from('einsatz_training_modules').select('*').eq('active', true).order('name'),
@@ -136,6 +136,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
       moduleId: session.module_id,
       moduleName: module?.name,
       module,
+      officerOrganisation: profile.organisation,
       completions,
       announced: session.announced,
       capacity: session.capacity,
@@ -194,7 +195,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Ausgeschriebene Trainingsprogramme. Selbstanmeldung nur, wenn das Modul noch nicht abgeschlossen ist.
+          Anmeldung nur ohne Abschluss.
         </p>
         {canManage && (
           <button

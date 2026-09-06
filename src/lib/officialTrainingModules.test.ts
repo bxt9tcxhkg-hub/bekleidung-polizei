@@ -6,14 +6,14 @@ import {
 } from './officialTrainingModules'
 
 describe('Offizielle ET-Module', () => {
-  it('ordnet Verzeichnis-Namen Pflicht vs Zusatz zu, ohne neue Namen', () => {
-    expect(OFFICIAL_TRAINING_MODULES.map(m => `${m.name}|${m.moduleType}|${m.kind}`)).toEqual([
-      'Internes ET|pflicht_halbjahr|intern',
-      'Combat|zusatz|extern',
-      'Stockschulung TS-Einsatzstock|zusatz|intern',
-      'Erste Hilfe COMBAT|zusatz|extern',
-      'Szenarientraining|zusatz|intern',
-      'Fahrsicherheitstraining|zusatz|extern',
+  it('ordnet Verzeichnis-Namen intern/extern/zusatz zu, ohne neue Namen', () => {
+    expect(OFFICIAL_TRAINING_MODULES.map(m => `${m.name}|${m.moduleType}|${m.kind}|${m.appliesTo}`)).toEqual([
+      'Internes ET|pflicht_halbjahr|intern|polizei',
+      'Combat|zusatz|extern|polizei',
+      'Stockschulung TS-Einsatzstock|zusatz|intern|polizei',
+      'Erste Hilfe COMBAT|zusatz|extern|polizei',
+      'Szenarientraining|zusatz|intern|polizei',
+      'Fahrsicherheitstraining|zusatz|extern|polizei',
     ])
     expect(OFFICIAL_TRAINING_MODULES.every(m => m.schiesst === false)).toBe(true)
   })
@@ -34,7 +34,7 @@ describe('Offizielle ET-Module', () => {
     ], now)
     expect(plan.alreadyActive.map(r => r.name)).toEqual(['Combat'])
     expect(plan.reactivations).toEqual([
-      { id: '2', name: 'Internes ET', moduleType: 'pflicht_halbjahr', kind: 'intern' },
+      { id: '2', name: 'Internes ET', moduleType: 'pflicht_halbjahr', kind: 'intern', appliesTo: 'polizei' },
     ])
     expect(plan.inserts.map(m => m.name)).toEqual([
       'Stockschulung TS-Einsatzstock',

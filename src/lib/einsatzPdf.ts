@@ -7,14 +7,19 @@
 import { activeEinsatzmittel } from './einsatzmittelAusbuchung'
 import {
   ATTENDANCE_STATUS_LABELS,
+  SCHIESSEN_LABEL,
   TRAINING_KIND_LABELS,
-  TRAINING_MODULE_TYPE_LABELS,
+  appliesToLabel,
+  etClassCadenceLabel,
+  etClassFromModule,
+  etClassLabel,
   formatCompletedOn,
   formatMunitionVerbrauch,
   isAttendanceStatus,
+  isTrainingEtClass,
   isTrainingKind,
-  isTrainingModuleType,
-  moduleTypeLabel,
+  type TrainingAppliesTo,
+  type TrainingEtClass,
   type TrainingKind,
   type TrainingModuleType,
 } from './einsatztraining'
@@ -130,6 +135,8 @@ export type TrainingModulePdfRow = {
   name: string
   kind: TrainingKind
   moduleType?: TrainingModuleType | string | null
+  etClass?: TrainingEtClass | string | null
+  appliesTo?: TrainingAppliesTo | string | null
   schiesst?: boolean
   periodLabel?: string
   active: boolean
@@ -141,12 +148,15 @@ export type TrainingCompletionPdfRow = {
   moduleName: string
   kind: TrainingKind
   moduleType?: TrainingModuleType | string | null
+  etClass?: TrainingEtClass | string | null
   completedOn: string
 }
 
 export type OffenAnmeldungenPdfInput = {
   moduleName: string
   moduleType?: string | null
+  etClass?: TrainingEtClass | string | null
+  appliesTo?: TrainingAppliesTo | string | null
   periodLabel?: string | null
   openOfficers: readonly { officerName: string; dienstnummer?: string | null }[]
   completedOfficers?: readonly { officerName: string; completedOn: string }[]
@@ -558,7 +568,8 @@ export function buildTrainingModulesPdfHtml(input: {
     .sort((a, b) => compareDe(a.name, b.name) || compareDe(a.kind, b.kind))
     .map(row => `<tr>
       <td>${escHtml(row.name)}</td>
-      <td>${escHtml(row.moduleType && isTrainingModuleType(row.moduleType) ? TRAINING_MODULE_TYPE_LABELS[row.moduleType] : TRAINING_KIND_LABELS[row.kind])}</td>
+      <td>${escHtml(etClassLabel({ kind: row.kind, module_type: row.moduleType }))}</td>
+      <td>${escHtml(appliesToLabel(row.appliesTo))}</td>
       <td>${row.active ? 'Aktiv' : 'Inaktiv'}</td>
       <td>${row.schiesst ? 'Ja' : 'Nein'}</td>
       <td class="num">${row.completionCount}</td>
@@ -571,13 +582,13 @@ export function buildTrainingModulesPdfHtml(input: {
     : `<div class="section">
       <h2>Abschlüsse</h2>
       <table class="report">
-        <thead><tr><th>Polizist</th><th>Modul</th><th>Typ</th><th>Abgeschlossen</th></tr></thead>
+        <thead><tr><th>Polizist</th><th>Modul</th><th>Art</th><th>Abgeschlossen</th></tr></thead>
         <tbody>${[...completions]
           .sort((a, b) => compareDe(a.officerName, b.officerName) || compareDe(a.moduleName, b.moduleName))
           .map(row => `<tr>
             <td>${escHtml(row.officerName)}</td>
             <td>${escHtml(row.moduleName)}</td>
-            <td>${escHtml(row.moduleType && isTrainingModuleType(row.moduleType) ? TRAINING_MODULE_TYPE_LABELS[row.moduleType] : TRAINING_KIND_LABELS[row.kind])}</td>
+            <td>${escHtml(etClassLabel({ kind: row.kind, module_type: row.moduleType }))}</td>
             <td>${escHtml(formatCompletedOn(row.completedOn) || row.completedOn)}</td>
           </tr>`)
           .join('\n')}</tbody>
@@ -587,8 +598,8 @@ export function buildTrainingModulesPdfHtml(input: {
   const body = `<div class="section">
     <h2>Module</h2>
     <table class="report">
-      <thead><tr><th>Modul</th><th>Typ</th><th>Status</th><th>Schießt</th><th class="num">Abschlüsse</th></tr></thead>
-      <tbody>${moduleRows || emptyRow(5, 'Keine Module erfasst.')}</tbody>
+      <thead><tr><th>Modul</th><th>Art</th><th>Geltung</th><th>Status</th><th>${SCHIESSEN_LABEL}</th><th class="num">Abschlüsse</th></tr></thead>
+      <tbody>${moduleRows || emptyRow(6, 'Keine Module erfasst.')}</tbody>
     </table>
   </div>${completionSection}`
 
@@ -643,12 +654,23 @@ export function generateTrainingModulesPdf(input: {
 
 export function buildOffenAnmeldungenPdfHtml(input: OffenAnmeldungenPdfInput): string {
   const now = input.now ?? new Date()
-  const typeLabel = moduleTypeLabel(input.moduleType)
+  const art: TrainingEtClass = isTrainingEtClass(input.etClass ?? '')
+    ? input.etClass as TrainingEtClass
+    : etClassFromModule({
+      kind: input.etClass === 'extern' ? 'extern' : 'intern',
+      module_type: input.moduleType,
+    })
+  const typeLabel = etClassLabel({
+    kind: art === 'extern' ? 'extern' : 'intern',
+    module_type: art === 'intern' ? 'pflicht_halbjahr' : 'zusatz',
+  })
   const period = input.periodLabel?.trim()
   const subtitle = [
     typeLabel,
+    etClassCadenceLabel(art),
+    appliesToLabel(input.appliesTo),
     period,
-    'Offene Stadtpolizei-Mitglieder und Anmeldungen für den Kommandanten / Dienstplan',
+    'Offen laut Geltung',
   ].filter(Boolean).join(' · ')
 
   const openRows = input.openOfficers.length === 0

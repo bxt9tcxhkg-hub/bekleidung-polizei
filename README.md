@@ -41,12 +41,13 @@ Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:
 Zuweisungen (Polizist oder Verwahrungsort, z. B. Lager nach Austritt; mehrere Stücke
 derselben Kategorie mit unterschiedlicher Waffennummer), Pool-Einsatzmittel und
 Lagerbestand (Pool-Zahlen plus eingelagerte persönliche Stücke). Unterbereich Einsatztraining:
-Pflicht-ET (`pflicht_halbjahr`, alle Stadtpolizei Dornbirn im Halbjahr) und Zusatzmodule
-(Combat, Erste Hilfe COMBAT, Fahrsicherheit, Stockschulung, Szenarien). Schießen-Flag am Modul.
-Offene Liste, Ausschreibung mit Selbstanmeldung (nur ohne Abschluss), Protokoll (Modul am Tag,
-Anwesenheit, Munition aus dem Pool). `kind` intern/extern bleibt Herkunftsfilter.
-Lesen: `user` (eigener Status + Anmeldung). Verwalten: Sachbearbeiter/Admin. Parkaufsicht
-zählt nicht zur Pflicht-Stadtpolizei. Abgeschlossenes Modul: keine erneute Zuweisung/Anmeldung.
+Internes Einsatztraining (2 Module pro Jahr), Externes Einsatztraining (4 Module pro Jahr)
+und Zusatzmodule (Combat/Erste Hilfe COMBAT/Fahrsicherheit = extern; Stockschulung/Szenarien
+= Zusatz). UI-Art aus `module_type` + `kind`. Geltung je Modul (`applies_to`: Polizei,
+Parkaufsicht, Alle). Schießen-Flag `schiesst`, UI «Mit Schießen». Offene Liste nach Geltung,
+Ausschreibung mit Selbstanmeldung (nur ohne Abschluss und bei passender Geltung), Protokoll
+(Modul am Tag, Anwesenheit, Munition aus dem Pool). Lesen: `user` (eigener Status + Anmeldung).
+Verwalten: Sachbearbeiter/Admin. Abgeschlossenes Modul: keine erneute Zuweisung/Anmeldung.
 
 ## Bestell-Workflow
 
@@ -216,6 +217,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260917_force_username_set.sql` | `username` nullable (`DROP NOT NULL`), Wipe `dn{N}`, `force_username_set`, Erstlogin setzt PC-Namen |
 | `20260918_budget_used_adjustment.sql` | `user_budgets.used_adjustment`, Verbrauchskorrektur je Kalenderjahr, `submit_cart` berücksichtigt Korrektur |
 | `20260919_einsatztraining_fachlogik.sql` | Pflicht/Zusatz, schiesst, Halbjahr, Ausschreibung/Anmeldung |
+| `20260920_einsatztraining_geltung.sql` | Geltung `applies_to` (Polizei/Parkaufsicht/Alle), Selbstanmeldung prüft Organisation |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
@@ -243,7 +245,7 @@ neu erzeugt).
 Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
-1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260919`) auf das Supabase-Projekt.
+1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260920`) auf das Supabase-Projekt.
 2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig
    auch wegen CORS (kein `*`) und wegen `action: reset_password`.
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst

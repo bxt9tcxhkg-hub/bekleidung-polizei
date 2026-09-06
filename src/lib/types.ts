@@ -282,6 +282,7 @@ export interface PoolEinsatzmittel {
 
 export type TrainingKind = 'intern' | 'extern'
 export type TrainingModuleType = 'pflicht_halbjahr' | 'zusatz'
+export type TrainingAppliesTo = 'polizei' | 'parkaufsicht' | 'alle'
 export type TrainingAttendanceStatus = 'present' | 'absent'
 export type TrainingPeriodHalf = 1 | 2
 
@@ -291,6 +292,7 @@ export interface EinsatzTrainingModule {
   kind: TrainingKind
   module_type: TrainingModuleType
   schiesst: boolean
+  applies_to: TrainingAppliesTo
   period_year: number | null
   period_half: TrainingPeriodHalf | null
   active: boolean
@@ -317,7 +319,7 @@ export interface EinsatzTrainingSession {
   created_at: string | null
   updated_at: string | null
   created_by: string | null
-  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'period_year' | 'period_half' | 'active'>
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'applies_to' | 'period_year' | 'period_half' | 'active'>
 }
 
 export interface EinsatzTrainingAttendance {
@@ -338,7 +340,7 @@ export interface EinsatzTrainingParticipation {
   interval_label: string | null
   created_at: string | null
   created_by: string | null
-  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'active'>
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'applies_to' | 'active'>
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
 }
 
@@ -350,7 +352,7 @@ export interface EinsatzTrainingCompletion {
   participation_id: string
   completed_on: string
   created_at: string | null
-  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'active'>
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'applies_to' | 'active'>
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
 }
 

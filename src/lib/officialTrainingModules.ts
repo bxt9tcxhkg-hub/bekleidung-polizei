@@ -2,10 +2,11 @@
  * Offizielle Einsatztraining-Module aus dem Verzeichnis (Petternel, 2026-09-06).
  * Keine weiteren Namen — nur diese Liste.
  *
- * Primärachse laut Owner: Internes ET = pflicht_halbjahr (alle Stadtpolizei
- * Dornbirn im Halbjahr). Combat, Erste Hilfe COMBAT, Fahrsicherheit,
- * Stockschulung und Szenarien = zusatz (interne zusätzliche Module).
- * `kind` intern/extern bleibt nur Herkunft/Filter der Alt-Daten.
+ * UI-Art aus module_type + kind:
+ * Internes ET = intern (pflicht_halbjahr, 2 Module/Jahr über Halbjahr-Zeilen).
+ * Combat / Erste Hilfe COMBAT / Fahrsicherheit = extern (kind extern).
+ * Stockschulung / Szenarien = Zusatzmodul (kind intern, module_type zusatz).
+ * Geltung der Verzeichnis-Namen: Polizei. Sachbearbeiter kann das ändern.
  */
 
 import {
@@ -13,6 +14,7 @@ import {
   isTrainingKind,
   isTrainingModuleType,
   isTrainingPeriodHalf,
+  type TrainingAppliesTo,
   type TrainingKind,
   type TrainingModuleType,
   type TrainingPeriodHalf,
@@ -28,28 +30,31 @@ export type OfficialTrainingModule = {
   moduleType: TrainingModuleType
   kind: TrainingKind
   schiesst: boolean
+  appliesTo: TrainingAppliesTo
   note?: string
 }
 
 export const OFFICIAL_TRAINING_MODULES: readonly OfficialTrainingModule[] = [
-  { name: 'Internes ET', moduleType: 'pflicht_halbjahr', kind: 'intern', schiesst: false },
+  { name: 'Internes ET', moduleType: 'pflicht_halbjahr', kind: 'intern', schiesst: false, appliesTo: 'polizei' },
   {
     name: 'Combat',
     moduleType: 'zusatz',
     kind: 'extern',
     schiesst: false,
-    note: 'Zusatzmodul (Owner: interne zusätzliche Module).',
+    appliesTo: 'polizei',
+    note: 'Externes Einsatztraining.',
   },
   {
     name: 'Stockschulung TS-Einsatzstock',
     moduleType: 'zusatz',
     kind: 'intern',
     schiesst: false,
-    note: 'Zusatzmodul. kind intern nur als Herkunftsfilter.',
+    appliesTo: 'polizei',
+    note: 'Zusatzmodul.',
   },
-  { name: 'Erste Hilfe COMBAT', moduleType: 'zusatz', kind: 'extern', schiesst: false },
-  { name: 'Szenarientraining', moduleType: 'zusatz', kind: 'intern', schiesst: false },
-  { name: 'Fahrsicherheitstraining', moduleType: 'zusatz', kind: 'extern', schiesst: false },
+  { name: 'Erste Hilfe COMBAT', moduleType: 'zusatz', kind: 'extern', schiesst: false, appliesTo: 'polizei' },
+  { name: 'Szenarientraining', moduleType: 'zusatz', kind: 'intern', schiesst: false, appliesTo: 'polizei' },
+  { name: 'Fahrsicherheitstraining', moduleType: 'zusatz', kind: 'extern', schiesst: false, appliesTo: 'polizei' },
 ]
 
 export function officialModuleKey(
@@ -73,12 +78,25 @@ export type ExistingTrainingModuleRef = {
   period_year?: number | null
   period_half?: number | null
   schiesst?: boolean | null
+  applies_to?: string | null
 }
 
 export type OfficialModulePlan = {
   inserts: Array<OfficialTrainingModule & { period_year: number | null; period_half: TrainingPeriodHalf | null }>
-  reactivations: { id: string; name: string; moduleType: TrainingModuleType; kind: TrainingKind }[]
-  alreadyActive: { id: string; name: string; moduleType: TrainingModuleType; kind: TrainingKind }[]
+  reactivations: {
+    id: string
+    name: string
+    moduleType: TrainingModuleType
+    kind: TrainingKind
+    appliesTo: TrainingAppliesTo
+  }[]
+  alreadyActive: {
+    id: string
+    name: string
+    moduleType: TrainingModuleType
+    kind: TrainingKind
+    appliesTo: TrainingAppliesTo
+  }[]
 }
 
 function existingKey(row: ExistingTrainingModuleRef): string | null {
@@ -138,15 +156,22 @@ export function planOfficialModuleUpserts(
       period_year: periodRef?.year ?? null,
       period_half: periodRef?.half ?? null,
     }
+    const plannedRef = {
+      id: found?.id ?? '',
+      name: module.name,
+      moduleType: module.moduleType,
+      kind: module.kind,
+      appliesTo: module.appliesTo,
+    }
 
     if (!found) {
       inserts.push(planned)
       continue
     }
     if (found.active) {
-      alreadyActive.push({ id: found.id, name: module.name, moduleType: module.moduleType, kind: module.kind })
+      alreadyActive.push({ ...plannedRef, id: found.id })
     } else {
-      reactivations.push({ id: found.id, name: module.name, moduleType: module.moduleType, kind: module.kind })
+      reactivations.push({ ...plannedRef, id: found.id })
     }
   }
 
