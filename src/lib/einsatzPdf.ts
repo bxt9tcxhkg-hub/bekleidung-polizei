@@ -18,7 +18,6 @@ import {
   isAttendanceStatus,
   isTrainingEtClass,
   isTrainingKind,
-  moduleTypeLabel,
   type TrainingAppliesTo,
   type TrainingEtClass,
   type TrainingKind,
@@ -655,22 +654,20 @@ export function generateTrainingModulesPdf(input: {
 
 export function buildOffenAnmeldungenPdfHtml(input: OffenAnmeldungenPdfInput): string {
   const now = input.now ?? new Date()
-  const art = isTrainingEtClass(input.etClass ?? '')
-    ? input.etClass
+  const art: TrainingEtClass = isTrainingEtClass(input.etClass ?? '')
+    ? input.etClass as TrainingEtClass
     : etClassFromModule({
       kind: input.etClass === 'extern' ? 'extern' : 'intern',
       module_type: input.moduleType,
     })
-  const typeLabel = isTrainingEtClass(art)
-    ? etClassLabel({
-      kind: art === 'extern' ? 'extern' : 'intern',
-      module_type: art === 'intern' ? 'pflicht_halbjahr' : 'zusatz',
-    })
-    : moduleTypeLabel(input.moduleType)
+  const typeLabel = etClassLabel({
+    kind: art === 'extern' ? 'extern' : 'intern',
+    module_type: art === 'intern' ? 'pflicht_halbjahr' : 'zusatz',
+  })
   const period = input.periodLabel?.trim()
   const subtitle = [
     typeLabel,
-    isTrainingEtClass(art) ? etClassCadenceLabel(art) : '',
+    etClassCadenceLabel(art),
     appliesToLabel(input.appliesTo),
     period,
     'Offene Mitglieder gemäß Geltung und Anmeldungen für den Kommandanten / Dienstplan',

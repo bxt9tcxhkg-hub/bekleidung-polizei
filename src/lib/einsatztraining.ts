@@ -309,9 +309,11 @@ export function officerMatchesAppliesTo(
   appliesTo?: TrainingAppliesTo | string | null,
 ): boolean {
   const audience = normalizeAppliesTo(appliesTo)
-  if (audience === 'polizei') return isStadtpolizeiMember(officer)
-  if (audience === 'parkaufsicht') return isParkaufsichtMember(officer)
-  return isStadtpolizeiMember(officer) || isParkaufsichtMember(officer)
+  const org = (officer.organisation ?? '').trim()
+  if (audience === 'parkaufsicht') return org === PARKAUFSICHT_ORGANISATION
+  const asPolizei = { organisation: org || ET_ROSTER_ORGANISATION }
+  if (audience === 'polizei') return isStadtpolizeiMember(asPolizei)
+  return isStadtpolizeiMember(asPolizei) || isParkaufsichtMember({ organisation: org })
 }
 
 export function officersEligibleForModule<T extends TrainingOfficerRef>(input: {
