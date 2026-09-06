@@ -158,6 +158,12 @@ zeigt das neue Passwort einmal zum Kopieren. Das gebundene Admin-Konto
 `123456` erfüllt das. Lokal: `supabase/config.toml`
 `[auth] minimum_password_length = 6`. Das Admin-Passwort bleibt unverändert.
 
+**Passwort ändern (Mein Profil):** Jede angemeldete Person kann unter `/profil`
+das eigene Passwort ändern. Formular: aktuelles Passwort (Bestätigung, nie als
+Klartext aus Auth), neues Passwort, Bestätigung. Mindestlänge 6 wie Auth.
+Ablauf wie Erstlogin: vorhandene Session, dann `signInWithPassword` mit der
+Session-E-Mail und `updateUser({ password })`. Kein Admin-Reset auf dieser Seite.
+
 Login-E-Mail (Auth-Identität, nicht `profiles.username`):
 
 `vorname.nachname@dornbirn.at` (Local-Part und Domain klein)

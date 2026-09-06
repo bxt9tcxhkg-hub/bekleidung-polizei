@@ -3,6 +3,7 @@ import { UserCircle, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { sizeLabel } from '../lib/sizes'
+import ChangePasswordForm from '../components/ChangePasswordForm'
 
 type SizeOptGroup = { group: string; sizes: string[] }
 type SizeField = { key: string; label: string; options: (string | SizeOptGroup)[] }
@@ -123,10 +124,10 @@ export default function UserProfile() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Mein Profil</h1>
-        <p className="text-gray-500 text-sm mt-1">Persönliche Daten bearbeiten</p>
+        <p className="text-gray-500 text-sm mt-1">Persönliche Daten und Passwort</p>
       </div>
 
-      <div className="max-w-lg">
+      <div className="max-w-lg space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100 bg-gray-50">
             <div className="bg-blue-100 p-3 rounded-full">
@@ -236,6 +237,8 @@ export default function UserProfile() {
             </button>
           </div>
         </div>
+
+        <ChangePasswordForm />
       </div>
     </div>
   )
