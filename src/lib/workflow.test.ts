@@ -34,17 +34,18 @@ describe('resolveLoginEmail', () => {
     }
   })
 
-  it('nimmt volle E-Mail-Adressen (trim), auch bestehende Admins', () => {
+  it('nimmt volle E-Mail-Adressen (trim, klein), auch bestehende Admins', () => {
     expect(resolveLoginEmail('name@beispiel.at')).toEqual({ ok: true, email: 'name@beispiel.at' })
     expect(resolveLoginEmail('  Hans-Peter.Schwendinger@dornbirn.at  ')).toEqual({
       ok: true,
-      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+      email: 'hans-peter.schwendinger@dornbirn.at',
     })
     expect(resolveLoginEmail('Martin.Feurstein2@dornbirn.at')).toEqual({
       ok: true,
-      email: 'Martin.Feurstein2@dornbirn.at',
+      email: 'martin.feurstein2@dornbirn.at',
     })
     expect(resolveLoginEmail(ADMIN_AUTH_EMAIL)).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
+    expect(ADMIN_AUTH_EMAIL).toBe('admin@stadtpolizei-dornbirn.local')
   })
 
   it('löst nur den gebundenen Admin-Benutzernamen auf', () => {
@@ -61,7 +62,7 @@ describe('bound Admin Erstlogin', () => {
   it('erkennt das gebundene Admin-Konto', () => {
     expect(isBoundAdminIdentity({ username: 'admin' })).toBe(true)
     expect(isBoundAdminIdentity({ email: ADMIN_AUTH_EMAIL })).toBe(true)
-    expect(isBoundAdminIdentity({ email: 'Hans-Peter.Schwendinger@dornbirn.at' })).toBe(false)
+    expect(isBoundAdminIdentity({ email: 'hans-peter.schwendinger@dornbirn.at' })).toBe(false)
     expect(isBoundAdminIdentity({ username: 'hschwendinger' })).toBe(false)
   })
 
@@ -81,20 +82,20 @@ describe('bound Admin Erstlogin', () => {
   it('lässt Erstlogin für Beamte unverändert', () => {
     expect(shouldForcePasswordChange({
       forcePasswordChange: true,
-      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+      email: 'hans-peter.schwendinger@dornbirn.at',
     })).toBe(true)
     expect(shouldForceUsernameSet({
       forceUsernameSet: true,
       username: null,
-      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+      email: 'hans-peter.schwendinger@dornbirn.at',
     })).toBe(true)
     expect(shouldForceUsernameSet({
       username: '',
-      email: 'Irmgard.Faessler@dornbirn.at',
+      email: 'irmgard.faessler@dornbirn.at',
     })).toBe(true)
     expect(shouldForceUsernameSet({
       username: 'hschwendinger',
-      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+      email: 'hans-peter.schwendinger@dornbirn.at',
     })).toBe(false)
   })
 })

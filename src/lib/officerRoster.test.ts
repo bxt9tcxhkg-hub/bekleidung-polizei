@@ -9,20 +9,20 @@ import {
 } from './officerRoster'
 
 describe('Offiziersliste', () => {
-  it('bildet den Login aus Vorname.Nachname@dornbirn.at, Username bleibt leer', () => {
+  it('bildet den Login aus vorname.nachname@dornbirn.at, Username bleibt leer', () => {
     expect(rosterRowToImportUser({
       vorname: 'Hans-Peter',
       nachname: 'Schwendinger',
       dienstnummer: '1',
     })).toMatchObject({
-      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+      email: 'hans-peter.schwendinger@dornbirn.at',
       username: null,
     })
     expect(rosterRowToImportUser({
       vorname: 'Martin',
       nachname: 'Feurstein',
       dienstnummer: '3',
-    })?.email).toBe('Martin.Feurstein2@dornbirn.at')
+    })?.email).toBe('martin.feurstein2@dornbirn.at')
   })
 
   it('verwirft Kopf- und Summenzeilen', () => {
@@ -44,7 +44,7 @@ describe('Offiziersliste', () => {
     expect(stadt).toHaveLength(34)
     expect(stadt.find(u => u.dienstnummer === '2')).toMatchObject({
       name: 'Andreas Gisinger',
-      email: 'Andreas.Gisinger@dornbirn.at',
+      email: 'andreas.gisinger@dornbirn.at',
       username: null,
       roles: ['user'],
       einsatzMtRole: 'user',
@@ -74,13 +74,13 @@ describe('Offiziersliste', () => {
       dienstnummer: '7',
     })
     expect(fenkart?.username).toBeNull()
-    expect(fenkart?.email).toBe('Matthias.Fenkart@dornbirn.at')
+    expect(fenkart?.email).toBe('matthias.fenkart@dornbirn.at')
     const plan = planRosterEnsure(knownRosterImportUsers(), [
       { id: 'x', name: 'Fenkart Matthias', username: null, dienstnummer: '7' },
     ])
     expect(plan.already.map(u => u.dienstnummer)).toContain('7')
     expect(plan.create.map(u => u.dienstnummer)).not.toContain('7')
-    expect(plan.create.map(u => u.email)).toContain('Hans-Peter.Schwendinger@dornbirn.at')
+    expect(plan.create.map(u => u.email)).toContain('hans-peter.schwendinger@dornbirn.at')
   })
 
   it('legt Parkaufsicht aus users-seed.json nur als Benutzer an', () => {

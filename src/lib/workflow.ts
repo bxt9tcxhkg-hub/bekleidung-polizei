@@ -6,7 +6,7 @@ export const LOCAL_AUTH_DOMAIN = AUTH_EMAIL_DOMAIN
 export const USERNAME_RE = /^[a-z0-9._-]+$/
 export const DN_PLACEHOLDER_USERNAME_RE = /^dn[0-9]+$/i
 
-/** Historisches Admin-Auth-Konto (nicht Vorname.Nachname@dornbirn.at). */
+/** Historisches Admin-Auth-Konto (nicht vorname.nachname@dornbirn.at). */
 export const ADMIN_LOGIN_USERNAME = 'admin'
 export const ADMIN_AUTH_EMAIL = 'admin@stadtpolizei-dornbirn.local'
 
@@ -45,7 +45,7 @@ export function resolveLoginEmail(input: string): ResolveLoginEmailResult {
   if (!LOGIN_EMAIL_RE.test(trimmed)) {
     return { ok: false, error: LOGIN_EMAIL_REQUIRED_ERROR }
   }
-  return { ok: true, email: trimmed }
+  return { ok: true, email: trimmed.toLowerCase() }
 }
 
 export function shouldForcePasswordChange(input: {
