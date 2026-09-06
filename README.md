@@ -18,13 +18,17 @@ Stadtwappen (Birnbaum): Wikimedia Commons, [File:Wappendornbirn.svg](https://com
 | Rolle | Bereich |
 |---|---|
 | Benutzer | Bekleidung bestellen, eigene Bestellungen, Profil (inkl. Größen) |
-| Sachbearbeiter | Bestellungen abwickeln, Lager, Produkte, Quartale, Benutzer anlegen, Analyse |
-| Genehmiger | Freigaben, Budgetverwaltung, Schuherstattungen, Benutzer anlegen und deaktivieren |
+| Sachbearbeiter | Bestellungen abwickeln, Lager, Produkte, Quartale, Analyse |
+| Genehmiger | Freigaben, Budgetverwaltung, Schuherstattungen; Benutzerverwaltung im Portal |
 | Admin | Alle Bereiche |
 
 Die Rolle `approver` wird weiterhin als Synonym für `Genehmiger` akzeptiert.
 
-Benutzerverwaltung liegt im **Portal** (`/portal/benutzer`), nicht in der Bekleidungs-Sidebar.
+Benutzerverwaltung liegt ausschließlich im **Portal** (`/portal/benutzer`) und ist für
+**Admin oder Genehmiger** (Bekleidung) bedienbar. In der Bekleidungs-App gibt es keine
+Benutzerseite und keinen Querverweis. Dual-Write `profiles.roles` ↔ `portal_area_roles`
+(area=`bekleidung`) bleibt; `einsatz_mt`-Rechte bleiben Admin-only.
+Deaktivieren bleibt Genehmiger/Admin (bestehende Shop-Regel).
 Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:
 
 | Bereich | Erlaubte Rollen |
@@ -34,7 +38,9 @@ Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:
 
 `profiles.roles` bleibt Quelle für bestehende Bekleidungs-RLS/`has_role`. Die Portal-Kachel
 «Einsatzmittel & Training» führt auf `/einsatz`. Unterbereich Einsatzmittel: persönliche
-Zuweisungen, Pool-Einsatzmittel und Lagerbestand. Unterbereich Einsatztraining: Module
+Zuweisungen (Polizist oder Verwahrungsort, z. B. Lager nach Austritt; mehrere Stücke
+derselben Kategorie mit unterschiedlicher Waffennummer), Pool-Einsatzmittel und
+Lagerbestand (Pool-Zahlen plus eingelagerte persönliche Stücke). Unterbereich Einsatztraining: Module
 (ohne hinterlegten Lehrplan), internes Protokoll (Anwesend/Abwesend, Intervall) und
 externe Teilnahmen. Lesen für `user`, Verwalten für Sachbearbeiter/Admin.
 Taktung (Konstante `EINSATZTRAINING_CADENCE`): internes ET 1× pro Halbjahr,
@@ -143,6 +149,8 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260907_personal_einsatzmittel.sql` | Persönliche Einsatzmittel (eine Tabelle + category), RLS über `einsatz_mt` |
 | `20260908_pool_einsatzmittel.sql` | Pool-Einsatzmittel + Verwahrungsort (eine Tabelle + category), RLS über `einsatz_mt` |
 | `20260909_einsatztraining.sql` | Einsatztraining: Module, Trainingstage, Protokoll, Abschlüsse/Sperre, RLS über `einsatz_mt` |
+| `20260910_personal_em_verwahrungsort.sql` | Persönliche EM: optionaler Officer + Verwahrungsort (Lager) |
+| `20260911_portal_benutzer_genehmiger.sql` | Genehmiger darf `portal_area_roles` lesen; Schreiben bleibt Admin |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

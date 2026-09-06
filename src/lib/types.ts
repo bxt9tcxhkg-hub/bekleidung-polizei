@@ -205,6 +205,8 @@ export interface PortalAreaRole {
   updated_at: string | null
 }
 
+export type Verwahrungsort = 'lager' | 'innendienst' | 'peter_1' | 'peter_2' | 'peter_30'
+
 export type PersonalEmCategory =
   | 'schutzweste'
   | 'glock_17'
@@ -219,7 +221,8 @@ export type PersonalEmCategory =
 export interface PersonalEinsatzmittel {
   id: string
   category: PersonalEmCategory
-  officer_id: string
+  officer_id: string | null
+  verwahrungsort: Verwahrungsort | null
   groesse: string | null
   ablaufdatum: string | null
   schutzfristen: string | null
@@ -234,7 +237,7 @@ export interface PersonalEinsatzmittel {
   created_at: string | null
   updated_at: string | null
   created_by: string | null
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'> | null
 }
 
 export type PoolEmCategory =
@@ -246,8 +249,6 @@ export type PoolEmCategory =
   | 'ballistischer_helm'
   | 'schwere_westen'
   | 'spuckschutzhaube'
-
-export type Verwahrungsort = 'lager' | 'innendienst' | 'peter_1' | 'peter_2' | 'peter_30'
 
 export interface PoolEinsatzmittel {
   id: string
@@ -444,7 +445,7 @@ export type Database = {
       portal_area_roles: { Row: PortalAreaRoleRow; Insert: Pick<PortalAreaRoleRow, 'user_id' | 'area' | 'roles'> & Partial<Omit<PortalAreaRoleRow, 'user_id' | 'area' | 'roles'>>; Update: Partial<Pick<PortalAreaRoleRow, 'roles' | 'updated_at'>>; Relationships: [
         { foreignKeyName: 'portal_area_roles_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      personal_einsatzmittel: { Row: PersonalEinsatzmittelRow; Insert: Pick<PersonalEinsatzmittelRow, 'category' | 'officer_id'> & Partial<Omit<PersonalEinsatzmittelRow, 'category' | 'officer_id'>>; Update: Partial<Omit<PersonalEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
+      personal_einsatzmittel: { Row: PersonalEinsatzmittelRow; Insert: Pick<PersonalEinsatzmittelRow, 'category'> & Partial<Omit<PersonalEinsatzmittelRow, 'category'>>; Update: Partial<Omit<PersonalEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'personal_einsatzmittel_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'personal_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }

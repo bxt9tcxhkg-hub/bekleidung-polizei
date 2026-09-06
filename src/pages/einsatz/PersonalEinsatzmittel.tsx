@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Pencil, Plus, Trash2, UserPlus, Warehouse, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -12,16 +12,21 @@ import {
   emptyPersonalEmFormValues,
   formValuesFromRecord,
   isPersonalEmCategory,
+  isPersonalEmInLager,
   officerDisplayName,
   personalEmDetailText,
   personalEmFieldKind,
   personalEmFieldLabel,
+  personalEmLocationLabel,
+  personalEmOfficerLabel,
+  toPersonalLagerAssignment,
   validatePersonalEm,
   type PersonalEmCategory,
   type PersonalEmFormValues,
 } from '../../lib/personalEinsatzmittel'
+import { VERWAHRUNGSORTE, VERWAHRUNGSORT_LABELS } from '../../lib/verwahrungsort'
 
-type CategoryFilter = 'all' | PersonalEmCategory
+type CategoryFilter = 'all' | 'lager' | PersonalEmCategory
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
 
@@ -40,6 +45,7 @@ export default function PersonalEinsatzmittelPanel() {
   const [editId, setEditId] = useState<string | null>(null)
   const [category, setCategory] = useState<PersonalEmCategory>('schutzweste')
   const [officerId, setOfficerId] = useState('')
+  const [verwahrungsort, setVerwahrungsort] = useState('')
   const [values, setValues] = useState<PersonalEmFormValues>(emptyPersonalEmFormValues())
   const [saving, setSaving] = useState(false)
 
@@ -73,10 +79,11 @@ export default function PersonalEinsatzmittelPanel() {
     })
   }, [])
 
-  const visible = useMemo(
-    () => (filter === 'all' ? items : items.filter(item => item.category === filter)),
-    [items, filter],
-  )
+  const visible = useMemo(() => {
+    if (filter === 'all') return items
+    if (filter === 'lager') return items.filter(isPersonalEmInLager)
+    return items.filter(item => item.category === filter)
+  }, [items, filter])
 
   const officerChoices = useMemo(() => {
     const active = officers.filter(o => o.active)
@@ -89,6 +96,7 @@ export default function PersonalEinsatzmittelPanel() {
     setEditId(null)
     setCategory('schutzweste')
     setOfficerId('')
+    setVerwahrungsort('')
     setValues(emptyPersonalEmFormValues())
     setError('')
     setShowForm(true)
@@ -97,7 +105,8 @@ export default function PersonalEinsatzmittelPanel() {
   function openEdit(item: PersonalEinsatzmittel) {
     setEditId(item.id)
     setCategory(item.category)
-    setOfficerId(item.officer_id)
+    setOfficerId(item.officer_id ?? '')
+    setVerwahrungsort(item.verwahrungsort ?? '')
     setValues(formValuesFromRecord(item))
     setError('')
     setShowForm(true)
@@ -111,7 +120,7 @@ export default function PersonalEinsatzmittelPanel() {
 
   async function save() {
     if (!canManage) return
-    const result = validatePersonalEm({ category, officer_id: officerId, values })
+    const result = validatePersonalEm({ category, officer_id: officerId, verwahrungsort, values })
     if (!result.ok) {
       setError(result.error)
       return
@@ -164,13 +173,41 @@ export default function PersonalEinsatzmittelPanel() {
     }
   }
 
+  async function moveToLager(item: PersonalEinsatzmittel) {
+    if (!canManage) return
+    if (isPersonalEmInLager(item) && !item.officer_id) return
+    if (!window.confirm(`«${PERSONAL_EM_CATEGORY_LABELS[item.category]}» ins Lager stellen? Die Zuweisung an den Polizisten wird aufgehoben.`)) return
+    const { error: updateError } = await supabase
+      .from('personal_einsatzmittel')
+      .update(toPersonalLagerAssignment())
+      .eq('id', item.id)
+    if (updateError) {
+      setError(updateError.message || 'Einlagern fehlgeschlagen.')
+      return
+    }
+    logAudit('Persönliches Einsatzmittel eingelagert', PERSONAL_EM_CATEGORY_LABELS[item.category])
+    try {
+      await load()
+    } catch {
+      setError('Eingelagert, Liste konnte nicht aktualisiert werden.')
+    }
+  }
+
+  function openAssign(item: PersonalEinsatzmittel) {
+    openEdit(item)
+    setOfficerId(item.officer_id ?? '')
+    setVerwahrungsort(item.verwahrungsort ?? '')
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Persönliche Einsatzmittel</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {canManage ? 'Zuweisungen an Polizistinnen und Polizisten' : 'Nur Leserecht'}
+            {canManage
+              ? 'Zuweisung an Polizistinnen und Polizisten oder Einlagerung (z. B. nach Austritt)'
+              : 'Nur Leserecht'}
           </p>
         </div>
         {canManage && (
@@ -198,6 +235,15 @@ export default function PersonalEinsatzmittelPanel() {
           }`}
         >
           Alle
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter('lager')}
+          className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
+            filter === 'lager' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Im Lager
         </button>
         {PERSONAL_EM_CATEGORIES.map(id => (
           <button
@@ -228,7 +274,8 @@ export default function PersonalEinsatzmittelPanel() {
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Kategorie</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Polizist</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Angaben</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Verwahrungsort</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Angaben</th>
                 {canManage && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -238,13 +285,36 @@ export default function PersonalEinsatzmittelPanel() {
                   <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                     {PERSONAL_EM_CATEGORY_LABELS[item.category]}
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{officerDisplayName(item.officer)}</td>
+                  <td className="px-4 py-3 text-gray-700">{personalEmOfficerLabel(item.officer, item.officer_id)}</td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
+                    {personalEmLocationLabel(item.verwahrungsort)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                     {personalEmDetailText(item) || '–'}
                   </td>
                   {canManage && (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
+                        {!(isPersonalEmInLager(item) && !item.officer_id) && (
+                          <button
+                            type="button"
+                            onClick={() => { void moveToLager(item) }}
+                            className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900"
+                            title="Ins Lager stellen"
+                          >
+                            <Warehouse className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {!item.officer_id && (
+                          <button
+                            type="button"
+                            onClick={() => openAssign(item)}
+                            className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900"
+                            title="Polizisten zuweisen"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => openEdit(item)}
@@ -298,18 +368,36 @@ export default function PersonalEinsatzmittelPanel() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="em-officer">Polizist *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="em-officer">
+                  Polizist{verwahrungsort ? '' : ' *'}
+                </label>
                 <select
                   id="em-officer"
                   className={inputClass}
                   value={officerId}
                   onChange={e => setOfficerId(e.target.value)}
                 >
-                  <option value="">Bitte wählen</option>
+                  <option value="">{verwahrungsort ? 'nicht zugewiesen' : 'Bitte wählen'}</option>
                   {officerChoices.map(o => (
                     <option key={o.id} value={o.id}>
                       {officerDisplayName(o)}{o.active ? '' : ' (inaktiv)'}
                     </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="em-ort">
+                  Verwahrungsort{officerId ? '' : ' *'}
+                </label>
+                <select
+                  id="em-ort"
+                  className={inputClass}
+                  value={verwahrungsort}
+                  onChange={e => setVerwahrungsort(e.target.value)}
+                >
+                  <option value="">{officerId ? 'Beim Polizisten' : 'Bitte wählen'}</option>
+                  {VERWAHRUNGSORTE.map(ort => (
+                    <option key={ort} value={ort}>{VERWAHRUNGSORT_LABELS[ort]}</option>
                   ))}
                 </select>
               </div>

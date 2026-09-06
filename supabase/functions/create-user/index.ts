@@ -64,7 +64,7 @@ function canAssign(callerRoles: string[], role: string): boolean {
   const isSachbearbeiter = isAdmin || callerRoles.includes('sachbearbeiter')
   if (role === 'admin') return isAdmin
   if (role === 'genehmiger') return isGenehmiger
-  if (role === 'sachbearbeiter') return isSachbearbeiter
+  if (role === 'sachbearbeiter') return isSachbearbeiter || isGenehmiger
   return true
 }
 

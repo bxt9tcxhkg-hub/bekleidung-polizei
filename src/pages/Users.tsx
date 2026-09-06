@@ -139,7 +139,7 @@ export default function Users() {
   function canAssignRole(role: string) {
     if (role === 'admin') return isStrictAdmin
     if (role === 'genehmiger') return isStrictAdmin || isGenehmiger
-    if (role === 'sachbearbeiter') return isStrictAdmin || isSachbearbeiter
+    if (role === 'sachbearbeiter') return isStrictAdmin || isSachbearbeiter || isGenehmiger
     return true
   }
 

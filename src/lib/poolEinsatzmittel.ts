@@ -11,6 +11,14 @@
 
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
 import { formatIsoDate } from './personalEinsatzmittel'
+import {
+  isVerwahrungsort,
+  VERWAHRUNGSORTE,
+  VERWAHRUNGSORT_LABELS,
+  type Verwahrungsort,
+} from './verwahrungsort'
+
+export { isVerwahrungsort, VERWAHRUNGSORTE, VERWAHRUNGSORT_LABELS, type Verwahrungsort }
 
 export const POOL_EM_CATEGORIES = [
   'langwaffe_stg77',
@@ -24,16 +32,6 @@ export const POOL_EM_CATEGORIES = [
 ] as const
 
 export type PoolEmCategory = (typeof POOL_EM_CATEGORIES)[number]
-
-export const VERWAHRUNGSORTE = [
-  'lager',
-  'innendienst',
-  'peter_1',
-  'peter_2',
-  'peter_30',
-] as const
-
-export type Verwahrungsort = (typeof VERWAHRUNGSORTE)[number]
 
 export const POOL_EM_FIELD_KEYS = [
   'marke',
@@ -57,14 +55,6 @@ export const POOL_EM_CATEGORY_LABELS: Record<PoolEmCategory, string> = {
   ballistischer_helm: 'ballistischer Helm',
   schwere_westen: 'schwere Westen',
   spuckschutzhaube: 'Spuckschutzhaube',
-}
-
-export const VERWAHRUNGSORT_LABELS: Record<Verwahrungsort, string> = {
-  lager: 'Lager',
-  innendienst: 'Innendienst',
-  peter_1: 'Peter 1',
-  peter_2: 'Peter 2',
-  peter_30: 'Peter 30',
 }
 
 const FIELD_LABELS: Record<PoolEmFieldKey, string> = {
@@ -108,10 +98,6 @@ export function poolEmFieldLabel(field: PoolEmFieldKey, category: PoolEmCategory
 
 export function isPoolEmCategory(value: string): value is PoolEmCategory {
   return (POOL_EM_CATEGORIES as readonly string[]).includes(value)
-}
-
-export function isVerwahrungsort(value: string): value is Verwahrungsort {
-  return (VERWAHRUNGSORTE as readonly string[]).includes(value)
 }
 
 export type PoolEmFormValues = Record<PoolEmFieldKey, string>
