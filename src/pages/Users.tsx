@@ -7,7 +7,7 @@ import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
 import { OFFICER_ROSTER_CSV_TEMPLATE, importUsersFromSeedJson, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
-import { USERNAME_RE, canCreateUsers, canDeactivateUsers, canResetUserPassword, isDnPlaceholderUsername } from '../lib/workflow'
+import { USERNAME_RE, canCreateUsers, canDeactivateUsers, canResetUserPassword, isBoundAdminIdentity, isDnPlaceholderUsername } from '../lib/workflow'
 import {
   DEFAULT_START_PASSWORD,
   START_PASSWORD_HINT,
@@ -327,6 +327,10 @@ export default function Users() {
   async function submitResetDialog() {
     if (!resetTarget) return
     setResetError('')
+    if (isBoundAdminIdentity({ username: resetTarget.username })) {
+      setResetError('Das Admin-Konto behält sein bestehendes Passwort.')
+      return
+    }
     if (!isValidStartPassword(resetPassword)) {
       setResetError(START_PASSWORD_REQUIRED_MESSAGE)
       return
@@ -553,7 +557,7 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
-                      {canReset && (
+                      {canReset && !isBoundAdminIdentity({ username: u.username }) && (
                         <button
                           type="button"
                           onClick={() => { setResetTarget(u); setResetPassword(DEFAULT_START_PASSWORD); setResetError(''); setResetCopied(false) }}

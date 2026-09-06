@@ -6,14 +6,65 @@ export const LOCAL_AUTH_DOMAIN = AUTH_EMAIL_DOMAIN
 export const USERNAME_RE = /^[a-z0-9._-]+$/
 export const DN_PLACEHOLDER_USERNAME_RE = /^dn[0-9]+$/i
 
+/** Historisches Admin-Auth-Konto (nicht Vorname.Nachname@dornbirn.at). */
+export const ADMIN_LOGIN_USERNAME = 'admin'
+export const ADMIN_AUTH_EMAIL = 'admin@stadtpolizei-dornbirn.local'
+
+export const LOGIN_EMAIL_REQUIRED_ERROR =
+  'Bitte die Stadt-E-Mail eingeben (vorname.nachname@dornbirn.at).'
+
+const LOGIN_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+export type ResolveLoginEmailResult =
+  | { ok: true; email: string }
+  | { ok: false; error: string }
+
 export function isDnPlaceholderUsername(value: string | null | undefined): boolean {
   return DN_PLACEHOLDER_USERNAME_RE.test((value ?? '').trim())
 }
 
-/** Login-E-Mail: volle Adresse bleibt, sonst Local-Part @dornbirn.at. Bestehende Admins mit voller E-Mail (auch anderer Domain). */
-export function loginEmailFromInput(input: string): string {
+export function isBoundAdminLoginInput(input: string): boolean {
+  return input.trim().toLowerCase() === ADMIN_LOGIN_USERNAME
+}
+
+export function isBoundAdminIdentity(input: {
+  email?: string | null
+  username?: string | null
+}): boolean {
+  const email = (input.email ?? '').trim().toLowerCase()
+  const username = (input.username ?? '').trim().toLowerCase()
+  return email === ADMIN_AUTH_EMAIL.toLowerCase() || username === ADMIN_LOGIN_USERNAME
+}
+
+/** Login nur mit voller E-Mail. Einzige Ausnahme: Benutzername admin. */
+export function resolveLoginEmail(input: string): ResolveLoginEmailResult {
   const trimmed = input.trim()
-  return trimmed.includes('@') ? trimmed : `${trimmed.toLowerCase()}@${AUTH_EMAIL_DOMAIN}`
+  if (isBoundAdminLoginInput(trimmed)) {
+    return { ok: true, email: ADMIN_AUTH_EMAIL }
+  }
+  if (!LOGIN_EMAIL_RE.test(trimmed)) {
+    return { ok: false, error: LOGIN_EMAIL_REQUIRED_ERROR }
+  }
+  return { ok: true, email: trimmed }
+}
+
+export function shouldForcePasswordChange(input: {
+  forcePasswordChange?: boolean | null
+  email?: string | null
+  username?: string | null
+}): boolean {
+  if (isBoundAdminIdentity(input)) return false
+  return input.forcePasswordChange === true
+}
+
+export function shouldForceUsernameSet(input: {
+  forceUsernameSet?: boolean | null
+  username?: string | null
+  email?: string | null
+}): boolean {
+  if (isBoundAdminIdentity(input)) return false
+  if (input.forceUsernameSet === true) return true
+  return !(input.username ?? '').trim()
 }
 
 /**

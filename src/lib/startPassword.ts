@@ -3,10 +3,10 @@ import { isDnPlaceholderUsername } from './workflow'
 export { canResetUserPassword } from './workflow'
 
 /** Owner-gewähltes gemeinsames Startpasswort — bewusst schwach und nur temporär bis zum Erstlogin. */
-export const DEFAULT_START_PASSWORD = '1234'
+export const DEFAULT_START_PASSWORD = '123456'
 
 export const START_PASSWORD_HINT =
-  'Startpasswort (z. B. 1234) — beim Erstlogin muss die Person ein eigenes Passwort setzen.'
+  'Startpasswort (z. B. 123456) — beim Erstlogin muss die Person ein eigenes Passwort setzen.'
 
 export const START_PASSWORD_REQUIRED_MESSAGE = 'Startpasswort ist Pflicht.'
 

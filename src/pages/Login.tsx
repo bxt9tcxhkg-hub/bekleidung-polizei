@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { loginEmailFromInput } from '../lib/workflow'
+import { resolveLoginEmail } from '../lib/workflow'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
   const { user, authError } = useAuth()
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -17,9 +17,16 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    const resolved = resolveLoginEmail(email)
+    if (!resolved.ok) {
+      setError(resolved.error)
+      return
+    }
     setLoading(true)
-    const email = loginEmailFromInput(username)
-    const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error: signErr } = await supabase.auth.signInWithPassword({
+      email: resolved.email,
+      password,
+    })
     if (signErr || !data.user) {
       setError('Ungültige E-Mail oder Passwort')
       setLoading(false)
@@ -57,11 +64,15 @@ export default function Login() {
               type="text"
               required
               autoComplete="username"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
+              inputMode="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               placeholder="vorname.nachname@dornbirn.at"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Beamte: Stadt-E-Mail. Admin: Benutzername admin. Der PC-Anmeldename ist nicht der Login.
+            </p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Passwort</label>

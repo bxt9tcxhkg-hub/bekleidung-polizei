@@ -5,6 +5,7 @@ import type { Profile } from '../lib/types'
 import { availableRolesFromFlags, flagsFromRoles, type AppRole } from '../lib/authRoles'
 import type { PortalArea } from '../lib/portalEntitlements'
 import { hasAreaEntitlement } from '../lib/portalEntitlements'
+import { shouldForcePasswordChange, shouldForceUsernameSet } from '../lib/workflow'
 
 export type { AppRole }
 
@@ -132,12 +133,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const roles = profile?.roles ?? []
   const { isAdmin, isSachbearbeiter, isGenehmiger, isStrictAdmin } = flagsFromRoles(roles)
-  const mustChangePassword = user?.user_metadata?.force_password_change === true
-  const mustSetUsername = Boolean(user && profile && (
-    user.user_metadata?.force_username_set === true
-    || profile.force_username_set === true
-    || !profile.username?.trim()
-  ))
+  const mustChangePassword = shouldForcePasswordChange({
+    forcePasswordChange: user?.user_metadata?.force_password_change === true,
+    email: user?.email,
+    username: profile?.username,
+  })
+  const mustSetUsername = Boolean(user && profile && shouldForceUsernameSet({
+    forceUsernameSet: user.user_metadata?.force_username_set === true || profile.force_username_set === true,
+    username: profile.username,
+    email: user.email,
+  }))
   const availableRoles: AppRole[] = availableRolesFromFlags({ isAdmin, isSachbearbeiter, isGenehmiger, isStrictAdmin })
 
   const signOut = async () => {

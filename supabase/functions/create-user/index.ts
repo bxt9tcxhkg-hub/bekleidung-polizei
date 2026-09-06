@@ -158,7 +158,16 @@ function shouldKeepForceUsernameSet(
   return !trimmed || isDnPlaceholderUsername(trimmed)
 }
 
-/** Startpasswort: bewusst einfach (Owner-Default 1234). Persönliches Passwort prüft die UI nach Erstlogin. */
+const ADMIN_LOGIN_USERNAME = 'admin'
+const ADMIN_AUTH_EMAIL = 'admin@stadtpolizei-dornbirn.local'
+
+function isBoundAdminAccount(username: string | null | undefined, email: string | null | undefined): boolean {
+  const u = (username ?? '').trim().toLowerCase()
+  const e = (email ?? '').trim().toLowerCase()
+  return u === ADMIN_LOGIN_USERNAME || e === ADMIN_AUTH_EMAIL
+}
+
+/** Startpasswort: bewusst einfach (Owner-Default 123456). Persönliches Passwort prüft die UI nach Erstlogin. */
 function isValidStartPassword(pw: string): boolean {
   return pw.trim().length > 0
 }
@@ -238,6 +247,9 @@ Deno.serve(async (req) => {
     const { data: existingAuth, error: getErr } = await admin.auth.admin.getUserById(userId)
     if (getErr || !existingAuth.user) {
       return json(req, { error: 'Auth-Konto nicht gefunden.' }, 404)
+    }
+    if (isBoundAdminAccount(profile.username, existingAuth.user.email)) {
+      return json(req, { error: 'Das Admin-Konto behält sein bestehendes Passwort.' }, 400)
     }
 
     const meta = (existingAuth.user.user_metadata ?? {}) as Record<string, unknown>
