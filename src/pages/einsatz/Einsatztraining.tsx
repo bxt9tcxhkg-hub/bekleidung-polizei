@@ -33,9 +33,7 @@ export default function EinsatztrainingPanel() {
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Einsatztraining</h2>
         <p className="text-sm text-gray-500 mt-1">
-          {canManage ? 'Module, Abschlüsse, Ausschreibung und Protokoll' : 'Eigener Status und Anmeldung'}
-          {' · '}
-          {fachlogikSummary()}
+          {canManage ? fachlogikSummary() : 'Eigener Stand und Anmeldung'}
         </p>
       </div>
 

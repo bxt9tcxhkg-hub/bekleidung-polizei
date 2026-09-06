@@ -93,11 +93,11 @@ export function isAttendanceStatus(value: string): value is AttendanceStatus {
 
 export function cadenceLabel(kind: TrainingKind): string {
   const cadence = EINSATZTRAINING_CADENCE[kind]
-  return `${cadence.times} Module pro Jahr`
+  return `${cadence.times}/Jahr`
 }
 
 export function etClassCadenceLabel(etClass: TrainingEtClass): string {
-  if (etClass === 'zusatz') return 'zusätzliche interne Module'
+  if (etClass === 'zusatz') return 'Zusatz'
   return cadenceLabel(etClass)
 }
 
@@ -106,7 +106,7 @@ export function cadenceSummary(): string {
 }
 
 export function fachlogikSummary(): string {
-  return 'Internes Einsatztraining: 2 Module pro Jahr. Externes Einsatztraining: 4 Module pro Jahr. Zusatzmodule: zusätzliche interne Module. Geltung je Modul: Polizei, Parkaufsicht oder Alle.'
+  return 'Intern 2/Jahr · Extern 4/Jahr · Zusatz'
 }
 
 export function etClassFromModule(module: {

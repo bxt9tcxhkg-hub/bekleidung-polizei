@@ -670,7 +670,7 @@ export function buildOffenAnmeldungenPdfHtml(input: OffenAnmeldungenPdfInput): s
     etClassCadenceLabel(art),
     appliesToLabel(input.appliesTo),
     period,
-    'Offene Mitglieder gemäß Geltung und Anmeldungen für den Kommandanten / Dienstplan',
+    'Offen laut Geltung',
   ].filter(Boolean).join(' · ')
 
   const openRows = input.openOfficers.length === 0

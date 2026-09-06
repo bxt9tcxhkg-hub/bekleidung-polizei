@@ -95,7 +95,7 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
   if (!canManage) {
     return (
       <p className="text-sm text-gray-500">
-        Die offene Liste ist für die Sachbearbeitung und den Kommandanten.
+        Offene Liste nur für Sachbearbeitung.
       </p>
     )
   }
@@ -104,9 +104,7 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Offen = aktive Mitglieder gemäß Geltung des Moduls ohne Abschluss.
-          Geltung setzt der Sachbearbeiter: Polizei, Parkaufsicht oder Alle.
-          Export für Kommandant / Dienstplan.
+          Offen laut Geltung, ohne Abschluss.
         </p>
         {selected && (
           <PdfExportButton

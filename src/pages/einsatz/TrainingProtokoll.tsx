@@ -388,7 +388,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
             </p>
             {selected.note && <p className="text-sm text-gray-500 mt-1">{selected.note}</p>}
             <p className="text-sm text-gray-500 mt-1">
-              Anwesend schließt das gewählte Modul ab. Erneute Zuweisung nach Abschluss ist gesperrt.
+              Anwesend schließt das Modul ab.
             </p>
           </div>
           <PdfExportButton
@@ -538,7 +538,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Am Trainingstag das Modul wählen, Anwesenheit führen und bei Schießen Munition aus dem Pool buchen.
+          Trainingstag, Anwesenheit, Munition.
         </p>
         {canManage && (
           <button

@@ -195,7 +195,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Ausgeschriebene Trainingsprogramme. Selbstanmeldung nur, wenn das Modul noch nicht abgeschlossen ist.
+          Anmeldung nur ohne Abschluss.
         </p>
         {canManage && (
           <button

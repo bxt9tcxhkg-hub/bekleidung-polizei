@@ -265,8 +265,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Internes Einsatztraining: 2 Module pro Jahr. Externes Einsatztraining: 4 Module pro Jahr.
-          Zusatzmodule ohne Jahressoll. Geltung je Modul: Polizei, Parkaufsicht oder Alle.
+          Geltung: Polizei, Parkaufsicht oder Alle.
         </p>
         <div className="flex flex-wrap items-center gap-2 justify-end">
           <PdfExportButton
@@ -328,7 +327,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>
       )}
 
-      <div className="flex gap-1 mb-2 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap">
+      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap">
         <button
           type="button"
           onClick={() => setFilter('all')}
@@ -351,9 +350,6 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
           </button>
         ))}
       </div>
-      <p className="text-xs text-gray-500 mb-4">
-        {TRAINING_ET_CLASSES.map(id => `${TRAINING_ET_CLASS_LABELS[id]}: ${etClassCadenceLabel(id)}`).join(' · ')}
-      </p>
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -362,7 +358,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
           <p className="text-sm text-gray-500">
-            Noch keine Module. «Offizielle Module» legt die Verzeichnis-Namen an.
+            Noch keine Module.
           </p>
         </div>
       ) : (
