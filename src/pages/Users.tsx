@@ -6,7 +6,7 @@ import { useAuth as _useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
-import { OFFICER_ROSTER_CSV_TEMPLATE, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
+import { OFFICER_ROSTER_CSV_TEMPLATE, importUsersFromSeedJson, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
 import { USERNAME_RE, canCreateUsers, canDeactivateUsers } from '../lib/workflow'
 import {
   AREA_ROLE_LABELS,
@@ -244,9 +244,21 @@ export default function Users() {
     const file = e.target.files?.[0]
     if (!file) return
     const isExcel = file.name.match(/\.(xlsx|xls|ods)$/i)
+    const isJson = file.name.match(/\.json$/i)
     const reader = new FileReader()
     reader.onload = ev => {
       try {
+        if (isJson) {
+          const parsed = importUsersFromSeedJson(String(ev.target?.result ?? ''))
+          if (!parsed.ok) { setImportError(parsed.error); return }
+          const plan = planRosterEnsure(parsed.users, users)
+          setImportRows(plan.create)
+          setImportError(plan.already.length || plan.skipped.length
+            ? `${plan.already.length} bereits vorhanden, ${plan.skipped.length} übersprungen.`
+            : '')
+          setImportProgress(null)
+          return
+        }
         let rawRows: Record<string, string>[]
         if (isExcel) {
           const wb = XLSX.read(ev.target?.result, { type: 'array' })
@@ -497,7 +509,7 @@ export default function Users() {
                 <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`} download="benutzer-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
                   <Download className="w-4 h-4" /> Vorlage
                 </a>
-                <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.ods" className="hidden" onChange={handleFile} />
+                <input ref={fileRef} type="file" accept=".csv,.txt,.json,.xlsx,.xls,.ods" className="hidden" onChange={handleFile} />
               </div>
               {importError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{importError}</p>}
               {importProgress && (

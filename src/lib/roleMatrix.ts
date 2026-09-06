@@ -1,9 +1,6 @@
 /**
- * Owner-Rollenmatrix 2026-09-06.
- * Fest: Schwendinger Genehmiger, Albrecht Bekleidung-SB, Petternel Einsatz-SB.
- * Matthias (Fenkart DN 7 oder Wiesner DN 16) ist Owner-Parameter — solange
- * ungesetzt bekommt keiner von beiden Sachbearbeiter.
- * Muhammet Soyucok (DN 37) bleibt Admin, wenn er Admin ist — kein Downgrade.
+ * Rollen kommen aus users-seed.json (Quelle der Wahrheit).
+ * Muhammet Soyucok (DN 37) bleibt Admin, wenn er bereits Admin ist.
  */
 
 import {
@@ -11,8 +8,13 @@ import {
   parseEinsatzMtRole,
   type EinsatzMtRole,
 } from './portalEntitlements'
+import {
+  USERS_SEED,
+  bekleidungRolesFromSeed,
+  type UserSeedOfficer,
+} from './usersSeed'
 
-export type RoleMatrixStaffKind = 'genehmiger' | 'bekleidung_sb' | 'einsatz_sb'
+export type RoleMatrixStaffKind = 'genehmiger' | 'bekleidung_sb' | 'einsatz_sb' | 'admin'
 
 export type RoleMatrixStaff = {
   names: readonly string[]
@@ -21,43 +23,6 @@ export type RoleMatrixStaff = {
   bekleidungRoles: readonly string[]
   einsatzMtRole: EinsatzMtRole
 }
-
-export type MatthiasBekleidungSb = null | 'fenkart_7' | 'wiesner_16'
-
-/** Owner entscheidet Fenkart DN 7 oder Wiesner DN 16. null = noch nicht gesetzt. */
-export const MATTHIAS_BEKLEIDUNG_SB: MatthiasBekleidungSb = null
-
-export const MATTHIAS_CANDIDATES: Record<Exclude<MatthiasBekleidungSb, null>, {
-  names: readonly string[]
-  dienstnummer: string
-}> = {
-  fenkart_7: { names: ['Fenkart Matthias', 'Matthias Fenkart'], dienstnummer: '7' },
-  wiesner_16: { names: ['Wiesner'], dienstnummer: '16' },
-}
-
-export const LOCKED_ROLE_MATRIX_STAFF: readonly RoleMatrixStaff[] = [
-  {
-    names: ['Hans-Peter Schwendinger', 'Hans Peter Schwendinger', 'Hans Peter'],
-    dienstnummer: '1',
-    kind: 'genehmiger',
-    bekleidungRoles: ['user', 'genehmiger'],
-    einsatzMtRole: 'user',
-  },
-  {
-    names: ['Stefanie Albrecht'],
-    dienstnummer: '32',
-    kind: 'bekleidung_sb',
-    bekleidungRoles: ['user', 'sachbearbeiter'],
-    einsatzMtRole: 'user',
-  },
-  {
-    names: ['Heinz Petternel'],
-    dienstnummer: '18',
-    kind: 'einsatz_sb',
-    bekleidungRoles: ['user'],
-    einsatzMtRole: 'sachbearbeiter',
-  },
-]
 
 export const DEFAULT_OFFICER_BEKLEIDUNG_ROLES = ['user'] as const
 export const DEFAULT_OFFICER_EINSATZ_MT_ROLE: EinsatzMtRole = 'user'
@@ -69,34 +34,24 @@ export function normalizeDienstnummer(raw: string | null | undefined): string {
   return stripped || '0'
 }
 
-function normalizeName(raw: string | null | undefined): string {
-  return (raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+function staffKind(row: UserSeedOfficer): RoleMatrixStaffKind {
+  if (row.bekleidung === 'admin' || row.einsatz_mt === 'admin') return 'admin'
+  if (row.bekleidung === 'genehmiger') return 'genehmiger'
+  if (row.bekleidung === 'sachbearbeiter') return 'bekleidung_sb'
+  if (row.einsatz_mt === 'sachbearbeiter') return 'einsatz_sb'
+  return 'bekleidung_sb'
 }
 
-function nameMatchesStaff(profileName: string, names: readonly string[]): boolean {
-  const hay = normalizeName(profileName)
-  if (!hay) return false
-  return names.some(name => {
-    const needle = normalizeName(name)
-    return hay === needle || hay.includes(needle)
-  })
-}
-
-export function roleMatrixStaff(
-  matthias: MatthiasBekleidungSb = MATTHIAS_BEKLEIDUNG_SB,
-): RoleMatrixStaff[] {
-  const staff = [...LOCKED_ROLE_MATRIX_STAFF]
-  if (matthias && MATTHIAS_CANDIDATES[matthias]) {
-    const candidate = MATTHIAS_CANDIDATES[matthias]
-    staff.push({
-      names: candidate.names,
-      dienstnummer: candidate.dienstnummer,
-      kind: 'bekleidung_sb',
-      bekleidungRoles: ['user', 'sachbearbeiter'],
-      einsatzMtRole: 'user',
-    })
-  }
-  return staff
+export function roleMatrixStaff(): RoleMatrixStaff[] {
+  return USERS_SEED
+    .filter(row => row.bekleidung !== 'user' || row.einsatz_mt !== 'user')
+    .map(row => ({
+      names: [`${row.vorname} ${row.nachname}`, `${row.nachname} ${row.vorname}`],
+      dienstnummer: normalizeDienstnummer(row.dienstnummer),
+      kind: staffKind(row),
+      bekleidungRoles: bekleidungRolesFromSeed(row.bekleidung),
+      einsatzMtRole: row.einsatz_mt,
+    }))
 }
 
 export function isProtectedAdmin(profile: {
@@ -105,17 +60,22 @@ export function isProtectedAdmin(profile: {
   return Boolean(profile.roles?.includes('admin'))
 }
 
-export function matchRoleMatrixStaff(
-  profile: { name?: string | null; dienstnummer?: string | null },
-  matthias: MatthiasBekleidungSb = MATTHIAS_BEKLEIDUNG_SB,
-): RoleMatrixStaff | null {
-  const staff = roleMatrixStaff(matthias)
+export function matchRoleMatrixStaff(profile: {
+  name?: string | null
+  dienstnummer?: string | null
+}): RoleMatrixStaff | null {
+  const staff = roleMatrixStaff()
   const dn = normalizeDienstnummer(profile.dienstnummer)
   if (dn) {
     const byDn = staff.find(row => row.dienstnummer === dn)
     if (byDn) return byDn
   }
-  const byName = staff.filter(row => nameMatchesStaff(profile.name ?? '', row.names))
+  const hay = (profile.name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!hay) return null
+  const byName = staff.filter(row => row.names.some(name => {
+    const needle = name.toLowerCase()
+    return hay === needle || hay.includes(needle)
+  }))
   if (byName.length === 1) return byName[0]
   return null
 }
@@ -136,10 +96,7 @@ export type RoleMatrixAssignment = {
   reason: string
 }
 
-export function planRoleMatrixAssignment(
-  profile: RoleMatrixProfile,
-  matthias: MatthiasBekleidungSb = MATTHIAS_BEKLEIDUNG_SB,
-): RoleMatrixAssignment {
+export function planRoleMatrixAssignment(profile: RoleMatrixProfile): RoleMatrixAssignment {
   if (isProtectedAdmin(profile)) {
     const bekleidung = bekleidungRolesFromProfiles(profile.roles ?? ['admin'])
     return {
@@ -151,14 +108,14 @@ export function planRoleMatrixAssignment(
     }
   }
 
-  const staff = matchRoleMatrixStaff(profile, matthias)
+  const staff = matchRoleMatrixStaff(profile)
   if (staff) {
     return {
       profileId: profile.id,
       bekleidungRoles: [...staff.bekleidungRoles],
       einsatzMtRole: staff.einsatzMtRole,
       skipped: false,
-      reason: `Rollenmatrix ${staff.names[0]} DN ${staff.dienstnummer}.`,
+      reason: `users-seed ${staff.names[0]} DN ${staff.dienstnummer}.`,
     }
   }
 

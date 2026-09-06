@@ -1,0 +1,43 @@
+{
+  "source": {
+    "path": "/workspace/bekleidung-inbox/2026-09-06-einsatztraining/users-seed.json",
+    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. Weitere der 34 Offiziere nicht erfunden — per gleichem JSON/CSV nachziehen."
+  },
+  "officers": [
+    {
+      "nachname": "Schwendinger",
+      "vorname": "Hans-Peter",
+      "dienstnummer": "1",
+      "bekleidung": "genehmiger",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Fenkart",
+      "vorname": "Matthias",
+      "dienstnummer": "7",
+      "bekleidung": "sachbearbeiter",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Petternel",
+      "vorname": "Heinz",
+      "dienstnummer": "18",
+      "bekleidung": "user",
+      "einsatz_mt": "sachbearbeiter"
+    },
+    {
+      "nachname": "Albrecht",
+      "vorname": "Stefanie",
+      "dienstnummer": "32",
+      "bekleidung": "sachbearbeiter",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Soyucok",
+      "vorname": "Muhammet",
+      "dienstnummer": "37",
+      "bekleidung": "admin",
+      "einsatz_mt": "admin"
+    }
+  ]
+}

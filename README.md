@@ -154,7 +154,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260911_portal_benutzer_genehmiger.sql` | Genehmiger darf `portal_area_roles` lesen; Schreiben bleibt Admin |
 | `20260912_pool_verwahrungsorte_lager.sql` | Pool-Orte Spind/Waffentresor + Lager-Notiz |
 | `20260913_munition_verbrauch_ausbuchung.sql` | Munitionsverbrauch am Trainingstag, Ausbuchung `removed_at` |
-| `20260914_official_et_roles.sql` | Offizielle ET-Module + Rollenmatrix (Matthias-SB als Parameter, noch offen) |
+| `20260914_official_et_roles.sql` | Offizielle ET-Module + Rollen aus users-seed.json |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

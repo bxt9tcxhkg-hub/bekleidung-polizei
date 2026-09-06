@@ -1,40 +1,11 @@
 {
-  "source": "Owner 2026-09-06",
+  "source": "users-seed.json",
   "staff": [
-    {
-      "name": "Hans-Peter Schwendinger",
-      "dienstnummer": "1",
-      "bekleidung": ["user", "genehmiger"],
-      "einsatz_mt": "user"
-    },
-    {
-      "name": "Stefanie Albrecht",
-      "dienstnummer": "32",
-      "bekleidung": ["user", "sachbearbeiter"],
-      "einsatz_mt": "user"
-    },
-    {
-      "name": "Heinz Petternel",
-      "dienstnummer": "18",
-      "bekleidung": ["user"],
-      "einsatz_mt": "sachbearbeiter"
-    }
+    { "name": "Hans-Peter Schwendinger", "dienstnummer": "1", "bekleidung": ["user", "genehmiger"], "einsatz_mt": "user" },
+    { "name": "Matthias Fenkart", "dienstnummer": "7", "bekleidung": ["user", "sachbearbeiter"], "einsatz_mt": "user" },
+    { "name": "Stefanie Albrecht", "dienstnummer": "32", "bekleidung": ["user", "sachbearbeiter"], "einsatz_mt": "user" },
+    { "name": "Heinz Petternel", "dienstnummer": "18", "bekleidung": ["user"], "einsatz_mt": "sachbearbeiter" },
+    { "name": "Muhammet Soyucok", "dienstnummer": "37", "note": "Admin nicht herabstufen." }
   ],
-  "matthias_bekleidung_sb": {
-    "value": null,
-    "candidates": [
-      { "id": "fenkart_7", "name": "Fenkart Matthias", "dienstnummer": "7" },
-      { "id": "wiesner_16", "name": "Wiesner", "dienstnummer": "16" }
-    ],
-    "note": "Owner entscheidet. Solange null bekommt keiner von beiden Bekleidung-SB."
-  },
-  "admin_keep": {
-    "name": "Muhammet Soyucok",
-    "dienstnummer": "37",
-    "note": "Nicht herabstufen, wenn bereits Admin."
-  },
-  "everyone_else": {
-    "bekleidung": ["user"],
-    "einsatz_mt": "user"
-  }
+  "everyone_else": { "bekleidung": ["user"], "einsatz_mt": "user" }
 }

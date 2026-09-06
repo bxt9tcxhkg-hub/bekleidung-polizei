@@ -1,35 +1,41 @@
 /**
- * Offiziersliste aus Zuteilung/ET (Vorname, Nachname, Dienstnummer).
+ * Offiziersliste aus users-seed.json.
  * Auth-Anlage nur über create-user: E-Mail = {username}@stadtpolizei-dornbirn.local
  * mit username dn{DN}. Keine erfundenen Adressen.
  */
 
 import { USERNAME_RE } from './workflow'
-import { normalizeDienstnummer, planRoleMatrixAssignment } from './roleMatrix'
+import { normalizeDienstnummer } from './roleMatrix'
+import {
+  USERS_SEED,
+  bekleidungRolesFromSeed,
+  parseUsersSeed,
+  type UserSeedOfficer,
+} from './usersSeed'
 
 export type OfficerRosterRow = {
   vorname: string
   nachname: string
   dienstnummer: string
   gender?: 'male' | 'female'
+  bekleidung?: UserSeedOfficer['bekleidung']
+  einsatz_mt?: UserSeedOfficer['einsatz_mt']
 }
 
-/** Bestätigte Personen. Weitere Zeilen kommen per CSV-Import, nicht erfunden. */
-export const KNOWN_OFFICER_ROSTER: readonly OfficerRosterRow[] = [
-  { vorname: 'Hans-Peter', nachname: 'Schwendinger', dienstnummer: '1', gender: 'male' },
-  { vorname: 'Stefanie', nachname: 'Albrecht', dienstnummer: '32', gender: 'female' },
-  { vorname: 'Matthias', nachname: 'Fenkart', dienstnummer: '7', gender: 'male' },
-  { vorname: 'Heinz', nachname: 'Petternel', dienstnummer: '18', gender: 'male' },
-  { vorname: 'Muhammet', nachname: 'Soyucok', dienstnummer: '37', gender: 'male' },
-]
+export const KNOWN_OFFICER_ROSTER: readonly OfficerRosterRow[] = USERS_SEED.map(row => ({
+  vorname: row.vorname,
+  nachname: row.nachname,
+  dienstnummer: row.dienstnummer,
+  gender: /\bstefanie\b/i.test(row.vorname) ? 'female' : 'male',
+  bekleidung: row.bekleidung,
+  einsatz_mt: row.einsatz_mt,
+}))
 
-export const OFFICER_ROSTER_CSV_TEMPLATE = `vorname;nachname;dienstnummer
-Hans-Peter;Schwendinger;1
-Stefanie;Albrecht;32
-Matthias;Fenkart;7
-Heinz;Petternel;18
-Muhammet;Soyucok;37
-`
+export const OFFICER_ROSTER_CSV_TEMPLATE = [
+  'vorname;nachname;dienstnummer',
+  ...USERS_SEED.map(row => `${row.vorname};${row.nachname};${row.dienstnummer}`),
+  '',
+].join('\n')
 
 const JUNK_NAME = /^(name|vorname|nachname|summe|gesamt|lagerstand|dienstnummer|dn|dg)$/i
 
@@ -67,23 +73,28 @@ export type RosterImportUser = {
   gender: 'male' | 'female'
 }
 
+function rolesForRow(row: OfficerRosterRow): { roles: string[]; einsatzMtRole: string } {
+  const seed = USERS_SEED.find(item => normalizeDienstnummer(item.dienstnummer) === normalizeDienstnummer(row.dienstnummer))
+  const bekleidung = row.bekleidung ?? seed?.bekleidung ?? 'user'
+  const einsatz = row.einsatz_mt ?? seed?.einsatz_mt ?? 'user'
+  return {
+    roles: bekleidungRolesFromSeed(bekleidung),
+    einsatzMtRole: einsatz,
+  }
+}
+
 export function rosterRowToImportUser(row: OfficerRosterRow): RosterImportUser | null {
   if (isJunkRosterRow(row)) return null
   const name = officerDisplayName(row.vorname, row.nachname)
   const username = usernameFromDienstnummer(row.dienstnummer)
   if (!name || !USERNAME_RE.test(username)) return null
-  const planned = planRoleMatrixAssignment({
-    id: '',
-    name,
-    dienstnummer: row.dienstnummer,
-    roles: ['user'],
-  })
+  const planned = rolesForRow(row)
   return {
     name,
     username,
     dienstnummer: normalizeDienstnummer(row.dienstnummer),
     organisation: 'Stadtpolizei',
-    roles: planned.bekleidungRoles,
+    roles: planned.roles,
     einsatzMtRole: planned.einsatzMtRole,
     gender: row.gender ?? inferOfficerGender(name),
   }
@@ -91,6 +102,21 @@ export function rosterRowToImportUser(row: OfficerRosterRow): RosterImportUser |
 
 export function knownRosterImportUsers(): RosterImportUser[] {
   return KNOWN_OFFICER_ROSTER.map(rosterRowToImportUser).filter((row): row is RosterImportUser => row !== null)
+}
+
+export function importUsersFromSeedJson(text: string): { ok: true; users: RosterImportUser[] } | { ok: false; error: string } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { ok: false, error: 'users-seed.json ist ungültig.' }
+  }
+  const seed = parseUsersSeed(parsed)
+  if (!seed.ok) return seed
+  const users = seed.file.officers
+    .map(row => rosterRowToImportUser(row))
+    .filter((row): row is RosterImportUser => row !== null)
+  return { ok: true, users }
 }
 
 export type ExistingRosterProfile = {

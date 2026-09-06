@@ -27,8 +27,8 @@ describe('Offiziersliste', () => {
     expect(users.find(u => u.dienstnummer === '1')?.roles).toEqual(['user', 'genehmiger'])
     expect(users.find(u => u.dienstnummer === '32')?.roles).toEqual(['user', 'sachbearbeiter'])
     expect(users.find(u => u.dienstnummer === '18')?.einsatzMtRole).toBe('sachbearbeiter')
-    expect(users.find(u => u.dienstnummer === '7')?.roles).toEqual(['user'])
-    expect(users.find(u => u.dienstnummer === '37')?.roles).toEqual(['user'])
+    expect(users.find(u => u.dienstnummer === '7')?.roles).toEqual(['user', 'sachbearbeiter'])
+    expect(users.find(u => u.dienstnummer === '37')?.roles).toEqual(['admin'])
   })
 
   it('überspringt vorhandene Dienstnummern und plant nur neue', () => {
