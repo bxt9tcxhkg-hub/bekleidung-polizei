@@ -34,3 +34,27 @@ export function mapErstloginAuthError(
   const message = error?.message?.trim()
   return message || 'Konto konnte nicht eingerichtet werden.'
 }
+
+/** Auth-Metadata nach erfolgreichem Erstlogin. Passwort-Flag lebt nur hier, nicht in profiles. */
+export function buildErstloginAuthMetadata(): Record<string, unknown> {
+  return {
+    force_password_change: false,
+    force_username_set: false,
+  }
+}
+
+export type ErstloginProfilePatch = {
+  force_username_set: false
+  username?: string
+}
+
+/** Profil: PC-Name + force_username_set. Kein force_password_change — die Spalte gibt es nicht. */
+export function buildErstloginProfilePatch(input: {
+  pcUsername?: string
+}): ErstloginProfilePatch {
+  const patch: ErstloginProfilePatch = {
+    force_username_set: false,
+  }
+  if (input.pcUsername) patch.username = input.pcUsername
+  return patch
+}

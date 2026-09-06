@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   ERSTLOGIN_SESSION_EXPIRED,
+  buildErstloginAuthMetadata,
+  buildErstloginProfilePatch,
   ensureAuthSession,
   isAuthSessionMissingError,
   mapErstloginAuthError,
@@ -67,6 +69,19 @@ describe('Erstlogin Restschritte nach Teilschreiben', () => {
     })).toBe(true)
   })
 
+  it('Live: gültiger PC-Name ohne Username-Flag bleibt nur Passwort-Erstlogin', () => {
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: false,
+      username: 'msoyucok',
+      email: 'msoyucok@dornbirn.at',
+    })).toBe(false)
+    expect(shouldForcePasswordChange({
+      forcePasswordChange: true,
+      username: 'msoyucok',
+      email: 'msoyucok@dornbirn.at',
+    })).toBe(true)
+  })
+
   it('Auth erledigt, Profil-Username fehlt noch → nur PC-Name bleibt', () => {
     expect(shouldForcePasswordChange({
       forcePasswordChange: false,
@@ -86,5 +101,37 @@ describe('Erstlogin Restschritte nach Teilschreiben', () => {
       username: 'msoyucok',
       ...beamter,
     })).toBe(false)
+  })
+
+  it('leerer Username / dn{N} bleibt Erstlogin-pflichtig, auch wenn das Flag schon false ist', () => {
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: false,
+      username: null,
+      ...beamter,
+    })).toBe(true)
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: true,
+      username: null,
+    })).toBe(true)
+  })
+})
+
+describe('Erstlogin Persistenz', () => {
+  it('setzt beide Auth-Metadata-Flags zurück (Passwort-Flag nur dort)', () => {
+    expect(buildErstloginAuthMetadata()).toEqual({
+      force_password_change: false,
+      force_username_set: false,
+    })
+  })
+
+  it('schreibt nur PC-Namen und force_username_set, nie force_password_change', () => {
+    expect(buildErstloginProfilePatch({ pcUsername: 'msoyucok' })).toEqual({
+      force_username_set: false,
+      username: 'msoyucok',
+    })
+    expect(buildErstloginProfilePatch({})).toEqual({
+      force_username_set: false,
+    })
+    expect(buildErstloginProfilePatch({})).not.toHaveProperty('force_password_change')
   })
 })
