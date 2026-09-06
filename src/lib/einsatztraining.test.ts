@@ -15,10 +15,17 @@ import {
   moduleAssignmentOptions,
   moduleLockUserMessage,
   officerHasCompletedModule,
+  emptyMunitionVerbrauchInput,
+  formatMunitionVerbrauch,
+  munitionVerbrauchInputFromSession,
+  planPoolMunitionAdjustments,
+  poolMunitionOptionLabel,
   validateAttendance,
+  validateMunitionVerbrauch,
   validateParticipation,
   validateSession,
   validateTrainingModule,
+  withMunitionRecordedBy,
 } from './einsatztraining'
 
 const completions = [
@@ -219,6 +226,169 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
       ok: true,
       payload: { kind: 'intern', session_date: '2026-09-06', note: 'Test' },
     })
+  })
+})
+
+describe('Munitionsverbrauch', () => {
+  it('erlaubt leeren Verbrauch ohne Katalogfelder', () => {
+    expect(validateMunitionVerbrauch(emptyMunitionVerbrauchInput())).toEqual({
+      ok: true,
+      payload: {
+        munition_anzahl: null,
+        munition_marke: null,
+        munition_kaliber: null,
+        munition_art: null,
+        munition_pool_id: null,
+      },
+    })
+  })
+
+  it('verlangt Anzahl, wenn Marke/Kaliber/Art oder Pool gesetzt sind', () => {
+    const missing = validateMunitionVerbrauch({
+      ...emptyMunitionVerbrauchInput(),
+      marke: 'Geco',
+    })
+    expect(missing.ok).toBe(false)
+    if (!missing.ok) expect(missing.error).toMatch(/Anzahl/)
+  })
+
+  it('nimmt Anzahl und optionale Felder der bestehenden Munitions-Spalten', () => {
+    const ok = validateMunitionVerbrauch({
+      anzahl: ' 50 ',
+      marke: ' Geco ',
+      kaliber: '9x19',
+      art: 'Übung',
+      poolItemId: 'pool-1',
+    })
+    expect(ok).toEqual({
+      ok: true,
+      payload: {
+        munition_anzahl: 50,
+        munition_marke: 'Geco',
+        munition_kaliber: '9x19',
+        munition_art: 'Übung',
+        munition_pool_id: 'pool-1',
+      },
+    })
+    expect(validateMunitionVerbrauch({
+      ...emptyMunitionVerbrauchInput(),
+      anzahl: '-1',
+    }).ok).toBe(false)
+    expect(validateMunitionVerbrauch({
+      ...emptyMunitionVerbrauchInput(),
+      anzahl: '1.5',
+    }).ok).toBe(false)
+  })
+
+  it('setzt recorded-Felder nur bei vorhandenem Verbrauch', () => {
+    const filled = withMunitionRecordedBy({
+      munition_anzahl: 10,
+      munition_marke: null,
+      munition_kaliber: null,
+      munition_art: null,
+      munition_pool_id: null,
+    }, 'u1', '2026-09-06T12:00:00.000Z')
+    expect(filled.munition_recorded_by).toBe('u1')
+    expect(filled.munition_recorded_at).toBe('2026-09-06T12:00:00.000Z')
+
+    const cleared = withMunitionRecordedBy({
+      munition_anzahl: null,
+      munition_marke: null,
+      munition_kaliber: null,
+      munition_art: null,
+      munition_pool_id: null,
+    }, 'u1', '2026-09-06T12:00:00.000Z')
+    expect(cleared.munition_recorded_at).toBeNull()
+    expect(cleared.munition_recorded_by).toBeNull()
+  })
+
+  it('formatiert den Verbrauch und liest das Formular aus der Session', () => {
+    expect(formatMunitionVerbrauch({ munition_anzahl: null })).toBe('')
+    expect(formatMunitionVerbrauch({
+      munition_anzahl: 40,
+      munition_marke: 'Geco',
+      munition_kaliber: '9x19',
+      munition_art: 'Übung',
+    })).toBe('40 · Geco · 9x19 · Übung')
+    expect(munitionVerbrauchInputFromSession({
+      munition_anzahl: 12,
+      munition_marke: 'Geco',
+      munition_kaliber: null,
+      munition_art: null,
+      munition_pool_id: 'p1',
+    })).toEqual({
+      anzahl: '12',
+      marke: 'Geco',
+      kaliber: '',
+      art: '',
+      poolItemId: 'p1',
+    })
+    expect(poolMunitionOptionLabel({
+      marke: 'Geco',
+      typ: '9mm',
+      art: 'Übung',
+      anzahl: 200,
+      locationLabel: 'Lager',
+    })).toBe('Geco · 9mm · Übung · Menge 200 · Lager')
+  })
+
+  it('verringert Pool-Bestand nur bei gewählter Zeile und verhindert Unterbestand', () => {
+    const first = planPoolMunitionAdjustments({
+      previous: { poolId: null, anzahl: null },
+      next: { poolId: 'p1', anzahl: 30 },
+      stocks: { p1: 200 },
+    })
+    expect(first).toEqual({ ok: true, payload: { adjustments: [{ poolId: 'p1', nextAnzahl: 170 }] } })
+
+    const update = planPoolMunitionAdjustments({
+      previous: { poolId: 'p1', anzahl: 30 },
+      next: { poolId: 'p1', anzahl: 50 },
+      stocks: { p1: 170 },
+    })
+    expect(update).toEqual({ ok: true, payload: { adjustments: [{ poolId: 'p1', nextAnzahl: 150 }] } })
+
+    const tooMuch = planPoolMunitionAdjustments({
+      previous: { poolId: null, anzahl: null },
+      next: { poolId: 'p1', anzahl: 80 },
+      stocks: { p1: 50 },
+    })
+    expect(tooMuch.ok).toBe(false)
+
+    const noMenge = planPoolMunitionAdjustments({
+      previous: { poolId: null, anzahl: null },
+      next: { poolId: 'p1', anzahl: 10 },
+      stocks: { p1: null },
+    })
+    expect(noMenge.ok).toBe(false)
+
+    const recordOnly = planPoolMunitionAdjustments({
+      previous: { poolId: null, anzahl: null },
+      next: { poolId: null, anzahl: 40 },
+      stocks: { p1: 200 },
+    })
+    expect(recordOnly).toEqual({ ok: true, payload: { adjustments: [] } })
+  })
+
+  it('stellt den Bestand zurück, wenn Verbrauch oder Pool-Zeile wechselt', () => {
+    const cleared = planPoolMunitionAdjustments({
+      previous: { poolId: 'p1', anzahl: 20 },
+      next: { poolId: null, anzahl: null },
+      stocks: { p1: 180 },
+    })
+    expect(cleared).toEqual({ ok: true, payload: { adjustments: [{ poolId: 'p1', nextAnzahl: 200 }] } })
+
+    const switched = planPoolMunitionAdjustments({
+      previous: { poolId: 'p1', anzahl: 20 },
+      next: { poolId: 'p2', anzahl: 10 },
+      stocks: { p1: 180, p2: 40 },
+    })
+    expect(switched.ok).toBe(true)
+    if (switched.ok) {
+      expect(switched.payload.adjustments).toEqual(expect.arrayContaining([
+        { poolId: 'p1', nextAnzahl: 200 },
+        { poolId: 'p2', nextAnzahl: 30 },
+      ]))
+    }
   })
 })
 

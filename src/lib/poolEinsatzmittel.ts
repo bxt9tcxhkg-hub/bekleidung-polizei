@@ -299,6 +299,7 @@ export function aggregateLagerbestand(
     category: PoolEmCategory
     verwahrungsort: Verwahrungsort
     anzahl: number | null
+    removed_at?: string | null
   }[],
 ): LagerbestandRow[] {
   const rows: LagerbestandRow[] = POOL_EM_CATEGORIES.map(category => ({
@@ -308,6 +309,7 @@ export function aggregateLagerbestand(
   }))
   const index = new Map(rows.map(row => [row.category, row]))
   for (const item of items) {
+    if (item.removed_at) continue
     if (!isPoolEmCategory(item.category) || !isVerwahrungsort(item.verwahrungsort)) continue
     const row = index.get(item.category)
     if (!row) continue

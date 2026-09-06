@@ -236,6 +236,9 @@ export interface PersonalEinsatzmittel {
   art: string | null
   patronen: number | null
   ablauf_mm_yyyy: string | null
+  removed_at: string | null
+  removed_by: string | null
+  removal_reason: string | null
   created_at: string | null
   updated_at: string | null
   created_by: string | null
@@ -265,6 +268,9 @@ export interface PoolEinsatzmittel {
   anzahl: number | null
   groessen: string | null
   ablaufdatum: string | null
+  removed_at: string | null
+  removed_by: string | null
+  removal_reason: string | null
   created_at: string | null
   updated_at: string | null
   created_by: string | null
@@ -288,6 +294,13 @@ export interface EinsatzTrainingSession {
   kind: TrainingKind
   session_date: string
   note: string | null
+  munition_anzahl: number | null
+  munition_marke: string | null
+  munition_kaliber: string | null
+  munition_art: string | null
+  munition_pool_id: string | null
+  munition_recorded_at: string | null
+  munition_recorded_by: string | null
   created_at: string | null
   updated_at: string | null
   created_by: string | null
@@ -451,15 +464,19 @@ export type Database = {
       personal_einsatzmittel: { Row: PersonalEinsatzmittelRow; Insert: Pick<PersonalEinsatzmittelRow, 'category'> & Partial<Omit<PersonalEinsatzmittelRow, 'category'>>; Update: Partial<Omit<PersonalEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'personal_einsatzmittel_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'personal_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'personal_einsatzmittel_removed_by_fkey'; columns: ['removed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       pool_einsatzmittel: { Row: PoolEinsatzmittelRow; Insert: Pick<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'> & Partial<Omit<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'>>; Update: Partial<Omit<PoolEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'pool_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'pool_einsatzmittel_removed_by_fkey'; columns: ['removed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_training_modules: { Row: EinsatzTrainingModuleRow; Insert: Pick<EinsatzTrainingModuleRow, 'name' | 'kind'> & Partial<Omit<EinsatzTrainingModuleRow, 'name' | 'kind'>>; Update: Partial<Omit<EinsatzTrainingModuleRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_training_modules_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_training_sessions: { Row: EinsatzTrainingSessionRow; Insert: Pick<EinsatzTrainingSessionRow, 'kind' | 'session_date'> & Partial<Omit<EinsatzTrainingSessionRow, 'kind' | 'session_date'>>; Update: Partial<Omit<EinsatzTrainingSessionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_training_sessions_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_sessions_munition_pool_id_fkey'; columns: ['munition_pool_id']; isOneToOne: false; referencedRelation: 'pool_einsatzmittel'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_sessions_munition_recorded_by_fkey'; columns: ['munition_recorded_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_training_attendance: { Row: EinsatzTrainingAttendanceRow; Insert: Pick<EinsatzTrainingAttendanceRow, 'session_id' | 'officer_id' | 'status'> & Partial<Omit<EinsatzTrainingAttendanceRow, 'session_id' | 'officer_id' | 'status'>>; Update: Partial<Omit<EinsatzTrainingAttendanceRow, 'id' | 'created_at' | 'session_id'>>; Relationships: [
         { foreignKeyName: 'einsatz_training_attendance_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },

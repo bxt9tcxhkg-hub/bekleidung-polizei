@@ -1,0 +1,64 @@
+/**
+ * Ausbuchung von Einsatzmitteln (persönlich und Pool).
+ * Soft-Delete mit Zeitstempel und optionalem Grund — kein Hard-Delete.
+ */
+
+export type AusbuchungInput = {
+  reason: string
+}
+
+export type AusbuchungPayload = {
+  removed_at: string
+  removed_by: string | null
+  removal_reason: string | null
+}
+
+export type AusbuchungOk = { ok: true; payload: Omit<AusbuchungPayload, 'removed_at' | 'removed_by'> & { removal_reason: string | null } }
+export type AusbuchungErr = { ok: false; error: string }
+export type AusbuchungValidateResult = AusbuchungOk | AusbuchungErr
+
+export function isEinsatzmittelRemoved(item: { removed_at?: string | null }): boolean {
+  return Boolean(item.removed_at)
+}
+
+export function isEinsatzmittelActive(item: { removed_at?: string | null }): boolean {
+  return !isEinsatzmittelRemoved(item)
+}
+
+export function activeEinsatzmittel<T extends { removed_at?: string | null }>(items: readonly T[]): T[] {
+  return items.filter(isEinsatzmittelActive)
+}
+
+export function removedEinsatzmittel<T extends { removed_at?: string | null }>(items: readonly T[]): T[] {
+  return items.filter(isEinsatzmittelRemoved)
+}
+
+export function validateAusbuchung(input: AusbuchungInput): AusbuchungValidateResult {
+  const reason = input.reason.trim()
+  if (reason.length > 500) {
+    return { ok: false, error: 'Der Grund darf höchstens 500 Zeichen haben.' }
+  }
+  return { ok: true, payload: { removal_reason: reason.length > 0 ? reason : null } }
+}
+
+export function ausbuchungPayload(input: {
+  reason: string
+  removedBy: string | null
+  removedAt?: string
+}): AusbuchungValidateResult & { payload?: AusbuchungPayload } {
+  const validated = validateAusbuchung({ reason: input.reason })
+  if (!validated.ok) return validated
+  return {
+    ok: true,
+    payload: {
+      removed_at: input.removedAt ?? new Date().toISOString(),
+      removed_by: input.removedBy,
+      removal_reason: validated.payload.removal_reason,
+    },
+  }
+}
+
+export function formatRemovalReason(reason: string | null | undefined): string {
+  const trimmed = reason?.trim()
+  return trimmed ? trimmed : 'ohne Angabe'
+}

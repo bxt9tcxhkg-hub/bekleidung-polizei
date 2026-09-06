@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, Trash2, UserPlus, Warehouse, X } from 'lucide-react'
+import { Pencil, Plus, UserPlus, Warehouse, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -11,6 +11,7 @@ import {
   canManagePersonalEinsatzmittel,
   emptyPersonalEmFormValues,
   formValuesFromRecord,
+  formatIsoDate,
   isPersonalEmCategory,
   isPersonalEmInLager,
   officerDisplayName,
@@ -25,8 +26,16 @@ import {
   type PersonalEmFormValues,
 } from '../../lib/personalEinsatzmittel'
 import { VERWAHRUNGSORTE, VERWAHRUNGSORT_LABELS } from '../../lib/verwahrungsort'
+import {
+  activeEinsatzmittel,
+  ausbuchungPayload,
+  formatRemovalReason,
+  isEinsatzmittelRemoved,
+  removedEinsatzmittel,
+} from '../../lib/einsatzmittelAusbuchung'
+import AusbuchungDialog from './AusbuchungDialog'
 
-type CategoryFilter = 'all' | 'lager' | PersonalEmCategory
+type CategoryFilter = 'all' | 'lager' | 'ausgebucht' | PersonalEmCategory
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
 
@@ -48,6 +57,9 @@ export default function PersonalEinsatzmittelPanel() {
   const [verwahrungsort, setVerwahrungsort] = useState('')
   const [values, setValues] = useState<PersonalEmFormValues>(emptyPersonalEmFormValues())
   const [saving, setSaving] = useState(false)
+  const [ausbuchungItem, setAusbuchungItem] = useState<PersonalEinsatzmittel | null>(null)
+  const [ausbuchungReason, setAusbuchungReason] = useState('')
+  const [ausbuchungSaving, setAusbuchungSaving] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -80,9 +92,11 @@ export default function PersonalEinsatzmittelPanel() {
   }, [])
 
   const visible = useMemo(() => {
-    if (filter === 'all') return items
-    if (filter === 'lager') return items.filter(isPersonalEmInLager)
-    return items.filter(item => item.category === filter)
+    if (filter === 'ausgebucht') return removedEinsatzmittel(items)
+    const active = activeEinsatzmittel(items)
+    if (filter === 'all') return active
+    if (filter === 'lager') return active.filter(isPersonalEmInLager)
+    return active.filter(item => item.category === filter)
   }, [items, filter])
 
   const officerChoices = useMemo(() => {
@@ -103,6 +117,7 @@ export default function PersonalEinsatzmittelPanel() {
   }
 
   function openEdit(item: PersonalEinsatzmittel) {
+    if (isEinsatzmittelRemoved(item)) return
     setEditId(item.id)
     setCategory(item.category)
     setOfficerId(item.officer_id ?? '')
@@ -157,24 +172,44 @@ export default function PersonalEinsatzmittelPanel() {
     }
   }
 
-  async function remove(item: PersonalEinsatzmittel) {
-    if (!canManage) return
-    if (!window.confirm(`Zuweisung «${PERSONAL_EM_CATEGORY_LABELS[item.category]}» wirklich entfernen?`)) return
-    const { error: deleteError } = await supabase.from('personal_einsatzmittel').delete().eq('id', item.id)
-    if (deleteError) {
-      setError(deleteError.message || 'Löschen fehlgeschlagen.')
+  function openAusbuchung(item: PersonalEinsatzmittel) {
+    if (!canManage || isEinsatzmittelRemoved(item)) return
+    setAusbuchungItem(item)
+    setAusbuchungReason('')
+    setError('')
+  }
+
+  async function confirmAusbuchung() {
+    if (!canManage || !ausbuchungItem) return
+    const result = ausbuchungPayload({ reason: ausbuchungReason, removedBy: profile?.id ?? null })
+    if (!result.ok || !result.payload) {
+      setError(result.ok ? 'Ausbuchung fehlgeschlagen.' : result.error)
       return
     }
-    logAudit('Persönliches Einsatzmittel entfernt', PERSONAL_EM_CATEGORY_LABELS[item.category])
+    setAusbuchungSaving(true)
+    setError('')
+    const { error: updateError } = await supabase
+      .from('personal_einsatzmittel')
+      .update(result.payload)
+      .eq('id', ausbuchungItem.id)
+      .is('removed_at', null)
+    if (updateError) {
+      setError(updateError.message || 'Ausbuchen fehlgeschlagen.')
+      setAusbuchungSaving(false)
+      return
+    }
+    logAudit('Persönliches Einsatzmittel ausgebucht', PERSONAL_EM_CATEGORY_LABELS[ausbuchungItem.category])
+    setAusbuchungItem(null)
+    setAusbuchungSaving(false)
     try {
       await load()
     } catch {
-      setError('Entfernt, Liste konnte nicht aktualisiert werden.')
+      setError('Ausgebucht, Liste konnte nicht aktualisiert werden.')
     }
   }
 
   async function moveToLager(item: PersonalEinsatzmittel) {
-    if (!canManage) return
+    if (!canManage || isEinsatzmittelRemoved(item)) return
     if (isPersonalEmInLager(item) && !item.officer_id) return
     if (!window.confirm(`«${PERSONAL_EM_CATEGORY_LABELS[item.category]}» ins Lager stellen? Die Zuweisung an den Polizisten wird aufgehoben.`)) return
     const { error: updateError } = await supabase
@@ -245,6 +280,15 @@ export default function PersonalEinsatzmittelPanel() {
         >
           Im Lager
         </button>
+        <button
+          type="button"
+          onClick={() => setFilter('ausgebucht')}
+          className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
+            filter === 'ausgebucht' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Ausgebucht
+        </button>
         {PERSONAL_EM_CATEGORIES.map(id => (
           <button
             key={id}
@@ -265,7 +309,11 @@ export default function PersonalEinsatzmittelPanel() {
         </div>
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
-          <p className="text-sm text-gray-500">Keine persönlichen Einsatzmittel erfasst.</p>
+          <p className="text-sm text-gray-500">
+            {filter === 'ausgebucht'
+              ? 'Keine ausgebuchten persönlichen Einsatzmittel.'
+              : 'Keine persönlichen Einsatzmittel erfasst.'}
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
@@ -275,8 +323,10 @@ export default function PersonalEinsatzmittelPanel() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Kategorie</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Polizist</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Verwahrungsort</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Angaben</th>
-                {canManage && <th className="px-4 py-3" />}
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">
+                  {filter === 'ausgebucht' ? 'Ausbuchung' : 'Angaben'}
+                </th>
+                {canManage && filter !== 'ausgebucht' && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -290,9 +340,11 @@ export default function PersonalEinsatzmittelPanel() {
                     {personalEmLocationLabel(item.verwahrungsort)}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
-                    {personalEmDetailText(item) || '–'}
+                    {filter === 'ausgebucht'
+                      ? `${formatIsoDate(item.removed_at)} · ${formatRemovalReason(item.removal_reason)}`
+                      : (personalEmDetailText(item) || '–')}
                   </td>
-                  {canManage && (
+                  {canManage && filter !== 'ausgebucht' && (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
                         {!(isPersonalEmInLager(item) && !item.officer_id) && (
@@ -325,11 +377,11 @@ export default function PersonalEinsatzmittelPanel() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => { void remove(item) }}
-                          className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
-                          title="Entfernen"
+                          onClick={() => openAusbuchung(item)}
+                          className="px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 rounded-md"
+                          title="Aus Bestand entfernen"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          Ausbuchen
                         </button>
                       </div>
                     </td>
@@ -440,6 +492,18 @@ export default function PersonalEinsatzmittelPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {ausbuchungItem && (
+        <AusbuchungDialog
+          itemLabel={PERSONAL_EM_CATEGORY_LABELS[ausbuchungItem.category]}
+          reason={ausbuchungReason}
+          onReasonChange={setAusbuchungReason}
+          onCancel={() => { setAusbuchungItem(null); setAusbuchungSaving(false) }}
+          onConfirm={() => { void confirmAusbuchung() }}
+          saving={ausbuchungSaving}
+          error={error && ausbuchungItem ? error : ''}
+        />
       )}
     </div>
   )

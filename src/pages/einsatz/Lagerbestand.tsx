@@ -23,11 +23,12 @@ export default function LagerbestandPanel() {
   async function load() {
     setLoading(true)
     const [poolRes, personalRes] = await Promise.all([
-      supabase.from('pool_einsatzmittel').select('category,verwahrungsort,anzahl'),
+      supabase.from('pool_einsatzmittel').select('category,verwahrungsort,anzahl,removed_at').is('removed_at', null),
       supabase
         .from('personal_einsatzmittel')
-        .select('id,category,verwahrungsort,officer_id,waffennummer,marke,groesse,kaliber,art,service,magazinanzahl,patronen,ablaufdatum,ablauf_mm_yyyy,schutzfristen')
+        .select('id,category,verwahrungsort,officer_id,waffennummer,marke,groesse,kaliber,art,service,magazinanzahl,patronen,ablaufdatum,ablauf_mm_yyyy,schutzfristen,removed_at')
         .eq('verwahrungsort', 'lager')
+        .is('removed_at', null)
         .order('category'),
     ])
     const failures: string[] = []

@@ -250,6 +250,21 @@ describe('Lagerbestand persönliche EM', () => {
     expect(rows.find(r => r.category === 'munition')?.count).toBe(0)
   })
 
+  it('zählt ausgebuchte Stücke nicht zum Lagerbestand', () => {
+    const rows = aggregatePersonalLagerbestand([
+      { category: 'glock_17', verwahrungsort: 'lager' },
+      { category: 'glock_17', verwahrungsort: 'lager', removed_at: '2026-09-06T10:00:00.000Z' },
+      { category: 'warnweste', verwahrungsort: 'lager', removed_at: '2026-09-06T10:00:00.000Z' },
+    ])
+    expect(rows.find(r => r.category === 'glock_17')?.count).toBe(1)
+    expect(rows.find(r => r.category === 'warnweste')?.count).toBe(0)
+    expect(isPersonalEmInLager({ verwahrungsort: 'lager', removed_at: '2026-09-06T10:00:00.000Z' })).toBe(false)
+    expect(personalItemsInLager([
+      { id: 'a', verwahrungsort: 'lager' },
+      { id: 'b', verwahrungsort: 'lager', removed_at: '2026-09-06T10:00:00.000Z' },
+    ]).map(i => i.id)).toEqual(['a'])
+  })
+
   it('filtert nur Lager-Zeilen und liefert Einlager-Payload ohne Officer', () => {
     expect(isPersonalEmInLager({ verwahrungsort: 'lager' })).toBe(true)
     expect(isPersonalEmInLager({ verwahrungsort: 'innendienst' })).toBe(false)

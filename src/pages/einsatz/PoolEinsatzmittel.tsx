@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Pencil, Plus, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -23,8 +23,17 @@ import {
   type PoolEmCategory,
   type PoolEmFormValues,
 } from '../../lib/poolEinsatzmittel'
+import { formatIsoDate } from '../../lib/personalEinsatzmittel'
+import {
+  activeEinsatzmittel,
+  ausbuchungPayload,
+  formatRemovalReason,
+  isEinsatzmittelRemoved,
+  removedEinsatzmittel,
+} from '../../lib/einsatzmittelAusbuchung'
+import AusbuchungDialog from './AusbuchungDialog'
 
-type CategoryFilter = 'all' | PoolEmCategory
+type CategoryFilter = 'all' | 'ausgebucht' | PoolEmCategory
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -43,6 +52,9 @@ export default function PoolEinsatzmittelPanel() {
   const [lagerNotiz, setLagerNotiz] = useState('')
   const [values, setValues] = useState<PoolEmFormValues>(emptyPoolEmFormValues())
   const [saving, setSaving] = useState(false)
+  const [ausbuchungItem, setAusbuchungItem] = useState<PoolEinsatzmittel | null>(null)
+  const [ausbuchungReason, setAusbuchungReason] = useState('')
+  const [ausbuchungSaving, setAusbuchungSaving] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -67,10 +79,11 @@ export default function PoolEinsatzmittelPanel() {
     })
   }, [])
 
-  const visible = useMemo(
-    () => (filter === 'all' ? items : items.filter(item => item.category === filter)),
-    [items, filter],
-  )
+  const visible = useMemo(() => {
+    if (filter === 'ausgebucht') return removedEinsatzmittel(items)
+    const active = activeEinsatzmittel(items)
+    return filter === 'all' ? active : active.filter(item => item.category === filter)
+  }, [items, filter])
 
   function openNew() {
     setEditId(null)
@@ -83,6 +96,7 @@ export default function PoolEinsatzmittelPanel() {
   }
 
   function openEdit(item: PoolEinsatzmittel) {
+    if (isEinsatzmittelRemoved(item)) return
     setEditId(item.id)
     setCategory(item.category)
     setVerwahrungsort(item.verwahrungsort)
@@ -137,19 +151,39 @@ export default function PoolEinsatzmittelPanel() {
     }
   }
 
-  async function remove(item: PoolEinsatzmittel) {
-    if (!canManage) return
-    if (!window.confirm(`Eintrag «${POOL_EM_CATEGORY_LABELS[item.category]}» wirklich entfernen?`)) return
-    const { error: deleteError } = await supabase.from('pool_einsatzmittel').delete().eq('id', item.id)
-    if (deleteError) {
-      setError(deleteError.message || 'Löschen fehlgeschlagen.')
+  function openAusbuchung(item: PoolEinsatzmittel) {
+    if (!canManage || isEinsatzmittelRemoved(item)) return
+    setAusbuchungItem(item)
+    setAusbuchungReason('')
+    setError('')
+  }
+
+  async function confirmAusbuchung() {
+    if (!canManage || !ausbuchungItem) return
+    const result = ausbuchungPayload({ reason: ausbuchungReason, removedBy: profile?.id ?? null })
+    if (!result.ok || !result.payload) {
+      setError(result.ok ? 'Ausbuchung fehlgeschlagen.' : result.error)
       return
     }
-    logAudit('Pool-Einsatzmittel entfernt', POOL_EM_CATEGORY_LABELS[item.category])
+    setAusbuchungSaving(true)
+    setError('')
+    const { error: updateError } = await supabase
+      .from('pool_einsatzmittel')
+      .update(result.payload)
+      .eq('id', ausbuchungItem.id)
+      .is('removed_at', null)
+    if (updateError) {
+      setError(updateError.message || 'Ausbuchen fehlgeschlagen.')
+      setAusbuchungSaving(false)
+      return
+    }
+    logAudit('Pool-Einsatzmittel ausgebucht', POOL_EM_CATEGORY_LABELS[ausbuchungItem.category])
+    setAusbuchungItem(null)
+    setAusbuchungSaving(false)
     try {
       await load()
     } catch {
-      setError('Entfernt, Liste konnte nicht aktualisiert werden.')
+      setError('Ausgebucht, Liste konnte nicht aktualisiert werden.')
     }
   }
 
@@ -188,6 +222,15 @@ export default function PoolEinsatzmittelPanel() {
         >
           Alle
         </button>
+        <button
+          type="button"
+          onClick={() => setFilter('ausgebucht')}
+          className={`text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
+            filter === 'ausgebucht' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Ausgebucht
+        </button>
         {POOL_EM_CATEGORIES.map(id => (
           <button
             key={id}
@@ -208,7 +251,9 @@ export default function PoolEinsatzmittelPanel() {
         </div>
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
-          <p className="text-sm text-gray-500">Keine Pool-Einsatzmittel erfasst.</p>
+          <p className="text-sm text-gray-500">
+            {filter === 'ausgebucht' ? 'Keine ausgebuchten Pool-Einsatzmittel.' : 'Keine Pool-Einsatzmittel erfasst.'}
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
@@ -217,8 +262,10 @@ export default function PoolEinsatzmittelPanel() {
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Kategorie</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Verwahrungsort</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Angaben</th>
-                {canManage && <th className="px-4 py-3" />}
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">
+                  {filter === 'ausgebucht' ? 'Ausbuchung' : 'Angaben'}
+                </th>
+                {canManage && filter !== 'ausgebucht' && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -231,9 +278,11 @@ export default function PoolEinsatzmittelPanel() {
                     {poolEmLocationLabel(item.verwahrungsort, item.lager_notiz)}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
-                    {poolEmDetailText(item) || '–'}
+                    {filter === 'ausgebucht'
+                      ? `${formatIsoDate(item.removed_at)} · ${formatRemovalReason(item.removal_reason)}`
+                      : (poolEmDetailText(item) || '–')}
                   </td>
-                  {canManage && (
+                  {canManage && filter !== 'ausgebucht' && (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 justify-end">
                         <button
@@ -246,11 +295,11 @@ export default function PoolEinsatzmittelPanel() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => { void remove(item) }}
-                          className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
-                          title="Entfernen"
+                          onClick={() => openAusbuchung(item)}
+                          className="px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 rounded-md"
+                          title="Aus Bestand entfernen"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          Ausbuchen
                         </button>
                       </div>
                     </td>
@@ -355,6 +404,18 @@ export default function PoolEinsatzmittelPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {ausbuchungItem && (
+        <AusbuchungDialog
+          itemLabel={POOL_EM_CATEGORY_LABELS[ausbuchungItem.category]}
+          reason={ausbuchungReason}
+          onReasonChange={setAusbuchungReason}
+          onCancel={() => { setAusbuchungItem(null); setAusbuchungSaving(false) }}
+          onConfirm={() => { void confirmAusbuchung() }}
+          saving={ausbuchungSaving}
+          error={error && ausbuchungItem ? error : ''}
+        />
       )}
     </div>
   )

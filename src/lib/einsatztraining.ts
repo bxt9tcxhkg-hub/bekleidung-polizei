@@ -277,3 +277,200 @@ export function validateSession(input: {
     },
   }
 }
+
+/** Freitext wie persönliche Munition (Marke/Kaliber/Art) — kein Katalog. */
+export type MunitionVerbrauchInput = {
+  anzahl: string
+  marke: string
+  kaliber: string
+  art: string
+  poolItemId: string
+}
+
+export type MunitionVerbrauchPayload = {
+  munition_anzahl: number | null
+  munition_marke: string | null
+  munition_kaliber: string | null
+  munition_art: string | null
+  munition_pool_id: string | null
+}
+
+export type MunitionVerbrauchRecorded = MunitionVerbrauchPayload & {
+  munition_recorded_at: string | null
+  munition_recorded_by: string | null
+}
+
+export function emptyMunitionVerbrauchInput(): MunitionVerbrauchInput {
+  return { anzahl: '', marke: '', kaliber: '', art: '', poolItemId: '' }
+}
+
+export function munitionVerbrauchInputFromSession(session: {
+  munition_anzahl?: number | null
+  munition_marke?: string | null
+  munition_kaliber?: string | null
+  munition_art?: string | null
+  munition_pool_id?: string | null
+}): MunitionVerbrauchInput {
+  return {
+    anzahl: session.munition_anzahl == null ? '' : String(session.munition_anzahl),
+    marke: session.munition_marke ?? '',
+    kaliber: session.munition_kaliber ?? '',
+    art: session.munition_art ?? '',
+    poolItemId: session.munition_pool_id ?? '',
+  }
+}
+
+function optionalMunitionText(raw: string): string | null {
+  const trimmed = raw.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+export function validateMunitionVerbrauch(input: MunitionVerbrauchInput): ValidateResult<MunitionVerbrauchPayload> {
+  const anzahlRaw = input.anzahl.trim()
+  const marke = optionalMunitionText(input.marke)
+  const kaliber = optionalMunitionText(input.kaliber)
+  const art = optionalMunitionText(input.art)
+  const poolId = optionalMunitionText(input.poolItemId)
+  const hasMeta = Boolean(marke || kaliber || art || poolId)
+
+  if (!anzahlRaw) {
+    if (hasMeta) {
+      return { ok: false, error: 'Bitte die verbrauchte Anzahl angeben oder die Angaben leeren.' }
+    }
+    return {
+      ok: true,
+      payload: {
+        munition_anzahl: null,
+        munition_marke: null,
+        munition_kaliber: null,
+        munition_art: null,
+        munition_pool_id: null,
+      },
+    }
+  }
+
+  if (!/^\d+$/.test(anzahlRaw)) {
+    return { ok: false, error: 'Munition verbraucht muss eine ganze Zahl sein.' }
+  }
+  const anzahl = Number(anzahlRaw)
+  if (!Number.isSafeInteger(anzahl) || anzahl < 0) {
+    return { ok: false, error: 'Munition verbraucht muss 0 oder größer sein.' }
+  }
+
+  return {
+    ok: true,
+    payload: {
+      munition_anzahl: anzahl,
+      munition_marke: marke,
+      munition_kaliber: kaliber,
+      munition_art: art,
+      munition_pool_id: poolId,
+    },
+  }
+}
+
+export function withMunitionRecordedBy(
+  payload: MunitionVerbrauchPayload,
+  recordedBy: string | null,
+  recordedAt: string = new Date().toISOString(),
+): MunitionVerbrauchRecorded {
+  const hasVerbrauch = payload.munition_anzahl != null
+  return {
+    ...payload,
+    munition_recorded_at: hasVerbrauch ? recordedAt : null,
+    munition_recorded_by: hasVerbrauch ? recordedBy : null,
+  }
+}
+
+export function formatMunitionVerbrauch(session: {
+  munition_anzahl?: number | null
+  munition_marke?: string | null
+  munition_kaliber?: string | null
+  munition_art?: string | null
+}): string {
+  if (session.munition_anzahl == null) return ''
+  const parts = [`${session.munition_anzahl}`]
+  if (session.munition_marke?.trim()) parts.push(session.munition_marke.trim())
+  if (session.munition_kaliber?.trim()) parts.push(session.munition_kaliber.trim())
+  if (session.munition_art?.trim()) parts.push(session.munition_art.trim())
+  return parts.join(' · ')
+}
+
+export type PoolMunitionStockRef = {
+  id: string
+  anzahl: number | null
+}
+
+export type PoolStockAdjustment = {
+  poolId: string
+  nextAnzahl: number
+}
+
+/**
+ * Bestand nur anpassen, wenn eine konkrete Pool-Munitionszeile gewählt ist.
+ * Persönliche Patronen werden nicht automatisch reduziert.
+ */
+export function planPoolMunitionAdjustments(input: {
+  previous: { poolId: string | null; anzahl: number | null }
+  next: { poolId: string | null; anzahl: number | null }
+  stocks: Readonly<Record<string, number | null>>
+}): ValidateResult<{ adjustments: PoolStockAdjustment[] }> {
+  const prevId = input.previous.poolId
+  const nextId = input.next.poolId
+  const prevQty = prevId ? (input.previous.anzahl ?? 0) : 0
+  const nextQty = nextId ? (input.next.anzahl ?? 0) : 0
+
+  if (!prevId && !nextId) {
+    return { ok: true, payload: { adjustments: [] } }
+  }
+
+  const adjustments = new Map<string, number>()
+
+  function currentStock(poolId: string): ValidateResult<number> {
+    if (!(poolId in input.stocks)) {
+      return { ok: false, error: 'Die gewählte Pool-Munition wurde nicht gefunden.' }
+    }
+    const stock = input.stocks[poolId]
+    if (stock == null) {
+      return { ok: false, error: 'Pool-Munition hat keine Menge hinterlegt.' }
+    }
+    return { ok: true, payload: stock }
+  }
+
+  if (prevId) {
+    const stock = currentStock(prevId)
+    if (!stock.ok) return stock
+    adjustments.set(prevId, stock.payload + prevQty)
+  }
+
+  if (nextId) {
+    const base = adjustments.has(nextId)
+      ? { ok: true as const, payload: adjustments.get(nextId) as number }
+      : currentStock(nextId)
+    if (!base.ok) return base
+    const nextStock = base.payload - nextQty
+    if (nextStock < 0) {
+      return { ok: false, error: `Nicht genug Pool-Munition (Bestand ${base.payload}).` }
+    }
+    adjustments.set(nextId, nextStock)
+  }
+
+  return {
+    ok: true,
+    payload: {
+      adjustments: [...adjustments.entries()].map(([poolId, nextAnzahl]) => ({ poolId, nextAnzahl })),
+    },
+  }
+}
+
+export function poolMunitionOptionLabel(item: {
+  marke: string | null
+  typ: string | null
+  art: string | null
+  anzahl: number | null
+  locationLabel: string
+}): string {
+  const bits = [item.marke, item.typ, item.art].map(v => v?.trim()).filter((v): v is string => Boolean(v))
+  const menge = item.anzahl == null ? 'ohne Menge' : `Menge ${item.anzahl}`
+  return `${bits.length > 0 ? bits.join(' · ') : 'Munition (Pool)'} · ${menge} · ${item.locationLabel}`
+}

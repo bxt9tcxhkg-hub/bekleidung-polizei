@@ -11,16 +11,25 @@ import type {
   Profile,
 } from '../../lib/types'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
+import { isEinsatzmittelActive } from '../../lib/einsatzmittelAusbuchung'
 import {
   cadenceLabel,
+  emptyMunitionVerbrauchInput,
   formatCompletedOn,
+  formatMunitionVerbrauch,
   isModuleLockDbError,
   moduleAssignmentBlockReason,
   moduleAssignmentOptions,
   moduleLockUserMessage,
+  munitionVerbrauchInputFromSession,
   validateParticipation,
   validateSession,
+  type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
+import { poolEmLocationLabel } from '../../lib/poolEinsatzmittel'
+import { isVerwahrungsort } from '../../lib/verwahrungsort'
+import MunitionVerbrauchFields, { type PoolMunitionChoice } from './MunitionVerbrauchFields'
+import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
 
@@ -42,6 +51,10 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
   const [moduleId, setModuleId] = useState('')
   const [interval, setInterval] = useState('')
   const [saving, setSaving] = useState(false)
+  const [munition, setMunition] = useState<MunitionVerbrauchInput>(emptyMunitionVerbrauchInput())
+  const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
+  const [editMunitionSessionId, setEditMunitionSessionId] = useState<string | null>(null)
+  const [savingMunition, setSavingMunition] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -69,6 +82,19 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
     setModules((modulesRes.data ?? []) as EinsatzTrainingModule[])
     setCompletions((completionsRes.data ?? []) as EinsatzTrainingCompletion[])
     setOfficers((profilesRes.data ?? []) as OfficerOption[])
+    const poolRes = await loadPoolMunitionChoices()
+    if (poolRes.ok) {
+      setPoolMunition(poolRes.items.filter(isEinsatzmittelActive).map(item => ({
+        id: item.id,
+        marke: item.marke,
+        typ: item.typ,
+        art: item.art,
+        anzahl: item.anzahl,
+        locationLabel: isVerwahrungsort(item.verwahrungsort)
+          ? poolEmLocationLabel(item.verwahrungsort, item.lager_notiz)
+          : item.verwahrungsort,
+      })))
+    }
     setLoading(false)
   }
 
@@ -99,6 +125,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
     setOfficerId('')
     setModuleId('')
     setInterval('')
+    setMunition(emptyMunitionVerbrauchInput())
     setError('')
     setShowForm(true)
   }
@@ -154,9 +181,60 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
       setSaving(false)
       return
     }
+    const munitionResult = await saveMunitionVerbrauch({
+      sessionId: session.id,
+      previous: { munition_anzahl: null, munition_pool_id: null },
+      form: munition,
+      recordedBy: profile?.id ?? null,
+    })
+    if (!munitionResult.ok) {
+      setError(munitionResult.error)
+      setSaving(false)
+      try {
+        await load()
+      } catch {
+        setError(`${munitionResult.error} Teilnahme wurde erfasst.`)
+      }
+      return
+    }
     logAudit('Externes Einsatztraining erfasst', `${module?.name ?? moduleId} ${sessionResult.payload.session_date}`)
     setShowForm(false)
     setSaving(false)
+    try {
+      await load()
+    } catch {
+      setError('Gespeichert, Liste konnte nicht aktualisiert werden.')
+    }
+  }
+
+  function openMunitionEdit(sessionId: string) {
+    const session = sessionById.get(sessionId)
+    if (!session) return
+    setMunition(munitionVerbrauchInputFromSession(session))
+    setEditMunitionSessionId(sessionId)
+    setError('')
+  }
+
+  async function saveExistingMunition() {
+    if (!canManage || !editMunitionSessionId) return
+    const session = sessionById.get(editMunitionSessionId)
+    if (!session) return
+    setSavingMunition(true)
+    setError('')
+    const result = await saveMunitionVerbrauch({
+      sessionId: session.id,
+      previous: session,
+      form: munition,
+      recordedBy: profile?.id ?? null,
+    })
+    if (!result.ok) {
+      setError(result.error)
+      setSavingMunition(false)
+      return
+    }
+    logAudit('Munitionsverbrauch Einsatztraining', `${session.session_date} ${munition.anzahl || 'leer'}`)
+    setEditMunitionSessionId(null)
+    setSavingMunition(false)
     try {
       await load()
     } catch {
@@ -227,6 +305,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Polizist</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Modul</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Intervall</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Munition</th>
                 {canManage && <th className="px-4 py-3" />}
               </tr>
             </thead>
@@ -239,9 +318,20 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                   <td className="px-4 py-3 text-gray-700">{officerDisplayName(row.officer)}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{row.module?.name ?? '–'}</td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{row.interval_label || '–'}</td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
+                    {formatMunitionVerbrauch(sessionById.get(row.session_id) ?? {}) || '–'}
+                  </td>
                   {canManage && (
                     <td className="px-4 py-3">
-                      <div className="flex justify-end">
+                      <div className="flex justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openMunitionEdit(row.session_id)}
+                          className="px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-50 rounded-md"
+                          title="Munition verbraucht"
+                        >
+                          Munition
+                        </button>
                         <button
                           type="button"
                           onClick={() => { void remove(row) }}
@@ -328,6 +418,15 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                   onChange={e => setSessionNote(e.target.value)}
                 />
               </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Munition verbraucht</p>
+                <MunitionVerbrauchFields
+                  idPrefix="et-ext-munition"
+                  value={munition}
+                  onChange={setMunition}
+                  poolItems={poolMunition}
+                />
+              </div>
               {assignmentHint && (
                 <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded-lg">{assignmentHint}</p>
               )}
@@ -346,6 +445,51 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60"
               >
                 {saving ? 'Speichern...' : 'Erfassen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editMunitionSessionId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Munition verbraucht</h2>
+              <button
+                type="button"
+                onClick={() => { setEditMunitionSessionId(null); setSavingMunition(false) }}
+                className="p-1.5 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <MunitionVerbrauchFields
+                idPrefix="et-ext-edit-munition"
+                value={munition}
+                onChange={setMunition}
+                poolItems={poolMunition}
+              />
+              {error && editMunitionSessionId && !showForm && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+              )}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button
+                type="button"
+                onClick={() => { setEditMunitionSessionId(null); setSavingMunition(false) }}
+                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={() => { void saveExistingMunition() }}
+                disabled={savingMunition}
+                className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60"
+              >
+                {savingMunition ? 'Speichern...' : 'Speichern'}
               </button>
             </div>
           </div>
