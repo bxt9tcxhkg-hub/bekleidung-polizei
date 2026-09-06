@@ -4,7 +4,18 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
-import { DEFAULT_BUDGET, DEFAULT_SHOE_CAP, existingCapIdForDate, summarizeBudgetRows, withoutAdminProfiles } from '../lib/budget'
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_SHOE_CAP,
+  budgetUpsertPayload,
+  budgetYearFromValidFrom,
+  effectiveUsed,
+  existingCapIdForDate,
+  parseBudgetAmount,
+  remainingBudget,
+  summarizeBudgetRows,
+  withoutAdminProfiles,
+} from '../lib/budget'
 import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
 
 type BudgetDrillOrder = {
@@ -23,6 +34,7 @@ interface UserRow {
   profile: Profile
   currentBudget: UserBudget | null
   scheduledBudget: UserBudget | null
+  orderUsed: number
   used: number
 }
 
@@ -31,7 +43,7 @@ export default function Budgets() {
   const [rows, setRows] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ amount: '', valid_from: today() })
+  const [editForm, setEditForm] = useState({ amount: '', used: '', valid_from: today() })
   const [saving, setSaving] = useState(false)
   const [bulkForm, setBulkForm] = useState({ amount: '', valid_from: today() })
   const [showBulk, setShowBulk] = useState(false)
@@ -52,6 +64,7 @@ export default function Budgets() {
       .eq('user_id', profile.id)
       .not('status', 'in', '(pending,cancelled)')
       .gte('created_at', `${CURRENT_YEAR}-01-01`)
+      .lt('created_at', `${CURRENT_YEAR + 1}-01-01`)
       .order('created_at', { ascending: false })
     setDrilldown({ profile, orders: (data ?? []) as BudgetDrillOrder[] })
     setDrilldownLoading(false)
@@ -72,7 +85,8 @@ export default function Budgets() {
       supabase.from('orders')
         .select('user_id, unit_price, quantity')
         .not('status', 'in', '(pending,cancelled)')
-        .gte('created_at', `${CURRENT_YEAR}-01-01`),
+        .gte('created_at', `${CURRENT_YEAR}-01-01`)
+        .lt('created_at', `${CURRENT_YEAR + 1}-01-01`),
       supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }).order('created_at', { ascending: false }),
     ])
 
@@ -93,38 +107,76 @@ export default function Budgets() {
       const current = userBudgets.find(b => b.valid_from <= t) ?? null
       const future = userBudgets.filter(b => b.valid_from > t)
       const scheduled = future.length > 0 ? future[future.length - 1] : null
-      return { profile: p, currentBudget: current, scheduledBudget: scheduled, used: usedByUser[p.id] ?? 0 }
+      const orderUsed = usedByUser[p.id] ?? 0
+      const used = effectiveUsed(orderUsed, Number(current?.used_adjustment ?? 0))
+      return { profile: p, currentBudget: current, scheduledBudget: scheduled, orderUsed, used }
     }))
     setLoading(false)
   }
 
   useEffect(() => { load().catch(() => setError('Budgets konnten nicht geladen werden.')) }, [])
 
+  function startEdit(row: UserRow) {
+    setEditId(row.profile.id)
+    setEditForm({
+      amount: (row.currentBudget?.total_budget ?? DEFAULT_BUDGET).toFixed(2),
+      used: row.used.toFixed(2),
+      valid_from: today(),
+    })
+  }
+
+  function onEditValidFrom(value: string, row: UserRow) {
+    setEditForm(f => {
+      const prevYear = budgetYearFromValidFrom(f.valid_from)
+      const nextYear = budgetYearFromValidFrom(value)
+      let used = f.used
+      if (nextYear !== prevYear) {
+        used = nextYear === CURRENT_YEAR ? row.used.toFixed(2) : '0'
+      }
+      return { ...f, valid_from: value, used }
+    })
+  }
+
   async function saveBudget(userId: string) {
-    const val = parseFloat(editForm.amount.replace(',', '.'))
-    if (isNaN(val) || val < 0) return
+    const totalVal = parseBudgetAmount(editForm.amount)
+    const usedVal = parseBudgetAmount(editForm.used)
+    if (totalVal === null || usedVal === null) return
+    const row = rows.find(r => r.profile.id === userId)
+    const payload = budgetUpsertPayload({
+      userId,
+      validFrom: editForm.valid_from,
+      totalBudget: totalVal,
+      editedUsed: usedVal,
+      currentYearOrderUsed: row?.orderUsed ?? 0,
+      currentYear: CURRENT_YEAR,
+    })
     setSaving(true)
-    const { error } = await supabase.from('user_budgets').upsert(
-      { user_id: userId, year: CURRENT_YEAR, total_budget: val, valid_from: editForm.valid_from },
-      { onConflict: 'user_id,year,valid_from' }
-    )
+    const { error } = await supabase.from('user_budgets').upsert(payload, { onConflict: 'user_id,year,valid_from' })
     setSaving(false)
     if (error) { setError(`Budget konnte nicht gespeichert werden: ${error.message}`); return }
-    const benutzername = rows.find(r => r.profile.id === userId)?.profile.name ?? '?'
-    logAudit('Budget geändert', `${benutzername}: ${fmtEUR(val)}`)
+    const benutzername = row?.profile.name ?? '?'
+    logAudit('Budget geändert', `${benutzername}: ${fmtEUR(totalVal)}, verbraucht ${fmtEUR(usedVal)}`)
     setError('')
     setEditId(null)
     load()
   }
 
   async function saveBulk() {
-    const val = parseFloat(bulkForm.amount.replace(',', '.'))
-    if (isNaN(val) || val < 0) return
+    const val = parseBudgetAmount(bulkForm.amount)
+    if (val === null) return
+    const year = budgetYearFromValidFrom(bulkForm.valid_from)
     setBulkSaving(true)
     const results = await Promise.all(
       rows.map(r =>
         supabase.from('user_budgets').upsert(
-          { user_id: r.profile.id, year: CURRENT_YEAR, total_budget: val, valid_from: bulkForm.valid_from },
+          budgetUpsertPayload({
+            userId: r.profile.id,
+            validFrom: bulkForm.valid_from,
+            totalBudget: val,
+            editedUsed: year === CURRENT_YEAR ? r.used : 0,
+            currentYearOrderUsed: r.orderUsed,
+            currentYear: CURRENT_YEAR,
+          }),
           { onConflict: 'user_id,year,valid_from' }
         )
       )
@@ -182,7 +234,7 @@ export default function Budgets() {
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>
-        <p className="text-gray-500 text-sm mt-1">Jahresbudget und Schuherstattung verwalten</p>
+        <p className="text-gray-500 text-sm mt-1">Jahresbudget und bereits verbrauchtes Budget verwalten. Rückstellung zum 01.01.</p>
       </div>
 
       {/* Budget summary */}
@@ -286,7 +338,7 @@ export default function Budgets() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">DG</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Budget</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Verbraucht</th>
-                <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Verbleibend</th>
+                <th className="text-right px-4 py-3 font-semibold text-gray-600">Verbleibend</th>
                 <th className="px-4 py-3" />
                 <th className="px-4 py-3" />
               </tr>
@@ -295,19 +347,26 @@ export default function Budgets() {
               {rows.filter(({ profile }) => {
                 const q = search.toLowerCase()
                 return !q || profile.name.toLowerCase().includes(q) || (profile.dienstnummer ?? '').toLowerCase().includes(q)
-              }).map(({ profile, currentBudget, scheduledBudget, used }) => {
+              }).map(row => {
+                const { profile, currentBudget, scheduledBudget, used } = row
                 const total = currentBudget?.total_budget ?? DEFAULT_BUDGET
-                const remaining = total - used
-                const pct = total > 0 ? Math.min(100, (used / total) * 100) : 0
+                const editing = editId === profile.id
+                const editTotal = editing ? parseBudgetAmount(editForm.amount) : total
+                const editUsed = editing ? parseBudgetAmount(editForm.used) : used
+                const remaining = remainingBudget(editTotal ?? total, editUsed ?? used)
+                const displayUsed = editUsed ?? used
+                const displayTotal = editTotal ?? total
+                const pct = displayTotal > 0 ? Math.min(100, (displayUsed / displayTotal) * 100) : 0
                 return (
-                  <tr key={profile.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => editId !== profile.id && openDrilldown(profile)}>
+                  <tr key={profile.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => !editing && openDrilldown(profile)}>
                     <td className="px-4 py-3 font-medium text-gray-900">{profile.name}</td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{profile.dienstnummer ?? '–'}</td>
                     <td className="px-4 py-3 text-right">
-                      {editId === profile.id ? (
+                      {editing ? (
                         <div className="flex items-center justify-end gap-1 flex-wrap" onClick={e => e.stopPropagation()}>
+                          <label className="sr-only" htmlFor={`budget-total-${profile.id}`}>Jahresbudget</label>
                           <span className="text-gray-500 text-xs">€</span>
-                          <input type="number" step="0.01" min="0" autoFocus
+                          <input id={`budget-total-${profile.id}`} type="number" step="0.01" min="0" autoFocus
                             className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                             value={editForm.amount}
                             onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))}
@@ -316,7 +375,7 @@ export default function Budgets() {
                           <input type="date"
                             className="border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                             value={editForm.valid_from}
-                            onChange={e => setEditForm(f => ({ ...f, valid_from: e.target.value }))}
+                            onChange={e => onEditValidFrom(e.target.value, row)}
                           />
                           <button onClick={() => saveBudget(profile.id)} disabled={saving} className="p-1 hover:bg-green-50 rounded text-green-600"><Check className="w-4 h-4" /></button>
                           <button onClick={() => setEditId(null)} className="p-1 hover:bg-gray-100 rounded text-gray-500"><X className="w-4 h-4" /></button>
@@ -338,18 +397,36 @@ export default function Budgets() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-medium ${pct > 90 ? 'text-red-600' : pct > 70 ? 'text-amber-600' : 'text-gray-700'}`}>
-                        {fmtEUR(used)}
-                      </span>
-                      <div className="h-1.5 bg-gray-100 rounded-full mt-1 w-20 md:w-24 ml-auto">
-                        <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
-                      </div>
+                      {editing ? (
+                        <div onClick={e => e.stopPropagation()}>
+                          <label className="sr-only" htmlFor={`budget-used-${profile.id}`}>Bereits verbraucht</label>
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-gray-500 text-xs">€</span>
+                            <input id={`budget-used-${profile.id}`} type="number" step="0.01" min="0"
+                              className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              value={editForm.used}
+                              onChange={e => setEditForm(f => ({ ...f, used: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') saveBudget(profile.id); if (e.key === 'Escape') setEditId(null) }}
+                            />
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-1">Kalenderjahr · Rückstellung 01.01.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <span className={`font-medium ${pct > 90 ? 'text-red-600' : pct > 70 ? 'text-amber-600' : 'text-gray-700'}`}>
+                            {fmtEUR(used)}
+                          </span>
+                          <div className="h-1.5 bg-gray-100 rounded-full mt-1 w-20 md:w-24 ml-auto">
+                            <div className={`h-full rounded-full ${pct > 90 ? 'bg-red-500' : pct > 70 ? 'bg-amber-400' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </>
+                      )}
                     </td>
-                    <td className={`px-4 py-3 text-right font-semibold hidden lg:table-cell ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <td className={`px-4 py-3 text-right font-semibold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {fmtEUR(remaining)}
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={e => { e.stopPropagation(); setEditId(profile.id); setEditForm({ amount: total.toFixed(2), valid_from: today() }) }}
+                      <button onClick={e => { e.stopPropagation(); startEdit(row) }}
                         className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900 float-right">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -363,7 +440,7 @@ export default function Budgets() {
             </tbody>
           </table>
           </div>
-          <p className="text-xs text-gray-400 px-4 py-2 border-t">* Standardwert {fmtEUR(DEFAULT_BUDGET)} (kein individuelles Budget gesetzt)</p>
+          <p className="text-xs text-gray-400 px-4 py-2 border-t">* Standardwert {fmtEUR(DEFAULT_BUDGET)} (kein individuelles Budget gesetzt). Verbrauch und Korrektur gelten nur für das Kalenderjahr. Rückstellung zum 01.01. — Vorjahresverbrauch wird nicht übernommen.</p>
         </div>
       )}
 
@@ -373,7 +450,7 @@ export default function Budgets() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="px-6 py-4 border-b">
               <h2 className="font-bold text-gray-900">Alle Budgets anpassen</h2>
-              <p className="text-xs text-gray-500 mt-1">Gilt für alle {rows.length} aktiven Benutzer</p>
+              <p className="text-xs text-gray-500 mt-1">Gilt für alle {rows.length} aktiven Benutzer. Verbrauchskorrekturen bleiben im Kalenderjahr erhalten. Rückstellung zum 01.01.</p>
             </div>
             <div className="px-6 py-4 space-y-3">
               <div>

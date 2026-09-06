@@ -69,6 +69,7 @@ Zusätzlich im Code:
 - **Massa Wien**: Sachbearbeiter löst Export/Mail bewusst aus (CSV + Vorschau). Standard und Tests senden keine E-Mail; mit `VITE_MASSA_MAILTO` nur ein mailto-Entwurf.
 - **Lager-Shortcut**: `approved` → `ready_for_issue` nur bei verfügbarem Bestand und ohne Schneiderpflicht.
 - **Standardbudget**: 350 €/Jahr, falls kein `user_budgets`-Eintrag existiert.
+- **Verbrauch**: Bestellsumme des Kalenderjahres plus `used_adjustment` (Korrektur in der Budgetverwaltung). Rückstellung zum 01.01. — Vorjahr gilt nicht für das neue Jahr.
 - **Schuherstattungs-Cap**: Fallback 120 €, falls kein `shoe_refund_caps`-Eintrag existiert. Genehmiger setzt den Betrag unter Budgetverwaltung (nicht fest 80 €).
 
 ## Entwicklung
@@ -212,6 +213,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260915_et_roster_stadtpolizei.sql` | Stadtpolizei-Organisation für ET-Liste |
 | `20260916_parkaufsicht_roster.sql` | Parkaufsicht-Organisation für Owner-Liste |
 | `20260917_force_username_set.sql` | `username` nullable (`DROP NOT NULL`), Wipe `dn{N}`, `force_username_set`, Erstlogin setzt PC-Namen |
+| `20260918_budget_used_adjustment.sql` | `user_budgets.used_adjustment`, Verbrauchskorrektur je Kalenderjahr, `submit_cart` berücksichtigt Korrektur |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

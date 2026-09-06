@@ -4,7 +4,7 @@ import { ShoppingCart, CalendarRange, CheckSquare, ShoppingBag, Euro, Truck, Sci
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Quarter } from '../lib/types'
-import { getCurrentBudget, DEFAULT_BUDGET, isBudgetParticipant } from '../lib/budget'
+import { getCurrentBudget, getUsedBudget, DEFAULT_BUDGET, isBudgetParticipant } from '../lib/budget'
 import { fmtEUR } from '../lib/format'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -28,18 +28,13 @@ function UserDashboard({ profile }: { profile: NonNullable<ReturnType<typeof use
           .eq('user_id', profile.id)
           .not('status', 'in', '(pending,cancelled)'),
         showJahresbudget ? getCurrentBudget(profile.id, CURRENT_YEAR) : Promise.resolve(DEFAULT_BUDGET),
-        showJahresbudget
-          ? supabase.from('orders').select('unit_price, quantity')
-            .eq('user_id', profile.id)
-            .not('status', 'in', '(pending,cancelled)')
-            .gte('created_at', `${CURRENT_YEAR}-01-01`)
-          : Promise.resolve({ data: [] as { unit_price: number; quantity: number }[] }),
+        showJahresbudget ? getUsedBudget(profile.id, CURRENT_YEAR) : Promise.resolve(0),
       ])
       setCartCount(cartRes.count ?? 0)
       setActiveQuarter(quarterRes.data ?? null)
       setActiveOrderCount(activeRes.count ?? 0)
       setTotalBudget(totalBud)
-      setUsedBudget((usedRes.data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0))
+      setUsedBudget(usedRes)
       setLoading(false)
     }
     load().catch(() => setError('Daten konnten nicht geladen werden.'))
