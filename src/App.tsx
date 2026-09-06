@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -17,7 +17,6 @@ const Products = lazy(() => import('./pages/Products'))
 const Orders = lazy(() => import('./pages/Orders'))
 const Quarters = lazy(() => import('./pages/Quarters'))
 const ShoeRefunds = lazy(() => import('./pages/ShoeRefunds'))
-const Users = lazy(() => import('./pages/Users'))
 const AuditLog = lazy(() => import('./pages/AuditLog'))
 const Approvals = lazy(() => import('./pages/Approvals'))
 const Budgets = lazy(() => import('./pages/Budgets'))
@@ -25,6 +24,8 @@ const Lager = lazy(() => import('./pages/Lager'))
 const Analyse = lazy(() => import('./pages/Analyse'))
 const Grundausstattung = lazy(() => import('./pages/Grundausstattung'))
 const Hilfe = lazy(() => import('./pages/Hilfe'))
+const Einsatz = lazy(() => import('./pages/Einsatz'))
+const PortalUsers = lazy(() => import('./pages/PortalUsers'))
 
 const PageSpinner = () => (
   <div className="flex justify-center py-16">
@@ -48,6 +49,23 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/portal/benutzer"
+            element={
+              <ProtectedRoute staffOnly>
+                <PortalUsers />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/einsatz"
+            element={
+              <ProtectedRoute>
+                <Einsatz />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
           <Route
             element={
               <ProtectedRoute>
@@ -73,7 +91,6 @@ export default function App() {
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
             <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
             <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
-            <Route path="benutzer" element={<ProtectedRoute staffOnly><Users /></ProtectedRoute>} />
             <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />

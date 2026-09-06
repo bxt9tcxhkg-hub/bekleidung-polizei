@@ -1,13 +1,13 @@
 import { Link } from 'react-router-dom'
-import { LogOut, Shirt, Target, Briefcase, type LucideIcon } from 'lucide-react'
+import { Shirt, Target, Users, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import ChangePasswordModal from '../components/ChangePasswordModal'
+import PortalChrome from '../components/PortalChrome'
 import { PORTAL_APPS, type PortalApp, type PortalAppId } from '../lib/portalApps'
+import { visiblePortalApps } from '../lib/portalEntitlements'
 
 const APP_ICONS: Record<PortalAppId, LucideIcon> = {
   bekleidung: Shirt,
-  einsatztraining: Target,
-  einsatzmittel: Briefcase,
+  einsatz_mt: Target,
 }
 
 function AppTile({ app }: { app: PortalApp }) {
@@ -54,59 +54,43 @@ function AppTile({ app }: { app: PortalApp }) {
 }
 
 export default function Portal() {
-  const { profile, mustChangePassword, signOut } = useAuth()
+  const { profile, isStrictAdmin, areaRoles } = useAuth()
+  const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, rows: areaRoles })
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <img
-              src="/wappen-dornbirn.svg"
-              alt="Wappen der Stadt Dornbirn"
-              className="h-10 w-auto flex-shrink-0"
-            />
-            <div className="min-w-0">
-              <p className="font-semibold text-gray-900 text-sm leading-tight truncate">Stadtpolizei Dornbirn</p>
-              <p className="text-gray-500 text-xs">Portal</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[12rem]">
-              {profile?.name || profile?.username}
-            </span>
-            <button
-              type="button"
-              onClick={() => { void signOut() }}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Abmelden</span>
-            </button>
-          </div>
+    <PortalChrome
+      actions={
+        isStrictAdmin ? (
+          <Link
+            to="/portal/benutzer"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <Users className="w-4 h-4" />
+            <span className="hidden sm:inline">Benutzer</span>
+          </Link>
+        ) : null
+      }
+    >
+      <div className="flex flex-col items-center text-center mb-8">
+        <div className="mb-4 h-16 w-16 rounded-xl bg-white p-1 flex items-center justify-center border border-gray-200">
+          <img
+            src="/wappen-dornbirn.svg"
+            alt="Wappen der Stadt Dornbirn"
+            className="h-full w-auto"
+          />
         </div>
-      </header>
+        <h1 className="text-2xl font-bold text-gray-900">Stadtpolizei Dornbirn</h1>
+        <p className="text-gray-500 text-sm mt-1">Portal</p>
+        {profile?.name ? (
+          <p className="text-gray-400 text-xs mt-1 sm:hidden">{profile.name}</p>
+        ) : null}
+      </div>
 
-      <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8 sm:py-12">
-        <div className="flex flex-col items-center text-center mb-8">
-          <div className="mb-4 h-16 w-16 rounded-xl bg-white p-1 flex items-center justify-center border border-gray-200">
-            <img
-              src="/wappen-dornbirn.svg"
-              alt="Wappen der Stadt Dornbirn"
-              className="h-full w-auto"
-            />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Stadtpolizei Dornbirn</h1>
-          <p className="text-gray-500 text-sm mt-1">Portal</p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {PORTAL_APPS.map(app => (
-            <AppTile key={app.id} app={app} />
-          ))}
-        </div>
-      </main>
-      {mustChangePassword && <ChangePasswordModal />}
-    </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {apps.map(app => (
+          <AppTile key={app.id} app={app} />
+        ))}
+      </div>
+    </PortalChrome>
   )
 }

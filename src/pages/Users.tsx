@@ -7,6 +7,13 @@ import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
 import { USERNAME_RE, canCreateUsers, canDeactivateUsers } from '../lib/workflow'
+import {
+  AREA_ROLE_LABELS,
+  defaultEinsatzMtRoleForNewUser,
+  parseEinsatzMtRole,
+  profilesRolesFromBekleidung,
+  type EinsatzMtRole,
+} from '../lib/portalEntitlements'
 
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
 Max Mustermann;mmustermann;1234;Stadtpolizei;user
@@ -28,11 +35,68 @@ function generateInitialPassword(): string {
 }
 
 const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
-const emptyForm = () => ({ name: '', username: '', initialPassword: '', dienstnummer: '', roles: ['user'] as string[], gender: 'male' as 'male' | 'female', organisation: 'Stadtpolizei' as string, active: true })
+const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole | ''; label: string }[] = [
+  { value: 'user', label: AREA_ROLE_LABELS.user },
+  { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
+  { value: 'admin', label: AREA_ROLE_LABELS.admin },
+  { value: '', label: 'Kein Zugriff' },
+]
+const BEKLEIDUNG_ROLE_LABEL: Record<string, string> = {
+  user: 'Benutzer',
+  sachbearbeiter: 'Sachbearbeiter',
+  admin: 'Admin',
+  genehmiger: 'Genehmiger',
+  approver: 'Genehmiger',
+}
+const BEKLEIDUNG_ROLE_COLOR: Record<string, string> = {
+  user: 'bg-gray-100 text-gray-600',
+  sachbearbeiter: 'bg-blue-100 text-blue-700',
+  admin: 'bg-purple-100 text-purple-700',
+  genehmiger: 'bg-green-100 text-green-700',
+  approver: 'bg-green-100 text-green-700',
+}
+
+type AreaRolesByUser = Record<string, { bekleidung?: string[]; einsatz_mt?: string[] }>
+
+const emptyForm = () => ({
+  name: '',
+  username: '',
+  initialPassword: '',
+  dienstnummer: '',
+  roles: ['user'] as string[],
+  einsatzMtRole: defaultEinsatzMtRoleForNewUser() as EinsatzMtRole | '',
+  gender: 'male' as 'male' | 'female',
+  organisation: 'Stadtpolizei' as string,
+  active: true,
+})
+
+async function persistAreaRoles(
+  userId: string,
+  bekleidungRoles: string[],
+  einsatzMt: EinsatzMtRole | '',
+): Promise<string | null> {
+  const { error: bekErr } = await supabase.from('portal_area_roles').upsert({
+    user_id: userId,
+    area: 'bekleidung',
+    roles: profilesRolesFromBekleidung(bekleidungRoles),
+  })
+  if (bekErr) return bekErr.message
+  if (einsatzMt) {
+    const { error } = await supabase.from('portal_area_roles').upsert({
+      user_id: userId,
+      area: 'einsatz_mt',
+      roles: [einsatzMt],
+    })
+    return error?.message ?? null
+  }
+  const { error } = await supabase.from('portal_area_roles').delete().eq('user_id', userId).eq('area', 'einsatz_mt')
+  return error?.message ?? null
+}
 
 export default function Users() {
   const { isStrictAdmin, isGenehmiger, isSachbearbeiter, profile: authProfile } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
+  const [areaByUser, setAreaByUser] = useState<AreaRolesByUser>({})
   const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -56,10 +120,28 @@ export default function Users() {
     setLoading(true)
     const { data } = await supabase.from('profiles').select('*').order('name')
     setUsers(data ?? [])
+    const { data: areas } = await supabase.from('portal_area_roles').select('user_id, area, roles')
+    const map: AreaRolesByUser = {}
+    for (const row of areas ?? []) {
+      const current = map[row.user_id] ?? {}
+      if (row.area === 'bekleidung') current.bekleidung = row.roles
+      if (row.area === 'einsatz_mt') current.einsatz_mt = row.roles
+      map[row.user_id] = current
+    }
+    setAreaByUser(map)
     setLoading(false)
   }
 
   useEffect(() => { load().catch(() => setError('Benutzer konnten nicht geladen werden.')) }, [])
+
+  const isSelfEdit = editId === authProfile?.id
+
+  function canAssignRole(role: string) {
+    if (role === 'admin') return isStrictAdmin
+    if (role === 'genehmiger') return isStrictAdmin || isGenehmiger
+    if (role === 'sachbearbeiter') return isStrictAdmin || isSachbearbeiter
+    return true
+  }
 
   function openNew() {
     setForm(emptyForm())
@@ -69,7 +151,17 @@ export default function Users() {
   }
 
   function openEdit(u: Profile) {
-    setForm({ name: u.name, username: u.username, initialPassword: '', dienstnummer: u.dienstnummer ?? '', roles: u.roles, gender: u.gender ?? 'male', organisation: u.organisation ?? 'Stadtpolizei', active: u.active })
+    setForm({
+      name: u.name,
+      username: u.username,
+      initialPassword: '',
+      dienstnummer: u.dienstnummer ?? '',
+      roles: u.roles,
+      einsatzMtRole: parseEinsatzMtRole(areaByUser[u.id]?.einsatz_mt) ?? '',
+      gender: u.gender ?? 'male',
+      organisation: u.organisation ?? 'Stadtpolizei',
+      active: u.active,
+    })
     setEditId(u.id)
     setError('')
     setShowForm(true)
@@ -96,6 +188,10 @@ export default function Users() {
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
+      if (isStrictAdmin && !isSelfEdit) {
+        const areaErr = await persistAreaRoles(editId, safeRoles, form.einsatzMtRole)
+        if (areaErr) { setError(areaErr); setSaving(false); return }
+      }
       logAudit('Benutzer bearbeitet', username)
     } else {
       if (!canCreate) { setError('Keine Berechtigung zum Anlegen.'); setSaving(false); return }
@@ -106,8 +202,12 @@ export default function Users() {
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
           body: JSON.stringify({ ...dbPayload, initial_password: form.initialPassword }),
         })
-        const json = await res.json()
+        const json = await res.json() as { error?: string; id?: string }
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
+        if (isStrictAdmin && json.id) {
+          const areaErr = await persistAreaRoles(json.id, safeRoles, form.einsatzMtRole)
+          if (areaErr) { setError(areaErr); setSaving(false); return }
+        }
         logAudit('Benutzer angelegt', username)
       } catch {
         setError('Netzwerkfehler – bitte nochmals versuchen.'); setSaving(false); return
@@ -209,15 +309,6 @@ export default function Users() {
     }
   }
 
-  const isSelfEdit = editId === authProfile?.id
-
-  function canAssignRole(role: string) {
-    if (role === 'admin') return isStrictAdmin // Admin-Rolle darf nur ein Admin vergeben
-    if (role === 'genehmiger') return isStrictAdmin || isGenehmiger
-    if (role === 'sachbearbeiter') return isStrictAdmin || isSachbearbeiter
-    return true // 'user' darf von allen Berechtigten vergeben werden
-  }
-
   function toggleRole(role: string) {
     if (isSelfEdit) return
     if (!canAssignRole(role)) return
@@ -233,7 +324,7 @@ export default function Users() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>
-          <p className="text-gray-500 text-sm mt-1">Benutzerverwaltung</p>
+          <p className="text-gray-500 text-sm mt-1">Portal-Benutzerverwaltung</p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           {canCreate && (
@@ -270,7 +361,8 @@ export default function Users() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstnummer</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Rollen</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Bekleidung</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Einsatzmittel &amp; Training</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
                 <th className="px-4 py-3" />
               </tr>
@@ -302,16 +394,29 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap">
-                      {u.roles.map(r => {
-                        const roleLabel: Record<string, string> = { user: 'Benutzer', sachbearbeiter: 'Sachbearbeiter', admin: 'Admin', genehmiger: 'Genehmiger', approver: 'Genehmiger' }
-                        const roleColor: Record<string, string> = { user: 'bg-gray-100 text-gray-600', sachbearbeiter: 'bg-blue-100 text-blue-700', admin: 'bg-purple-100 text-purple-700', genehmiger: 'bg-green-100 text-green-700', approver: 'bg-green-100 text-green-700' }
+                      {u.roles.map(r => (
+                        <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${BEKLEIDUNG_ROLE_COLOR[r] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {BEKLEIDUNG_ROLE_LABEL[r] ?? r}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {(() => {
+                      const emRoles = areaByUser[u.id]?.einsatz_mt
+                      const em = parseEinsatzMtRole(emRoles)
+                      if (em) {
                         return (
-                          <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColor[r] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {roleLabel[r] ?? r}
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BEKLEIDUNG_ROLE_COLOR[em] ?? 'bg-gray-100 text-gray-600'}`}>
+                            {AREA_ROLE_LABELS[em]}
                           </span>
                         )
-                      })}
-                    </div>
+                      }
+                      if (isStrictAdmin || emRoles) {
+                        return <span className="text-xs text-gray-400">Kein Zugriff</span>
+                      }
+                      return <span className="text-xs text-gray-400">–</span>
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     {canDeactivate ? (
@@ -433,7 +538,7 @@ export default function Users() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="font-bold text-gray-900">{editId ? 'Benutzer bearbeiten' : 'Neuer Benutzer'}</h2>
               <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
@@ -487,8 +592,8 @@ export default function Users() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-2">Rollen</label>
-                <div className="flex gap-3">
+                <label className="block text-xs font-medium text-gray-600 mb-2">Bekleidung</label>
+                <div className="flex gap-3 flex-wrap">
                   {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter'], ['admin', 'Admin'], ['genehmiger', 'Genehmiger']] as [string, string][]).map(([role, label]) => {
                     const restricted = isSelfEdit || !canAssignRole(role)
                     return (
@@ -506,6 +611,28 @@ export default function Users() {
                   <p className="text-xs text-gray-400 mt-1">Die Admin-Rolle kann nur von Admins vergeben werden{!isGenehmiger ? ', die Genehmiger-Rolle nur von Admins oder Genehmigern' : ''}.</p>
                 )}
               </div>
+              {isStrictAdmin && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="einsatz-mt-role">Einsatzmittel &amp; Training</label>
+                  <select
+                    id="einsatz-mt-role"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                    value={form.einsatzMtRole}
+                    disabled={isSelfEdit}
+                    onChange={e => {
+                      const value = e.target.value
+                      if (value === '' || value === 'user' || value === 'sachbearbeiter' || value === 'admin') {
+                        setForm(f => ({ ...f, einsatzMtRole: value }))
+                      }
+                    }}
+                  >
+                    {EINSATZ_MT_OPTIONS.map(opt => (
+                      <option key={opt.label} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Benutzer = Leserecht. Kein Genehmiger in diesem Bereich.</p>
+                </div>
+              )}
               {(!editId || canDeactivate) && (
                 <div className="flex items-center gap-3">
                   <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />

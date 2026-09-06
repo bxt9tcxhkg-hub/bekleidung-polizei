@@ -1,6 +1,6 @@
 export type PortalAppStatus = 'active' | 'coming_soon'
 
-export type PortalAppId = 'bekleidung' | 'einsatztraining' | 'einsatzmittel'
+export type PortalAppId = 'bekleidung' | 'einsatz_mt'
 
 type PortalAppBase = {
   id: PortalAppId
@@ -22,9 +22,9 @@ export type ComingSoonPortalApp = PortalAppBase & {
 export type PortalApp = ActivePortalApp | ComingSoonPortalApp
 
 /**
- * Konfig-Stub: welche Apps im Portal sichtbar sind.
- * Keine Rollenmatrix — Bekleidung ist für alle Angemeldeten aktiv.
- * Entitlements kann der Owner später nachliefern.
+ * Portal-Kacheln. Sichtbarkeit je Entitlement (siehe portalEntitlements):
+ * Bekleidung bei bekleidung-Recht, Einsatzmittel & Training bei einsatz_mt-Recht.
+ * Admin sieht immer beide. Eine Kachel einsatz_mt, zwei Unterbereiche in /einsatz.
  */
 export const PORTAL_APPS: readonly PortalApp[] = [
   {
@@ -35,18 +35,11 @@ export const PORTAL_APPS: readonly PortalApp[] = [
     status: 'active',
   },
   {
-    id: 'einsatztraining',
-    title: 'Einsatztraining',
+    id: 'einsatz_mt',
+    title: 'Einsatzmittel & Training',
     description: '',
-    path: null,
-    status: 'coming_soon',
-  },
-  {
-    id: 'einsatzmittel',
-    title: 'Einsatzmittel',
-    description: '',
-    path: null,
-    status: 'coming_soon',
+    path: '/einsatz',
+    status: 'active',
   },
 ]
 
