@@ -1,3 +1,7 @@
+import type { Verwahrungsort } from './verwahrungsort'
+
+export type { Verwahrungsort }
+
 export type OrderStatus =
   | 'pending'
   | 'pending_approval'
@@ -205,8 +209,6 @@ export interface PortalAreaRole {
   updated_at: string | null
 }
 
-export type Verwahrungsort = 'lager' | 'innendienst' | 'peter_1' | 'peter_2' | 'peter_30'
-
 export type PersonalEmCategory =
   | 'schutzweste'
   | 'glock_17'
@@ -254,6 +256,7 @@ export interface PoolEinsatzmittel {
   id: string
   category: PoolEmCategory
   verwahrungsort: Verwahrungsort
+  lager_notiz: string | null
   marke: string | null
   typ: string | null
   waffennummer: string | null

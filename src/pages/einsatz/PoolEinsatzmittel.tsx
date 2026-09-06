@@ -13,10 +13,12 @@ import {
   canManagePoolEinsatzmittel,
   emptyPoolEmFormValues,
   formValuesFromPoolRecord,
+  isLagerOrt,
   isPoolEmCategory,
   poolEmDetailText,
   poolEmFieldKind,
   poolEmFieldLabel,
+  poolEmLocationLabel,
   validatePoolEm,
   type PoolEmCategory,
   type PoolEmFormValues,
@@ -38,6 +40,7 @@ export default function PoolEinsatzmittelPanel() {
   const [editId, setEditId] = useState<string | null>(null)
   const [category, setCategory] = useState<PoolEmCategory>('langwaffe_stg77')
   const [verwahrungsort, setVerwahrungsort] = useState('')
+  const [lagerNotiz, setLagerNotiz] = useState('')
   const [values, setValues] = useState<PoolEmFormValues>(emptyPoolEmFormValues())
   const [saving, setSaving] = useState(false)
 
@@ -73,6 +76,7 @@ export default function PoolEinsatzmittelPanel() {
     setEditId(null)
     setCategory('langwaffe_stg77')
     setVerwahrungsort('')
+    setLagerNotiz('')
     setValues(emptyPoolEmFormValues())
     setError('')
     setShowForm(true)
@@ -82,6 +86,7 @@ export default function PoolEinsatzmittelPanel() {
     setEditId(item.id)
     setCategory(item.category)
     setVerwahrungsort(item.verwahrungsort)
+    setLagerNotiz(item.lager_notiz ?? '')
     setValues(formValuesFromPoolRecord(item))
     setError('')
     setShowForm(true)
@@ -95,7 +100,7 @@ export default function PoolEinsatzmittelPanel() {
 
   async function save() {
     if (!canManage) return
-    const result = validatePoolEm({ category, verwahrungsort, values })
+    const result = validatePoolEm({ category, verwahrungsort, values, lagerNotiz })
     if (!result.ok) {
       setError(result.error)
       return
@@ -223,7 +228,7 @@ export default function PoolEinsatzmittelPanel() {
                     {POOL_EM_CATEGORY_LABELS[item.category]}
                   </td>
                   <td className="px-4 py-3 text-gray-700">
-                    {VERWAHRUNGSORT_LABELS[item.verwahrungsort]}
+                    {poolEmLocationLabel(item.verwahrungsort, item.lager_notiz)}
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
                     {poolEmDetailText(item) || '–'}
@@ -297,6 +302,21 @@ export default function PoolEinsatzmittelPanel() {
                   ))}
                 </select>
               </div>
+              {isLagerOrt(verwahrungsort) && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="pool-lager-notiz">
+                    Lager-Notiz
+                  </label>
+                  <input
+                    id="pool-lager-notiz"
+                    className={inputClass}
+                    type="text"
+                    value={lagerNotiz}
+                    onChange={e => setLagerNotiz(e.target.value)}
+                    placeholder="optional, z. B. Regal oder Fach"
+                  />
+                </div>
+              )}
               {POOL_EM_FIELDS[category].map(field => {
                 const kind = poolEmFieldKind(field)
                 const label = poolEmFieldLabel(field, category)

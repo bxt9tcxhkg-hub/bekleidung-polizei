@@ -125,6 +125,17 @@ describe('validatePersonalEm', () => {
     }
   })
 
+  it('akzeptiert die erweiterten Verwahrungsorte aus dem gemeinsamen Lookup', () => {
+    const result = validatePersonalEm({
+      category: 'schlagstock',
+      officer_id: '',
+      verwahrungsort: 'spind_2',
+      values: empty,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.payload.verwahrungsort).toBe('spind_2')
+  })
+
   it('nimmt Schutzweste-Felder und setzt fremde Spalten auf null', () => {
     const result = validatePersonalEm({
       category: 'schutzweste',
@@ -202,6 +213,8 @@ describe('Anzeigehelfer', () => {
     expect(personalEmLocationLabel(null)).toBe('Beim Polizisten')
     expect(personalEmLocationLabel('lager')).toBe('Lager')
     expect(personalEmLocationLabel('peter_30')).toBe('Peter 30')
+    expect(personalEmLocationLabel('spind_1')).toBe('Spind 1')
+    expect(personalEmLocationLabel('waffentresor_zentrale')).toBe('Waffentresor Zentrale')
   })
 
   it('füllt das Formular aus einem Datensatz', () => {
