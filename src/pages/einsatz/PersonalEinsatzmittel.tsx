@@ -33,8 +33,10 @@ import {
   isEinsatzmittelRemoved,
   removedEinsatzmittel,
 } from '../../lib/einsatzmittelAusbuchung'
+import { PDF_UNASSIGNED_OFFICER, generatePersonalEmPdf } from '../../lib/einsatzPdf'
 import AusbuchungDialog from './AusbuchungDialog'
 import ZuteilungImportDialog from './ZuteilungImportDialog'
+import PdfExportButton from './PdfExportButton'
 
 type CategoryFilter = 'all' | 'lager' | 'ausgebucht' | PersonalEmCategory
 
@@ -49,6 +51,7 @@ export default function PersonalEinsatzmittelPanel() {
   const [items, setItems] = useState<PersonalEinsatzmittel[]>([])
   const [officers, setOfficers] = useState<OfficerOption[]>([])
   const [filter, setFilter] = useState<CategoryFilter>('all')
+  const [pdfOfficerId, setPdfOfficerId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -107,6 +110,44 @@ export default function PersonalEinsatzmittelPanel() {
     if (current && !current.active) return [current, ...active]
     return active
   }, [officers, officerId])
+
+  const pdfOfficerChoices = useMemo(() => {
+    const active = activeEinsatzmittel(items)
+    const byId = new Map<string, OfficerOption>()
+    let hasUnassigned = false
+    for (const item of active) {
+      if (!item.officer_id) {
+        hasUnassigned = true
+        continue
+      }
+      if (byId.has(item.officer_id)) continue
+      const fromList = officers.find(o => o.id === item.officer_id)
+      const fromItem = item.officer
+      byId.set(item.officer_id, fromList ?? {
+        id: item.officer_id,
+        name: fromItem?.name ?? '–',
+        dienstnummer: fromItem?.dienstnummer ?? null,
+        username: fromItem?.username ?? '',
+        active: fromItem?.active ?? true,
+      })
+    }
+    const list = [...byId.values()].sort((a, b) =>
+      officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'),
+    )
+    return { list, hasUnassigned }
+  }, [items, officers])
+
+  function exportPersonalPdf() {
+    const officer = pdfOfficerChoices.list.find(o => o.id === pdfOfficerId)
+    generatePersonalEmPdf(items, {
+      officerId: pdfOfficerId || null,
+      officerLabel: pdfOfficerId === PDF_UNASSIGNED_OFFICER
+        ? 'nicht zugewiesen'
+        : officer
+          ? officerDisplayName(officer)
+          : null,
+    })
+  }
 
   function openNew() {
     setEditId(null)
@@ -247,8 +288,23 @@ export default function PersonalEinsatzmittelPanel() {
               : 'Nur Leserecht'}
           </p>
         </div>
-        {canManage && (
-          <div className="flex flex-wrap gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <select
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
+            value={pdfOfficerId}
+            onChange={e => setPdfOfficerId(e.target.value)}
+            aria-label="PDF nach Polizist filtern"
+          >
+            <option value="">Alle Polizisten</option>
+            {pdfOfficerChoices.hasUnassigned && (
+              <option value={PDF_UNASSIGNED_OFFICER}>nicht zugewiesen</option>
+            )}
+            {pdfOfficerChoices.list.map(o => (
+              <option key={o.id} value={o.id}>{officerDisplayName(o)}</option>
+            ))}
+          </select>
+          <PdfExportButton onClick={exportPersonalPdf} />
+          {canManage && (
             <button
               type="button"
               onClick={() => setShowImport(true)}
@@ -257,16 +313,18 @@ export default function PersonalEinsatzmittelPanel() {
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">Import Zuteilung</span>
             </button>
+          )}
+          {canManage && (
             <button
               type="button"
               onClick={openNew}
-              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors"
+              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Neue Zuweisung</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {error && !showForm && (

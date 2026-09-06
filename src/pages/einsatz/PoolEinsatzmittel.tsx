@@ -33,7 +33,9 @@ import {
   poolItemUsesCountedAusbuchung,
   removedEinsatzmittel,
 } from '../../lib/einsatzmittelAusbuchung'
+import { generatePoolEmPdf } from '../../lib/einsatzPdf'
 import AusbuchungDialog from './AusbuchungDialog'
+import PdfExportButton from './PdfExportButton'
 
 type CategoryFilter = 'all' | 'ausgebucht' | PoolEmCategory
 
@@ -45,6 +47,7 @@ export default function PoolEinsatzmittelPanel() {
 
   const [items, setItems] = useState<PoolEinsatzmittel[]>([])
   const [filter, setFilter] = useState<CategoryFilter>('all')
+  const [pdfOrt, setPdfOrt] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -87,6 +90,11 @@ export default function PoolEinsatzmittelPanel() {
     const active = activeEinsatzmittel(items)
     return filter === 'all' ? active : active.filter(item => item.category === filter)
   }, [items, filter])
+
+  const pdfOrtChoices = useMemo(() => {
+    const used = new Set(activeEinsatzmittel(items).map(item => item.verwahrungsort))
+    return VERWAHRUNGSORTE.filter(ort => used.has(ort))
+  }, [items])
 
   function openNew() {
     setEditId(null)
@@ -218,16 +226,30 @@ export default function PoolEinsatzmittelPanel() {
             {canManage ? 'Gemeinsame Ausrüstung mit Verwahrungsort' : 'Nur Leserecht'}
           </p>
         </div>
-        {canManage && (
-          <button
-            type="button"
-            onClick={openNew}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <select
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-700 bg-white"
+            value={pdfOrt}
+            onChange={e => setPdfOrt(e.target.value)}
+            aria-label="PDF nach Verwahrungsort filtern"
           >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Neuer Eintrag</span>
-          </button>
-        )}
+            <option value="">Alle Verwahrungsorte</option>
+            {pdfOrtChoices.map(ort => (
+              <option key={ort} value={ort}>{VERWAHRUNGSORT_LABELS[ort]}</option>
+            ))}
+          </select>
+          <PdfExportButton onClick={() => generatePoolEmPdf(items, { verwahrungsort: pdfOrt || null })} />
+          {canManage && (
+            <button
+              type="button"
+              onClick={openNew}
+              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Neuer Eintrag</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {error && !showForm && (
