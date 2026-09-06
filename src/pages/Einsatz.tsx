@@ -5,6 +5,7 @@ import PortalChrome from '../components/PortalChrome'
 import PersonalEinsatzmittelPanel from './einsatz/PersonalEinsatzmittel'
 import PoolEinsatzmittelPanel from './einsatz/PoolEinsatzmittel'
 import LagerbestandPanel from './einsatz/Lagerbestand'
+import EinsatztrainingPanel from './einsatz/Einsatztraining'
 
 type EinsatzTab = 'einsatzmittel' | 'einsatztraining'
 type EmSubTab = 'persoenlich' | 'pool' | 'lagerbestand'
@@ -74,10 +75,7 @@ export default function Einsatz() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">Einsatztraining</h2>
-          <p className="text-sm text-gray-500">folgt</p>
-        </div>
+        <EinsatztrainingPanel />
       )}
     </PortalChrome>
   )

@@ -24,7 +24,7 @@ export type PortalApp = ActivePortalApp | ComingSoonPortalApp
 /**
  * Portal-Kacheln. Sichtbarkeit je Entitlement (siehe portalEntitlements):
  * Bekleidung bei bekleidung-Recht, Einsatzmittel & Training bei einsatz_mt-Recht.
- * Admin sieht immer beide. Eine Kachel einsatz_mt, zwei Unterbereiche in /einsatz.
+ * Admin sieht immer beide. Eine Kachel einsatz_mt, Unterbereiche Einsatzmittel und Training in /einsatz.
  */
 export const PORTAL_APPS: readonly PortalApp[] = [
   {

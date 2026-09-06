@@ -5,7 +5,7 @@
  * - bekleidung: mehrere Rollen gleichzeitig (wie profiles.roles: Benutzer,
  *   Sachbearbeiter, Genehmiger, Admin). approver wird als genehmiger gelesen.
  * - einsatz_mt: genau eine Rolle aus Benutzer | Sachbearbeiter | Admin
- *   (kein Genehmiger). Benutzer = Leserecht für Einsatzmittel (persönlich und Pool).
+ *   (kein Genehmiger). Benutzer = Leserecht für Einsatzmittel und Training.
  *
  * Dual-Write: area=bekleidung.roles ↔ profiles.roles. profiles.roles bleibt
  * Quelle für bestehende Bekleidungs-RLS / has_role.
