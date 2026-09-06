@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, X } from 'lucide-react'
+import { Check, Pencil, Plus, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -11,6 +11,7 @@ import {
   validateTrainingModule,
   type TrainingKind,
 } from '../../lib/einsatztraining'
+import { planOfficialModuleUpserts } from '../../lib/officialTrainingModules'
 
 type KindFilter = 'all' | TrainingKind
 
@@ -29,6 +30,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
   const [kind, setKind] = useState<TrainingKind>('intern')
   const [active, setActive] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [ensuring, setEnsuring] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -130,21 +132,67 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     }
   }
 
+  async function ensureOfficial() {
+    if (!canManage) return
+    setEnsuring(true)
+    setError('')
+    const plan = planOfficialModuleUpserts(items)
+    for (const module of plan.inserts) {
+      const { error: insertError } = await supabase
+        .from('einsatz_training_modules')
+        .insert({ name: module.name, kind: module.kind, active: true, created_by: profile?.id ?? null })
+      if (insertError) {
+        setError(insertError.message || 'Offizielle Module konnten nicht angelegt werden.')
+        setEnsuring(false)
+        return
+      }
+    }
+    for (const row of plan.reactivations) {
+      const { error: updateError } = await supabase
+        .from('einsatz_training_modules')
+        .update({ active: true, name: row.name })
+        .eq('id', row.id)
+      if (updateError) {
+        setError(updateError.message || 'Offizielle Module konnten nicht aktiviert werden.')
+        setEnsuring(false)
+        return
+      }
+    }
+    logAudit('Offizielle Einsatztraining-Module sichergestellt', `${plan.inserts.length} neu, ${plan.reactivations.length} aktiviert`)
+    setEnsuring(false)
+    try {
+      await load()
+    } catch {
+      setError('Gespeichert, Liste konnte nicht aktualisiert werden.')
+    }
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Kein hinterlegter Lehrplan. Module werden hier angelegt (Name, intern/extern).
+          Offizielle Module aus dem Verzeichnis (Combat, Internes ET, Stockschulung, Erste Hilfe COMBAT, Szenarien, Fahrsicherheit). Weitere Module nur bei Bedarf.
         </p>
         {canManage && (
-          <button
-            type="button"
-            onClick={openNew}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Neues Modul</span>
-          </button>
+          <div className="flex flex-wrap gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => { void ensureOfficial() }}
+              disabled={ensuring}
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+            >
+              <Check className="w-4 h-4" />
+              <span className="hidden sm:inline">{ensuring ? 'Übernehme...' : 'Offizielle Module'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={openNew}
+              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Neues Modul</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -183,7 +231,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
       ) : visible.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
           <p className="text-sm text-gray-500">
-            Noch keine Module. Sachbearbeiter und Admin legen sie an — ohne vorgegebene Dienststellen-Module.
+            Noch keine Module. «Offizielle Module» legt die Verzeichnis-Namen an.
           </p>
         </div>
       ) : (

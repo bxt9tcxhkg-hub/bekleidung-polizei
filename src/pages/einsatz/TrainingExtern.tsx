@@ -17,6 +17,7 @@ import {
   emptyMunitionVerbrauchInput,
   formatCompletedOn,
   formatMunitionVerbrauch,
+  geschossenFromSession,
   isModuleLockDbError,
   moduleAssignmentBlockReason,
   moduleAssignmentOptions,
@@ -24,11 +25,12 @@ import {
   munitionVerbrauchInputFromSession,
   validateParticipation,
   validateSession,
+  type GeschossenAnswer,
   type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
 import { poolEmLocationLabel } from '../../lib/poolEinsatzmittel'
 import { isVerwahrungsort } from '../../lib/verwahrungsort'
-import MunitionVerbrauchFields, { type PoolMunitionChoice } from './MunitionVerbrauchFields'
+import MunitionVerbrauchFields, { GeschossenFrage, type PoolMunitionChoice } from './MunitionVerbrauchFields'
 import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
@@ -52,6 +54,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
   const [interval, setInterval] = useState('')
   const [saving, setSaving] = useState(false)
   const [munition, setMunition] = useState<MunitionVerbrauchInput>(emptyMunitionVerbrauchInput())
+  const [geschossen, setGeschossen] = useState<GeschossenAnswer>('')
   const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
   const [editMunitionSessionId, setEditMunitionSessionId] = useState<string | null>(null)
   const [savingMunition, setSavingMunition] = useState(false)
@@ -126,6 +129,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
     setModuleId('')
     setInterval('')
     setMunition(emptyMunitionVerbrauchInput())
+    setGeschossen('')
     setError('')
     setShowForm(true)
   }
@@ -184,7 +188,8 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
     const munitionResult = await saveMunitionVerbrauch({
       sessionId: session.id,
       previous: { munition_anzahl: null, munition_pool_id: null },
-      form: munition,
+      form: geschossen === 'yes' ? munition : emptyMunitionVerbrauchInput(),
+      geschossen,
       recordedBy: profile?.id ?? null,
     })
     if (!munitionResult.ok) {
@@ -211,6 +216,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
     const session = sessionById.get(sessionId)
     if (!session) return
     setMunition(munitionVerbrauchInputFromSession(session))
+    setGeschossen(geschossenFromSession(session))
     setEditMunitionSessionId(sessionId)
     setError('')
   }
@@ -224,7 +230,8 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
     const result = await saveMunitionVerbrauch({
       sessionId: session.id,
       previous: session,
-      form: munition,
+      form: geschossen === 'yes' ? munition : emptyMunitionVerbrauchInput(),
+      geschossen,
       recordedBy: profile?.id ?? null,
     })
     if (!result.ok) {
@@ -418,14 +425,24 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
                   onChange={e => setSessionNote(e.target.value)}
                 />
               </div>
-              <div>
-                <p className="text-xs font-medium text-gray-600 mb-2">Munition verbraucht</p>
-                <MunitionVerbrauchFields
+              <div className="space-y-3">
+                <GeschossenFrage
                   idPrefix="et-ext-munition"
-                  value={munition}
-                  onChange={setMunition}
-                  poolItems={poolMunition}
+                  value={geschossen}
+                  onChange={next => {
+                    setGeschossen(next)
+                    if (next === 'no') setMunition(emptyMunitionVerbrauchInput())
+                  }}
                 />
+                {geschossen === 'yes' && (
+                  <MunitionVerbrauchFields
+                    idPrefix="et-ext-munition"
+                    value={munition}
+                    onChange={setMunition}
+                    poolItems={poolMunition.filter(item => (item.anzahl ?? 0) > 0)}
+                    requirePool
+                  />
+                )}
               </div>
               {assignmentHint && (
                 <p className="text-sm text-amber-800 bg-amber-50 px-3 py-2 rounded-lg">{assignmentHint}</p>
@@ -455,7 +472,7 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Munition verbraucht</h2>
+              <h2 className="font-bold text-gray-900">Munition</h2>
               <button
                 type="button"
                 onClick={() => { setEditMunitionSessionId(null); setSavingMunition(false) }}
@@ -465,12 +482,23 @@ export default function TrainingExternPanel({ canManage }: { canManage: boolean 
               </button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <MunitionVerbrauchFields
+              <GeschossenFrage
                 idPrefix="et-ext-edit-munition"
-                value={munition}
-                onChange={setMunition}
-                poolItems={poolMunition}
+                value={geschossen}
+                onChange={next => {
+                  setGeschossen(next)
+                  if (next === 'no') setMunition(emptyMunitionVerbrauchInput())
+                }}
               />
+              {geschossen === 'yes' && (
+                <MunitionVerbrauchFields
+                  idPrefix="et-ext-edit-munition"
+                  value={munition}
+                  onChange={setMunition}
+                  poolItems={poolMunition.filter(item => (item.anzahl ?? 0) > 0 || item.id === sessionById.get(editMunitionSessionId)?.munition_pool_id)}
+                  requirePool
+                />
+              )}
               {error && editMunitionSessionId && !showForm && (
                 <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
               )}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, UserPlus, Warehouse, X } from 'lucide-react'
+import { Pencil, Plus, Upload, UserPlus, Warehouse, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -34,6 +34,7 @@ import {
   removedEinsatzmittel,
 } from '../../lib/einsatzmittelAusbuchung'
 import AusbuchungDialog from './AusbuchungDialog'
+import ZuteilungImportDialog from './ZuteilungImportDialog'
 
 type CategoryFilter = 'all' | 'lager' | 'ausgebucht' | PersonalEmCategory
 
@@ -57,6 +58,7 @@ export default function PersonalEinsatzmittelPanel() {
   const [verwahrungsort, setVerwahrungsort] = useState('')
   const [values, setValues] = useState<PersonalEmFormValues>(emptyPersonalEmFormValues())
   const [saving, setSaving] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [ausbuchungItem, setAusbuchungItem] = useState<PersonalEinsatzmittel | null>(null)
   const [ausbuchungReason, setAusbuchungReason] = useState('')
   const [ausbuchungSaving, setAusbuchungSaving] = useState(false)
@@ -246,14 +248,24 @@ export default function PersonalEinsatzmittelPanel() {
           </p>
         </div>
         {canManage && (
-          <button
-            type="button"
-            onClick={openNew}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">Neue Zuweisung</span>
-          </button>
+          <div className="flex flex-wrap gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Import Zuteilung</span>
+            </button>
+            <button
+              type="button"
+              onClick={openNew}
+              className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">Neue Zuweisung</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -492,6 +504,16 @@ export default function PersonalEinsatzmittelPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ZuteilungImportDialog
+          officers={officers}
+          existing={items}
+          createdBy={profile?.id ?? null}
+          onClose={() => setShowImport(false)}
+          onImported={load}
+        />
       )}
 
       {ausbuchungItem && (

@@ -70,10 +70,10 @@ const FIELD_LABELS: Record<PersonalEmFieldKey, string> = {
 
 export const PERSONAL_EM_FIELDS: Record<PersonalEmCategory, readonly PersonalEmFieldKey[]> = {
   schutzweste: ['groesse', 'ablaufdatum', 'schutzfristen'],
-  glock_17: ['waffennummer', 'service', 'magazinanzahl'],
+  glock_17: ['marke', 'waffennummer', 'service', 'magazinanzahl'],
   munition: ['marke', 'kaliber', 'art', 'patronen'],
   pfefferspray: ['ablauf_mm_yyyy'],
-  schlagstock: [],
+  schlagstock: ['marke'],
   handfesseln: [],
   taschenlampe_kelle: ['marke'],
   leatherman: ['marke'],
@@ -90,6 +90,8 @@ export function personalEmFieldKind(field: PersonalEmFieldKey): PersonalEmFieldK
 }
 
 export function personalEmFieldLabel(field: PersonalEmFieldKey, category: PersonalEmCategory): string {
+  if (field === 'marke' && category === 'glock_17') return 'Modell'
+  if (field === 'marke' && category === 'schlagstock') return 'Kennung (EKA)'
   if (field === 'marke' && (category === 'taschenlampe_kelle' || category === 'leatherman')) {
     return 'Marke/Type'
   }

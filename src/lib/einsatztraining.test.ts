@@ -17,10 +17,12 @@ import {
   officerHasCompletedModule,
   emptyMunitionVerbrauchInput,
   formatMunitionVerbrauch,
+  geschossenFromSession,
   munitionVerbrauchInputFromSession,
   planPoolMunitionAdjustments,
   poolMunitionOptionLabel,
   validateAttendance,
+  validateGeschossenMunition,
   validateMunitionVerbrauch,
   validateParticipation,
   validateSession,
@@ -304,6 +306,7 @@ describe('Munitionsverbrauch', () => {
 
   it('formatiert den Verbrauch und liest das Formular aus der Session', () => {
     expect(formatMunitionVerbrauch({ munition_anzahl: null })).toBe('')
+    expect(formatMunitionVerbrauch({ munition_anzahl: 0 })).toBe('nicht geschossen')
     expect(formatMunitionVerbrauch({
       munition_anzahl: 40,
       munition_marke: 'Geco',
@@ -419,5 +422,41 @@ describe('canManageEinsatztraining', () => {
       isStrictAdmin: false,
       rows: [{ area: 'bekleidung', roles: ['sachbearbeiter'] }],
     })).toBe(false)
+  })
+})
+
+describe('Geschossen-Nachfrage', () => {
+  it('leitet den Stand aus der Session ab', () => {
+    expect(geschossenFromSession({})).toBe('')
+    expect(geschossenFromSession({ munition_anzahl: 0, munition_pool_id: null })).toBe('no')
+    expect(geschossenFromSession({ munition_anzahl: 12, munition_pool_id: 'p1' })).toBe('yes')
+  })
+
+  it('verlangt eine Antwort und bei Ja eingebuchte Munition plus Menge', () => {
+    const empty = emptyMunitionVerbrauchInput()
+    expect(validateGeschossenMunition({ geschossen: '', form: empty }).ok).toBe(false)
+    expect(validateGeschossenMunition({ geschossen: 'no', form: empty })).toEqual({
+      ok: true,
+      payload: {
+        munition_anzahl: 0,
+        munition_marke: null,
+        munition_kaliber: null,
+        munition_art: null,
+        munition_pool_id: null,
+      },
+    })
+    expect(validateGeschossenMunition({
+      geschossen: 'yes',
+      form: { ...empty, anzahl: '20' },
+    }).ok).toBe(false)
+    const ok = validateGeschossenMunition({
+      geschossen: 'yes',
+      form: { ...empty, anzahl: '20', poolItemId: 'p1', marke: 'Geco' },
+    })
+    expect(ok.ok).toBe(true)
+    if (ok.ok) {
+      expect(ok.payload.munition_anzahl).toBe(20)
+      expect(ok.payload.munition_pool_id).toBe('p1')
+    }
   })
 })

@@ -1,0 +1,40 @@
+{
+  "source": "Owner 2026-09-06",
+  "staff": [
+    {
+      "name": "Hans-Peter Schwendinger",
+      "aliases": ["Hans Peter Schwendinger", "Hans Peter"],
+      "dienstnummer": "1",
+      "bekleidung": ["user", "genehmiger"],
+      "einsatz_mt": "user"
+    },
+    {
+      "name": "Stefanie Albrecht",
+      "dienstnummer": "32",
+      "bekleidung": ["user", "sachbearbeiter"],
+      "einsatz_mt": "user"
+    },
+    {
+      "name": "Fenkart Matthias",
+      "dienstnummer": "7",
+      "bekleidung": ["user", "sachbearbeiter"],
+      "einsatz_mt": "user",
+      "note": "Bekleidung-SB ist Fenkart, nicht Wiesner."
+    },
+    {
+      "name": "Heinz Petternel",
+      "dienstnummer": "18",
+      "bekleidung": ["user"],
+      "einsatz_mt": "sachbearbeiter"
+    },
+    {
+      "name": "Muhammet Soyucok",
+      "dienstnummer": "37",
+      "note": "Nicht herabstufen, wenn Admin."
+    }
+  ],
+  "everyone_else": {
+    "bekleidung": ["user"],
+    "einsatz_mt": "user"
+  }
+}

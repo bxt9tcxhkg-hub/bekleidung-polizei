@@ -19,6 +19,7 @@ import {
   emptyMunitionVerbrauchInput,
   formatCompletedOn,
   formatMunitionVerbrauch,
+  geschossenFromSession,
   isAttendanceStatus,
   isModuleLockDbError,
   moduleAssignmentOptions,
@@ -28,11 +29,12 @@ import {
   validateParticipation,
   validateSession,
   type AttendanceStatus,
+  type GeschossenAnswer,
   type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
 import { poolEmLocationLabel } from '../../lib/poolEinsatzmittel'
 import { isVerwahrungsort } from '../../lib/verwahrungsort'
-import MunitionVerbrauchFields, { type PoolMunitionChoice } from './MunitionVerbrauchFields'
+import MunitionVerbrauchFields, { GeschossenFrage, type PoolMunitionChoice } from './MunitionVerbrauchFields'
 import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
@@ -57,6 +59,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   const [addOfficerId, setAddOfficerId] = useState('')
   const [drafts, setDrafts] = useState<Record<string, { moduleId: string; interval: string }>>({})
   const [munition, setMunition] = useState<MunitionVerbrauchInput>(emptyMunitionVerbrauchInput())
+  const [geschossen, setGeschossen] = useState<GeschossenAnswer>('')
   const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
   const [savingMunition, setSavingMunition] = useState(false)
 
@@ -134,9 +137,11 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   useEffect(() => {
     if (!selected) {
       setMunition(emptyMunitionVerbrauchInput())
+      setGeschossen('')
       return
     }
     setMunition(munitionVerbrauchInputFromSession(selected))
+    setGeschossen(geschossenFromSession(selected))
   }, [selected])
 
   const officerById = useMemo(() => new Map(officers.map(o => [o.id, o])), [officers])
@@ -319,7 +324,8 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     const result = await saveMunitionVerbrauch({
       sessionId: selected.id,
       previous: selected,
-      form: munition,
+      form: geschossen === 'yes' ? munition : emptyMunitionVerbrauchInput(),
+      geschossen,
       recordedBy: profile?.id ?? null,
     })
     if (!result.ok) {
@@ -362,29 +368,40 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Munition verbraucht</h4>
+          <h4 className="text-sm font-semibold text-gray-900 mb-3">Munition</h4>
           {canManage ? (
-            <>
-              <MunitionVerbrauchFields
+            <div className="space-y-4">
+              <GeschossenFrage
                 idPrefix="et-int-munition"
-                value={munition}
-                onChange={setMunition}
-                poolItems={poolChoicesForForm}
+                value={geschossen}
+                onChange={next => {
+                  setGeschossen(next)
+                  if (next === 'no') setMunition(emptyMunitionVerbrauchInput())
+                }}
               />
-              <div className="mt-3 flex justify-end">
+              {geschossen === 'yes' && (
+                <MunitionVerbrauchFields
+                  idPrefix="et-int-munition"
+                  value={munition}
+                  onChange={setMunition}
+                  poolItems={poolChoicesForForm.filter(item => (item.anzahl ?? 0) > 0 || item.id === selected.munition_pool_id)}
+                  requirePool
+                />
+              )}
+              <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={() => { void saveMunition() }}
                   disabled={savingMunition}
                   className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg"
                 >
-                  {savingMunition ? 'Speichern...' : 'Verbrauch speichern'}
+                  {savingMunition ? 'Speichern...' : 'Speichern'}
                 </button>
               </div>
-            </>
+            </div>
           ) : (
             <p className="text-sm text-gray-600">
-              {formatMunitionVerbrauch(selected) || 'Kein Verbrauch erfasst.'}
+              {formatMunitionVerbrauch(selected) || 'Noch nicht erfasst.'}
             </p>
           )}
         </div>

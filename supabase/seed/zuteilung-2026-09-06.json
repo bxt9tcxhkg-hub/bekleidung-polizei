@@ -1,0 +1,8 @@
+{
+  "source": {
+    "folder": "2026-09-06-einsatztraining",
+    "files": ["zuteilung.txt", "Einsatzmittel_Zuteilungsliste.pdf"],
+    "note": "Offizielle Zuteilungstexte lagen auf dieser Cloud-VM nicht vor. Keine Offiziere oder Waffennummern erfunden. Admin/SB importiert die Liste (JSON oder CSV); Treffer nur über bestehende Profile (Dienstnummer, sonst eindeutiger Name)."
+  },
+  "rows": []
+}

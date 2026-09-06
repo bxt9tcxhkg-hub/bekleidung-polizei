@@ -5,6 +5,8 @@ import {
   formatRemovalReason,
   isEinsatzmittelActive,
   isEinsatzmittelRemoved,
+  planCountedAusbuchung,
+  poolItemUsesCountedAusbuchung,
   removedEinsatzmittel,
   validateAusbuchung,
 } from './einsatzmittelAusbuchung'
@@ -52,5 +54,20 @@ describe('Ausbuchung', () => {
     })
     expect(formatRemovalReason(null)).toBe('ohne Angabe')
     expect(formatRemovalReason('  Bruch  ')).toBe('Bruch')
+  })
+
+  it('verringert Pool-Anzahl und lässt den Rest stehen', () => {
+    expect(poolItemUsesCountedAusbuchung({ anzahl: 40 })).toBe(true)
+    expect(poolItemUsesCountedAusbuchung({ anzahl: null })).toBe(false)
+    expect(planCountedAusbuchung({ currentAnzahl: 40, qtyRaw: '10' })).toEqual({
+      ok: true,
+      payload: { mode: 'decrement', qty: 10, nextAnzahl: 30 },
+    })
+    expect(planCountedAusbuchung({ currentAnzahl: 10, qtyRaw: '10' })).toEqual({
+      ok: true,
+      payload: { mode: 'remove', qty: 10, nextAnzahl: 0 },
+    })
+    expect(planCountedAusbuchung({ currentAnzahl: 5, qtyRaw: '6' }).ok).toBe(false)
+    expect(planCountedAusbuchung({ currentAnzahl: null, qtyRaw: '1' }).ok).toBe(false)
   })
 })

@@ -43,20 +43,22 @@ describe('Kategorien', () => {
 
   it('ordnet jeder Kategorie nur die festgelegten Felder zu', () => {
     expect([...PERSONAL_EM_FIELDS.schutzweste]).toEqual(['groesse', 'ablaufdatum', 'schutzfristen'])
-    expect([...PERSONAL_EM_FIELDS.glock_17]).toEqual(['waffennummer', 'service', 'magazinanzahl'])
+    expect([...PERSONAL_EM_FIELDS.glock_17]).toEqual(['marke', 'waffennummer', 'service', 'magazinanzahl'])
     expect([...PERSONAL_EM_FIELDS.munition]).toEqual(['marke', 'kaliber', 'art', 'patronen'])
     expect([...PERSONAL_EM_FIELDS.pfefferspray]).toEqual(['ablauf_mm_yyyy'])
-    expect([...PERSONAL_EM_FIELDS.schlagstock]).toEqual([])
+    expect([...PERSONAL_EM_FIELDS.schlagstock]).toEqual(['marke'])
     expect([...PERSONAL_EM_FIELDS.handfesseln]).toEqual([])
     expect([...PERSONAL_EM_FIELDS.taschenlampe_kelle]).toEqual(['marke'])
     expect([...PERSONAL_EM_FIELDS.leatherman]).toEqual(['marke'])
     expect([...PERSONAL_EM_FIELDS.warnweste]).toEqual(['marke', 'groesse'])
   })
 
-  it('beschriftet Marke bei Taschenlampe und Leatherman als Marke/Type', () => {
+  it('beschriftet Marke je Kategorie', () => {
     expect(personalEmFieldLabel('marke', 'warnweste')).toBe('Marke')
     expect(personalEmFieldLabel('marke', 'taschenlampe_kelle')).toBe('Marke/Type')
     expect(personalEmFieldLabel('marke', 'leatherman')).toBe('Marke/Type')
+    expect(personalEmFieldLabel('marke', 'glock_17')).toBe('Modell')
+    expect(personalEmFieldLabel('marke', 'schlagstock')).toBe('Kennung (EKA)')
   })
 })
 
@@ -173,12 +175,16 @@ describe('validatePersonalEm', () => {
     if (ok.ok) expect(ok.payload.patronen).toBe(50)
   })
 
-  it('erlaubt Schlagstock nur mit Polizist', () => {
-    const result = validatePersonalEm({ category: 'schlagstock', officer_id: 'u2', values: empty })
+  it('erlaubt Schlagstock mit Polizist und EKA-Kennung', () => {
+    const result = validatePersonalEm({
+      category: 'schlagstock',
+      officer_id: 'u2',
+      values: { ...empty, marke: 'EKA-12' },
+    })
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.payload.officer_id).toBe('u2')
-    expect(result.payload.marke).toBeNull()
+    expect(result.payload.marke).toBe('EKA-12')
   })
 })
 

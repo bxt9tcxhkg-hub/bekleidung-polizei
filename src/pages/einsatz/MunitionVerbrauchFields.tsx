@@ -1,5 +1,6 @@
 import {
   poolMunitionOptionLabel,
+  type GeschossenAnswer,
   type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
 
@@ -14,18 +15,60 @@ export type PoolMunitionChoice = {
   locationLabel: string
 }
 
+export function GeschossenFrage({
+  value,
+  onChange,
+  disabled,
+  idPrefix,
+}: {
+  value: GeschossenAnswer
+  onChange: (next: GeschossenAnswer) => void
+  disabled?: boolean
+  idPrefix: string
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-xs font-medium text-gray-600">Wurde geschossen? *</legend>
+      <div className="flex flex-wrap gap-4 text-sm text-gray-800">
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="radio"
+            name={`${idPrefix}-geschossen`}
+            checked={value === 'yes'}
+            disabled={disabled}
+            onChange={() => onChange('yes')}
+          />
+          Ja
+        </label>
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="radio"
+            name={`${idPrefix}-geschossen`}
+            checked={value === 'no'}
+            disabled={disabled}
+            onChange={() => onChange('no')}
+          />
+          Nein
+        </label>
+      </div>
+    </fieldset>
+  )
+}
+
 export default function MunitionVerbrauchFields({
   value,
   onChange,
   poolItems,
   disabled,
   idPrefix,
+  requirePool = false,
 }: {
   value: MunitionVerbrauchInput
   onChange: (next: MunitionVerbrauchInput) => void
   poolItems: readonly PoolMunitionChoice[]
   disabled?: boolean
   idPrefix: string
+  requirePool?: boolean
 }) {
   function set<K extends keyof MunitionVerbrauchInput>(key: K, next: MunitionVerbrauchInput[K]) {
     onChange({ ...value, [key]: next })
@@ -52,7 +95,7 @@ export default function MunitionVerbrauchFields({
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-pool`}>
-            Aus Pool-Bestand (optional)
+            {requirePool ? 'Eingebuchte Munition *' : 'Aus Pool-Bestand (optional)'}
           </label>
           <select
             id={`${idPrefix}-pool`}
@@ -70,7 +113,7 @@ export default function MunitionVerbrauchFields({
               })
             }}
           >
-            <option value="">Nur protokollieren</option>
+            <option value="">{requirePool ? 'Bitte wählen' : 'Nur protokollieren'}</option>
             {poolItems.map(item => (
               <option key={item.id} value={item.id}>
                 {poolMunitionOptionLabel(item)}
@@ -118,8 +161,9 @@ export default function MunitionVerbrauchFields({
         </div>
       </div>
       <p className="text-xs text-gray-500">
-        Session-Summe. Pool-Bestand wird nur bei gewählter Munitionszeile verringert.
-        Persönliche Patronen bleiben unverändert.
+        {requirePool
+          ? 'Verbrauch wird von der gewählten eingebuchten Pool-Munition abgezogen. Persönliche Patronen bleiben unverändert.'
+          : 'Session-Summe. Pool-Bestand wird nur bei gewählter Munitionszeile verringert. Persönliche Patronen bleiben unverändert.'}
       </p>
     </div>
   )

@@ -29,6 +29,8 @@ import {
   ausbuchungPayload,
   formatRemovalReason,
   isEinsatzmittelRemoved,
+  planCountedAusbuchung,
+  poolItemUsesCountedAusbuchung,
   removedEinsatzmittel,
 } from '../../lib/einsatzmittelAusbuchung'
 import AusbuchungDialog from './AusbuchungDialog'
@@ -54,6 +56,7 @@ export default function PoolEinsatzmittelPanel() {
   const [saving, setSaving] = useState(false)
   const [ausbuchungItem, setAusbuchungItem] = useState<PoolEinsatzmittel | null>(null)
   const [ausbuchungReason, setAusbuchungReason] = useState('')
+  const [ausbuchungQty, setAusbuchungQty] = useState('')
   const [ausbuchungSaving, setAusbuchungSaving] = useState(false)
 
   async function load() {
@@ -155,11 +158,24 @@ export default function PoolEinsatzmittelPanel() {
     if (!canManage || isEinsatzmittelRemoved(item)) return
     setAusbuchungItem(item)
     setAusbuchungReason('')
+    setAusbuchungQty('')
     setError('')
   }
 
   async function confirmAusbuchung() {
     if (!canManage || !ausbuchungItem) return
+    const counted = poolItemUsesCountedAusbuchung(ausbuchungItem)
+    let nextAnzahl: number | null = ausbuchungItem.anzahl
+    let remove = !counted
+    if (counted) {
+      const plan = planCountedAusbuchung({ currentAnzahl: ausbuchungItem.anzahl, qtyRaw: ausbuchungQty })
+      if (!plan.ok) {
+        setError(plan.error)
+        return
+      }
+      nextAnzahl = plan.payload.nextAnzahl
+      remove = plan.payload.mode === 'remove'
+    }
     const result = ausbuchungPayload({ reason: ausbuchungReason, removedBy: profile?.id ?? null })
     if (!result.ok || !result.payload) {
       setError(result.ok ? 'Ausbuchung fehlgeschlagen.' : result.error)
@@ -167,9 +183,12 @@ export default function PoolEinsatzmittelPanel() {
     }
     setAusbuchungSaving(true)
     setError('')
+    const update = remove
+      ? { ...result.payload, anzahl: nextAnzahl }
+      : { anzahl: nextAnzahl }
     const { error: updateError } = await supabase
       .from('pool_einsatzmittel')
-      .update(result.payload)
+      .update(update)
       .eq('id', ausbuchungItem.id)
       .is('removed_at', null)
     if (updateError) {
@@ -177,7 +196,10 @@ export default function PoolEinsatzmittelPanel() {
       setAusbuchungSaving(false)
       return
     }
-    logAudit('Pool-Einsatzmittel ausgebucht', POOL_EM_CATEGORY_LABELS[ausbuchungItem.category])
+    logAudit(
+      remove ? 'Pool-Einsatzmittel ausgebucht' : 'Pool-Einsatzmittel Anzahl verringert',
+      POOL_EM_CATEGORY_LABELS[ausbuchungItem.category],
+    )
     setAusbuchungItem(null)
     setAusbuchungSaving(false)
     try {
@@ -415,6 +437,11 @@ export default function PoolEinsatzmittelPanel() {
           onConfirm={() => { void confirmAusbuchung() }}
           saving={ausbuchungSaving}
           error={error && ausbuchungItem ? error : ''}
+          counted={
+            poolItemUsesCountedAusbuchung(ausbuchungItem) && ausbuchungItem.anzahl != null
+              ? { currentAnzahl: ausbuchungItem.anzahl, qty: ausbuchungQty, onQtyChange: setAusbuchungQty }
+              : undefined
+          }
         />
       )}
     </div>

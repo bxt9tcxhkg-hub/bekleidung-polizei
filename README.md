@@ -40,9 +40,10 @@ Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:
 «Einsatzmittel & Training» führt auf `/einsatz`. Unterbereich Einsatzmittel: persönliche
 Zuweisungen (Polizist oder Verwahrungsort, z. B. Lager nach Austritt; mehrere Stücke
 derselben Kategorie mit unterschiedlicher Waffennummer), Pool-Einsatzmittel und
-Lagerbestand (Pool-Zahlen plus eingelagerte persönliche Stücke). Unterbereich Einsatztraining: Module
-(ohne hinterlegten Lehrplan), internes Protokoll (Anwesend/Abwesend, Intervall) und
-externe Teilnahmen. Lesen für `user`, Verwalten für Sachbearbeiter/Admin.
+Lagerbestand (Pool-Zahlen plus eingelagerte persönliche Stücke). Unterbereich Einsatztraining: offizielle
+Module (Combat, Internes ET, Stockschulung TS-Einsatzstock, Erste Hilfe COMBAT,
+Szenarientraining, Fahrsicherheitstraining), internes Protokoll (Anwesend/Abwesend, Intervall,
+Geschossen-Nachfrage) und externe Teilnahmen. Lesen für `user`, Verwalten für Sachbearbeiter/Admin.
 Taktung (Konstante `EINSATZTRAINING_CADENCE`): internes ET 1× pro Halbjahr,
 externes ET 4× pro Jahr. Ein abgeschlossenes Modul ist nicht erneut zuweisbar.
 
@@ -151,6 +152,9 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260909_einsatztraining.sql` | Einsatztraining: Module, Trainingstage, Protokoll, Abschlüsse/Sperre, RLS über `einsatz_mt` |
 | `20260910_personal_em_verwahrungsort.sql` | Persönliche EM: optionaler Officer + Verwahrungsort (Lager) |
 | `20260911_portal_benutzer_genehmiger.sql` | Genehmiger darf `portal_area_roles` lesen; Schreiben bleibt Admin |
+| `20260912_pool_verwahrungsorte_lager.sql` | Pool-Orte Spind/Waffentresor + Lager-Notiz |
+| `20260913_munition_verbrauch_ausbuchung.sql` | Munitionsverbrauch am Trainingstag, Ausbuchung `removed_at` |
+| `20260914_official_et_roles.sql` | Offizielle ET-Module + Owner-Rollenmatrix nach Dienstnummer |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
@@ -178,7 +182,7 @@ neu erzeugt).
 Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
-1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`, `20260907`, `20260908`, `20260909`) auf das Supabase-Projekt.
+1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260914`) auf das Supabase-Projekt.
 2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig auch wegen CORS (kein `*`).
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
    funktionieren Upload/Dateizugriff nicht mehr (kein JWT mehr im Repo).
