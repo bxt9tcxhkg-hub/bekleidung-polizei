@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil, Plus, UserPlus, Warehouse, X } from 'lucide-react'
+import { Pencil, Plus, Upload, UserPlus, Warehouse, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -35,6 +35,7 @@ import {
 } from '../../lib/einsatzmittelAusbuchung'
 import { PDF_UNASSIGNED_OFFICER, generatePersonalEmPdf } from '../../lib/einsatzPdf'
 import AusbuchungDialog from './AusbuchungDialog'
+import ZuteilungImportDialog from './ZuteilungImportDialog'
 import PdfExportButton from './PdfExportButton'
 
 type CategoryFilter = 'all' | 'lager' | 'ausgebucht' | PersonalEmCategory
@@ -60,6 +61,7 @@ export default function PersonalEinsatzmittelPanel() {
   const [verwahrungsort, setVerwahrungsort] = useState('')
   const [values, setValues] = useState<PersonalEmFormValues>(emptyPersonalEmFormValues())
   const [saving, setSaving] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [ausbuchungItem, setAusbuchungItem] = useState<PersonalEinsatzmittel | null>(null)
   const [ausbuchungReason, setAusbuchungReason] = useState('')
   const [ausbuchungSaving, setAusbuchungSaving] = useState(false)
@@ -302,6 +304,16 @@ export default function PersonalEinsatzmittelPanel() {
             ))}
           </select>
           <PdfExportButton onClick={exportPersonalPdf} />
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Import Zuteilung</span>
+            </button>
+          )}
           {canManage && (
             <button
               type="button"
@@ -550,6 +562,16 @@ export default function PersonalEinsatzmittelPanel() {
             </div>
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ZuteilungImportDialog
+          officers={officers}
+          existing={items}
+          createdBy={profile?.id ?? null}
+          onClose={() => setShowImport(false)}
+          onImported={load}
+        />
       )}
 
       {ausbuchungItem && (

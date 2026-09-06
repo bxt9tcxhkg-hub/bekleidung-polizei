@@ -1,8 +1,9 @@
 import { supabase } from '../../lib/supabase'
 import {
   planPoolMunitionAdjustments,
-  validateMunitionVerbrauch,
+  validateGeschossenMunition,
   withMunitionRecordedBy,
+  type GeschossenAnswer,
   type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
 import type { EinsatzTrainingSession } from '../../lib/types'
@@ -13,9 +14,10 @@ export async function saveMunitionVerbrauch(input: {
   sessionId: string
   previous: MunitionSessionRef
   form: MunitionVerbrauchInput
+  geschossen: GeschossenAnswer
   recordedBy: string | null
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const validated = validateMunitionVerbrauch(input.form)
+  const validated = validateGeschossenMunition({ geschossen: input.geschossen, form: input.form })
   if (!validated.ok) return validated
 
   const neededIds = [validated.payload.munition_pool_id, input.previous.munition_pool_id]

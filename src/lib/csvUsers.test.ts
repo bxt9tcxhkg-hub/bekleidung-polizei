@@ -24,7 +24,7 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
   it('parst die Dokumentations-Vorlage', () => {
     const users = parseImportUsers(csv)
     expect(users).toHaveLength(2)
-    expect(users[0]).toEqual({
+    expect(users[0]).toMatchObject({
       name: 'Max Mustermann',
       username: 'mmustermann',
       dienstnummer: '1234',
@@ -42,5 +42,43 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
   it('ignoriert Zeilen ohne Name/Benutzername', () => {
     expect(rowToUser({ name: '', benutzername: 'x' })).toBeNull()
     expect(rowToUser({ name: 'A', username: 'a' })?.username).toBe('a')
+  })
+
+  it('erzeugt aus Vorname/Nachname/DN den Platzhalter-Login dn{DN}', () => {
+    const user = rowToUser({ vorname: 'Stefanie', nachname: 'Albrecht', dienstnummer: '32' })
+    expect(user).toMatchObject({
+      name: 'Stefanie Albrecht',
+      username: 'dn32',
+      dienstnummer: '32',
+      organisation: 'Stadtpolizei',
+      roles: ['user', 'sachbearbeiter'],
+      gender: 'female',
+    })
+  })
+
+  it('setzt ET-Offizierszeilen aus der Seed immer auf Stadtpolizei', () => {
+    const user = rowToUser({
+      vorname: 'Hans-Peter',
+      nachname: 'Schwendinger',
+      dienstnummer: '1',
+      organisation: 'Parkaufsicht',
+    })
+    expect(user?.organisation).toBe('Stadtpolizei')
+    expect(user?.username).toBe('dn1')
+  })
+
+  it('setzt Parkaufsicht-Seedzeilen auf Parkaufsicht, auch ohne Org-Spalte', () => {
+    const user = rowToUser({ vorname: 'Irmgard', nachname: 'Fässler', dienstnummer: '70' })
+    expect(user).toMatchObject({
+      username: 'dn70',
+      organisation: 'Parkaufsicht',
+      roles: ['user'],
+      gender: 'female',
+    })
+  })
+
+  it('leitet Parkaufsicht nicht aus park im Benutzernamen ab', () => {
+    const user = rowToUser({ name: 'Parker Test', benutzername: 'parkert', dienstnummer: '99' })
+    expect(user?.organisation).toBe('Stadtpolizei')
   })
 })

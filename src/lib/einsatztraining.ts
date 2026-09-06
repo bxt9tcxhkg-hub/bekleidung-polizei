@@ -1,7 +1,8 @@
 /**
  * Einsatztraining (Phase 3a): Module, internes Protokoll, Modul-Sperre.
  *
- * Kein hinterlegter Lehrplan — Module legt SB/Admin an (Name, intern/extern).
+ * Offizielle Modulnamen liegen in `officialTrainingModules.ts` (Verzeichnis).
+ * Weitere Module kann SB/Admin anlegen (Name, intern/extern).
  * Taktung nur hier als Konstante, nicht als Magie in der UI.
  * Schreiben: einsatz_mt Sachbearbeiter/Admin oder globales profiles.admin.
  * Lesen: jede einsatz_mt-Rolle (user = nur Lesen).
@@ -304,6 +305,52 @@ export function emptyMunitionVerbrauchInput(): MunitionVerbrauchInput {
   return { anzahl: '', marke: '', kaliber: '', art: '', poolItemId: '' }
 }
 
+export const GESCHOSSEN_ANSWERS = ['yes', 'no'] as const
+export type GeschossenAnswer = (typeof GESCHOSSEN_ANSWERS)[number] | ''
+
+export function isGeschossenAnswer(value: string): value is Exclude<GeschossenAnswer, ''> {
+  return value === 'yes' || value === 'no'
+}
+
+export function geschossenFromSession(session: {
+  munition_anzahl?: number | null
+  munition_pool_id?: string | null
+}): GeschossenAnswer {
+  if (session.munition_anzahl == null && !session.munition_pool_id) return ''
+  if (session.munition_anzahl === 0 && !session.munition_pool_id) return 'no'
+  return 'yes'
+}
+
+export function validateGeschossenMunition(input: {
+  geschossen: GeschossenAnswer
+  form: MunitionVerbrauchInput
+}): ValidateResult<MunitionVerbrauchPayload> {
+  if (input.geschossen === '') {
+    return { ok: false, error: 'Bitte angeben, ob geschossen wurde.' }
+  }
+  if (input.geschossen === 'no') {
+    return {
+      ok: true,
+      payload: {
+        munition_anzahl: 0,
+        munition_marke: null,
+        munition_kaliber: null,
+        munition_art: null,
+        munition_pool_id: null,
+      },
+    }
+  }
+  const base = validateMunitionVerbrauch(input.form)
+  if (!base.ok) return base
+  if (!base.payload.munition_pool_id) {
+    return { ok: false, error: 'Bitte die eingebuchte Munition wählen.' }
+  }
+  if (base.payload.munition_anzahl == null || base.payload.munition_anzahl < 1) {
+    return { ok: false, error: 'Bitte die verbrauchte Anzahl angeben.' }
+  }
+  return base
+}
+
 export function munitionVerbrauchInputFromSession(session: {
   munition_anzahl?: number | null
   munition_marke?: string | null
@@ -389,6 +436,7 @@ export function formatMunitionVerbrauch(session: {
   munition_art?: string | null
 }): string {
   if (session.munition_anzahl == null) return ''
+  if (session.munition_anzahl === 0) return 'nicht geschossen'
   const parts = [`${session.munition_anzahl}`]
   if (session.munition_marke?.trim()) parts.push(session.munition_marke.trim())
   if (session.munition_kaliber?.trim()) parts.push(session.munition_kaliber.trim())

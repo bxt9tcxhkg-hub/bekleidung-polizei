@@ -1,0 +1,11 @@
+{
+  "source": "users-seed.json",
+  "staff": [
+    { "name": "Hans-Peter Schwendinger", "dienstnummer": "1", "bekleidung": ["user", "genehmiger"], "einsatz_mt": "user" },
+    { "name": "Matthias Fenkart", "dienstnummer": "7", "bekleidung": ["user", "sachbearbeiter"], "einsatz_mt": "user" },
+    { "name": "Stefanie Albrecht", "dienstnummer": "32", "bekleidung": ["user", "sachbearbeiter"], "einsatz_mt": "user" },
+    { "name": "Heinz Petternel", "dienstnummer": "18", "bekleidung": ["user"], "einsatz_mt": "sachbearbeiter" },
+    { "name": "Muhammet Soyucok", "dienstnummer": "37", "note": "Admin nicht herabstufen." }
+  ],
+  "everyone_else": { "bekleidung": ["user"], "einsatz_mt": "user" }
+}

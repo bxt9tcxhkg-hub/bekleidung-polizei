@@ -10,6 +10,7 @@ export default function AusbuchungDialog({
   onConfirm,
   saving,
   error,
+  counted,
 }: {
   itemLabel: string
   reason: string
@@ -18,20 +19,47 @@ export default function AusbuchungDialog({
   onConfirm: () => void
   saving: boolean
   error: string
+  counted?: {
+    currentAnzahl: number
+    qty: string
+    onQtyChange: (value: string) => void
+  }
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-bold text-gray-900">Aus Bestand entfernen</h2>
+          <h2 className="font-bold text-gray-900">
+            {counted ? 'Anzahl ausbuchen' : 'Aus Bestand entfernen'}
+          </h2>
           <button type="button" onClick={onCancel} className="p-1.5 hover:bg-gray-100 rounded-lg" aria-label="Schließen">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="px-6 py-4 space-y-4">
           <p className="text-sm text-gray-600">
-            «{itemLabel}» wird ausgebucht und erscheint nicht mehr im Bestand. Der Eintrag bleibt nachvollziehbar.
+            {counted
+              ? `«${itemLabel}» hat ${counted.currentAnzahl} Stück. Die ausgebuchte Menge wird abgezogen, der Rest bleibt im Bestand.`
+              : `«${itemLabel}» wird ausgebucht und erscheint nicht mehr im Bestand. Der Eintrag bleibt nachvollziehbar.`}
           </p>
+          {counted && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="em-ausbuchung-anzahl">
+                Anzahl *
+              </label>
+              <input
+                id="em-ausbuchung-anzahl"
+                className={inputClass}
+                type="number"
+                min={1}
+                max={counted.currentAnzahl}
+                step={1}
+                inputMode="numeric"
+                value={counted.qty}
+                onChange={e => counted.onQtyChange(e.target.value)}
+              />
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="em-ausbuchung-grund">
               Grund (optional)

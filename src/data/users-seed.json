@@ -1,0 +1,112 @@
+{
+  "source": {
+    "path": "/workspace/bekleidung-inbox/2026-09-06-einsatztraining/users-seed.json",
+    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste vom Owner: nur Bekleidung Benutzer, keine erfundenen höheren Rollen. Weitere der 34 ET-Offiziere nicht erfunden."
+  },
+  "officers": [
+    {
+      "nachname": "Schwendinger",
+      "vorname": "Hans-Peter",
+      "dienstnummer": "1",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "genehmiger",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Fenkart",
+      "vorname": "Matthias",
+      "dienstnummer": "7",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "sachbearbeiter",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Petternel",
+      "vorname": "Heinz",
+      "dienstnummer": "18",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "sachbearbeiter"
+    },
+    {
+      "nachname": "Albrecht",
+      "vorname": "Stefanie",
+      "dienstnummer": "32",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "sachbearbeiter",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Soyucok",
+      "vorname": "Muhammet",
+      "dienstnummer": "37",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "admin",
+      "einsatz_mt": "admin"
+    },
+    {
+      "nachname": "Fässler",
+      "vorname": "Irmgard",
+      "dienstnummer": "70",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Fitz",
+      "vorname": "Werner",
+      "dienstnummer": "90",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Griß",
+      "vorname": "Rainer",
+      "dienstnummer": "40",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Kalfa",
+      "vorname": "Okan",
+      "dienstnummer": "75",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Kusche",
+      "vorname": "Karl",
+      "dienstnummer": "55",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Mandracchia",
+      "vorname": "Alfonso",
+      "dienstnummer": "50",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Ploder",
+      "vorname": "Karin",
+      "dienstnummer": "65",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Schrotter",
+      "vorname": "Gerhard",
+      "dienstnummer": "95",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    }
+  ]
+}

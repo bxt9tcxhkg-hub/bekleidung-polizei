@@ -1,9 +1,22 @@
+import { inferOfficerGender, isJunkRosterRow, usernameFromDienstnummer } from './officerRoster'
+import { planRoleMatrixAssignment } from './roleMatrix'
+import { findUserSeedByDienstnummer, organisationFromSeedValue } from './usersSeed'
+
+/** Seed-DN gewinnt. Sonst nur explizite Parkaufsicht-Spalte — nicht aus „park“ im Namen. */
+export function organisationFromImportRow(explicit: string, dienstnummer: string): string {
+  const seed = findUserSeedByDienstnummer(dienstnummer)
+  if (seed) return seed.organisation
+  return organisationFromSeedValue(explicit)
+}
+
 export interface ImportUser {
   name: string
   username: string
   dienstnummer: string
   organisation: string
   roles: string[]
+  einsatzMtRole?: string
+  gender?: 'male' | 'female'
 }
 
 export function rowToUser(row: Record<string, string>): ImportUser | null {
@@ -14,18 +27,25 @@ export function rowToUser(row: Record<string, string>): ImportUser | null {
     }
     return ''
   }
-  const name = get('name', 'nachname', 'vollname')
-  const username = get('benutzername', 'username', 'benutzer', 'login')
+  const vorname = get('vorname')
+  const nachname = get('nachname')
+  const name = get('name', 'vollname') || [vorname, nachname].filter(Boolean).join(' ')
+  const dienstnummer = get('dienstnummer', 'dn', 'dg', 'dienst-nr', 'dienstnr')
+  const explicitUsername = get('benutzername', 'username', 'benutzer', 'login')
+  const username = explicitUsername || usernameFromDienstnummer(dienstnummer)
   if (!name || !username) return null
+  if (!explicitUsername && isJunkRosterRow({ name, vorname, nachname, dienstnummer })) return null
   const rollen = get('rollen', 'roles', 'rolle', 'role')
-  const org = get('organisation', 'org', 'abteilung', 'einheit')
-  const normOrg = org.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei'
+  const org = get('organisation', 'org')
+  const planned = planRoleMatrixAssignment({ id: '', name, dienstnummer, roles: ['user'] })
   return {
     name,
     username: username.toLowerCase(),
-    dienstnummer: get('dienstnummer', 'dg', 'dienst-nr', 'dienstnr'),
-    organisation: normOrg,
-    roles: rollen ? rollen.split('|').map((s) => s.trim()).filter(Boolean) : ['user'],
+    dienstnummer,
+    organisation: organisationFromImportRow(org, dienstnummer),
+    roles: rollen ? rollen.split('|').map((s) => s.trim()).filter(Boolean) : planned.bekleidungRoles,
+    einsatzMtRole: planned.einsatzMtRole,
+    gender: inferOfficerGender(name),
   }
 }
 

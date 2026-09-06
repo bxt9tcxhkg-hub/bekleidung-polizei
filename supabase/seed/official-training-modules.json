@@ -1,0 +1,15 @@
+{
+  "source": {
+    "folder": "2026-09-06-einsatztraining",
+    "files": ["verzeichnis.txt", "Verzeichnis.pdf"],
+    "note": "Offizielle Modulnamen aus dem Petternel-Verzeichnis. Keine weiteren Module."
+  },
+  "modules": [
+    { "name": "Combat", "kind": "extern", "active": true },
+    { "name": "Internes ET", "kind": "intern", "active": true },
+    { "name": "Stockschulung TS-Einsatzstock", "kind": "intern", "active": true, "note": "Intern angesetzt (wie ET getaktet)." },
+    { "name": "Erste Hilfe COMBAT", "kind": "extern", "active": true },
+    { "name": "Szenarientraining", "kind": "intern", "active": true },
+    { "name": "Fahrsicherheitstraining", "kind": "extern", "active": true }
+  ]
+}

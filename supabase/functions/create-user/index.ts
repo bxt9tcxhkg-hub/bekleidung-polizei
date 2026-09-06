@@ -106,6 +106,7 @@ Deno.serve(async (req) => {
     organisation?: string
     active?: boolean
     initial_password?: string
+    einsatz_mt_role?: string
   }
   try {
     body = await req.json()
@@ -177,7 +178,11 @@ Deno.serve(async (req) => {
     { user_id: created.user.id, area: 'bekleidung', roles: bekleidungRoles },
   ]
   if (active) {
-    areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: ['user'] })
+    const requestedEinsatz = body.einsatz_mt_role
+    const einsatzMt = callerRoles.includes('admin') && (requestedEinsatz === 'sachbearbeiter' || requestedEinsatz === 'admin')
+      ? requestedEinsatz
+      : 'user'
+    areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: [einsatzMt] })
   }
   const { error: areaErr } = await admin.from('portal_area_roles').upsert(areaRows)
   if (areaErr) {
