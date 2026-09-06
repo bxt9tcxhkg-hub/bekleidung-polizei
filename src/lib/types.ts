@@ -237,6 +237,35 @@ export interface PersonalEinsatzmittel {
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
 }
 
+export type PoolEmCategory =
+  | 'langwaffe_stg77'
+  | 'magazine'
+  | 'munition'
+  | 'pfefferspray_gross'
+  | 'schild'
+  | 'ballistischer_helm'
+  | 'schwere_westen'
+  | 'spuckschutzhaube'
+
+export type Verwahrungsort = 'lager' | 'innendienst' | 'peter_1' | 'peter_2' | 'peter_30'
+
+export interface PoolEinsatzmittel {
+  id: string
+  category: PoolEmCategory
+  verwahrungsort: Verwahrungsort
+  marke: string | null
+  typ: string | null
+  waffennummer: string | null
+  kaliber: string | null
+  art: string | null
+  anzahl: number | null
+  groessen: string | null
+  ablaufdatum: string | null
+  created_at: string | null
+  updated_at: string | null
+  created_by: string | null
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 
 export interface SupportTicket {
@@ -277,6 +306,7 @@ type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
+type PoolEinsatzmittelRow = PoolEinsatzmittel
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -355,6 +385,9 @@ export type Database = {
       personal_einsatzmittel: { Row: PersonalEinsatzmittelRow; Insert: Pick<PersonalEinsatzmittelRow, 'category' | 'officer_id'> & Partial<Omit<PersonalEinsatzmittelRow, 'category' | 'officer_id'>>; Update: Partial<Omit<PersonalEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'personal_einsatzmittel_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'personal_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      pool_einsatzmittel: { Row: PoolEinsatzmittelRow; Insert: Pick<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'> & Partial<Omit<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'>>; Update: Partial<Omit<PoolEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'pool_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
     }
     Views: {
