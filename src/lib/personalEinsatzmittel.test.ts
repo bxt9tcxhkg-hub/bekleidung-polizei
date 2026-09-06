@@ -3,22 +3,31 @@ import {
   PERSONAL_EM_CATEGORIES,
   PERSONAL_EM_CATEGORY_LABELS,
   PERSONAL_EM_FIELDS,
+  PERSONAL_EM_ORG_FILTERS,
+  PERSONAL_EM_ORG_FILTER_LABELS,
   aggregatePersonalLagerbestand,
   canManagePersonalEinsatzmittel,
   emptyPersonalEmFormValues,
+  filterActiveOfficersForPersonalEmMatrix,
   formValuesFromRecord,
   formatIsoDate,
   isPersonalEmCategory,
   isPersonalEmInLager,
   normalizeAblaufMmYyyy,
   officerDisplayName,
+  officerMatchesPersonalEmOrgFilter,
   personalEmDetailText,
   personalEmFieldLabel,
+  personalEmItemsForMatrixCell,
+  personalEmKeyDetail,
   personalEmLocationLabel,
+  personalEmMatrixCellStatus,
   personalEmOfficerLabel,
   personalItemsInLager,
   toPersonalLagerAssignment,
+  unassignedActivePersonalEm,
   validatePersonalEm,
+  type PersonalEmMatrixRecord,
 } from './personalEinsatzmittel'
 
 const empty = emptyPersonalEmFormValues()
@@ -279,6 +288,134 @@ describe('Lagerbestand persönliche EM', () => {
       { id: 'b', verwahrungsort: null },
     ]).map(i => i.id)).toEqual(['a'])
     expect(toPersonalLagerAssignment()).toEqual({ officer_id: null, verwahrungsort: 'lager' })
+  })
+})
+
+function matrixRecord(partial: Partial<PersonalEmMatrixRecord> & { category?: PersonalEmMatrixRecord['category'] }): PersonalEmMatrixRecord {
+  return {
+    category: 'warnweste',
+    groesse: null,
+    ablaufdatum: null,
+    schutzfristen: null,
+    waffennummer: null,
+    service: null,
+    magazinanzahl: null,
+    marke: null,
+    kaliber: null,
+    art: null,
+    patronen: null,
+    ablauf_mm_yyyy: null,
+    officer_id: 'u1',
+    verwahrungsort: null,
+    removed_at: null,
+    ...partial,
+  }
+}
+
+describe('Org-Filter Matrix', () => {
+  it('nutzt die bestehenden Geltungs-Labels Polizei / Parkaufsicht / Alle', () => {
+    expect([...PERSONAL_EM_ORG_FILTERS]).toEqual(['polizei', 'parkaufsicht', 'alle'])
+    expect(PERSONAL_EM_ORG_FILTER_LABELS.polizei).toBe('Polizei')
+    expect(PERSONAL_EM_ORG_FILTER_LABELS.parkaufsicht).toBe('Parkaufsicht')
+    expect(PERSONAL_EM_ORG_FILTER_LABELS.alle).toBe('Alle')
+  })
+
+  it('filtert über isStadtpolizeiMember / isParkaufsichtMember, leere Org zählt als Polizei', () => {
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Stadtpolizei' }, 'polizei')).toBe(true)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Parkaufsicht' }, 'polizei')).toBe(false)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Parkaufsicht' }, 'parkaufsicht')).toBe(true)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Stadtpolizei' }, 'parkaufsicht')).toBe(false)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: '' }, 'polizei')).toBe(true)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: '' }, 'parkaufsicht')).toBe(false)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Stadtpolizei' }, 'alle')).toBe(true)
+    expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Parkaufsicht' }, 'alle')).toBe(true)
+  })
+
+  it('nimmt nur aktive Offiziere und sortiert nach Anzeigename', () => {
+    const rows = filterActiveOfficersForPersonalEmMatrix([
+      { id: 'p', name: 'Park', organisation: 'Parkaufsicht', active: true },
+      { id: 'z', name: 'Zoe', organisation: 'Stadtpolizei', active: true },
+      { id: 'a', name: 'Anna', organisation: 'Stadtpolizei', active: true },
+      { id: 'x', name: 'Inaktiv', organisation: 'Stadtpolizei', active: false },
+    ], 'polizei')
+    expect(rows.map(r => r.id)).toEqual(['a', 'z'])
+    expect(filterActiveOfficersForPersonalEmMatrix(rows, 'parkaufsicht')).toEqual([])
+    expect(filterActiveOfficersForPersonalEmMatrix([
+      { id: 'p', name: 'Park', organisation: 'Parkaufsicht', active: true },
+      { id: 'a', name: 'Anna', organisation: 'Stadtpolizei', active: true },
+    ], 'alle').map(r => r.id)).toEqual(['a', 'p'])
+  })
+})
+
+describe('Matrixzellen', () => {
+  it('nimmt das erste Detailfeld als Kurztext', () => {
+    expect(personalEmKeyDetail(matrixRecord({
+      category: 'warnweste',
+      marke: '3M',
+      groesse: 'XL',
+    }))).toBe('Marke: 3M')
+    expect(personalEmKeyDetail(matrixRecord({
+      category: 'glock_17',
+      waffennummer: 'W-1001',
+    }))).toBe('Waffennummer: W-1001')
+    expect(personalEmKeyDetail(matrixRecord({ category: 'handfesseln' }))).toBe('')
+  })
+
+  it('zeigt leer als Gedankenstrich, eins als Detail, mehrere als N× plus Hinweis', () => {
+    expect(personalEmMatrixCellStatus([])).toEqual({
+      count: 0,
+      text: '—',
+      hint: '',
+      inLager: false,
+    })
+    expect(personalEmMatrixCellStatus([matrixRecord({
+      category: 'pfefferspray',
+      ablauf_mm_yyyy: '03/2027',
+    })])).toEqual({
+      count: 1,
+      text: 'Ablauf (MM/JJJJ): 03/2027',
+      hint: 'Ablauf (MM/JJJJ): 03/2027',
+      inLager: false,
+    })
+    expect(personalEmMatrixCellStatus([
+      matrixRecord({ category: 'glock_17', waffennummer: 'W-1' }),
+      matrixRecord({ category: 'glock_17', waffennummer: 'W-2' }),
+    ])).toEqual({
+      count: 2,
+      text: '2× Waffennummer: W-1',
+      hint: 'Waffennummer: W-1',
+      inLager: false,
+    })
+  })
+
+  it('merkt Lager an der Zuweisung und fällt ohne Felder auf zugewiesen zurück', () => {
+    expect(personalEmMatrixCellStatus([matrixRecord({
+      category: 'handfesseln',
+    })]).text).toBe('zugewiesen')
+    expect(personalEmMatrixCellStatus([matrixRecord({
+      category: 'handfesseln',
+      verwahrungsort: 'lager',
+    })])).toMatchObject({
+      text: 'zugewiesen · Lager',
+      inLager: true,
+    })
+    expect(personalEmMatrixCellStatus([
+      matrixRecord({ category: 'warnweste', marke: '3M', verwahrungsort: 'lager' }),
+      matrixRecord({ category: 'warnweste', marke: 'UV' }),
+    ]).text).toBe('2× Marke: 3M · Lager')
+  })
+
+  it('ordnet aktive Zuweisungen nach Polizist und Kategorie, ignoriert Ausbuchungen', () => {
+    const items = [
+      matrixRecord({ officer_id: 'u1', category: 'schutzweste', groesse: 'L' }),
+      matrixRecord({ officer_id: 'u1', category: 'schutzweste', groesse: 'XL', removed_at: '2026-09-01' }),
+      matrixRecord({ officer_id: 'u2', category: 'schutzweste', groesse: 'M' }),
+      matrixRecord({ officer_id: 'u1', category: 'warnweste', marke: '3M' }),
+      matrixRecord({ officer_id: null, category: 'leatherman', marke: 'Wave', verwahrungsort: 'lager' }),
+    ]
+    expect(personalEmItemsForMatrixCell(items, 'u1', 'schutzweste').map(i => i.groesse)).toEqual(['L'])
+    expect(unassignedActivePersonalEm(items)).toHaveLength(1)
+    expect(unassignedActivePersonalEm(items)[0].category).toBe('leatherman')
   })
 })
 
