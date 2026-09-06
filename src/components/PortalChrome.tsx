@@ -1,7 +1,13 @@
-import { Link } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { LifeBuoy, LogOut, UserCircle, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { PORTAL_ACCOUNT_LINKS, type PortalAccountId } from '../lib/portalAccount'
 import ChangePasswordModal from './ChangePasswordModal'
+
+const ACCOUNT_ICONS: Record<PortalAccountId, LucideIcon> = {
+  profil: UserCircle,
+  hilfe: LifeBuoy,
+}
 
 export default function PortalChrome({
   children,
@@ -13,6 +19,7 @@ export default function PortalChrome({
   wide?: boolean
 }) {
   const { profile, mustChangePassword, mustSetUsername, signOut } = useAuth()
+  const location = useLocation()
   const width = wide ? 'max-w-6xl' : 'max-w-4xl'
 
   return (
@@ -31,6 +38,22 @@ export default function PortalChrome({
             </div>
           </Link>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {PORTAL_ACCOUNT_LINKS.map(link => {
+              const Icon = ACCOUNT_ICONS[link.id]
+              const active = location.pathname === link.to
+              return (
+                <Link
+                  key={link.id}
+                  to={link.to}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    active ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{link.label}</span>
+                </Link>
+              )
+            })}
             {actions}
             <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[12rem]">
               {profile?.name || profile?.username}

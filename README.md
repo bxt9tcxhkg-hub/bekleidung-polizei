@@ -17,7 +17,7 @@ Stadtwappen (Birnbaum): Wikimedia Commons, [File:Wappendornbirn.svg](https://com
 
 | Rolle | Bereich |
 |---|---|
-| Benutzer | Bekleidung bestellen, eigene Bestellungen, Profil (inkl. Größen) |
+| Benutzer | Bekleidung bestellen, eigene Bestellungen |
 | Sachbearbeiter | Bestellungen abwickeln, Lager, Produkte, Quartale, Analyse |
 | Genehmiger | Freigaben, Budgetverwaltung, Schuherstattungen; Benutzerverwaltung im Portal |
 | Admin | Alle Bereiche |
@@ -26,7 +26,9 @@ Die Rolle `approver` wird weiterhin als Synonym für `Genehmiger` akzeptiert.
 
 Benutzerverwaltung liegt ausschließlich im **Portal** (`/portal/benutzer`) und ist für
 **Admin oder Genehmiger** (Bekleidung) bedienbar. In der Bekleidungs-App gibt es keine
-Benutzerseite und keinen Querverweis. Dual-Write `profiles.roles` ↔ `portal_area_roles`
+Benutzerseite und keinen Querverweis. «Mein Profil» (`/profil`) und «Hilfe» (`/hilfe`)
+liegen auf der Portal-Startseite und in der Portal-Kopfzeile, nicht in der
+Bekleidungs-Navigation. Dual-Write `profiles.roles` ↔ `portal_area_roles`
 (area=`bekleidung`) bleibt; `einsatz_mt`-Rechte bleiben Admin-only.
 Deaktivieren bleibt Genehmiger/Admin (bestehende Shop-Regel).
 Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:

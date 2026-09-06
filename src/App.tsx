@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import PortalChrome from './components/PortalChrome'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
@@ -67,6 +68,26 @@ export default function App() {
           />
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
           <Route
+            path="/profil"
+            element={
+              <ProtectedRoute>
+                <PortalChrome>
+                  <UserProfile />
+                </PortalChrome>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/hilfe"
+            element={
+              <ProtectedRoute>
+                <PortalChrome wide>
+                  <Hilfe />
+                </PortalChrome>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             element={
               <ProtectedRoute>
                 <Layout />
@@ -79,8 +100,6 @@ export default function App() {
             {/* Benutzer */}
             <Route path="warenkorb" element={<Shop />} />
             <Route path="meine-bestellungen" element={<MyOrders />} />
-            <Route path="profil" element={<UserProfile />} />
-            <Route path="hilfe" element={<Hilfe />} />
 
             {/* Genehmiger */}
             <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />

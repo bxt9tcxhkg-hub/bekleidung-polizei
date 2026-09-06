@@ -1,13 +1,19 @@
 import { Link } from 'react-router-dom'
-import { Shirt, Target, Users, type LucideIcon } from 'lucide-react'
+import { LifeBuoy, Shirt, Target, UserCircle, Users, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import PortalChrome from '../components/PortalChrome'
+import { PORTAL_ACCOUNT_LINKS, type PortalAccountId, type PortalAccountLink } from '../lib/portalAccount'
 import { PORTAL_APPS, type PortalApp, type PortalAppId } from '../lib/portalApps'
 import { visiblePortalApps } from '../lib/portalEntitlements'
 
 const APP_ICONS: Record<PortalAppId, LucideIcon> = {
   bekleidung: Shirt,
   einsatz_mt: Target,
+}
+
+const ACCOUNT_ICONS: Record<PortalAccountId, LucideIcon> = {
+  profil: UserCircle,
+  hilfe: LifeBuoy,
 }
 
 function AppTile({ app }: { app: PortalApp }) {
@@ -53,6 +59,27 @@ function AppTile({ app }: { app: PortalApp }) {
   )
 }
 
+function AccountTile({ link }: { link: PortalAccountLink }) {
+  const Icon = ACCOUNT_ICONS[link.id]
+
+  return (
+    <Link
+      to={link.to}
+      className="rounded-xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all block"
+    >
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="bg-blue-50 p-2.5 rounded-lg">
+          <Icon className="w-5 h-5 text-blue-700" />
+        </div>
+      </div>
+      <h2 className="text-lg font-semibold text-gray-900">{link.label}</h2>
+      {link.description ? (
+        <p className="text-sm text-gray-500 mt-1">{link.description}</p>
+      ) : null}
+    </Link>
+  )
+}
+
 export default function Portal() {
   const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, rows: areaRoles })
@@ -89,6 +116,12 @@ export default function Portal() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {apps.map(app => (
           <AppTile key={app.id} app={app} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 pt-8 border-t border-gray-200">
+        {PORTAL_ACCOUNT_LINKS.map(link => (
+          <AccountTile key={link.id} link={link} />
         ))}
       </div>
     </PortalChrome>
