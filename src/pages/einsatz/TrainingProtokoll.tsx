@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Plus, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -8,6 +8,7 @@ import type {
   EinsatzTrainingCompletion,
   EinsatzTrainingModule,
   EinsatzTrainingParticipation,
+  EinsatzTrainingRegistration,
   EinsatzTrainingSession,
   Profile,
 } from '../../lib/types'
@@ -15,16 +16,18 @@ import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { isEinsatzmittelActive } from '../../lib/einsatzmittelAusbuchung'
 import {
   ATTENDANCE_STATUS_LABELS,
-  cadenceLabel,
   emptyMunitionVerbrauchInput,
   formatCompletedOn,
   formatMunitionVerbrauch,
   geschossenFromSession,
   isAttendanceStatus,
   isModuleLockDbError,
-  moduleAssignmentOptions,
-  moduleLockUserMessage,
+  moduleAssignmentBlockReason,
+  moduleFilterLabel,
   munitionVerbrauchInputFromSession,
+  preferGeschossenQuestion,
+  shouldAskGeschossen,
+  stadtpolizeiDutyOfficers,
   validateAttendance,
   validateParticipation,
   validateSession,
@@ -39,7 +42,7 @@ import MunitionVerbrauchFields, { GeschossenFrage, type PoolMunitionChoice } fro
 import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 import PdfExportButton from './PdfExportButton'
 
-type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -51,40 +54,47 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   const [officers, setOfficers] = useState<OfficerOption[]>([])
   const [attendance, setAttendance] = useState<EinsatzTrainingAttendance[]>([])
   const [participations, setParticipations] = useState<EinsatzTrainingParticipation[]>([])
+  const [registrations, setRegistrations] = useState<EinsatzTrainingRegistration[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showSessionForm, setShowSessionForm] = useState(false)
   const [sessionDate, setSessionDate] = useState('')
   const [sessionNote, setSessionNote] = useState('')
+  const [sessionModuleId, setSessionModuleId] = useState('')
+  const [sessionCapacity, setSessionCapacity] = useState('')
+  const [sessionAnnounced, setSessionAnnounced] = useState(false)
   const [saving, setSaving] = useState(false)
   const [addOfficerId, setAddOfficerId] = useState('')
-  const [drafts, setDrafts] = useState<Record<string, { moduleId: string; interval: string }>>({})
   const [munition, setMunition] = useState<MunitionVerbrauchInput>(emptyMunitionVerbrauchInput())
   const [geschossen, setGeschossen] = useState<GeschossenAnswer>('')
   const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
   const [savingMunition, setSavingMunition] = useState(false)
 
   const selected = sessions.find(s => s.id === selectedId) ?? null
+  const selectedModule = selected?.module ?? modules.find(m => m.id === selected?.module_id) ?? null
 
   async function loadList() {
     setLoading(true)
-    const [{ data, error: loadError }, { data: moduleRows }, { data: completionRows }, { data: profileRows }] = await Promise.all([
-      supabase.from('einsatz_training_sessions').select('*').eq('kind', 'intern').order('session_date', { ascending: false }),
+    const [sessRes, modRes, compRes, profRes] = await Promise.all([
+      supabase
+        .from('einsatz_training_sessions')
+        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,period_year,period_half,active)')
+        .order('session_date', { ascending: false }),
       supabase.from('einsatz_training_modules').select('*').order('name'),
       supabase.from('einsatz_training_completions').select('*'),
-      supabase.from('profiles').select('id,name,dienstnummer,username,active').order('name'),
+      supabase.from('profiles').select('id,name,dienstnummer,username,active,organisation').order('name'),
     ])
-    if (loadError) {
+    if (sessRes.error) {
       setError('Trainingstage konnten nicht geladen werden.')
       setSessions([])
     } else {
       setError('')
-      setSessions((data ?? []) as EinsatzTrainingSession[])
+      setSessions((sessRes.data ?? []) as EinsatzTrainingSession[])
     }
-    setModules((moduleRows ?? []) as EinsatzTrainingModule[])
-    setCompletions((completionRows ?? []) as EinsatzTrainingCompletion[])
-    setOfficers((profileRows ?? []) as OfficerOption[])
+    setModules((modRes.data ?? []) as EinsatzTrainingModule[])
+    setCompletions((compRes.data ?? []) as EinsatzTrainingCompletion[])
+    setOfficers((profRes.data ?? []) as OfficerOption[])
     const poolRes = await loadPoolMunitionChoices()
     if (poolRes.ok) {
       setPoolMunition(poolRes.items.filter(isEinsatzmittelActive).map(item => ({
@@ -102,22 +112,29 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   }
 
   async function loadProtocol(sessionId: string) {
-    const [{ data: attRows, error: attError }, { data: partRows, error: partError }] = await Promise.all([
+    const [attRes, partRes, regRes] = await Promise.all([
       supabase
         .from('einsatz_training_attendance')
-        .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active)')
+        .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
         .eq('session_id', sessionId),
       supabase
         .from('einsatz_training_participations')
-        .select('*, module:einsatz_training_modules(id,name,kind,active)')
+        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,active)')
         .eq('session_id', sessionId),
+      canManage
+        ? supabase
+          .from('einsatz_training_registrations')
+          .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
+          .eq('session_id', sessionId)
+        : Promise.resolve({ data: [], error: null }),
     ])
-    if (attError || partError) {
+    if (attRes.error || partRes.error) {
       setError('Protokoll konnte nicht geladen werden.')
       return
     }
-    setAttendance((attRows ?? []) as EinsatzTrainingAttendance[])
-    setParticipations((partRows ?? []) as EinsatzTrainingParticipation[])
+    setAttendance((attRes.data ?? []) as EinsatzTrainingAttendance[])
+    setParticipations((partRes.data ?? []) as EinsatzTrainingParticipation[])
+    setRegistrations((regRes.data ?? []) as EinsatzTrainingRegistration[])
   }
 
   useEffect(() => {
@@ -131,6 +148,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     if (!selectedId) {
       setAttendance([])
       setParticipations([])
+      setRegistrations([])
       return
     }
     loadProtocol(selectedId).catch(() => setError('Protokoll konnte nicht geladen werden.'))
@@ -147,22 +165,29 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   }, [selected])
 
   const officerById = useMemo(() => new Map(officers.map(o => [o.id, o])), [officers])
-
+  const dutyOfficers = useMemo(() => stadtpolizeiDutyOfficers(officers), [officers])
   const addableOfficers = useMemo(() => {
     const taken = new Set(attendance.map(row => row.officer_id))
-    return officers.filter(o => o.active && !taken.has(o.id))
-  }, [officers, attendance])
+    return dutyOfficers.filter(o => !taken.has(o.id))
+  }, [dutyOfficers, attendance])
 
-  function openNewSession() {
-    setSessionDate('')
-    setSessionNote('')
-    setError('')
-    setShowSessionForm(true)
+  async function reloadCompletions() {
+    const { data } = await supabase.from('einsatz_training_completions').select('*')
+    setCompletions((data ?? []) as EinsatzTrainingCompletion[])
   }
 
   async function createSession() {
     if (!canManage) return
-    const result = validateSession({ kind: 'intern', sessionDate, note: sessionNote })
+    const module = modules.find(m => m.id === sessionModuleId)
+    const result = validateSession({
+      kind: module?.kind ?? 'intern',
+      sessionDate,
+      note: sessionNote,
+      moduleId: sessionModuleId,
+      capacity: sessionCapacity,
+      announced: sessionAnnounced,
+      module,
+    })
     if (!result.ok) {
       setError(result.error)
       return
@@ -179,16 +204,52 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
       setSaving(false)
       return
     }
-    logAudit('Internes Einsatztraining angelegt', result.payload.session_date)
+    logAudit('Einsatztraining-Protokoll angelegt', `${module?.name ?? sessionModuleId} ${result.payload.session_date}`)
     setShowSessionForm(false)
     setSaving(false)
     await loadList()
     setSelectedId(data.id)
   }
 
+  async function assignIfNeeded(officerId: string, session: EinsatzTrainingSession) {
+    if (!session.module_id) return
+    const module = session.module ?? modules.find(m => m.id === session.module_id)
+    const lock = moduleAssignmentBlockReason({
+      officerId,
+      moduleId: session.module_id,
+      moduleName: module?.name,
+      completions,
+      module,
+    })
+    if (lock) return
+    const result = validateParticipation({
+      sessionKind: session.kind,
+      officerId,
+      moduleId: session.module_id,
+      intervalLabel: '',
+      attendanceStatus: 'present',
+      completions,
+      moduleName: module?.name,
+      sessionModuleId: session.module_id,
+      sessionDate: session.session_date,
+      module,
+    })
+    if (!result.ok) return
+    const { error: insertError } = await supabase.from('einsatz_training_participations').insert({
+      session_id: session.id,
+      officer_id: result.payload.officer_id,
+      module_id: result.payload.module_id,
+      interval_label: result.payload.interval_label,
+      created_by: profile?.id ?? null,
+    })
+    if (insertError && !isModuleLockDbError(insertError.message)) {
+      setError(insertError.message || 'Abschluss konnte nicht gesetzt werden.')
+    }
+  }
+
   async function addOfficer(officerId: string, status: AttendanceStatus = 'present') {
-    if (!canManage || !selectedId) return
-    const result = validateAttendance({ sessionKind: 'intern', officerId, status })
+    if (!canManage || !selectedId || !selected) return
+    const result = validateAttendance({ sessionKind: selected.kind, officerId, status })
     if (!result.ok) {
       setError(result.error)
       return
@@ -202,29 +263,35 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
       setError(insertError.message || 'Person konnte nicht übernommen werden.')
       return
     }
+    if (status === 'present') await assignIfNeeded(officerId, selected)
     setAddOfficerId('')
-    await loadProtocol(selectedId)
+    await Promise.all([loadProtocol(selectedId), reloadCompletions()])
   }
 
-  async function addAllActive() {
-    if (!canManage || !selectedId) return
-    if (addableOfficers.length === 0) return
-    const rows = addableOfficers.map(o => ({
+  async function importRegistrations() {
+    if (!canManage || !selectedId || !selected) return
+    const taken = new Set(attendance.map(row => row.officer_id))
+    const missing = registrations.filter(r => !taken.has(r.officer_id))
+    if (missing.length === 0) return
+    const rows = missing.map(r => ({
       session_id: selectedId,
-      officer_id: o.id,
+      officer_id: r.officer_id,
       status: 'present' as const,
     }))
     const { error: insertError } = await supabase.from('einsatz_training_attendance').insert(rows)
     if (insertError) {
-      setError(insertError.message || 'Übernahme fehlgeschlagen.')
+      setError(insertError.message || 'Anmeldungen konnten nicht übernommen werden.')
       return
     }
-    logAudit('Einsatztraining-Protokoll: aktive Personen übernommen', selected?.session_date ?? selectedId)
-    await loadProtocol(selectedId)
+    for (const row of missing) {
+      await assignIfNeeded(row.officer_id, selected)
+    }
+    logAudit('Einsatztraining-Anmeldungen übernommen', selected.session_date)
+    await Promise.all([loadProtocol(selectedId), reloadCompletions()])
   }
 
   async function setStatus(row: EinsatzTrainingAttendance, status: AttendanceStatus) {
-    if (!canManage || !selectedId) return
+    if (!canManage || !selectedId || !selected) return
     const { error: updateError } = await supabase
       .from('einsatz_training_attendance')
       .update({ status })
@@ -240,84 +307,30 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
         .eq('session_id', selectedId)
         .eq('officer_id', row.officer_id)
       if (deleteError) {
-        setError(deleteError.message || 'Modulzuweisungen der abwesenden Person konnten nicht entfernt werden.')
+        setError(deleteError.message || 'Abschluss der abwesenden Person konnte nicht entfernt werden.')
       }
+    } else {
+      await assignIfNeeded(row.officer_id, selected)
     }
     await Promise.all([loadProtocol(selectedId), reloadCompletions()])
   }
 
-  async function reloadCompletions() {
-    const { data } = await supabase.from('einsatz_training_completions').select('*')
-    setCompletions((data ?? []) as EinsatzTrainingCompletion[])
-  }
-
-  async function assignModule(officerId: string) {
-    if (!canManage || !selectedId) return
-    const draft = drafts[officerId] ?? { moduleId: '', interval: '' }
-    const module = modules.find(m => m.id === draft.moduleId)
-    const result = validateParticipation({
-      sessionKind: 'intern',
-      officerId,
-      moduleId: draft.moduleId,
-      moduleKind: module?.kind,
-      intervalLabel: draft.interval,
-      attendanceStatus: attendance.find(a => a.officer_id === officerId)?.status ?? null,
-      completions,
-      moduleName: module?.name,
-    })
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    const { error: insertError } = await supabase.from('einsatz_training_participations').insert({
-      session_id: selectedId,
-      officer_id: result.payload.officer_id,
-      module_id: result.payload.module_id,
-      interval_label: result.payload.interval_label,
-      created_by: profile?.id ?? null,
-    })
-    if (insertError) {
-      setError(
-        isModuleLockDbError(insertError.message)
-          ? moduleLockUserMessage(module?.name)
-          : (insertError.message || 'Zuweisung fehlgeschlagen.'),
-      )
-      return
-    }
-    logAudit('Einsatztraining-Modul zugewiesen', `${module?.name ?? result.payload.module_id}`)
-    setDrafts(d => ({ ...d, [officerId]: { moduleId: '', interval: '' } }))
-    setError('')
-    await Promise.all([loadProtocol(selectedId), reloadCompletions()])
-  }
-
-  async function removeParticipation(row: EinsatzTrainingParticipation) {
-    if (!canManage || !selectedId) return
-    const { error: deleteError } = await supabase.from('einsatz_training_participations').delete().eq('id', row.id)
-    if (deleteError) {
-      setError(deleteError.message || 'Zuweisung konnte nicht entfernt werden.')
-      return
-    }
-    await Promise.all([loadProtocol(selectedId), reloadCompletions()])
-  }
-
-  function participationsFor(officerId: string) {
-    return participations.filter(row => row.officer_id === officerId)
-  }
-
+  const selectedPoolId = selected?.munition_pool_id ?? null
+  const selectedMarke = selected?.munition_marke ?? null
+  const selectedArt = selected?.munition_art ?? null
   const poolChoicesForForm = useMemo(() => {
-    const extraId = selected?.munition_pool_id
-    if (extraId && !poolMunition.some(item => item.id === extraId)) {
+    if (selectedPoolId && !poolMunition.some(item => item.id === selectedPoolId)) {
       return [...poolMunition, {
-        id: extraId,
-        marke: selected.munition_marke,
+        id: selectedPoolId,
+        marke: selectedMarke,
         typ: null,
-        art: selected.munition_art,
+        art: selectedArt,
         anzahl: null,
         locationLabel: 'ausgebucht oder unbekannt',
       }]
     }
     return poolMunition
-  }, [poolMunition, selected])
+  }, [poolMunition, selectedPoolId, selectedMarke, selectedArt])
 
   async function saveMunition() {
     if (!canManage || !selected) return
@@ -349,6 +362,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   }
 
   if (selected) {
+    const askMunition = shouldAskGeschossen(selectedModule)
     return (
       <div>
         <button
@@ -357,65 +371,72 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
           className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          Alle internen Trainingstage
+          Alle Trainingstage
         </button>
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900">
               Protokoll {formatCompletedOn(selected.session_date)}
             </h3>
+            <p className="text-sm text-gray-700 mt-1">
+              {selectedModule ? moduleFilterLabel(selectedModule) : 'Kein Modul gesetzt'}
+            </p>
             {selected.note && <p className="text-sm text-gray-500 mt-1">{selected.note}</p>}
             <p className="text-sm text-gray-500 mt-1">
-              Anwesend/Abwesend und Intervall je Person. Ein abgeschlossenes Modul kann nicht erneut zugewiesen werden.
+              Anwesend schließt das gewählte Modul ab. Erneute Zuweisung nach Abschluss ist gesperrt.
             </p>
           </div>
           <PdfExportButton
             onClick={() => generateTrainingProtocolPdf({
-              session: selected,
+              session: { ...selected, moduleName: selectedModule?.name },
               attendance,
               participations,
             })}
           />
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-3">Munition</h4>
-          {canManage ? (
-            <div className="space-y-4">
-              <GeschossenFrage
-                idPrefix="et-int-munition"
-                value={geschossen}
-                onChange={next => {
-                  setGeschossen(next)
-                  if (next === 'no') setMunition(emptyMunitionVerbrauchInput())
-                }}
-              />
-              {geschossen === 'yes' && (
-                <MunitionVerbrauchFields
-                  idPrefix="et-int-munition"
-                  value={munition}
-                  onChange={setMunition}
-                  poolItems={poolChoicesForForm.filter(item => (item.anzahl ?? 0) > 0 || item.id === selected.munition_pool_id)}
-                  requirePool
+        {askMunition && (
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">
+              Munition{preferGeschossenQuestion(selectedModule) ? ' (Modul schießt)' : ''}
+            </h4>
+            {canManage ? (
+              <div className="space-y-4">
+                <GeschossenFrage
+                  idPrefix="et-prot-munition"
+                  value={geschossen}
+                  onChange={next => {
+                    setGeschossen(next)
+                    if (next === 'no') setMunition(emptyMunitionVerbrauchInput())
+                  }}
                 />
-              )}
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => { void saveMunition() }}
-                  disabled={savingMunition}
-                  className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg"
-                >
-                  {savingMunition ? 'Speichern...' : 'Speichern'}
-                </button>
+                {geschossen === 'yes' && (
+                  <MunitionVerbrauchFields
+                    idPrefix="et-prot-munition"
+                    value={munition}
+                    onChange={setMunition}
+                    poolItems={poolChoicesForForm.filter(item => (item.anzahl ?? 0) > 0 || item.id === selected.munition_pool_id)}
+                    requirePool
+                  />
+                )}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { void saveMunition() }}
+                    disabled={savingMunition}
+                    className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                  >
+                    {savingMunition ? 'Speichern...' : 'Speichern'}
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600">
-              {formatMunitionVerbrauch(selected) || 'Noch nicht erfasst.'}
-            </p>
-          )}
-        </div>
+            ) : (
+              <p className="text-sm text-gray-600">
+                {formatMunitionVerbrauch(selected) || 'Noch nicht erfasst.'}
+              </p>
+            )}
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>
@@ -444,10 +465,10 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
             </button>
             <button
               type="button"
-              onClick={() => { void addAllActive() }}
+              onClick={() => { void importRegistrations() }}
               className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50"
             >
-              Alle Aktiven übernehmen
+              Anmeldungen übernehmen
             </button>
           </div>
         )}
@@ -460,20 +481,30 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
           <div className="space-y-3">
             {attendance.map(row => {
               const officer = row.officer ?? officerById.get(row.officer_id)
-              const assigned = participationsFor(row.officer_id)
-              const options = moduleAssignmentOptions({
-                officerId: row.officer_id,
-                kind: 'intern',
-                modules,
-                completions,
-              })
-              const draft = drafts[row.officer_id] ?? { moduleId: '', interval: '' }
+              const assigned = participations.filter(p => p.officer_id === row.officer_id)
+              const lock = selected.module_id
+                ? moduleAssignmentBlockReason({
+                  officerId: row.officer_id,
+                  moduleId: selected.module_id,
+                  moduleName: selectedModule?.name,
+                  completions,
+                  module: selectedModule,
+                })
+                : null
               return (
                 <div key={row.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{officerDisplayName(officer)}</p>
                       <p className="text-xs text-gray-500">{ATTENDANCE_STATUS_LABELS[row.status]}</p>
+                      {assigned.length > 0 && (
+                        <p className="text-xs text-green-800 mt-1">
+                          Abschluss {assigned.map(p => p.module?.name ?? selectedModule?.name ?? 'Modul').join(', ')}
+                        </p>
+                      )}
+                      {lock && row.status === 'present' && assigned.length === 0 && (
+                        <p className="text-xs text-amber-800 mt-1">{lock}</p>
+                      )}
                     </div>
                     {canManage && (
                       <select
@@ -489,78 +520,6 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                       </select>
                     )}
                   </div>
-
-                  {assigned.length > 0 && (
-                    <ul className="mt-3 space-y-1">
-                      {assigned.map(part => (
-                        <li key={part.id} className="flex items-center justify-between gap-2 text-sm text-gray-700">
-                          <span>
-                            Intervall {part.interval_label ?? '–'} · {part.module?.name ?? 'Modul'}
-                          </span>
-                          {canManage && (
-                            <button
-                              type="button"
-                              onClick={() => { void removeParticipation(part) }}
-                              className="p-1.5 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600"
-                              title="Zuweisung entfernen"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {row.status === 'present' && canManage && (
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <input
-                        className={inputClass}
-                        placeholder="Intervall"
-                        value={draft.interval}
-                        onChange={e => setDrafts(d => ({
-                          ...d,
-                          [row.officer_id]: { ...draft, interval: e.target.value },
-                        }))}
-                        aria-label={`Intervall ${officerDisplayName(officer)}`}
-                      />
-                      <select
-                        className={inputClass}
-                        value={draft.moduleId}
-                        onChange={e => setDrafts(d => ({
-                          ...d,
-                          [row.officer_id]: { ...draft, moduleId: e.target.value },
-                        }))}
-                        aria-label={`Modul ${officerDisplayName(officer)}`}
-                      >
-                        <option value="">Modul wählen</option>
-                        {options.map(opt => (
-                          <option key={opt.module.id} value={opt.module.id} disabled={opt.blocked}>
-                            {opt.blocked
-                              ? `${opt.module.name} — bereits abgeschlossen`
-                              : opt.module.name}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => { void assignModule(row.officer_id) }}
-                        className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"
-                      >
-                        Zuweisen
-                      </button>
-                    </div>
-                  )}
-
-                  {row.status === 'present' && options.some(opt => opt.blocked) && (
-                    <ul className="mt-2 space-y-1">
-                      {options.filter(opt => opt.blocked).map(opt => (
-                        <li key={opt.module.id} className="text-xs text-amber-800 bg-amber-50 px-2 py-1 rounded">
-                          {opt.reason}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               )
             })}
@@ -574,13 +533,21 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Am internen Trainingstag: Anwesenheit und Intervall je Modul. Taktung {cadenceLabel('intern')}.
+          Am Trainingstag das Modul wählen, Anwesenheit führen und bei Schießen Munition aus dem Pool buchen.
         </p>
         {canManage && (
           <button
             type="button"
-            onClick={openNewSession}
-            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
+            onClick={() => {
+              setSessionDate('')
+              setSessionNote('')
+              setSessionModuleId(modules.find(m => m.active)?.id ?? '')
+              setSessionCapacity('')
+              setSessionAnnounced(false)
+              setError('')
+              setShowSessionForm(true)
+            }}
+            className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Trainingstag</span>
@@ -594,7 +561,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
 
       {sessions.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
-          <p className="text-sm text-gray-500">Noch kein internes Einsatztraining erfasst.</p>
+          <p className="text-sm text-gray-500">Noch kein Trainingstag erfasst.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
@@ -602,6 +569,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Modul</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Hinweis</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Munition</th>
               </tr>
@@ -618,6 +586,9 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                       {formatCompletedOn(session.session_date)}
                     </button>
                   </td>
+                  <td className="px-4 py-3 text-gray-700">
+                    {session.module ? moduleFilterLabel(session.module) : '–'}
+                  </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{session.note || '–'}</td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                     {formatMunitionVerbrauch(session) || '–'}
@@ -633,7 +604,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Interner Trainingstag</h2>
+              <h2 className="font-bold text-gray-900">Trainingstag</h2>
               <button type="button" onClick={() => { setShowSessionForm(false); setSaving(false) }} className="p-1.5 hover:bg-gray-100 rounded-lg">
                 <X className="w-4 h-4" />
               </button>
@@ -641,23 +612,29 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
             <div className="px-6 py-4 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-session-date">Datum *</label>
-                <input
-                  id="et-session-date"
-                  type="date"
-                  className={inputClass}
-                  value={sessionDate}
-                  onChange={e => setSessionDate(e.target.value)}
-                />
+                <input id="et-session-date" type="date" className={inputClass} value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-session-module">Modul *</label>
+                <select id="et-session-module" className={inputClass} value={sessionModuleId} onChange={e => setSessionModuleId(e.target.value)}>
+                  <option value="">Bitte wählen</option>
+                  {modules.filter(m => m.active).map(module => (
+                    <option key={module.id} value={module.id}>{moduleFilterLabel(module)}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-session-note">Hinweis</label>
-                <input
-                  id="et-session-note"
-                  className={inputClass}
-                  value={sessionNote}
-                  onChange={e => setSessionNote(e.target.value)}
-                />
+                <input id="et-session-note" className={inputClass} value={sessionNote} onChange={e => setSessionNote(e.target.value)} />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-session-cap">Kapazität</label>
+                <input id="et-session-cap" className={inputClass} value={sessionCapacity} onChange={e => setSessionCapacity(e.target.value)} placeholder="optional" />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={sessionAnnounced} onChange={e => setSessionAnnounced(e.target.checked)} />
+                Ausschreiben (Selbstanmeldung)
+              </label>
               {error && showSessionForm && (
                 <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
               )}

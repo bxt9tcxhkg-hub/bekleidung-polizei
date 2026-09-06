@@ -281,12 +281,18 @@ export interface PoolEinsatzmittel {
 }
 
 export type TrainingKind = 'intern' | 'extern'
+export type TrainingModuleType = 'pflicht_halbjahr' | 'zusatz'
 export type TrainingAttendanceStatus = 'present' | 'absent'
+export type TrainingPeriodHalf = 1 | 2
 
 export interface EinsatzTrainingModule {
   id: string
   name: string
   kind: TrainingKind
+  module_type: TrainingModuleType
+  schiesst: boolean
+  period_year: number | null
+  period_half: TrainingPeriodHalf | null
   active: boolean
   created_at: string | null
   updated_at: string | null
@@ -298,6 +304,9 @@ export interface EinsatzTrainingSession {
   kind: TrainingKind
   session_date: string
   note: string | null
+  module_id: string | null
+  capacity: number | null
+  announced: boolean
   munition_anzahl: number | null
   munition_marke: string | null
   munition_kaliber: string | null
@@ -308,6 +317,7 @@ export interface EinsatzTrainingSession {
   created_at: string | null
   updated_at: string | null
   created_by: string | null
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'period_year' | 'period_half' | 'active'>
 }
 
 export interface EinsatzTrainingAttendance {
@@ -317,7 +327,7 @@ export interface EinsatzTrainingAttendance {
   status: TrainingAttendanceStatus
   created_at: string | null
   updated_at: string | null
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
 }
 
 export interface EinsatzTrainingParticipation {
@@ -328,8 +338,8 @@ export interface EinsatzTrainingParticipation {
   interval_label: string | null
   created_at: string | null
   created_by: string | null
-  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'active'>
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'active'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
 }
 
 export interface EinsatzTrainingCompletion {
@@ -340,8 +350,17 @@ export interface EinsatzTrainingCompletion {
   participation_id: string
   completed_on: string
   created_at: string | null
-  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'active'>
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'active'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+}
+
+export interface EinsatzTrainingRegistration {
+  id: string
+  session_id: string
+  officer_id: string
+  created_at: string | null
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+  session?: Pick<EinsatzTrainingSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
 }
 
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
@@ -386,10 +405,11 @@ type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
 type EinsatzTrainingModuleRow = Omit<EinsatzTrainingModule, never>
-type EinsatzTrainingSessionRow = Omit<EinsatzTrainingSession, never>
+type EinsatzTrainingSessionRow = Omit<EinsatzTrainingSession, 'module'>
 type EinsatzTrainingAttendanceRow = Omit<EinsatzTrainingAttendance, 'officer'>
 type EinsatzTrainingParticipationRow = Omit<EinsatzTrainingParticipation, 'module' | 'officer'>
 type EinsatzTrainingCompletionRow = Omit<EinsatzTrainingCompletion, 'module' | 'officer'>
+type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer' | 'session'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -474,11 +494,12 @@ export type Database = {
         { foreignKeyName: 'pool_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'pool_einsatzmittel_removed_by_fkey'; columns: ['removed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      einsatz_training_modules: { Row: EinsatzTrainingModuleRow; Insert: Pick<EinsatzTrainingModuleRow, 'name' | 'kind'> & Partial<Omit<EinsatzTrainingModuleRow, 'name' | 'kind'>>; Update: Partial<Omit<EinsatzTrainingModuleRow, 'id' | 'created_at'>>; Relationships: [
+      einsatz_training_modules: { Row: EinsatzTrainingModuleRow; Insert: Pick<EinsatzTrainingModuleRow, 'name' | 'kind' | 'module_type'> & Partial<Omit<EinsatzTrainingModuleRow, 'name' | 'kind' | 'module_type'>>; Update: Partial<Omit<EinsatzTrainingModuleRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_training_modules_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_training_sessions: { Row: EinsatzTrainingSessionRow; Insert: Pick<EinsatzTrainingSessionRow, 'kind' | 'session_date'> & Partial<Omit<EinsatzTrainingSessionRow, 'kind' | 'session_date'>>; Update: Partial<Omit<EinsatzTrainingSessionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_training_sessions_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_sessions_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'einsatz_training_modules'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_training_sessions_munition_pool_id_fkey'; columns: ['munition_pool_id']; isOneToOne: false; referencedRelation: 'pool_einsatzmittel'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_training_sessions_munition_recorded_by_fkey'; columns: ['munition_recorded_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
@@ -498,6 +519,10 @@ export type Database = {
         { foreignKeyName: 'einsatz_training_completions_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_training_completions_participation_id_fkey'; columns: ['participation_id']; isOneToOne: false; referencedRelation: 'einsatz_training_participations'; referencedColumns: ['id'] },
       ] }
+      einsatz_training_registrations: { Row: EinsatzTrainingRegistrationRow; Insert: Pick<EinsatzTrainingRegistrationRow, 'session_id' | 'officer_id'> & Partial<Omit<EinsatzTrainingRegistrationRow, 'session_id' | 'officer_id'>>; Update: Partial<Omit<EinsatzTrainingRegistrationRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_registrations_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_registrations_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -509,6 +534,7 @@ export type Database = {
       has_portal_area_role: { Args: { p_area: string; p_role: string }; Returns: boolean }
       has_portal_area_access: { Args: { p_area: string }; Returns: boolean }
       can_manage_einsatzmittel: { Args: Record<string, never>; Returns: boolean }
+      can_self_register_einsatztraining: { Args: { p_session_id: string }; Returns: boolean }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

@@ -2,14 +2,14 @@
   "source": {
     "folder": "2026-09-06-einsatztraining",
     "files": ["verzeichnis.txt", "Verzeichnis.pdf"],
-    "note": "Offizielle Modulnamen aus dem Petternel-Verzeichnis. Keine weiteren Module."
+    "note": "Owner-Fachlogik 2026-09-06: Internes ET = Pflicht Halbjahr. Übrige = Zusatz. kind intern/extern nur Herkunftsfilter."
   },
   "modules": [
-    { "name": "Combat", "kind": "extern", "active": true },
-    { "name": "Internes ET", "kind": "intern", "active": true },
-    { "name": "Stockschulung TS-Einsatzstock", "kind": "intern", "active": true, "note": "Intern angesetzt (wie ET getaktet)." },
-    { "name": "Erste Hilfe COMBAT", "kind": "extern", "active": true },
-    { "name": "Szenarientraining", "kind": "intern", "active": true },
-    { "name": "Fahrsicherheitstraining", "kind": "extern", "active": true }
+    { "name": "Internes ET", "module_type": "pflicht_halbjahr", "kind": "intern", "schiesst": false, "active": true },
+    { "name": "Combat", "module_type": "zusatz", "kind": "extern", "schiesst": false, "active": true },
+    { "name": "Stockschulung TS-Einsatzstock", "module_type": "zusatz", "kind": "intern", "schiesst": false, "active": true },
+    { "name": "Erste Hilfe COMBAT", "module_type": "zusatz", "kind": "extern", "schiesst": false, "active": true },
+    { "name": "Szenarientraining", "module_type": "zusatz", "kind": "intern", "schiesst": false, "active": true },
+    { "name": "Fahrsicherheitstraining", "module_type": "zusatz", "kind": "extern", "schiesst": false, "active": true }
   ]
 }

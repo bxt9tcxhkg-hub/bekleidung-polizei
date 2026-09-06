@@ -4,6 +4,7 @@ import {
   buildLagerbestandPdfHtml,
   buildPersonalEmPdfHtml,
   buildPoolEmPdfHtml,
+  buildOffenAnmeldungenPdfHtml,
   buildTrainingModulesPdfHtml,
   buildTrainingProtocolPdfHtml,
   compareDe,
@@ -281,5 +282,35 @@ describe('buildTrainingModulesPdfHtml', () => {
     expect(html).toContain('Abschlüsse')
     expect(html).toContain('15.03.2026')
     expect(html).toContain('Müller (12)')
+  })
+})
+
+describe('buildOffenAnmeldungenPdfHtml', () => {
+  it('listet Offene, Abschlüsse und Anmeldungen auf Deutsch', () => {
+    const html = buildOffenAnmeldungenPdfHtml({
+      moduleName: 'Internes ET',
+      moduleType: 'pflicht_halbjahr',
+      periodLabel: '2. Halbjahr 2026',
+      openOfficers: [{ officerName: 'Huber', dienstnummer: '34' }],
+      completedOfficers: [{ officerName: 'Müller (12)', completedOn: '2026-09-01' }],
+      offerings: [{
+        date: '2026-09-20',
+        note: 'Halle A',
+        capacity: 8,
+        registrations: [{ officerName: 'Huber' }],
+      }],
+      now,
+    })
+    expect(html).toContain('Offen / Anmeldungen · Internes ET')
+    expect(html).toContain('Pflicht (Halbjahr)')
+    expect(html).toContain('2. Halbjahr 2026')
+    expect(html).toContain('Kommandanten')
+    expect(html).toContain('Huber')
+    expect(html).toContain('34')
+    expect(html).toContain('Abgeschlossen')
+    expect(html).toContain('01.09.2026')
+    expect(html).toContain('Anmeldungen 20.09.2026')
+    expect(html).toContain('Kapazität 8')
+    expect(html).toContain('Halle A')
   })
 })

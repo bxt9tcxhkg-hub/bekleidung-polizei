@@ -4,23 +4,32 @@ import {
   EINSATZTRAINING_CADENCE,
   TRAINING_KINDS,
   TRAINING_KIND_LABELS,
+  TRAINING_MODULE_TYPES,
   canManageEinsatztraining,
+  canSelfRegister,
   cadenceLabel,
   cadenceSummary,
+  currentHalfYear,
   formatCompletedOn,
   isAttendanceStatus,
+  isDateInHalfYear,
   isModuleLockDbError,
+  isStadtpolizeiMember,
   isTrainingKind,
+  isTrainingModuleType,
   moduleAssignmentBlockReason,
   moduleAssignmentOptions,
   moduleLockUserMessage,
   officerHasCompletedModule,
+  officersOpenForModule,
   emptyMunitionVerbrauchInput,
   formatMunitionVerbrauch,
   geschossenFromSession,
   munitionVerbrauchInputFromSession,
+  periodLabel,
   planPoolMunitionAdjustments,
   poolMunitionOptionLabel,
+  selfRegisterBlockReason,
   validateAttendance,
   validateGeschossenMunition,
   validateMunitionVerbrauch,
@@ -35,15 +44,19 @@ const completions = [
 ]
 
 describe('Taktung', () => {
-  it('liegt nur in der Konstante: intern 1× Halbjahr, extern 4× Jahr', () => {
+  it('hält intern/extern nur als Herkunft, Primärachse ist Pflicht vs Zusatz', () => {
     expect(EINSATZTRAINING_CADENCE.intern).toEqual({ times: 1, period: 'halbjahr' })
     expect(EINSATZTRAINING_CADENCE.extern).toEqual({ times: 4, period: 'jahr' })
     expect(cadenceLabel('intern')).toBe('1× pro Halbjahr')
     expect(cadenceLabel('extern')).toBe('4× pro Jahr')
-    expect(cadenceSummary()).toBe('Internes ET: 1× pro Halbjahr. Externes ET: 4× pro Jahr.')
+    expect(cadenceSummary()).toMatch(/Stadtpolizei Dornbirn/)
+    expect(cadenceSummary()).toMatch(/Zusatz/)
+    expect([...TRAINING_MODULE_TYPES]).toEqual(['pflicht_halbjahr', 'zusatz'])
+    expect(isTrainingModuleType('pflicht_halbjahr')).toBe(true)
+    expect(isTrainingModuleType('intern')).toBe(false)
   })
 
-  it('kennt nur intern und extern, ohne Genehmiger- oder Lehrplan-Katalog', () => {
+  it('kennt intern/extern weiter als Filter, ohne Genehmiger-Katalog', () => {
     expect([...TRAINING_KINDS]).toEqual(['intern', 'extern'])
     expect(isTrainingKind('intern')).toBe(true)
     expect(isTrainingKind('schießen')).toBe(false)
@@ -55,13 +68,42 @@ describe('Taktung', () => {
 })
 
 describe('validateTrainingModule', () => {
-  it('verlangt Namen und Art, ohne vorgegebene Modulnamen', () => {
-    expect(validateTrainingModule({ name: '  ', kind: 'intern', active: true }).ok).toBe(false)
-    expect(validateTrainingModule({ name: 'Platzhalter A', kind: 'xyz', active: true }).ok).toBe(false)
-    const ok = validateTrainingModule({ name: '  Platzhalter A  ', kind: 'intern', active: false })
-    expect(ok).toEqual({
+  it('verlangt Namen, Typ und bei Pflicht das Halbjahr', () => {
+    expect(validateTrainingModule({
+      name: '  ', kind: 'intern', active: true, moduleType: 'zusatz', schiesst: false, periodYear: null, periodHalf: null,
+    }).ok).toBe(false)
+    expect(validateTrainingModule({
+      name: 'Internes ET', kind: 'intern', active: true, moduleType: 'pflicht_halbjahr', schiesst: true, periodYear: '', periodHalf: 1,
+    }).ok).toBe(false)
+    const pflicht = validateTrainingModule({
+      name: '  Internes ET  ', kind: 'intern', active: true, moduleType: 'pflicht_halbjahr', schiesst: true, periodYear: 2026, periodHalf: 2,
+    })
+    expect(pflicht).toEqual({
       ok: true,
-      payload: { name: 'Platzhalter A', kind: 'intern', active: false },
+      payload: {
+        name: 'Internes ET',
+        kind: 'intern',
+        active: true,
+        module_type: 'pflicht_halbjahr',
+        schiesst: true,
+        period_year: 2026,
+        period_half: 2,
+      },
+    })
+    const zusatz = validateTrainingModule({
+      name: 'Combat', kind: 'extern', active: false, moduleType: 'zusatz', schiesst: false, periodYear: 2026, periodHalf: 1,
+    })
+    expect(zusatz).toEqual({
+      ok: true,
+      payload: {
+        name: 'Combat',
+        kind: 'extern',
+        active: false,
+        module_type: 'zusatz',
+        schiesst: false,
+        period_year: null,
+        period_half: null,
+      },
     })
   })
 })
@@ -140,7 +182,7 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
     })
   })
 
-  it('weist intern nur Anwesende zu und verlangt Intervall', () => {
+  it('weist nur Anwesende zu; Intervall ist optional', () => {
     const absent = validateParticipation({
       sessionKind: 'intern',
       officerId: 'o2',
@@ -153,7 +195,7 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
     expect(absent.ok).toBe(false)
     if (!absent.ok) expect(absent.error).toMatch(/anwesend/)
 
-    const noInterval = validateParticipation({
+    const ok = validateParticipation({
       sessionKind: 'intern',
       officerId: 'o2',
       moduleId: 'm2',
@@ -162,20 +204,9 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
       attendanceStatus: 'present',
       completions,
     })
-    expect(noInterval.ok).toBe(false)
-
-    const ok = validateParticipation({
-      sessionKind: 'intern',
-      officerId: 'o2',
-      moduleId: 'm2',
-      moduleKind: 'intern',
-      intervalLabel: '  2  ',
-      attendanceStatus: 'present',
-      completions,
-    })
     expect(ok).toEqual({
       ok: true,
-      payload: { officer_id: 'o2', module_id: 'm2', interval_label: '2' },
+      payload: { officer_id: 'o2', module_id: 'm2', interval_label: null },
     })
   })
 
@@ -194,23 +225,12 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
     if (!locked.ok) expect(locked.error).toMatch(/bereits abgeschlossen/)
   })
 
-  it('erlaubt externes ET ohne Intervall, aber nicht mit internem Modul', () => {
-    const mismatch = validateParticipation({
-      sessionKind: 'extern',
-      officerId: 'o2',
-      moduleId: 'm2',
-      moduleKind: 'intern',
-      intervalLabel: '',
-      attendanceStatus: null,
-      completions,
-    })
-    expect(mismatch.ok).toBe(false)
-
+  it('erlaubt Zusatz ohne Intervall und ohne intern/extern-Zwang', () => {
     const ok = validateParticipation({
       sessionKind: 'extern',
       officerId: 'o2',
       moduleId: 'm3',
-      moduleKind: 'extern',
+      moduleKind: 'intern',
       intervalLabel: '',
       attendanceStatus: null,
       completions,
@@ -221,13 +241,92 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
     })
   })
 
-  it('prüft das Session-Datum', () => {
-    expect(validateSession({ kind: 'intern', sessionDate: '', note: '' }).ok).toBe(false)
-    expect(validateSession({ kind: 'intern', sessionDate: '06.09.2026', note: '' }).ok).toBe(false)
-    expect(validateSession({ kind: 'intern', sessionDate: '2026-09-06', note: '  Test  ' })).toEqual({
+  it('prüft Session-Datum, Modul und Pflicht-Fenster', () => {
+    expect(validateSession({ kind: 'intern', sessionDate: '', note: '', moduleId: 'm1' }).ok).toBe(false)
+    expect(validateSession({ kind: 'intern', sessionDate: '2026-09-06', note: '', moduleId: '' }).ok).toBe(false)
+    expect(validateSession({
+      kind: 'intern',
+      sessionDate: '2026-03-01',
+      note: '',
+      moduleId: 'm1',
+      module: { id: 'm1', module_type: 'pflicht_halbjahr', period_year: 2026, period_half: 2 },
+    }).ok).toBe(false)
+    expect(validateSession({
+      kind: 'intern',
+      sessionDate: '2026-09-06',
+      note: '  Test  ',
+      moduleId: 'm1',
+      announced: true,
+      capacity: '12',
+      module: { id: 'm1', module_type: 'pflicht_halbjahr', period_year: 2026, period_half: 2 },
+    })).toEqual({
       ok: true,
-      payload: { kind: 'intern', session_date: '2026-09-06', note: 'Test' },
+      payload: {
+        kind: 'intern',
+        session_date: '2026-09-06',
+        note: 'Test',
+        module_id: 'm1',
+        capacity: 12,
+        announced: true,
+      },
     })
+  })
+})
+
+describe('Offene Liste und Selbstanmeldung', () => {
+  const pflicht = { id: 'm1', module_type: 'pflicht_halbjahr' as const, period_year: 2026, period_half: 2 as const }
+  const officers = [
+    { id: 'o1', name: 'Heinz', organisation: 'Stadtpolizei', active: true },
+    { id: 'o2', name: 'Anna', organisation: 'Stadtpolizei', active: true },
+    { id: 'o3', name: 'Park', organisation: 'Parkaufsicht', active: true },
+    { id: 'o4', name: 'Inaktiv', organisation: 'Stadtpolizei', active: false },
+  ]
+
+  it('nimmt nur aktive Stadtpolizei ohne Abschluss im Halbjahr', () => {
+    expect(isStadtpolizeiMember({ organisation: 'Stadtpolizei' })).toBe(true)
+    expect(isStadtpolizeiMember({ organisation: 'Parkaufsicht' })).toBe(false)
+    expect(currentHalfYear(new Date(2026, 8, 6))).toEqual({ year: 2026, half: 2 })
+    expect(periodLabel(2026, 2)).toBe('2. Halbjahr 2026')
+    expect(isDateInHalfYear('2026-09-06', 2026, 2)).toBe(true)
+    expect(isDateInHalfYear('2026-03-01', 2026, 2)).toBe(false)
+
+    const h1 = { id: 'm-h1', module_type: 'pflicht_halbjahr' as const, period_year: 2026, period_half: 1 as const }
+    const open = officersOpenForModule({
+      module: pflicht,
+      officers,
+      completions: [
+        { officer_id: 'o1', module_id: 'm1', completed_on: '2026-09-01' },
+        { officer_id: 'o2', module_id: 'm-h1', completed_on: '2026-03-01' },
+      ],
+    })
+    expect(open.map(row => row.id)).toEqual(['o2'])
+    expect(officerHasCompletedModule(completions, 'o1', 'm1', pflicht)).toBe(true)
+    expect(officersOpenForModule({
+      module: h1,
+      officers,
+      completions: [{ officer_id: 'o2', module_id: 'm-h1', completed_on: '2026-03-01' }],
+    }).map(row => row.id)).toEqual(['o1'])
+  })
+
+  it('sperrt Selbstanmeldung nach Abschluss, ohne Ausschreibung oder bei voller Kapazität', () => {
+    const base = {
+      officerId: 'o2',
+      moduleId: 'm1',
+      moduleName: 'Internes ET',
+      module: pflicht,
+      completions,
+      announced: true,
+      capacity: 2,
+      registrationCount: 0,
+      alreadyRegistered: false,
+      isOwnRegistration: true,
+    }
+    expect(canSelfRegister(base)).toBe(true)
+    expect(selfRegisterBlockReason({ ...base, officerId: 'o1' })).toMatch(/abgeschlossen/)
+    expect(selfRegisterBlockReason({ ...base, announced: false })).toMatch(/ausgeschrieben/)
+    expect(selfRegisterBlockReason({ ...base, capacity: 1, registrationCount: 1 })).toMatch(/Plätze/)
+    expect(selfRegisterBlockReason({ ...base, alreadyRegistered: true })).toMatch(/bereits angemeldet/)
+    expect(selfRegisterBlockReason({ ...base, isOwnRegistration: false })).toMatch(/eigene Konto/)
   })
 })
 
