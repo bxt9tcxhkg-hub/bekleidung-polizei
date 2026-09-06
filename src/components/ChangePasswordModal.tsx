@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import {
+  ERSTLOGIN_SESSION_EXPIRED,
+  ensureAuthSession,
+  mapErstloginAuthError,
+} from '../lib/erstlogin'
 import { USERNAME_RE, isDnPlaceholderUsername, isValidPersonalPassword, sanitizePcUsername } from '../lib/workflow'
 
 // Erstlogin: nicht schließbar. Passwort und/oder PC-Benutzername je nach Flag.
-// Nach updateUser (USER_UPDATED) und Profil-Update verschwindet das Modal.
+// Auth-User zuerst (braucht Session), danach Profil-Username — weniger Hänger bei Session-Verlust.
 export default function ChangePasswordModal() {
   const { user, profile, mustChangePassword, mustSetUsername, refreshProfile } = useAuth()
   const [password, setPassword] = useState('')
@@ -15,6 +20,10 @@ export default function ChangePasswordModal() {
   )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    void supabase.auth.refreshSession()
+  }, [])
 
   const title = mustChangePassword && mustSetUsername
     ? 'Erstes Anmelden'
@@ -50,19 +59,11 @@ export default function ChangePasswordModal() {
     }
     if (!user) { setError('Nicht angemeldet.'); return }
     setSaving(true)
-    if (mustSetUsername) {
-      const { error: profileErr } = await supabase.from('profiles').update({
-        username: pcName,
-        force_username_set: false,
-      }).eq('id', user.id)
-      if (profileErr) {
-        const unique = /unique|duplicate|already/i.test(profileErr.message)
-        setError(unique
-          ? 'Dieser PC-Benutzername ist bereits vergeben.'
-          : 'PC-Benutzername konnte nicht gespeichert werden. Bitte Verwaltung informieren.')
-        setSaving(false)
-        return
-      }
+    const sessionOk = await ensureAuthSession(supabase.auth)
+    if (!sessionOk) {
+      setError(ERSTLOGIN_SESSION_EXPIRED)
+      setSaving(false)
+      return
     }
     const payload: { password?: string; data: Record<string, unknown> } = {
       data: {
@@ -73,7 +74,26 @@ export default function ChangePasswordModal() {
     if (mustChangePassword) payload.password = password
     if (mustSetUsername) payload.data.username = pcName
     const { error: authErr } = await supabase.auth.updateUser(payload)
-    if (authErr) { setError(authErr.message); setSaving(false); return }
+    if (authErr) {
+      setError(mapErstloginAuthError(authErr))
+      setSaving(false)
+      return
+    }
+    if (mustSetUsername) {
+      const { error: profileErr } = await supabase.from('profiles').update({
+        username: pcName,
+        force_username_set: false,
+      }).eq('id', user.id)
+      if (profileErr) {
+        const unique = /unique|duplicate|already/i.test(profileErr.message)
+        setError(unique
+          ? 'Dieser PC-Benutzername ist bereits vergeben.'
+          : 'PC-Benutzername konnte nicht gespeichert werden. Bitte Verwaltung informieren.')
+        await refreshProfile()
+        setSaving(false)
+        return
+      }
+    }
     await refreshProfile()
     setSaving(false)
   }
