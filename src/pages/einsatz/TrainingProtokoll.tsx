@@ -12,19 +12,28 @@ import type {
   Profile,
 } from '../../lib/types'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
+import { isEinsatzmittelActive } from '../../lib/einsatzmittelAusbuchung'
 import {
   ATTENDANCE_STATUS_LABELS,
   cadenceLabel,
+  emptyMunitionVerbrauchInput,
   formatCompletedOn,
+  formatMunitionVerbrauch,
   isAttendanceStatus,
   isModuleLockDbError,
   moduleAssignmentOptions,
   moduleLockUserMessage,
+  munitionVerbrauchInputFromSession,
   validateAttendance,
   validateParticipation,
   validateSession,
   type AttendanceStatus,
+  type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
+import { poolEmLocationLabel } from '../../lib/poolEinsatzmittel'
+import { isVerwahrungsort } from '../../lib/verwahrungsort'
+import MunitionVerbrauchFields, { type PoolMunitionChoice } from './MunitionVerbrauchFields'
+import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
 
@@ -47,6 +56,9 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   const [saving, setSaving] = useState(false)
   const [addOfficerId, setAddOfficerId] = useState('')
   const [drafts, setDrafts] = useState<Record<string, { moduleId: string; interval: string }>>({})
+  const [munition, setMunition] = useState<MunitionVerbrauchInput>(emptyMunitionVerbrauchInput())
+  const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
+  const [savingMunition, setSavingMunition] = useState(false)
 
   const selected = sessions.find(s => s.id === selectedId) ?? null
 
@@ -68,6 +80,19 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     setModules((moduleRows ?? []) as EinsatzTrainingModule[])
     setCompletions((completionRows ?? []) as EinsatzTrainingCompletion[])
     setOfficers((profileRows ?? []) as OfficerOption[])
+    const poolRes = await loadPoolMunitionChoices()
+    if (poolRes.ok) {
+      setPoolMunition(poolRes.items.filter(isEinsatzmittelActive).map(item => ({
+        id: item.id,
+        marke: item.marke,
+        typ: item.typ,
+        art: item.art,
+        anzahl: item.anzahl,
+        locationLabel: isVerwahrungsort(item.verwahrungsort)
+          ? poolEmLocationLabel(item.verwahrungsort, item.lager_notiz)
+          : item.verwahrungsort,
+      })))
+    }
     setLoading(false)
   }
 
@@ -105,6 +130,14 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     }
     loadProtocol(selectedId).catch(() => setError('Protokoll konnte nicht geladen werden.'))
   }, [selectedId])
+
+  useEffect(() => {
+    if (!selected) {
+      setMunition(emptyMunitionVerbrauchInput())
+      return
+    }
+    setMunition(munitionVerbrauchInputFromSession(selected))
+  }, [selected])
 
   const officerById = useMemo(() => new Map(officers.map(o => [o.id, o])), [officers])
 
@@ -264,6 +297,41 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     return participations.filter(row => row.officer_id === officerId)
   }
 
+  const poolChoicesForForm = useMemo(() => {
+    const extraId = selected?.munition_pool_id
+    if (extraId && !poolMunition.some(item => item.id === extraId)) {
+      return [...poolMunition, {
+        id: extraId,
+        marke: selected.munition_marke,
+        typ: null,
+        art: selected.munition_art,
+        anzahl: null,
+        locationLabel: 'ausgebucht oder unbekannt',
+      }]
+    }
+    return poolMunition
+  }, [poolMunition, selected])
+
+  async function saveMunition() {
+    if (!canManage || !selected) return
+    setSavingMunition(true)
+    setError('')
+    const result = await saveMunitionVerbrauch({
+      sessionId: selected.id,
+      previous: selected,
+      form: munition,
+      recordedBy: profile?.id ?? null,
+    })
+    if (!result.ok) {
+      setError(result.error)
+      setSavingMunition(false)
+      return
+    }
+    logAudit('Munitionsverbrauch Einsatztraining', `${selected.session_date} ${munition.anzahl || 'leer'}`)
+    setSavingMunition(false)
+    await loadList()
+  }
+
   if (loading && !selected) {
     return (
       <div className="flex justify-center py-12">
@@ -291,6 +359,34 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
           <p className="text-sm text-gray-500 mt-1">
             Anwesend/Abwesend und Intervall je Person. Ein abgeschlossenes Modul kann nicht erneut zugewiesen werden.
           </p>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-4">
+          <h4 className="text-sm font-semibold text-gray-900 mb-3">Munition verbraucht</h4>
+          {canManage ? (
+            <>
+              <MunitionVerbrauchFields
+                idPrefix="et-int-munition"
+                value={munition}
+                onChange={setMunition}
+                poolItems={poolChoicesForForm}
+              />
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => { void saveMunition() }}
+                  disabled={savingMunition}
+                  className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                >
+                  {savingMunition ? 'Speichern...' : 'Verbrauch speichern'}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-600">
+              {formatMunitionVerbrauch(selected) || 'Kein Verbrauch erfasst.'}
+            </p>
+          )}
         </div>
 
         {error && (
@@ -479,6 +575,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Hinweis</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Munition</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -494,6 +591,9 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                     </button>
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{session.note || '–'}</td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
+                    {formatMunitionVerbrauch(session) || '–'}
+                  </td>
                 </tr>
               ))}
             </tbody>

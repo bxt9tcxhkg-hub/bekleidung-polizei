@@ -337,8 +337,8 @@ export function personalEmLocationLabel(verwahrungsort: string | null | undefine
   return verwahrungsort
 }
 
-export function isPersonalEmInLager(item: { verwahrungsort?: string | null }): boolean {
-  return item.verwahrungsort === 'lager'
+export function isPersonalEmInLager(item: { verwahrungsort?: string | null; removed_at?: string | null }): boolean {
+  return item.verwahrungsort === 'lager' && !item.removed_at
 }
 
 export type PersonalLagerbestandRow = {
@@ -346,9 +346,9 @@ export type PersonalLagerbestandRow = {
   count: number
 }
 
-/** Eine Zeile = 1 Stück. Nur verwahrungsort = lager. */
+/** Eine Zeile = 1 Stück. Nur verwahrungsort = lager. Ausgebuchte zählen nicht. */
 export function aggregatePersonalLagerbestand(
-  items: readonly { category: string; verwahrungsort?: string | null }[],
+  items: readonly { category: string; verwahrungsort?: string | null; removed_at?: string | null }[],
 ): PersonalLagerbestandRow[] {
   const rows: PersonalLagerbestandRow[] = PERSONAL_EM_CATEGORIES.map(category => ({
     category,

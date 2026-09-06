@@ -259,6 +259,16 @@ describe('Anzeige und Lagerbestand', () => {
     expect(helm?.byOrt.waffentresor_zentrale).toBe(0)
   })
 
+  it('lässt ausgebuchte Pool-Zeilen im Lagerbestand weg', () => {
+    const rows = aggregateLagerbestand([
+      { category: 'munition', verwahrungsort: 'lager', anzahl: 100 },
+      { category: 'munition', verwahrungsort: 'lager', anzahl: 50, removed_at: '2026-09-06T10:00:00.000Z' },
+      { category: 'langwaffe_stg77', verwahrungsort: 'peter_1', anzahl: null, removed_at: '2026-09-06T10:00:00.000Z' },
+    ])
+    expect(rows.find(r => r.category === 'munition')?.total).toBe(100)
+    expect(rows.find(r => r.category === 'langwaffe_stg77')?.total).toBe(0)
+  })
+
   it('hängt die Lager-Notiz nur an das Lager-Label', () => {
     expect(poolEmLocationLabel('lager', null)).toBe('Lager')
     expect(poolEmLocationLabel('lager', ' Fach 2 ')).toBe('Lager · Fach 2')
