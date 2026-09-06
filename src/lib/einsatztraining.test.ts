@@ -29,6 +29,7 @@ import {
   isTrainingModuleType,
   officerMatchesAppliesTo,
   officerMatchesSearch,
+  officersEligibleForModule,
   officersForAusschreibungPicker,
   trainingModuleDeleteConfirm,
   trainingModuleDeleteUserMessage,
@@ -397,6 +398,45 @@ describe('Offene Liste und Selbstanmeldung', () => {
       officers,
       completions: [],
     }).map(row => row.id)).toEqual(['o1', 'o2', 'o3'])
+  })
+
+  it('nimmt Sonja Dolliner nicht in Polizei- oder Alle-Offizierslisten', () => {
+    const sonja = {
+      id: 'sonja',
+      name: 'Sonja Dolliner',
+      dienstnummer: '24',
+      organisation: 'Stadtpolizei',
+      active: true,
+    }
+    const roster = [...officers, sonja]
+    expect(officerMatchesAppliesTo(sonja, 'polizei')).toBe(false)
+    expect(officerMatchesAppliesTo(sonja, 'parkaufsicht')).toBe(false)
+    expect(officerMatchesAppliesTo(sonja, 'alle')).toBe(false)
+    expect(officersEligibleForModule({
+      module: { applies_to: 'polizei' },
+      officers: roster,
+    }).map(row => row.id)).toEqual(['o1', 'o2'])
+    expect(officersEligibleForModule({
+      module: { applies_to: 'alle' },
+      officers: roster,
+    }).map(row => row.id)).toEqual(['o1', 'o2', 'o3'])
+    expect(officersEligibleForModule({
+      module: { applies_to: 'parkaufsicht' },
+      officers: roster,
+    }).map(row => row.id)).toEqual(['o3'])
+    expect(selfRegisterBlockReason({
+      officerId: 'sonja',
+      moduleId: 'm1',
+      module: { ...pflicht, applies_to: 'polizei' },
+      officerOrganisation: 'Stadtpolizei',
+      officerName: 'Sonja Dolliner',
+      officerDienstnummer: '24',
+      completions: [],
+      announced: true,
+      alreadyRegistered: false,
+      isOwnRegistration: true,
+      registrationCount: 0,
+    })).toMatch(/Organisation/)
   })
 
   it('sperrt Selbstanmeldung nach Abschluss, ohne Ausschreibung oder bei voller Kapazität', () => {

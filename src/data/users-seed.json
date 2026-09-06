@@ -1,7 +1,7 @@
 {
   "source": {
     "path": "/workspace/bekleidung-inbox/2026-09-06-einsatztraining/users-seed.json",
-    "note": "Vollständige Stadtpolizei-Liste aus ET/Zuteilung (34 Offiziere). Stab-Rollen unverändert. Übrige Stadtpolizei: Bekleidung Benutzer, einsatz_mt Benutzer. Parkaufsicht-Liste vom Owner: nur Bekleidung Benutzer, keine erfundenen höheren Rollen. Keine erfundenen Namen."
+    "note": "Stadtpolizei-Liste aus ET/Zuteilung. 33 Polizei-Offiziere; Sonja Dolliner (DN 24) ist kein Polizist (officer: false), bleibt aber Stadtpolizei für den Bekleidung-Shop. Stab-Rollen unverändert. Übrige Stadtpolizei: Bekleidung Benutzer, einsatz_mt Benutzer. Parkaufsicht-Liste vom Owner: nur Bekleidung Benutzer, keine erfundenen höheren Rollen. Keine erfundenen Namen. Feld officer: optional, Default true; false = nicht in Polizei-Offizierslisten."
   },
   "officers": [
     {
@@ -162,7 +162,8 @@
       "dienstnummer": "24",
       "organisation": "Stadtpolizei",
       "bekleidung": "user",
-      "einsatz_mt": "user"
+      "einsatz_mt": "user",
+      "officer": false
     },
     {
       "nachname": "Aukenthaler",

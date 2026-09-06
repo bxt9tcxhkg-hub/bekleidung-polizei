@@ -10,7 +10,12 @@
  */
 
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
-import { ET_ROSTER_ORGANISATION, PARKAUFSICHT_ORGANISATION } from './usersSeed'
+import {
+  ET_ROSTER_ORGANISATION,
+  PARKAUFSICHT_ORGANISATION,
+  isPolizistForRoster,
+  type RosterOfficerRef,
+} from './usersSeed'
 
 export const TRAINING_KINDS = ['intern', 'extern'] as const
 export type TrainingKind = (typeof TRAINING_KINDS)[number]
@@ -298,22 +303,21 @@ export type TrainingOfficerRef = {
   name?: string | null
   dienstnummer?: string | null
   username?: string | null
+  officer?: boolean | null
 }
 
 export function stadtpolizeiDutyOfficers<T extends TrainingOfficerRef>(officers: readonly T[]): T[] {
-  return officers.filter(officer => officer.active !== false && isStadtpolizeiMember(officer))
+  return officers.filter(officer => officer.active !== false && isPolizistForRoster(officer))
 }
 
 export function officerMatchesAppliesTo(
-  officer: { organisation?: string | null },
+  officer: RosterOfficerRef,
   appliesTo?: TrainingAppliesTo | string | null,
 ): boolean {
   const audience = normalizeAppliesTo(appliesTo)
-  const org = (officer.organisation ?? '').trim()
-  if (audience === 'parkaufsicht') return org === PARKAUFSICHT_ORGANISATION
-  const asPolizei = { organisation: org || ET_ROSTER_ORGANISATION }
-  if (audience === 'polizei') return isStadtpolizeiMember(asPolizei)
-  return isStadtpolizeiMember(asPolizei) || isParkaufsichtMember({ organisation: org })
+  if (audience === 'parkaufsicht') return isParkaufsichtMember(officer)
+  if (audience === 'polizei') return isPolizistForRoster(officer)
+  return isPolizistForRoster(officer) || isParkaufsichtMember(officer)
 }
 
 export function officersEligibleForModule<T extends TrainingOfficerRef>(input: {
@@ -628,6 +632,9 @@ export type SelfRegisterInput = {
   moduleName?: string | null
   module?: TrainingModulePeriodRef | null
   officerOrganisation?: string | null
+  officerName?: string | null
+  officerDienstnummer?: string | null
+  officer?: boolean | null
   completions: readonly TrainingCompletionRef[]
   announced: boolean
   capacity?: number | null
@@ -673,7 +680,12 @@ export function selfRegisterBlockReason(input: SelfRegisterInput): string | null
   }
   if (
     input.officerOrganisation !== undefined
-    && !officerMatchesAppliesTo({ organisation: input.officerOrganisation }, input.module?.applies_to)
+    && !officerMatchesAppliesTo({
+      organisation: input.officerOrganisation,
+      name: input.officerName,
+      dienstnummer: input.officerDienstnummer,
+      officer: input.officer,
+    }, input.module?.applies_to)
   ) {
     return input.isManagerEnrollment
       ? 'Dieses Modul gilt nicht für diese Organisation.'

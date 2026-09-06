@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   PARKAUFSICHT_SEED,
+  STADTPOLIZEI_OFFICER_SEED,
   STADTPOLIZEI_SEED,
   USERS_SEED,
   bekleidungRolesFromSeed,
   findUserSeedByDienstnummer,
+  isPolizistForRoster,
+  parseSeedOfficerFlag,
   parseUsersSeed,
   seedOfficerAuthEmail,
 } from './usersSeed'
@@ -64,6 +67,75 @@ describe('users-seed', () => {
     const rankAndFile = STADTPOLIZEI_SEED.filter(row => row.bekleidung === 'user' && row.einsatz_mt === 'user')
     expect(rankAndFile).toHaveLength(29)
     expect(['4', '5', '6', '10'].every(dn => !STADTPOLIZEI_SEED.some(row => row.dienstnummer === dn))).toBe(true)
+  })
+
+  it('markiert Sonja Dolliner als Nicht-Offizier, Organisation bleibt Stadtpolizei', () => {
+    const sonja = findUserSeedByDienstnummer('24')
+    expect(sonja).toMatchObject({
+      vorname: 'Sonja',
+      nachname: 'Dolliner',
+      organisation: 'Stadtpolizei',
+      bekleidung: 'user',
+      einsatz_mt: 'user',
+      officer: false,
+    })
+    expect(STADTPOLIZEI_OFFICER_SEED).toHaveLength(33)
+    expect(STADTPOLIZEI_OFFICER_SEED.some(row => row.dienstnummer === '24')).toBe(false)
+    expect(STADTPOLIZEI_SEED.filter(row => row.officer !== false)).toHaveLength(33)
+    expect(STADTPOLIZEI_SEED.filter(row => row.officer === false)).toEqual([sonja])
+  })
+
+  it('liest officer: false aus der JSON-Zeile, sonst Default true', () => {
+    expect(parseSeedOfficerFlag({})).toBe(true)
+    expect(parseSeedOfficerFlag({ officer: true })).toBe(true)
+    expect(parseSeedOfficerFlag({ officer: false })).toBe(false)
+    expect(parseSeedOfficerFlag({ einsatz_roster: false })).toBe(false)
+    const parsed = parseUsersSeed({
+      officers: [{
+        nachname: 'Dolliner',
+        vorname: 'Sonja',
+        dienstnummer: '24',
+        organisation: 'Stadtpolizei',
+        bekleidung: 'user',
+        einsatz_mt: 'user',
+        officer: false,
+      }, {
+        nachname: 'Gisinger',
+        vorname: 'Andreas',
+        dienstnummer: '2',
+        organisation: 'Stadtpolizei',
+        bekleidung: 'user',
+        einsatz_mt: 'user',
+      }],
+    })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.file.officers[0].officer).toBe(false)
+    expect(parsed.file.officers[0].organisation).toBe('Stadtpolizei')
+    expect(parsed.file.officers[1].officer).toBe(true)
+  })
+
+  it('erkennt Polizei-Offiziere nur bei Stadtpolizei und officer !== false', () => {
+    expect(isPolizistForRoster({ organisation: 'Stadtpolizei' })).toBe(true)
+    expect(isPolizistForRoster({ organisation: '' })).toBe(true)
+    expect(isPolizistForRoster({ organisation: 'Parkaufsicht' })).toBe(false)
+    expect(isPolizistForRoster({ organisation: 'Stadtpolizei', officer: false })).toBe(false)
+    expect(isPolizistForRoster({
+      organisation: 'Stadtpolizei',
+      name: 'Sonja Dolliner',
+      dienstnummer: '24',
+    })).toBe(false)
+    expect(isPolizistForRoster({
+      organisation: 'Stadtpolizei',
+      vorname: 'Sonja',
+      nachname: 'Dolliner',
+    })).toBe(false)
+    expect(isPolizistForRoster({
+      organisation: 'Stadtpolizei',
+      name: 'Andreas Gisinger',
+      dienstnummer: '2',
+    })).toBe(true)
+    expect(isPolizistForRoster({ organisation: 'Parkaufsicht', dienstnummer: '24' })).toBe(false)
   })
 
   it('nimmt die acht Parkaufsicht-Personen nur als Bekleidung-Benutzer', () => {

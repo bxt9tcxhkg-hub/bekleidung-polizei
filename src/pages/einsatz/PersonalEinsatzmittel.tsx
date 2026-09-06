@@ -32,6 +32,8 @@ import {
   type PersonalEmFormValues,
   type PersonalEmOrgFilter,
 } from '../../lib/personalEinsatzmittel'
+import { isParkaufsichtMember } from '../../lib/einsatztraining'
+import { isPolizistForRoster } from '../../lib/usersSeed'
 import { VERWAHRUNGSORTE, VERWAHRUNGSORT_LABELS } from '../../lib/verwahrungsort'
 import {
   activeEinsatzmittel,
@@ -190,10 +192,12 @@ export default function PersonalEinsatzmittelPanel() {
   }, [scopedItems, activeItems, view])
 
   const officerChoices = useMemo(() => {
-    const active = officers.filter(o => o.active)
+    const roster = officers.filter(o =>
+      o.active && (isPolizistForRoster(o) || isParkaufsichtMember(o)),
+    )
     const current = officers.find(o => o.id === officerId)
-    if (current && !current.active) return [current, ...active]
-    return active
+    if (current && !roster.some(o => o.id === current.id)) return [current, ...roster]
+    return roster
   }, [officers, officerId])
 
   const pdfOfficerChoices = useMemo(() => {
@@ -216,9 +220,9 @@ export default function PersonalEinsatzmittelPanel() {
         organisation: fromItem?.organisation ?? '',
       })
     }
-    const list = [...byId.values()].sort((a, b) =>
-      officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'),
-    )
+    const list = [...byId.values()]
+      .filter(o => isPolizistForRoster(o) || isParkaufsichtMember(o))
+      .sort((a, b) => officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'))
     return { list, hasUnassigned }
   }, [activeItems, officers])
 

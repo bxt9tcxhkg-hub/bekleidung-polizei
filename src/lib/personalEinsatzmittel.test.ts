@@ -321,7 +321,7 @@ describe('Org-Filter Matrix', () => {
     expect(PERSONAL_EM_ORG_FILTER_LABELS.alle).toBe('Alle')
   })
 
-  it('filtert über isStadtpolizeiMember / isParkaufsichtMember, leere Org zählt als Polizei', () => {
+  it('filtert Polizei über isPolizistForRoster, leere Org zählt als Polizei-Offizier', () => {
     expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Stadtpolizei' }, 'polizei')).toBe(true)
     expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Parkaufsicht' }, 'polizei')).toBe(false)
     expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Parkaufsicht' }, 'parkaufsicht')).toBe(true)
@@ -332,18 +332,32 @@ describe('Org-Filter Matrix', () => {
     expect(officerMatchesPersonalEmOrgFilter({ organisation: 'Parkaufsicht' }, 'alle')).toBe(true)
   })
 
+  it('nimmt Sonja Dolliner nicht als Polizistin in Polizei oder Alle', () => {
+    const sonja = {
+      organisation: 'Stadtpolizei',
+      name: 'Sonja Dolliner',
+      dienstnummer: '24',
+    }
+    expect(officerMatchesPersonalEmOrgFilter(sonja, 'polizei')).toBe(false)
+    expect(officerMatchesPersonalEmOrgFilter(sonja, 'parkaufsicht')).toBe(false)
+    expect(officerMatchesPersonalEmOrgFilter(sonja, 'alle')).toBe(false)
+    expect(officerMatchesPersonalEmOrgFilter({ ...sonja, officer: false }, 'polizei')).toBe(false)
+  })
+
   it('nimmt nur aktive Offiziere und sortiert nach Anzeigename', () => {
     const rows = filterActiveOfficersForPersonalEmMatrix([
       { id: 'p', name: 'Park', organisation: 'Parkaufsicht', active: true },
       { id: 'z', name: 'Zoe', organisation: 'Stadtpolizei', active: true },
       { id: 'a', name: 'Anna', organisation: 'Stadtpolizei', active: true },
       { id: 'x', name: 'Inaktiv', organisation: 'Stadtpolizei', active: false },
+      { id: 's', name: 'Sonja Dolliner', dienstnummer: '24', organisation: 'Stadtpolizei', active: true },
     ], 'polizei')
     expect(rows.map(r => r.id)).toEqual(['a', 'z'])
     expect(filterActiveOfficersForPersonalEmMatrix(rows, 'parkaufsicht')).toEqual([])
     expect(filterActiveOfficersForPersonalEmMatrix([
       { id: 'p', name: 'Park', organisation: 'Parkaufsicht', active: true },
       { id: 'a', name: 'Anna', organisation: 'Stadtpolizei', active: true },
+      { id: 's', name: 'Sonja Dolliner', dienstnummer: '24', organisation: 'Stadtpolizei', active: true },
     ], 'alle').map(r => r.id)).toEqual(['a', 'p'])
   })
 })

@@ -212,7 +212,11 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     }
   }
 
-  function enrollBlockReason(session: EinsatzTrainingSession, officerId: string, officerOrganisation?: string | null) {
+  function enrollBlockReason(
+    session: EinsatzTrainingSession,
+    officerId: string,
+    officer?: Pick<OfficerOption, 'organisation' | 'name' | 'dienstnummer'> | null,
+  ) {
     if (!session.module_id) return 'Bitte das Modul für diesen Trainingstag wählen.'
     const module = session.module ?? modules.find(m => m.id === session.module_id)
     const regs = regsBySession.get(session.id) ?? []
@@ -222,7 +226,9 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
       moduleId: session.module_id,
       moduleName: module?.name,
       module,
-      officerOrganisation,
+      officerOrganisation: officer?.organisation,
+      officerName: officer?.name,
+      officerDienstnummer: officer?.dienstnummer,
       completions,
       announced: session.announced,
       capacity: session.capacity,
@@ -235,7 +241,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
 
   function registerHint(session: EinsatzTrainingSession) {
     if (!profile?.id || !session.module_id) return 'Bitte anmelden, um sich einzutragen.'
-    return enrollBlockReason(session, profile.id, profile.organisation)
+    return enrollBlockReason(session, profile.id, profile)
   }
 
   async function insertRegistration(session: EinsatzTrainingSession, officerId: string, auditAction: string, auditDetails: string) {
@@ -276,7 +282,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
 
   async function enrollOfficer(session: EinsatzTrainingSession, officer: OfficerOption) {
     if (!canManage) return
-    const hint = enrollBlockReason(session, officer.id, officer.organisation)
+    const hint = enrollBlockReason(session, officer.id, officer)
     if (hint) {
       setError(hint)
       return
@@ -367,6 +373,8 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
               moduleName: module?.name,
               module,
               officerOrganisation: profile?.organisation,
+              officerName: profile?.name,
+              officerDienstnummer: profile?.dienstnummer,
               completions,
               announced: session.announced,
               capacity: session.capacity,

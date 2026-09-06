@@ -9,9 +9,9 @@
  * Lesen: SB/Admin alle Zeilen; Benutzer nur eigene (officer_id = auth.uid()).
  */
 
-import { isParkaufsichtMember, isStadtpolizeiMember, TRAINING_APPLIES_TO, TRAINING_APPLIES_TO_LABELS, type TrainingAppliesTo } from './einsatztraining'
+import { isParkaufsichtMember, TRAINING_APPLIES_TO, TRAINING_APPLIES_TO_LABELS, type TrainingAppliesTo } from './einsatztraining'
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
-import { ET_ROSTER_ORGANISATION } from './usersSeed'
+import { isPolizistForRoster, type RosterOfficerRef } from './usersSeed'
 import { isVerwahrungsort, VERWAHRUNGSORT_LABELS, type Verwahrungsort } from './verwahrungsort'
 
 /** Polizei / Parkaufsicht / Alle — gleiche Werte wie Einsatztraining-Geltung. */
@@ -391,15 +391,12 @@ export function canManagePersonalEinsatzmittel(input: {
 }
 
 export function officerMatchesPersonalEmOrgFilter(
-  officer: { organisation?: string | null },
+  officer: RosterOfficerRef,
   filter: PersonalEmOrgFilter,
 ): boolean {
   if (filter === 'parkaufsicht') return isParkaufsichtMember(officer)
-  const asPolizei = {
-    organisation: (officer.organisation ?? '').trim() || ET_ROSTER_ORGANISATION,
-  }
-  if (filter === 'polizei') return isStadtpolizeiMember(asPolizei)
-  return isStadtpolizeiMember(asPolizei) || isParkaufsichtMember(officer)
+  if (filter === 'polizei') return isPolizistForRoster(officer)
+  return isPolizistForRoster(officer) || isParkaufsichtMember(officer)
 }
 
 export function filterActiveOfficersForPersonalEmMatrix<T extends {
@@ -408,6 +405,7 @@ export function filterActiveOfficersForPersonalEmMatrix<T extends {
   name?: string | null
   dienstnummer?: string | null
   username?: string | null
+  officer?: boolean | null
 }>(officers: readonly T[], filter: PersonalEmOrgFilter): T[] {
   return officers
     .filter(officer => officer.active !== false && officerMatchesPersonalEmOrgFilter(officer, filter))
