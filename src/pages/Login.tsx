@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { resolveLoginEmail } from '../lib/workflow'
+import { lookupUsernameAuthEmail, resolveLoginEmailForAuth } from '../lib/workflow'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 export default function Login() {
@@ -17,7 +17,9 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const resolved = resolveLoginEmail(email)
+    const resolved = await resolveLoginEmailForAuth(email, (username) =>
+      lookupUsernameAuthEmail(supabase, username),
+    )
     if (!resolved.ok) {
       setError(resolved.error)
       return
@@ -28,7 +30,7 @@ export default function Login() {
       password,
     })
     if (signErr || !data.user) {
-      setError('Ungültige E-Mail oder Passwort')
+      setError('Ungültige E-Mail, Benutzername oder Passwort')
       setLoading(false)
       return
     }
@@ -59,7 +61,7 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail oder Benutzername</label>
             <input
               type="text"
               required
@@ -68,10 +70,10 @@ export default function Login() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              placeholder="vorname.nachname@dornbirn.at"
+              placeholder="vorname.nachname@dornbirn.at oder PC-Benutzername"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Beamte: Stadt-E-Mail. Admin: Benutzername admin. Der PC-Anmeldename ist nicht der Login.
+              Beamte: Stadt-E-Mail oder PC-Anmeldename. Admin: Benutzername admin.
             </p>
           </div>
           <div>

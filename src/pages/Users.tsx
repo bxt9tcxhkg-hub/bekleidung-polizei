@@ -840,7 +840,7 @@ export default function Users() {
               )}
               {!editId && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-                  Login erfolgt mit vorname.nachname@dornbirn.at. {START_PASSWORD_HINT} PC-Benutzername (Windows-Anmeldename ohne Domäne) setzt die Person beim Erstlogin.
+                  Login mit Stadt-E-Mail (vorname.nachname@dornbirn.at) oder PC-Benutzername. {START_PASSWORD_HINT} PC-Benutzername (Windows-Anmeldename ohne Domäne) setzt die Person beim Erstlogin.
                 </p>
               )}
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}

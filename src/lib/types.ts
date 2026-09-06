@@ -537,6 +537,7 @@ export type Database = {
       has_portal_area_access: { Args: { p_area: string }; Returns: boolean }
       can_manage_einsatzmittel: { Args: Record<string, never>; Returns: boolean }
       can_self_register_einsatztraining: { Args: { p_session_id: string }; Returns: boolean }
+      lookup_login_email: { Args: { p_username: string }; Returns: string | null }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

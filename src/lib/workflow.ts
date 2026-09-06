@@ -11,13 +11,29 @@ export const ADMIN_LOGIN_USERNAME = 'admin'
 export const ADMIN_AUTH_EMAIL = 'admin@stadtpolizei-dornbirn.local'
 
 export const LOGIN_EMAIL_REQUIRED_ERROR =
-  'Bitte die Stadt-E-Mail eingeben (vorname.nachname@dornbirn.at).'
+  'Bitte Stadt-E-Mail (vorname.nachname@dornbirn.at) oder PC-Benutzernamen eingeben.'
+
+export const LOGIN_IDENTIFIER_REQUIRED_ERROR = LOGIN_EMAIL_REQUIRED_ERROR
+
+export const LOGIN_USERNAME_UNKNOWN_ERROR =
+  'Unbekannter Benutzername. Bitte den PC-Anmeldenamen oder die Stadt-E-Mail prüfen.'
 
 const LOGIN_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export type ResolveLoginEmailResult =
   | { ok: true; email: string }
+  | { ok: true; username: string }
   | { ok: false; error: string }
+
+export type UsernameEmailLookup = (username: string) => Promise<string | null>
+
+/** Minimaler RPC-Client für die anonyme Username→E-Mail-Auflösung. */
+export type LoginEmailRpcClient = {
+  rpc: (
+    fn: 'lookup_login_email',
+    args: { p_username: string },
+  ) => PromiseLike<{ data: unknown; error: { message?: string } | null }>
+}
 
 export function isDnPlaceholderUsername(value: string | null | undefined): boolean {
   return DN_PLACEHOLDER_USERNAME_RE.test((value ?? '').trim())
@@ -36,16 +52,64 @@ export function isBoundAdminIdentity(input: {
   return email === ADMIN_AUTH_EMAIL.toLowerCase() || username === ADMIN_LOGIN_USERNAME
 }
 
-/** Login nur mit voller E-Mail. Einzige Ausnahme: Benutzername admin. */
+/** Login: volle E-Mail, PC-Benutzername (Lookup nötig) oder gebundenes Admin-Konto. */
 export function resolveLoginEmail(input: string): ResolveLoginEmailResult {
   const trimmed = input.trim()
+  if (!trimmed) {
+    return { ok: false, error: LOGIN_IDENTIFIER_REQUIRED_ERROR }
+  }
   if (isBoundAdminLoginInput(trimmed)) {
     return { ok: true, email: ADMIN_AUTH_EMAIL }
   }
-  if (!LOGIN_EMAIL_RE.test(trimmed)) {
-    return { ok: false, error: LOGIN_EMAIL_REQUIRED_ERROR }
+  if (LOGIN_EMAIL_RE.test(trimmed)) {
+    return { ok: true, email: trimmed.toLowerCase() }
   }
-  return { ok: true, email: trimmed.toLowerCase() }
+  const username = sanitizePcUsername(trimmed)
+  if (!username || !USERNAME_RE.test(username)) {
+    return { ok: false, error: LOGIN_IDENTIFIER_REQUIRED_ERROR }
+  }
+  if (isDnPlaceholderUsername(username)) {
+    return { ok: false, error: LOGIN_USERNAME_UNKNOWN_ERROR }
+  }
+  return { ok: true, username }
+}
+
+export function isUsernameLoginResult(
+  result: ResolveLoginEmailResult,
+): result is { ok: true; username: string } {
+  return result.ok && 'username' in result
+}
+
+/** profiles.username → auth.users.email über SECURITY DEFINER RPC (auch ohne Session). */
+export async function lookupUsernameAuthEmail(
+  client: LoginEmailRpcClient,
+  username: string,
+): Promise<string | null> {
+  const sanitized = sanitizePcUsername(username)
+  if (!sanitized || !USERNAME_RE.test(sanitized) || isDnPlaceholderUsername(sanitized)) {
+    return null
+  }
+  const { data, error } = await client.rpc('lookup_login_email', { p_username: sanitized })
+  if (error || typeof data !== 'string') return null
+  const email = data.trim().toLowerCase()
+  return LOGIN_EMAIL_RE.test(email) ? email : null
+}
+
+/** Login-Submit: E-Mail/Admin lokal, PC-Namen über Lookup zur Auth-E-Mail. */
+export async function resolveLoginEmailForAuth(
+  input: string,
+  lookupUsernameEmail: UsernameEmailLookup,
+): Promise<{ ok: true; email: string } | { ok: false; error: string }> {
+  const resolved = resolveLoginEmail(input)
+  if (!resolved.ok) return resolved
+  if (!isUsernameLoginResult(resolved)) {
+    return { ok: true, email: resolved.email }
+  }
+  const email = await lookupUsernameEmail(resolved.username)
+  if (!email) {
+    return { ok: false, error: LOGIN_USERNAME_UNKNOWN_ERROR }
+  }
+  return { ok: true, email: email.trim().toLowerCase() }
 }
 
 export function shouldForcePasswordChange(input: {
