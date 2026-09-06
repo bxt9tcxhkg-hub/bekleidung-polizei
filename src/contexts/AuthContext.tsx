@@ -19,6 +19,7 @@ interface AuthContextType {
   isSachbearbeiter: boolean
   isGenehmiger: boolean
   mustChangePassword: boolean
+  mustSetUsername: boolean
   availableRoles: AppRole[]
   authError: string
   /** null = Tabelle nicht lesbar (Migration fehlt). */
@@ -37,6 +38,7 @@ const AuthContext = createContext<AuthContextType>({
   isSachbearbeiter: false,
   isGenehmiger: false,
   mustChangePassword: false,
+  mustSetUsername: false,
   availableRoles: [],
   authError: '',
   areaRoles: null,
@@ -131,6 +133,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const roles = profile?.roles ?? []
   const { isAdmin, isSachbearbeiter, isGenehmiger, isStrictAdmin } = flagsFromRoles(roles)
   const mustChangePassword = user?.user_metadata?.force_password_change === true
+  const mustSetUsername = Boolean(user && profile && (
+    user.user_metadata?.force_username_set === true
+    || profile.force_username_set === true
+    || !profile.username?.trim()
+  ))
   const availableRoles: AppRole[] = availableRolesFromFlags({ isAdmin, isSachbearbeiter, isGenehmiger, isStrictAdmin })
 
   const signOut = async () => {
@@ -144,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasAreaEntitlement({ area, isStrictAdmin, rows: areaRoles })
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, availableRoles, authError, areaRoles, hasAreaAccess, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, mustSetUsername, availableRoles, authError, areaRoles, hasAreaAccess, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )

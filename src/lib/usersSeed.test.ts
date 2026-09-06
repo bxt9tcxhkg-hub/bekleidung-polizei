@@ -6,6 +6,7 @@ import {
   bekleidungRolesFromSeed,
   findUserSeedByDienstnummer,
   parseUsersSeed,
+  seedOfficerAuthEmail,
 } from './usersSeed'
 
 describe('users-seed', () => {
@@ -19,6 +20,8 @@ describe('users-seed', () => {
       '37:admin:admin',
     ])
     expect(findUserSeedByDienstnummer('07')?.nachname).toBe('Fenkart')
+    expect(seedOfficerAuthEmail(findUserSeedByDienstnummer('1')!)).toBe('Hans-Peter.Schwendinger@dornbirn.at')
+    expect(seedOfficerAuthEmail(findUserSeedByDienstnummer('3')!)).toBe('Martin.Feurstein2@dornbirn.at')
     expect(bekleidungRolesFromSeed('sachbearbeiter')).toEqual(['user', 'sachbearbeiter'])
     expect(STADTPOLIZEI_SEED.every(row => row.organisation === 'Stadtpolizei')).toBe(true)
     expect(STADTPOLIZEI_SEED).toHaveLength(34)

@@ -1,12 +1,24 @@
 import type { OrderStatus } from './types'
 
-export const LOCAL_AUTH_DOMAIN = 'stadtpolizei-dornbirn.local'
+export const AUTH_EMAIL_DOMAIN = 'dornbirn.at'
+/** @deprecated Alias — Login-Domain ist dornbirn.at. */
+export const LOCAL_AUTH_DOMAIN = AUTH_EMAIL_DOMAIN
 export const USERNAME_RE = /^[a-z0-9._-]+$/
 
-/** Baut die Login-E-Mail wie Login.tsx: Benutzername → Platzhalter-Adresse. */
+/** Login-E-Mail: volle Adresse bleibt, sonst Local-Part @dornbirn.at. Bestehende Admins mit voller E-Mail (auch anderer Domain). */
 export function loginEmailFromInput(input: string): string {
   const trimmed = input.trim()
-  return trimmed.includes('@') ? trimmed : `${trimmed.toLowerCase()}@${LOCAL_AUTH_DOMAIN}`
+  return trimmed.includes('@') ? trimmed : `${trimmed.toLowerCase()}@${AUTH_EMAIL_DOMAIN}`
+}
+
+/**
+ * Windows/PC-Anmeldename: nur sAMAccountName, ohne Domäne.
+ * `STADT\\hschwendinger` → `hschwendinger`. Kleinbuchstaben für USERNAME_RE.
+ */
+export function sanitizePcUsername(input: string): string {
+  const trimmed = input.trim()
+  const withoutDomain = trimmed.includes('\\') ? (trimmed.split('\\').pop() ?? '') : trimmed
+  return withoutDomain.trim().toLowerCase()
 }
 
 /** Gleiche Budget-Entscheidung wie submit_cart() in der Datenbank. */

@@ -46,6 +46,8 @@ export interface Profile {
   active: boolean
   created_at: string | null
   size_preferences: Record<string, string> | null
+  /** Erstlogin: PC-Anmeldename muss gesetzt/bestätigt werden. */
+  force_username_set?: boolean
 }
 
 export interface Product {

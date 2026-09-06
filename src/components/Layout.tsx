@@ -107,7 +107,7 @@ function SidebarNav({
 }
 
 export default function Layout() {
-  const { profile, isAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, signOut } = useAuth()
+  const { profile, isAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, mustSetUsername, signOut } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const sections: NavSection[] = [
@@ -192,7 +192,7 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
-        {mustChangePassword && <ChangePasswordModal />}
+        {(mustChangePassword || mustSetUsername) && <ChangePasswordModal />}
       </div>
     </div>
   )

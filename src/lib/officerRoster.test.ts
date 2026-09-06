@@ -10,9 +10,21 @@ import {
 } from './officerRoster'
 
 describe('Offiziersliste', () => {
-  it('bildet den Login aus der Dienstnummer ohne erfundene E-Mail', () => {
+  it('bildet den Login aus Vorname.Nachname@dornbirn.at, nicht aus der DN', () => {
     expect(usernameFromDienstnummer('07')).toBe('dn7')
-    expect(usernameFromDienstnummer('32')).toBe('dn32')
+    expect(rosterRowToImportUser({
+      vorname: 'Hans-Peter',
+      nachname: 'Schwendinger',
+      dienstnummer: '1',
+    })).toMatchObject({
+      email: 'Hans-Peter.Schwendinger@dornbirn.at',
+      username: 'hans-peter.schwendinger',
+    })
+    expect(rosterRowToImportUser({
+      vorname: 'Martin',
+      nachname: 'Feurstein',
+      dienstnummer: '3',
+    })?.email).toBe('Martin.Feurstein2@dornbirn.at')
   })
 
   it('verwirft Kopf- und Summenzeilen', () => {
@@ -34,7 +46,8 @@ describe('Offiziersliste', () => {
     expect(stadt).toHaveLength(34)
     expect(stadt.find(u => u.dienstnummer === '2')).toMatchObject({
       name: 'Andreas Gisinger',
-      username: 'dn2',
+      email: 'Andreas.Gisinger@dornbirn.at',
+      username: 'andreas.gisinger',
       roles: ['user'],
       einsatzMtRole: 'user',
     })
@@ -60,13 +73,14 @@ describe('Offiziersliste', () => {
       nachname: 'Fenkart',
       dienstnummer: '7',
     })
-    expect(fenkart?.username).toBe('dn7')
+    expect(fenkart?.username).toBe('matthias.fenkart')
+    expect(fenkart?.email).toBe('Matthias.Fenkart@dornbirn.at')
     const plan = planRosterEnsure(knownRosterImportUsers(), [
-      { id: 'x', name: 'Fenkart Matthias', username: 'dn7', dienstnummer: '7' },
+      { id: 'x', name: 'Fenkart Matthias', username: 'matthias.fenkart', dienstnummer: '7' },
     ])
     expect(plan.already.map(u => u.dienstnummer)).toContain('7')
     expect(plan.create.map(u => u.dienstnummer)).not.toContain('7')
-    expect(plan.create.map(u => u.username)).toContain('dn1')
+    expect(plan.create.map(u => u.email)).toContain('Hans-Peter.Schwendinger@dornbirn.at')
   })
 
   it('legt Parkaufsicht aus users-seed.json nur als Benutzer an', () => {

@@ -12,7 +12,7 @@ export default function PortalChrome({
   actions?: React.ReactNode
   wide?: boolean
 }) {
-  const { profile, mustChangePassword, signOut } = useAuth()
+  const { profile, mustChangePassword, mustSetUsername, signOut } = useAuth()
   const width = wide ? 'max-w-6xl' : 'max-w-4xl'
 
   return (
@@ -50,7 +50,7 @@ export default function PortalChrome({
       <main className={`flex-1 ${width} mx-auto w-full px-4 py-8 sm:py-12`}>
         {children}
       </main>
-      {mustChangePassword && <ChangePasswordModal />}
+      {(mustChangePassword || mustSetUsername) && <ChangePasswordModal />}
     </div>
   )
 }

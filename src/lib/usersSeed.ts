@@ -1,9 +1,11 @@
 /**
  * Quelle der Offiziersanlage: users-seed.json (Zuteilung/ET + Parkaufsicht-Liste).
- * Rollen stehen an der Zeile. Keine erfundenen Namen oder höheren Rollen.
+ * Rollen stehen an der Zeile. Login-E-Mail: Vorname.Nachname@dornbirn.at
+ * (Ausnahme Feurstein Martin / DN 3). Keine erfundenen Namen oder höheren Rollen.
  */
 
 import seedFile from '../data/users-seed.json'
+import { officerAuthEmail } from './officerAuthEmail'
 
 export const BEKLEIDUNG_SEED_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
 export const EINSATZ_MT_SEED_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
@@ -105,4 +107,8 @@ export function bekleidungRolesFromSeed(role: BekleidungSeedRole): string[] {
 export function findUserSeedByDienstnummer(dienstnummer: string): UserSeedOfficer | undefined {
   const needle = dienstnummer.trim().replace(/^0+/, '') || '0'
   return USERS_SEED.find(row => (row.dienstnummer.replace(/^0+/, '') || '0') === needle)
+}
+
+export function seedOfficerAuthEmail(row: Pick<UserSeedOfficer, 'vorname' | 'nachname' | 'dienstnummer'>): string {
+  return officerAuthEmail(row)
 }

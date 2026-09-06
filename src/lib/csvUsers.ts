@@ -1,4 +1,5 @@
-import { inferOfficerGender, isJunkRosterRow, usernameFromDienstnummer } from './officerRoster'
+import { officerAuthEmail, provisionalUsernameFromEmail, splitOfficerName } from './officerAuthEmail'
+import { inferOfficerGender, isJunkRosterRow } from './officerRoster'
 import { planRoleMatrixAssignment } from './roleMatrix'
 import { findUserSeedByDienstnummer, organisationFromSeedValue } from './usersSeed'
 
@@ -11,6 +12,9 @@ export function organisationFromImportRow(explicit: string, dienstnummer: string
 
 export interface ImportUser {
   name: string
+  vorname?: string
+  nachname?: string
+  email: string
   username: string
   dienstnummer: string
   organisation: string
@@ -31,8 +35,15 @@ export function rowToUser(row: Record<string, string>): ImportUser | null {
   const nachname = get('nachname')
   const name = get('name', 'vollname') || [vorname, nachname].filter(Boolean).join(' ')
   const dienstnummer = get('dienstnummer', 'dn', 'dg', 'dienst-nr', 'dienstnr')
+  const names = vorname && nachname ? { vorname, nachname } : splitOfficerName(name)
+  const email = officerAuthEmail({
+    vorname: names.vorname || vorname,
+    nachname: names.nachname || nachname,
+    name,
+    dienstnummer,
+  })
   const explicitUsername = get('benutzername', 'username', 'benutzer', 'login')
-  const username = explicitUsername || usernameFromDienstnummer(dienstnummer)
+  const username = explicitUsername || provisionalUsernameFromEmail(email)
   if (!name || !username) return null
   if (!explicitUsername && isJunkRosterRow({ name, vorname, nachname, dienstnummer })) return null
   const rollen = get('rollen', 'roles', 'rolle', 'role')
@@ -40,6 +51,9 @@ export function rowToUser(row: Record<string, string>): ImportUser | null {
   const planned = planRoleMatrixAssignment({ id: '', name, dienstnummer, roles: ['user'] })
   return {
     name,
+    vorname: names.vorname || vorname || undefined,
+    nachname: names.nachname || nachname || undefined,
+    email,
     username: username.toLowerCase(),
     dienstnummer,
     organisation: organisationFromImportRow(org, dienstnummer),

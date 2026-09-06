@@ -1,5 +1,7 @@
 // Edge Function: legt Auth-User + Profil an (Service Role).
 // Wird von src/pages/Users.tsx (Portal-Benutzerseite) aufgerufen.
+// Auth-E-Mail: {Vorname}.{Nachname}@dornbirn.at (ASCII-Fold; Feurstein2-Ausnahme).
+// profiles.username = PC-Anmeldename (Platzhalter + force_username_set).
 // Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -40,7 +42,72 @@ function corsHeaders(req: Request): Record<string, string> {
 }
 
 const USERNAME_RE = /^[a-z0-9._-]+$/
-const LOCAL_DOMAIN = 'stadtpolizei-dornbirn.local'
+const AUTH_EMAIL_DOMAIN = 'dornbirn.at'
+const FEURSTEIN_MARTIN_EMAIL = 'Martin.Feurstein2@dornbirn.at'
+
+/** Keep in sync with src/lib/officerAuthEmail.ts */
+function foldGermanAscii(input: string): string {
+  return input
+    .replace(/Ä/g, 'Ae')
+    .replace(/Ö/g, 'Oe')
+    .replace(/Ü/g, 'Ue')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+}
+
+function splitOfficerName(name: string): { vorname: string; nachname: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return { vorname: '', nachname: '' }
+  if (parts.length === 1) return { vorname: parts[0], nachname: '' }
+  return { vorname: parts[0], nachname: parts.slice(1).join(' ') }
+}
+
+function normalizeDienstnummer(raw: string | null | undefined): string {
+  const trimmed = raw?.trim() ?? ''
+  if (!trimmed) return ''
+  const stripped = trimmed.replace(/^0+/, '')
+  return stripped || '0'
+}
+
+function isFeursteinMartinException(vorname: string, nachname: string, dienstnummer?: string | null): boolean {
+  const first = foldGermanAscii(vorname).trim().toLowerCase()
+  const last = foldGermanAscii(nachname).trim().toLowerCase()
+  const dn = normalizeDienstnummer(dienstnummer)
+  if (first === 'martin' && last === 'feurstein') return true
+  if (dn === '3' && last === 'feurstein') return true
+  return false
+}
+
+function officerAuthEmail(input: {
+  vorname?: string
+  nachname?: string
+  name?: string
+  dienstnummer?: string | null
+}): string {
+  let vorname = (input.vorname ?? '').trim()
+  let nachname = (input.nachname ?? '').trim()
+  if (!vorname || !nachname) {
+    const split = splitOfficerName(input.name ?? '')
+    if (!vorname) vorname = split.vorname
+    if (!nachname) nachname = split.nachname
+  }
+  if (!vorname || !nachname) return ''
+  if (isFeursteinMartinException(vorname, nachname, input.dienstnummer)) {
+    return FEURSTEIN_MARTIN_EMAIL
+  }
+  const localFirst = foldGermanAscii(vorname).replace(/\s+/g, '')
+  const localLast = foldGermanAscii(nachname).replace(/\s+/g, '-')
+  if (!localFirst || !localLast) return ''
+  return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`
+}
+
+function provisionalUsernameFromEmail(email: string): string {
+  return (email.split('@')[0] ?? '').trim().toLowerCase()
+}
 
 function json(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -99,6 +166,8 @@ Deno.serve(async (req) => {
 
   let body: {
     name?: string
+    vorname?: string
+    nachname?: string
     username?: string
     dienstnummer?: string | null
     roles?: string[]
@@ -115,9 +184,21 @@ Deno.serve(async (req) => {
   }
 
   const name = (body.name ?? '').trim()
-  const username = (body.username ?? '').trim().toLowerCase()
   const password = body.initial_password ?? ''
-  if (!name || !username) return json(req, { error: 'Name und Benutzername sind Pflicht.' }, 400)
+  const dienstnummer = body.dienstnummer?.trim() || null
+  const email = officerAuthEmail({
+    vorname: body.vorname,
+    nachname: body.nachname,
+    name,
+    dienstnummer,
+  })
+  const requestedUsername = (body.username ?? '').trim().toLowerCase()
+  const username = requestedUsername || provisionalUsernameFromEmail(email)
+  if (!name) return json(req, { error: 'Name ist Pflicht.' }, 400)
+  if (!email) {
+    return json(req, { error: 'Login-E-Mail konnte nicht gebildet werden (Vor- und Nachname nötig).' }, 400)
+  }
+  if (!username) return json(req, { error: 'Benutzername ist Pflicht oder muss aus der E-Mail ableitbar sein.' }, 400)
   if (!USERNAME_RE.test(username)) {
     return json(req, { error: 'Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.' }, 400)
   }
@@ -129,11 +210,9 @@ Deno.serve(async (req) => {
   const roles = requested.filter((r) => canAssign(callerRoles, r))
   if (roles.length === 0) roles.push('user')
 
-  const email = `${username}@${LOCAL_DOMAIN}`
   const gender = body.gender === 'female' ? 'female' : 'male'
   const organisation = body.organisation === 'Parkaufsicht' ? 'Parkaufsicht' : 'Stadtpolizei'
   const active = body.active !== false
-  const dienstnummer = body.dienstnummer?.trim() || null
 
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
@@ -141,6 +220,7 @@ Deno.serve(async (req) => {
     email_confirm: true,
     user_metadata: {
       force_password_change: true,
+      force_username_set: true,
       username,
       name,
       gender,
@@ -162,6 +242,7 @@ Deno.serve(async (req) => {
     gender,
     organisation,
     active,
+    force_username_set: true,
   })
   if (profileErr) {
     await admin.auth.admin.deleteUser(created.user.id)
@@ -189,5 +270,5 @@ Deno.serve(async (req) => {
     console.error('portal_area_roles:', areaErr.message)
   }
 
-  return json(req, { id: created.user.id, username })
+  return json(req, { id: created.user.id, username, email })
 })

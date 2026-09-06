@@ -11,16 +11,20 @@ import {
   canCreateUsers,
   canDeactivateUsers,
   USERNAME_RE,
+  sanitizePcUsername,
 } from './workflow'
 
 describe('loginEmailFromInput', () => {
-  it('hängt die Platzhalter-Domain an Benutzernamen', () => {
-    expect(loginEmailFromInput('mmustermann')).toBe('mmustermann@stadtpolizei-dornbirn.local')
-    expect(loginEmailFromInput('  Max.User  ')).toBe('max.user@stadtpolizei-dornbirn.local')
+  it('hängt dornbirn.at an Local-Parts ohne @', () => {
+    expect(loginEmailFromInput('mmustermann')).toBe('mmustermann@dornbirn.at')
+    expect(loginEmailFromInput('  Max.User  ')).toBe('max.user@dornbirn.at')
+    expect(loginEmailFromInput('Hans-Peter.Schwendinger')).toBe('hans-peter.schwendinger@dornbirn.at')
   })
 
-  it('lässt echte E-Mail-Adressen unverändert (trim)', () => {
+  it('lässt volle E-Mail-Adressen unverändert (trim), auch bestehende Admins', () => {
     expect(loginEmailFromInput('name@beispiel.at')).toBe('name@beispiel.at')
+    expect(loginEmailFromInput('Hans-Peter.Schwendinger@dornbirn.at')).toBe('Hans-Peter.Schwendinger@dornbirn.at')
+    expect(loginEmailFromInput('admin@stadtpolizei-dornbirn.local')).toBe('admin@stadtpolizei-dornbirn.local')
   })
 })
 
@@ -82,6 +86,14 @@ describe('isValidInitialPassword / USERNAME_RE', () => {
     expect(USERNAME_RE.test('max.user-1')).toBe(true)
     expect(USERNAME_RE.test('Max')).toBe(false)
     expect(USERNAME_RE.test('user name')).toBe(false)
+    expect(USERNAME_RE.test('stadt\\user')).toBe(false)
+  })
+
+  it('nimmt vom PC-Anmeldenamen nur den sAMAccountName', () => {
+    expect(sanitizePcUsername('HSCHWENDINGER')).toBe('hschwendinger')
+    expect(sanitizePcUsername('STADT\\hschwendinger')).toBe('hschwendinger')
+    expect(sanitizePcUsername('  stadt\\HSchwendinger  ')).toBe('hschwendinger')
+    expect(USERNAME_RE.test(sanitizePcUsername('STADT\\hschwendinger'))).toBe(true)
   })
 })
 
