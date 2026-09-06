@@ -69,6 +69,19 @@ describe('Erstlogin Restschritte nach Teilschreiben', () => {
     })).toBe(true)
   })
 
+  it('Live: gültiger PC-Name ohne Username-Flag bleibt nur Passwort-Erstlogin', () => {
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: false,
+      username: 'msoyucok',
+      email: 'msoyucok@dornbirn.at',
+    })).toBe(false)
+    expect(shouldForcePasswordChange({
+      forcePasswordChange: true,
+      username: 'msoyucok',
+      email: 'msoyucok@dornbirn.at',
+    })).toBe(true)
+  })
+
   it('Auth erledigt, Profil-Username fehlt noch → nur PC-Name bleibt', () => {
     expect(shouldForcePasswordChange({
       forcePasswordChange: false,
@@ -90,45 +103,35 @@ describe('Erstlogin Restschritte nach Teilschreiben', () => {
     })).toBe(false)
   })
 
-  it('schließt den Username-Schritt wenn force_username_set false ist, auch ohne gespeicherten PC-Namen', () => {
+  it('leerer Username / dn{N} bleibt Erstlogin-pflichtig, auch wenn das Flag schon false ist', () => {
     expect(shouldForceUsernameSet({
       forceUsernameSet: false,
       username: null,
       ...beamter,
-    })).toBe(false)
+    })).toBe(true)
     expect(shouldForceUsernameSet({
-      forceUsernameSet: false,
-      username: 'dn7',
-      ...beamter,
-    })).toBe(false)
+      forceUsernameSet: true,
+      username: null,
+    })).toBe(true)
   })
 })
 
 describe('Erstlogin Persistenz', () => {
-  it('setzt beide Auth-Flags zurück', () => {
+  it('setzt beide Auth-Metadata-Flags zurück (Passwort-Flag nur dort)', () => {
     expect(buildErstloginAuthMetadata()).toEqual({
       force_password_change: false,
       force_username_set: false,
     })
   })
 
-  it('schreibt PC-Namen und force_username_set, force_password_change nur wenn die Spalte existiert', () => {
-    expect(buildErstloginProfilePatch({ pcUsername: 'hschwendinger' })).toEqual({
+  it('schreibt nur PC-Namen und force_username_set, nie force_password_change', () => {
+    expect(buildErstloginProfilePatch({ pcUsername: 'msoyucok' })).toEqual({
       force_username_set: false,
-      username: 'hschwendinger',
+      username: 'msoyucok',
     })
-    expect(buildErstloginProfilePatch({
-      pcUsername: 'hschwendinger',
-      profile: { force_username_set: true },
-    })).toEqual({
+    expect(buildErstloginProfilePatch({})).toEqual({
       force_username_set: false,
-      username: 'hschwendinger',
     })
-    expect(buildErstloginProfilePatch({
-      profile: { force_username_set: true, force_password_change: true },
-    })).toEqual({
-      force_username_set: false,
-      force_password_change: false,
-    })
+    expect(buildErstloginProfilePatch({})).not.toHaveProperty('force_password_change')
   })
 })

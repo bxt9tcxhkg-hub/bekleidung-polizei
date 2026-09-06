@@ -164,10 +164,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: user?.email,
     username: profile?.username,
   })
-  // Nur Profilstand: force_username_set === false bleibt Username-fertig (auch ohne PC-Namen),
+  // Nur Profilstand: gültiger PC-Name + force_username_set false bleibt Username-fertig,
   // auch wenn Auth-Metadata nach einem fehlgeschlagenen updateUser noch das Flag trägt.
+  // Leerer Username / dn{N} bleibt Erstlogin-pflichtig (wie bisher).
   const mustSetUsername = Boolean(user && profile && shouldForceUsernameSet({
-    forceUsernameSet: profile.force_username_set,
+    forceUsernameSet: profile.force_username_set === true,
     username: profile.username,
     email: user.email,
   }))

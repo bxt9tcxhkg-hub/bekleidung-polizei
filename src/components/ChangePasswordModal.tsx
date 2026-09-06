@@ -75,21 +75,20 @@ export default function ChangePasswordModal() {
       setSaving(false)
       return
     }
-    const profilePatch = buildErstloginProfilePatch({
-      pcUsername: mustSetUsername ? pcName : undefined,
-      profile,
-    })
-    const { error: profileErr } = await supabase.from('profiles').update(profilePatch).eq('id', user.id)
-    if (profileErr) {
-      const unique = /unique|duplicate|already/i.test(profileErr.message)
-      setError(unique
-        ? 'Dieser PC-Benutzername ist bereits vergeben.'
-        : mustSetUsername
-          ? 'PC-Benutzername konnte nicht gespeichert werden. Bitte Verwaltung informieren.'
-          : 'Profil konnte nicht aktualisiert werden. Bitte Verwaltung informieren.')
-      await refreshProfile()
-      setSaving(false)
-      return
+    if (mustSetUsername || profile?.force_username_set === true) {
+      const profilePatch = buildErstloginProfilePatch({
+        pcUsername: mustSetUsername ? pcName : undefined,
+      })
+      const { error: profileErr } = await supabase.from('profiles').update(profilePatch).eq('id', user.id)
+      if (profileErr) {
+        const unique = /unique|duplicate|already/i.test(profileErr.message)
+        setError(unique
+          ? 'Dieser PC-Benutzername ist bereits vergeben.'
+          : 'PC-Benutzername konnte nicht gespeichert werden. Bitte Verwaltung informieren.')
+        await refreshProfile()
+        setSaving(false)
+        return
+      }
     }
     await refreshProfile()
     setSaving(false)

@@ -125,12 +125,12 @@ describe('bound Admin Erstlogin', () => {
       forceUsernameSet: false,
       username: '',
       email: 'irmgard.faessler@dornbirn.at',
-    })).toBe(false)
+    })).toBe(true)
     expect(shouldForceUsernameSet({
       forceUsernameSet: false,
       username: 'dn7',
       email: 'hans-peter.schwendinger@dornbirn.at',
-    })).toBe(false)
+    })).toBe(true)
   })
 
   it('hält den Username-Schritt nicht offen, wenn das Profil den PC-Namen schon hat', () => {
