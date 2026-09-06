@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   KNOWN_OFFICER_ROSTER,
+  importUsersFromSeedJson,
   isJunkRosterRow,
   knownRosterImportUsers,
   planRosterEnsure,
@@ -29,6 +30,8 @@ describe('Offiziersliste', () => {
     expect(users.find(u => u.dienstnummer === '18')?.einsatzMtRole).toBe('sachbearbeiter')
     expect(users.find(u => u.dienstnummer === '7')?.roles).toEqual(['user', 'sachbearbeiter'])
     expect(users.find(u => u.dienstnummer === '37')?.roles).toEqual(['admin'])
+    expect(users.every(u => u.organisation === 'Stadtpolizei')).toBe(true)
+    expect(users.some(u => u.organisation === 'Parkaufsicht')).toBe(false)
   })
 
   it('überspringt vorhandene Dienstnummern und plant nur neue', () => {
@@ -44,5 +47,23 @@ describe('Offiziersliste', () => {
     expect(plan.already.map(u => u.dienstnummer)).toContain('7')
     expect(plan.create.map(u => u.dienstnummer)).not.toContain('7')
     expect(plan.create.map(u => u.username)).toContain('dn1')
+  })
+
+  it('legt aus users-seed.json keine Parkaufsicht-Benutzer an', () => {
+    const parsed = importUsersFromSeedJson(JSON.stringify({
+      officers: [{
+        nachname: 'Probe',
+        vorname: 'Park',
+        dienstnummer: '88',
+        organisation: 'Parkaufsicht',
+        bekleidung: 'user',
+        einsatz_mt: 'user',
+      }],
+    }))
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.users).toHaveLength(1)
+      expect(parsed.users[0].organisation).toBe('Stadtpolizei')
+    }
   })
 })

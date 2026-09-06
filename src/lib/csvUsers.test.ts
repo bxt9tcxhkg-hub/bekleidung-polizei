@@ -50,8 +50,25 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
       name: 'Stefanie Albrecht',
       username: 'dn32',
       dienstnummer: '32',
+      organisation: 'Stadtpolizei',
       roles: ['user', 'sachbearbeiter'],
       gender: 'female',
     })
+  })
+
+  it('setzt ET-Offizierszeilen immer auf Stadtpolizei, auch bei Parkaufsicht-Spalte', () => {
+    const user = rowToUser({
+      vorname: 'Hans-Peter',
+      nachname: 'Schwendinger',
+      dienstnummer: '1',
+      organisation: 'Parkaufsicht',
+    })
+    expect(user?.organisation).toBe('Stadtpolizei')
+    expect(user?.username).toBe('dn1')
+  })
+
+  it('leitet Parkaufsicht nicht aus park im Benutzernamen ab', () => {
+    const user = rowToUser({ name: 'Parker Test', benutzername: 'parkert', dienstnummer: '99' })
+    expect(user?.organisation).toBe('Stadtpolizei')
   })
 })

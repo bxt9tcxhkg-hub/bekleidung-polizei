@@ -1,12 +1,15 @@
 /**
  * Quelle der Offiziersanlage: users-seed.json (Zuteilung/ET).
  * Rollen stehen an der Zeile. Keine erfundenen Namen über diese Liste hinaus.
+ * Organisation der ET-Liste ist immer Stadtpolizei; Parkaufsicht folgt später.
  */
 
 import seedFile from '../data/users-seed.json'
 
 export const BEKLEIDUNG_SEED_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
 export const EINSATZ_MT_SEED_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
+/** App-Wert für Stadtpolizei Dornbirn (profiles.organisation). */
+export const ET_ROSTER_ORGANISATION = 'Stadtpolizei' as const
 
 export type BekleidungSeedRole = (typeof BEKLEIDUNG_SEED_ROLES)[number]
 export type EinsatzMtSeedRole = (typeof EINSATZ_MT_SEED_ROLES)[number]
@@ -15,6 +18,7 @@ export type UserSeedOfficer = {
   nachname: string
   vorname: string
   dienstnummer: string
+  organisation: typeof ET_ROSTER_ORGANISATION
   bekleidung: BekleidungSeedRole
   einsatz_mt: EinsatzMtSeedRole
 }
@@ -57,7 +61,14 @@ export function parseUsersSeed(input: unknown): { ok: true; file: UserSeedFile }
     if (!isBekleidungSeedRole(bekleidung) || !isEinsatzMtSeedRole(einsatz)) {
       return { ok: false, error: `Zeile ${index + 1}: ungültige Rolle.` }
     }
-    rows.push({ nachname, vorname, dienstnummer, bekleidung, einsatz_mt: einsatz })
+    rows.push({
+      nachname,
+      vorname,
+      dienstnummer,
+      organisation: ET_ROSTER_ORGANISATION,
+      bekleidung,
+      einsatz_mt: einsatz,
+    })
   }
   return { ok: true, file: { ...(input as UserSeedFile), officers: rows } }
 }

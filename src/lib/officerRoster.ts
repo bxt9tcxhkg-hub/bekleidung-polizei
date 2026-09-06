@@ -2,11 +2,13 @@
  * Offiziersliste aus users-seed.json.
  * Auth-Anlage nur über create-user: E-Mail = {username}@stadtpolizei-dornbirn.local
  * mit username dn{DN}. Keine erfundenen Adressen.
+ * Organisation ist immer Stadtpolizei (Stadtpolizei Dornbirn). Parkaufsicht folgt später.
  */
 
 import { USERNAME_RE } from './workflow'
 import { normalizeDienstnummer } from './roleMatrix'
 import {
+  ET_ROSTER_ORGANISATION,
   USERS_SEED,
   bekleidungRolesFromSeed,
   parseUsersSeed,
@@ -67,7 +69,7 @@ export type RosterImportUser = {
   name: string
   username: string
   dienstnummer: string
-  organisation: 'Stadtpolizei'
+  organisation: typeof ET_ROSTER_ORGANISATION
   roles: string[]
   einsatzMtRole: string
   gender: 'male' | 'female'
@@ -93,7 +95,7 @@ export function rosterRowToImportUser(row: OfficerRosterRow): RosterImportUser |
     name,
     username,
     dienstnummer: normalizeDienstnummer(row.dienstnummer),
-    organisation: 'Stadtpolizei',
+    organisation: ET_ROSTER_ORGANISATION,
     roles: planned.roles,
     einsatzMtRole: planned.einsatzMtRole,
     gender: row.gender ?? inferOfficerGender(name),

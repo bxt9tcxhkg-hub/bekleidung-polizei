@@ -1,13 +1,14 @@
 {
   "source": {
     "path": "/workspace/bekleidung-inbox/2026-09-06-einsatztraining/users-seed.json",
-    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. Weitere der 34 Offiziere nicht erfunden — per gleichem JSON/CSV nachziehen."
+    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. Alle ET-/Zuteilungs-Offiziere sind Stadtpolizei (Stadtpolizei Dornbirn). Parkaufsicht kommt als eigene Liste später — hier nicht anlegen. Weitere der 34 Offiziere nicht erfunden — per gleichem JSON/CSV nachziehen."
   },
   "officers": [
     {
       "nachname": "Schwendinger",
       "vorname": "Hans-Peter",
       "dienstnummer": "1",
+      "organisation": "Stadtpolizei",
       "bekleidung": "genehmiger",
       "einsatz_mt": "user"
     },
@@ -15,6 +16,7 @@
       "nachname": "Fenkart",
       "vorname": "Matthias",
       "dienstnummer": "7",
+      "organisation": "Stadtpolizei",
       "bekleidung": "sachbearbeiter",
       "einsatz_mt": "user"
     },
@@ -22,6 +24,7 @@
       "nachname": "Petternel",
       "vorname": "Heinz",
       "dienstnummer": "18",
+      "organisation": "Stadtpolizei",
       "bekleidung": "user",
       "einsatz_mt": "sachbearbeiter"
     },
@@ -29,6 +32,7 @@
       "nachname": "Albrecht",
       "vorname": "Stefanie",
       "dienstnummer": "32",
+      "organisation": "Stadtpolizei",
       "bekleidung": "sachbearbeiter",
       "einsatz_mt": "user"
     },
@@ -36,6 +40,7 @@
       "nachname": "Soyucok",
       "vorname": "Muhammet",
       "dienstnummer": "37",
+      "organisation": "Stadtpolizei",
       "bekleidung": "admin",
       "einsatz_mt": "admin"
     }

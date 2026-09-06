@@ -12,6 +12,24 @@ describe('users-seed', () => {
     ])
     expect(findUserSeedByDienstnummer('07')?.nachname).toBe('Fenkart')
     expect(bekleidungRolesFromSeed('sachbearbeiter')).toEqual(['user', 'sachbearbeiter'])
+    expect(USERS_SEED.every(row => row.organisation === 'Stadtpolizei')).toBe(true)
+  })
+
+  it('erzwingt Stadtpolizei auch wenn die JSON-Zeile Parkaufsicht setzt', () => {
+    const parsed = parseUsersSeed({
+      officers: [{
+        nachname: 'Test',
+        vorname: 'Anna',
+        dienstnummer: '99',
+        organisation: 'Parkaufsicht',
+        bekleidung: 'user',
+        einsatz_mt: 'user',
+      }],
+    })
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.file.officers[0].organisation).toBe('Stadtpolizei')
+    }
   })
 
   it('lehnt unvollständige JSON-Zeilen ab', () => {
