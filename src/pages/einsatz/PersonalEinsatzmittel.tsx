@@ -41,13 +41,14 @@ import {
   removedEinsatzmittel,
 } from '../../lib/einsatzmittelAusbuchung'
 import { PDF_UNASSIGNED_OFFICER, generatePersonalEmPdf } from '../../lib/einsatzPdf'
+import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList } from '../../lib/portalAdmin'
 import AusbuchungDialog from './AusbuchungDialog'
 import ZuteilungImportDialog from './ZuteilungImportDialog'
 import PdfExportButton from './PdfExportButton'
 
 type ViewFilter = 'matrix' | 'lager' | 'ausgebucht'
 
-type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -111,7 +112,7 @@ export default function PersonalEinsatzmittelPanel() {
 
     let emQuery = supabase
       .from('personal_einsatzmittel')
-      .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
+      .select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
       .order('created_at', { ascending: false })
     if (!canManage && profile?.id) {
       emQuery = emQuery.eq('officer_id', profile.id)
@@ -133,6 +134,8 @@ export default function PersonalEinsatzmittelPanel() {
         username: profile.username,
         active: profile.active,
         organisation: profile.organisation,
+        roles: profile.roles,
+        admin: profile.admin,
       }] : [])
       setLoading(false)
       return
@@ -142,7 +145,7 @@ export default function PersonalEinsatzmittelPanel() {
       emQuery,
       supabase
         .from('profiles')
-        .select('id,name,dienstnummer,username,active,organisation')
+        .select(OFFICER_LIST_PROFILE_SELECT)
         .order('name'),
     ])
     if (loadError) {
@@ -190,9 +193,9 @@ export default function PersonalEinsatzmittelPanel() {
   }, [scopedItems, activeItems, view])
 
   const officerChoices = useMemo(() => {
-    const active = officers.filter(o => o.active)
+    const active = excludeAdminsFromOfficerList(officers.filter(o => o.active))
     const current = officers.find(o => o.id === officerId)
-    if (current && !current.active) return [current, ...active]
+    if (current && !active.some(o => o.id === current.id)) return [current, ...active]
     return active
   }, [officers, officerId])
 
@@ -214,9 +217,11 @@ export default function PersonalEinsatzmittelPanel() {
         username: fromItem?.username ?? '',
         active: fromItem?.active ?? true,
         organisation: fromItem?.organisation ?? '',
+        roles: fromItem?.roles ?? [],
+        admin: fromItem?.admin,
       })
     }
-    const list = [...byId.values()].sort((a, b) =>
+    const list = excludeAdminsFromOfficerList([...byId.values()]).sort((a, b) =>
       officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'),
     )
     return { list, hasUnassigned }
@@ -848,7 +853,7 @@ export default function PersonalEinsatzmittelPanel() {
 
       {showImport && canManage && (
         <ZuteilungImportDialog
-          officers={officers}
+          officers={excludeAdminsFromOfficerList(officers)}
           existing={items}
           createdBy={profile?.id ?? null}
           onClose={() => setShowImport(false)}

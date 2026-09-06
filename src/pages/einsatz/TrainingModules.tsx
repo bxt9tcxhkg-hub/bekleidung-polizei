@@ -29,6 +29,7 @@ import {
 } from '../../lib/einsatztraining'
 import { planOfficialModuleUpserts } from '../../lib/officialTrainingModules'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
+import { OFFICER_LIST_PROFILE_SELECT, isPortalAdminProfile } from '../../lib/portalAdmin'
 import { generateTrainingModulesPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
 
@@ -63,7 +64,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
       supabase.from('einsatz_training_modules').select('*').order('name'),
       supabase
         .from('einsatz_training_completions')
-        .select('officer_id, module_id, completed_on, officer:profiles!officer_id(id,name,dienstnummer,username)'),
+        .select(`officer_id, module_id, completed_on, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
     ])
     if (loadError) {
       setError('Module konnten nicht geladen werden.')
@@ -88,13 +89,18 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     [items, filter],
   )
 
+  const audienceCompletions = useMemo(
+    () => completions.filter(row => !isPortalAdminProfile(row.officer)),
+    [completions],
+  )
+
   const completionCount = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const row of completions) {
+    for (const row of audienceCompletions) {
       counts.set(row.module_id, (counts.get(row.module_id) ?? 0) + 1)
     }
     return counts
-  }, [completions])
+  }, [audienceCompletions])
 
   const ownStatus = useMemo(() => {
     if (!profile?.id) return []
@@ -284,7 +290,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
                 active: item.active,
                 completionCount: completionCount.get(item.id) ?? 0,
               })),
-              completions: completions.flatMap(row => {
+              completions: audienceCompletions.flatMap(row => {
                 const module = items.find(m => m.id === row.module_id)
                 if (!module) return []
                 if (filter !== 'all' && etClassFromModule(module) !== filter) return []
