@@ -24,7 +24,7 @@ export const PORTAL_ACCOUNT_LINKS: readonly PortalAccountLink[] = [
     id: 'profil',
     to: '/profil',
     label: 'Mein Profil',
-    description: 'Persönliche Daten bearbeiten',
+    description: 'Persönliche Daten und Passwort',
   },
   {
     id: 'hilfe',

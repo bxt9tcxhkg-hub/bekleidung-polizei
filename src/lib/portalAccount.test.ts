@@ -8,6 +8,7 @@ describe('PORTAL_ACCOUNT_LINKS', () => {
     expect(PORTAL_ACCOUNT_LINKS.find(link => link.id === 'profil')).toMatchObject({
       to: '/profil',
       label: 'Mein Profil',
+      description: 'Persönliche Daten und Passwort',
     })
     expect(PORTAL_ACCOUNT_LINKS.find(link => link.id === 'hilfe')).toMatchObject({
       to: '/hilfe',
