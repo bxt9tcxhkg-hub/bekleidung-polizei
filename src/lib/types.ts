@@ -50,6 +50,8 @@ export interface Profile {
   size_preferences: Record<string, string> | null
   /** Erstlogin: PC-Anmeldename muss gesetzt/bestätigt werden. */
   force_username_set?: boolean
+  /** Optionales Legacy-Flag; Portal-Admin auch über roles / gebundenes Konto. */
+  admin?: boolean
 }
 
 export interface Product {
@@ -246,7 +248,7 @@ export interface PersonalEinsatzmittel {
   created_at: string | null
   updated_at: string | null
   created_by: string | null
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'> | null
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'> | null
 }
 
 export type PoolEmCategory =
@@ -329,7 +331,7 @@ export interface EinsatzTrainingAttendance {
   status: TrainingAttendanceStatus
   created_at: string | null
   updated_at: string | null
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 }
 
 export interface EinsatzTrainingParticipation {
@@ -341,7 +343,7 @@ export interface EinsatzTrainingParticipation {
   created_at: string | null
   created_by: string | null
   module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'applies_to' | 'active'>
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 }
 
 export interface EinsatzTrainingCompletion {
@@ -353,7 +355,7 @@ export interface EinsatzTrainingCompletion {
   completed_on: string
   created_at: string | null
   module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'applies_to' | 'active'>
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 }
 
 export interface EinsatzTrainingRegistration {
@@ -361,7 +363,7 @@ export interface EinsatzTrainingRegistration {
   session_id: string
   officer_id: string
   created_at: string | null
-  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
   session?: Pick<EinsatzTrainingSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
 }
 

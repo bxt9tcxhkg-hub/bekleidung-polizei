@@ -22,10 +22,11 @@ import {
   periodLabel,
 } from '../../lib/einsatztraining'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
+import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList, isPortalAdminProfile } from '../../lib/portalAdmin'
 import { generateOffenAnmeldungenPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
 
-type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 
 export default function TrainingOffenPanel({ canManage }: { canManage: boolean }) {
   const { profile } = useAuth()
@@ -42,12 +43,12 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
     setLoading(true)
     const [modRes, compRes, profRes, sessRes, regRes] = await Promise.all([
       supabase.from('einsatz_training_modules').select('*').eq('active', true).order('name'),
-      supabase.from('einsatz_training_completions').select('*, officer:profiles!officer_id(id,name,dienstnummer,username,organisation)'),
-      supabase.from('profiles').select('id,name,dienstnummer,username,active,organisation').order('name'),
+      supabase.from('einsatz_training_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
+      supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name'),
       supabase.from('einsatz_training_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
       canManage
-        ? supabase.from('einsatz_training_registrations').select('*, officer:profiles!officer_id(id,name,dienstnummer,username,organisation)')
-        : supabase.from('einsatz_training_registrations').select('*, officer:profiles!officer_id(id,name,dienstnummer,username,organisation)').eq('officer_id', profile?.id ?? ''),
+        ? supabase.from('einsatz_training_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
+        : supabase.from('einsatz_training_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('officer_id', profile?.id ?? ''),
     ])
     if (modRes.error || compRes.error || profRes.error) {
       setError('Offene Liste konnte nicht geladen werden.')
@@ -58,7 +59,7 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
       setError('')
       setModules((modRes.data ?? []) as EinsatzTrainingModule[])
       setCompletions((compRes.data ?? []) as EinsatzTrainingCompletion[])
-      setOfficers((profRes.data ?? []) as OfficerOption[])
+      setOfficers(excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
     }
     setSessions((sessRes.data ?? []) as EinsatzTrainingSession[])
     setRegistrations((regRes.data ?? []) as EinsatzTrainingRegistration[])
@@ -133,7 +134,7 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
                 note: session.note,
                 capacity: session.capacity,
                 registrations: registrations
-                  .filter(r => r.session_id === session.id)
+                  .filter(r => r.session_id === session.id && !isPortalAdminProfile(r.officer))
                   .map(r => ({ officerName: officerDisplayName(r.officer) })),
               })),
             })}
@@ -222,7 +223,7 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
             ) : (
               <div className="divide-y divide-gray-100">
                 {offerings.map(session => {
-                  const regs = registrations.filter(r => r.session_id === session.id)
+                  const regs = registrations.filter(r => r.session_id === session.id && !isPortalAdminProfile(r.officer))
                   return (
                     <div key={session.id} className="px-4 py-3">
                       <p className="text-sm font-medium text-gray-900">

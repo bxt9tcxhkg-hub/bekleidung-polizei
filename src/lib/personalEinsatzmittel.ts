@@ -10,6 +10,7 @@
  */
 
 import { isParkaufsichtMember, isStadtpolizeiMember, TRAINING_APPLIES_TO, TRAINING_APPLIES_TO_LABELS, type TrainingAppliesTo } from './einsatztraining'
+import { excludeAdminsFromOfficerList, type PortalAdminProfile } from './portalAdmin'
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
 import { ET_ROSTER_ORGANISATION } from './usersSeed'
 import { isVerwahrungsort, VERWAHRUNGSORT_LABELS, type Verwahrungsort } from './verwahrungsort'
@@ -408,8 +409,8 @@ export function filterActiveOfficersForPersonalEmMatrix<T extends {
   name?: string | null
   dienstnummer?: string | null
   username?: string | null
-}>(officers: readonly T[], filter: PersonalEmOrgFilter): T[] {
-  return officers
+} & PortalAdminProfile>(officers: readonly T[], filter: PersonalEmOrgFilter): T[] {
+  return excludeAdminsFromOfficerList(officers)
     .filter(officer => officer.active !== false && officerMatchesPersonalEmOrgFilter(officer, filter))
     .slice()
     .sort((a, b) => officerDisplayName(a).localeCompare(officerDisplayName(b), 'de'))

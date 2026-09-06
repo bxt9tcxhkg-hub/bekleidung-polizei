@@ -346,6 +346,19 @@ describe('Org-Filter Matrix', () => {
       { id: 'a', name: 'Anna', organisation: 'Stadtpolizei', active: true },
     ], 'alle').map(r => r.id)).toEqual(['a', 'p'])
   })
+
+  it('nimmt Portal-Admin nicht in die Matrix auf, Parkaufsicht bleibt sonst unverändert', () => {
+    const rows = [
+      { id: 'a', name: 'Anna', organisation: 'Stadtpolizei', active: true, roles: ['user'] },
+      { id: 'admin-role', name: 'Muhammet', organisation: 'Stadtpolizei', active: true, roles: ['admin'] },
+      { id: 'admin-user', name: 'Admin', organisation: 'Stadtpolizei', active: true, username: 'admin' },
+      { id: 'sb', name: 'Heinz', organisation: 'Stadtpolizei', active: true, roles: ['sachbearbeiter'] },
+      { id: 'p', name: 'Park', organisation: 'Parkaufsicht', active: true, roles: ['user'] },
+    ]
+    expect(filterActiveOfficersForPersonalEmMatrix(rows, 'polizei').map(r => r.id)).toEqual(['a', 'sb'])
+    expect(filterActiveOfficersForPersonalEmMatrix(rows, 'parkaufsicht').map(r => r.id)).toEqual(['p'])
+    expect(filterActiveOfficersForPersonalEmMatrix(rows, 'alle').map(r => r.id)).toEqual(['a', 'sb', 'p'])
+  })
 })
 
 describe('Matrixzellen', () => {

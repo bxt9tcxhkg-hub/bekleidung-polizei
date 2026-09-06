@@ -36,6 +36,7 @@ import {
   moduleAssignmentOptions,
   moduleLockUserMessage,
   officerHasCompletedModule,
+  officersCompletedForModule,
   officersOpenForModule,
   emptyMunitionVerbrauchInput,
   formatMunitionVerbrauch,
@@ -350,10 +351,11 @@ describe('validateAttendance / validateParticipation / validateSession', () => {
 describe('Offene Liste und Selbstanmeldung', () => {
   const pflicht = { id: 'm1', module_type: 'pflicht_halbjahr' as const, period_year: 2026, period_half: 2 as const }
   const officers = [
-    { id: 'o1', name: 'Heinz', organisation: 'Stadtpolizei', active: true },
-    { id: 'o2', name: 'Anna', organisation: 'Stadtpolizei', active: true },
-    { id: 'o3', name: 'Park', organisation: 'Parkaufsicht', active: true },
-    { id: 'o4', name: 'Inaktiv', organisation: 'Stadtpolizei', active: false },
+    { id: 'o1', name: 'Heinz', organisation: 'Stadtpolizei', active: true, roles: ['sachbearbeiter'] },
+    { id: 'o2', name: 'Anna', organisation: 'Stadtpolizei', active: true, roles: ['user'] },
+    { id: 'o3', name: 'Park', organisation: 'Parkaufsicht', active: true, roles: ['user'] },
+    { id: 'o4', name: 'Inaktiv', organisation: 'Stadtpolizei', active: false, roles: ['user'] },
+    { id: 'o-admin', name: 'Admin', organisation: 'Stadtpolizei', active: true, username: 'admin', roles: ['admin'] },
   ]
 
   it('nimmt nur aktive Mitglieder gemäß Geltung ohne Abschluss', () => {
@@ -397,6 +399,19 @@ describe('Offene Liste und Selbstanmeldung', () => {
       officers,
       completions: [],
     }).map(row => row.id)).toEqual(['o1', 'o2', 'o3'])
+    expect(officersOpenForModule({
+      module: { ...pflicht, applies_to: 'polizei' },
+      officers,
+      completions: [],
+    }).map(row => row.id)).toEqual(['o1', 'o2'])
+    expect(officersCompletedForModule({
+      module: pflicht,
+      officers,
+      completions: [
+        { officer_id: 'o-admin', module_id: 'm1', completed_on: '2026-09-01' },
+        { officer_id: 'o1', module_id: 'm1', completed_on: '2026-09-01' },
+      ],
+    }).map(row => row.id)).toEqual(['o1'])
   })
 
   it('sperrt Selbstanmeldung nach Abschluss, ohne Ausschreibung oder bei voller Kapazität', () => {
@@ -474,6 +489,11 @@ describe('Offene Liste und Selbstanmeldung', () => {
       officers,
       registeredIds: new Set(),
     }).map(row => row.id)).toEqual(['o1', 'o2', 'o3'])
+    expect(officersForAusschreibungPicker({
+      module: { applies_to: 'polizei' },
+      officers,
+      registeredIds: new Set(),
+    }).map(row => row.id)).not.toContain('o-admin')
     expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, 'mus')).toBe(true)
     expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, '1234')).toBe(true)
     expect(officerMatchesSearch({ name: 'Max Muster', dienstnummer: '1234', username: 'max.muster' }, 'anna')).toBe(false)

@@ -13,6 +13,7 @@ import type {
   Profile,
 } from '../../lib/types'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
+import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList } from '../../lib/portalAdmin'
 import { isEinsatzmittelActive } from '../../lib/einsatzmittelAusbuchung'
 import {
   ATTENDANCE_STATUS_LABELS,
@@ -42,7 +43,7 @@ import MunitionVerbrauchFields, { GeschossenFrage, type PoolMunitionChoice } fro
 import { loadPoolMunitionChoices, saveMunitionVerbrauch } from './saveMunitionVerbrauch'
 import PdfExportButton from './PdfExportButton'
 
-type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation'>
+type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -83,7 +84,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
         .order('session_date', { ascending: false }),
       supabase.from('einsatz_training_modules').select('*').order('name'),
       supabase.from('einsatz_training_completions').select('*'),
-      supabase.from('profiles').select('id,name,dienstnummer,username,active,organisation').order('name'),
+      supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name'),
     ])
     if (sessRes.error) {
       setError('Trainingstage konnten nicht geladen werden.')
@@ -94,7 +95,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     }
     setModules((modRes.data ?? []) as EinsatzTrainingModule[])
     setCompletions((compRes.data ?? []) as EinsatzTrainingCompletion[])
-    setOfficers((profRes.data ?? []) as OfficerOption[])
+    setOfficers(excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
     const poolRes = await loadPoolMunitionChoices()
     if (poolRes.ok) {
       setPoolMunition(poolRes.items.filter(isEinsatzmittelActive).map(item => ({
@@ -115,7 +116,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     const [attRes, partRes, regRes] = await Promise.all([
       supabase
         .from('einsatz_training_attendance')
-        .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
+        .select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
         .eq('session_id', sessionId),
       supabase
         .from('einsatz_training_participations')
@@ -124,7 +125,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
       canManage
         ? supabase
           .from('einsatz_training_registrations')
-          .select('*, officer:profiles!officer_id(id,name,dienstnummer,username,active,organisation)')
+          .select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
           .eq('session_id', sessionId)
         : Promise.resolve({ data: [], error: null }),
     ])

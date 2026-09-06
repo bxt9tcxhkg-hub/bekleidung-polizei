@@ -9,6 +9,7 @@
  * Abschluss sperrt erneute Zuweisung und Anmeldung.
  */
 
+import { excludeAdminsFromOfficerList, type PortalAdminProfile } from './portalAdmin'
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
 import { ET_ROSTER_ORGANISATION, PARKAUFSICHT_ORGANISATION } from './usersSeed'
 
@@ -298,10 +299,12 @@ export type TrainingOfficerRef = {
   name?: string | null
   dienstnummer?: string | null
   username?: string | null
-}
+} & PortalAdminProfile
 
 export function stadtpolizeiDutyOfficers<T extends TrainingOfficerRef>(officers: readonly T[]): T[] {
-  return officers.filter(officer => officer.active !== false && isStadtpolizeiMember(officer))
+  return excludeAdminsFromOfficerList(officers).filter(
+    officer => officer.active !== false && isStadtpolizeiMember(officer),
+  )
 }
 
 export function officerMatchesAppliesTo(
@@ -320,7 +323,7 @@ export function officersEligibleForModule<T extends TrainingOfficerRef>(input: {
   module: Pick<TrainingModulePeriodRef, 'applies_to'>
   officers: readonly T[]
 }): T[] {
-  return input.officers.filter(
+  return excludeAdminsFromOfficerList(input.officers).filter(
     officer => officer.active !== false && officerMatchesAppliesTo(officer, input.module.applies_to),
   )
 }
