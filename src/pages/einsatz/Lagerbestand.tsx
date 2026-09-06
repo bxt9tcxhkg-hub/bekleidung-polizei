@@ -13,28 +13,26 @@ export default function LagerbestandPanel() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    let cancelled = false
-    supabase
+  async function load() {
+    setLoading(true)
+    const { data, error: loadError } = await supabase
       .from('pool_einsatzmittel')
       .select('category,verwahrungsort,anzahl')
-      .then(({ data, error: loadError }) => {
-        if (cancelled) return
-        if (loadError) {
-          setError('Lagerbestand konnte nicht geladen werden.')
-          setItems([])
-        } else {
-          setError('')
-          setItems((data ?? []) as PoolEinsatzmittel[])
-        }
-        setLoading(false)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setError('Lagerbestand konnte nicht geladen werden.')
-        setLoading(false)
-      })
-    return () => { cancelled = true }
+    if (loadError) {
+      setError('Lagerbestand konnte nicht geladen werden.')
+      setItems([])
+    } else {
+      setError('')
+      setItems((data ?? []) as PoolEinsatzmittel[])
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    load().catch(() => {
+      setError('Lagerbestand konnte nicht geladen werden.')
+      setLoading(false)
+    })
   }, [])
 
   const rows = useMemo(() => aggregateLagerbestand(items), [items])

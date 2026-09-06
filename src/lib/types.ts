@@ -306,7 +306,7 @@ type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
-type PoolEinsatzmittelRow = PoolEinsatzmittel
+type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
