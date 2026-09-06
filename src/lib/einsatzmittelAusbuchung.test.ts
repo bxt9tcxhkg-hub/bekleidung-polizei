@@ -58,7 +58,8 @@ describe('Ausbuchung', () => {
 
   it('verringert Pool-Anzahl und lässt den Rest stehen', () => {
     expect(poolItemUsesCountedAusbuchung({ anzahl: 40 })).toBe(true)
-    expect(poolItemUsesCountedAusbuchung({ anzahl: null })).toBe(false)
+    expect(poolItemUsesCountedAusbuchung({ category: 'munition', anzahl: null })).toBe(true)
+    expect(poolItemUsesCountedAusbuchung({ category: 'langwaffe_stg77', anzahl: null })).toBe(false)
     expect(planCountedAusbuchung({ currentAnzahl: 40, qtyRaw: '10' })).toEqual({
       ok: true,
       payload: { mode: 'decrement', qty: 10, nextAnzahl: 30 },

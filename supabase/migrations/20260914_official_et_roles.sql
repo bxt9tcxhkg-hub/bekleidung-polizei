@@ -1,7 +1,9 @@
 -- Offizielle ET-Module (Petternel-Verzeichnis 2026-09-06),
 -- Owner-Rollenmatrix nach Dienstnummer, idempotent.
--- Persönliche Zuteilung kommt über Admin-Import (JSON/CSV), nicht als
--- erfundene Offizierszeilen. Live-DB wird vom Agent nicht angewandt.
+-- Matthias (Fenkart DN 7 / Wiesner DN 16) ist Owner-Parameter und wird
+-- hier NICHT als Bekleidung-SB gesetzt, bis der Owner entscheidet.
+-- Persönliche Zuteilung und Offiziersanlage: Admin-Import (create-user).
+-- Live-DB wird vom Agent nicht angewandt.
 
 INSERT INTO public.einsatz_training_modules (name, kind, active)
 VALUES
@@ -16,10 +18,8 @@ ON CONFLICT ((lower(trim(name))), kind) DO UPDATE
       name = EXCLUDED.name,
       updated_at = now();
 
--- Rollenmatrix: nur vorhandene Profile, keine Neuanlage.
--- DN 1 Genehmiger, DN 7 + 32 Bekleidung-SB (Fenkart, nicht Wiesner),
--- DN 18 Einsatz-SB, DN 37 Admin nicht herabstufen.
--- Übrige aktive Profile: Bekleidung Benutzer + einsatz_mt Benutzer.
+-- Fest: DN 1 Genehmiger, DN 32 Bekleidung-SB, DN 18 Einsatz-SB.
+-- DN 37 Admin nicht herabstufen. Übrige aktive Profile: Benutzer.
 
 UPDATE public.profiles p
 SET roles = ARRAY['user', 'genehmiger']::text[]
@@ -38,15 +38,6 @@ WHERE NOT ('admin' = ANY (COALESCE(p.roles, ARRAY[]::text[])))
   );
 
 UPDATE public.profiles p
-SET roles = ARRAY['user', 'sachbearbeiter']::text[]
-WHERE NOT ('admin' = ANY (COALESCE(p.roles, ARRAY[]::text[])))
-  AND (
-    ltrim(trim(COALESCE(p.dienstnummer, '')), '0') = '7'
-    OR (p.name ILIKE '%fenkart%' AND p.name ILIKE '%matthias%')
-  )
-  AND p.name NOT ILIKE '%wiesner%';
-
-UPDATE public.profiles p
 SET roles = ARRAY['user']::text[]
 WHERE NOT ('admin' = ANY (COALESCE(p.roles, ARRAY[]::text[])))
   AND (
@@ -58,9 +49,8 @@ UPDATE public.profiles p
 SET roles = ARRAY['user']::text[]
 WHERE p.active IS TRUE
   AND NOT ('admin' = ANY (COALESCE(p.roles, ARRAY[]::text[])))
-  AND ltrim(trim(COALESCE(p.dienstnummer, '')), '0') NOT IN ('1', '7', '32', '18', '37')
+  AND ltrim(trim(COALESCE(p.dienstnummer, '')), '0') NOT IN ('1', '32', '18', '37')
   AND p.name NOT ILIKE '%schwendinger%'
-  AND p.name NOT ILIKE '%fenkart%'
   AND NOT (p.name ILIKE '%albrecht%' AND p.name ILIKE '%stefanie%')
   AND p.name NOT ILIKE '%petternel%'
   AND p.name NOT ILIKE '%soyucok%';

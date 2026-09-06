@@ -3,7 +3,6 @@
   "staff": [
     {
       "name": "Hans-Peter Schwendinger",
-      "aliases": ["Hans Peter Schwendinger", "Hans Peter"],
       "dienstnummer": "1",
       "bekleidung": ["user", "genehmiger"],
       "einsatz_mt": "user"
@@ -15,24 +14,25 @@
       "einsatz_mt": "user"
     },
     {
-      "name": "Fenkart Matthias",
-      "dienstnummer": "7",
-      "bekleidung": ["user", "sachbearbeiter"],
-      "einsatz_mt": "user",
-      "note": "Bekleidung-SB ist Fenkart, nicht Wiesner."
-    },
-    {
       "name": "Heinz Petternel",
       "dienstnummer": "18",
       "bekleidung": ["user"],
       "einsatz_mt": "sachbearbeiter"
-    },
-    {
-      "name": "Muhammet Soyucok",
-      "dienstnummer": "37",
-      "note": "Nicht herabstufen, wenn Admin."
     }
   ],
+  "matthias_bekleidung_sb": {
+    "value": null,
+    "candidates": [
+      { "id": "fenkart_7", "name": "Fenkart Matthias", "dienstnummer": "7" },
+      { "id": "wiesner_16", "name": "Wiesner", "dienstnummer": "16" }
+    ],
+    "note": "Owner entscheidet. Solange null bekommt keiner von beiden Bekleidung-SB."
+  },
+  "admin_keep": {
+    "name": "Muhammet Soyucok",
+    "dienstnummer": "37",
+    "note": "Nicht herabstufen, wenn bereits Admin."
+  },
   "everyone_else": {
     "bekleidung": ["user"],
     "einsatz_mt": "user"

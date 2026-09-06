@@ -6,6 +6,7 @@ import { useAuth as _useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
+import { OFFICER_ROSTER_CSV_TEMPLATE, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
 import { USERNAME_RE, canCreateUsers, canDeactivateUsers } from '../lib/workflow'
 import {
   AREA_ROLE_LABELS,
@@ -284,7 +285,16 @@ export default function Users() {
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ name: row.name, username: row.username, dienstnummer: row.dienstnummer || null, organisation: row.organisation, roles: row.roles, initial_password: password }),
+          body: JSON.stringify({
+            name: row.name,
+            username: row.username,
+            dienstnummer: row.dienstnummer || null,
+            organisation: row.organisation,
+            roles: row.roles,
+            gender: row.gender,
+            einsatz_mt_role: isStrictAdmin ? row.einsatzMtRole : undefined,
+            initial_password: password,
+          }),
         })
         if (res.ok) { done++; creds.push({ username: row.username, password }) } else err++
       } catch {
@@ -458,18 +468,34 @@ export default function Users() {
             </div>
             <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
               <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 space-y-1">
-                <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Format (Semikolon-getrennt, Rollen mit |):</p>
-                <p>name;benutzername;dienstnummer;organisation;rollen</p>
-                <p>Max Mustermann;mmustermann;1234;Stadtpolizei;user</p>
-                <p>Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger</p>
-                <p className="font-sans text-gray-500 mt-2">Für jeden Benutzer wird automatisch ein zufälliges Initialpasswort erzeugt und nach dem Import einmalig angezeigt.</p>
+                <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Offiziersliste (Vorname, Nachname, Dienstnummer):</p>
+                <p>vorname;nachname;dienstnummer</p>
+                <p>Stefanie;Albrecht;32</p>
+                <p className="font-sans text-gray-500 mt-2">Login wird als dn{'{DN}'}@stadtpolizei-dornbirn.local angelegt (keine erfundenen E-Mails). Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
                   <Upload className="w-4 h-4" /> CSV-Datei wählen
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const plan = planRosterEnsure(knownRosterImportUsers(), users)
+                    setImportRows(plan.create)
+                    setImportError(plan.already.length || plan.skipped.length
+                      ? `${plan.already.length} bereits vorhanden, ${plan.skipped.length} übersprungen.`
+                      : '')
+                    setImportProgress(null)
+                  }}
+                  className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50"
+                >
+                  Bekannte Offiziere
+                </button>
+                <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(OFFICER_ROSTER_CSV_TEMPLATE)}`} download="offiziere-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
+                  <Download className="w-4 h-4" /> Offiziersliste
+                </a>
                 <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(CSV_TEMPLATE)}`} download="benutzer-vorlage.csv" className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
-                  <Download className="w-4 h-4" /> Vorlage herunterladen
+                  <Download className="w-4 h-4" /> Vorlage
                 </a>
                 <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls,.ods" className="hidden" onChange={handleFile} />
               </div>

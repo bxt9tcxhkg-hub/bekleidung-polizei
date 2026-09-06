@@ -1,0 +1,15 @@
+{
+  "source": {
+    "note": "Bestätigte Personen aus Owner-Angaben. Die vollständige Zuteilungs-/ET-PDF-Liste lag auf der Cloud-VM nicht vor — weitere Offiziere per CSV vorname;nachname;dienstnummer importieren. Login: dn{DN}@stadtpolizei-dornbirn.local über create-user."
+  },
+  "officers": [
+    { "vorname": "Hans-Peter", "nachname": "Schwendinger", "dienstnummer": "1" },
+    { "vorname": "Stefanie", "nachname": "Albrecht", "dienstnummer": "32" },
+    { "vorname": "Matthias", "nachname": "Fenkart", "dienstnummer": "7" },
+    { "vorname": "Heinz", "nachname": "Petternel", "dienstnummer": "18" },
+    { "vorname": "Muhammet", "nachname": "Soyucok", "dienstnummer": "37" }
+  ],
+  "skipped": [
+    { "nachname": "Wiesner", "dienstnummer": "16", "reason": "Vorname fehlt; Matthias-SB ist Owner-Parameter, nicht angelegt." }
+  ]
+}

@@ -103,8 +103,23 @@ export function planCountedAusbuchung(input: {
   }
 }
 
+/** Pool-Kategorien mit Anzahl/Menge — Soft-Delete allein reicht nicht. */
+export const COUNTABLE_POOL_CATEGORIES = [
+  'magazine',
+  'munition',
+  'pfefferspray_gross',
+  'schild',
+  'ballistischer_helm',
+  'schwere_westen',
+  'spuckschutzhaube',
+] as const
+
 export function poolItemUsesCountedAusbuchung(item: {
+  category?: string
   anzahl?: number | null
 }): boolean {
+  if (item.category && (COUNTABLE_POOL_CATEGORIES as readonly string[]).includes(item.category)) {
+    return true
+  }
   return item.anzahl != null
 }

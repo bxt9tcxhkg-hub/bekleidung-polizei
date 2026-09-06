@@ -24,7 +24,7 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
   it('parst die Dokumentations-Vorlage', () => {
     const users = parseImportUsers(csv)
     expect(users).toHaveLength(2)
-    expect(users[0]).toEqual({
+    expect(users[0]).toMatchObject({
       name: 'Max Mustermann',
       username: 'mmustermann',
       dienstnummer: '1234',
@@ -42,5 +42,16 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
   it('ignoriert Zeilen ohne Name/Benutzername', () => {
     expect(rowToUser({ name: '', benutzername: 'x' })).toBeNull()
     expect(rowToUser({ name: 'A', username: 'a' })?.username).toBe('a')
+  })
+
+  it('erzeugt aus Vorname/Nachname/DN den Platzhalter-Login dn{DN}', () => {
+    const user = rowToUser({ vorname: 'Stefanie', nachname: 'Albrecht', dienstnummer: '32' })
+    expect(user).toMatchObject({
+      name: 'Stefanie Albrecht',
+      username: 'dn32',
+      dienstnummer: '32',
+      roles: ['user', 'sachbearbeiter'],
+      gender: 'female',
+    })
   })
 })

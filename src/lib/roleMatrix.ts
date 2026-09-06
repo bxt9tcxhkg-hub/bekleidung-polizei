@@ -1,9 +1,9 @@
 /**
  * Owner-Rollenmatrix 2026-09-06.
- * Nur diese namentlich genannten Personen bekommen Stab-Rollen.
+ * Fest: Schwendinger Genehmiger, Albrecht Bekleidung-SB, Petternel Einsatz-SB.
+ * Matthias (Fenkart DN 7 oder Wiesner DN 16) ist Owner-Parameter — solange
+ * ungesetzt bekommt keiner von beiden Sachbearbeiter.
  * Muhammet Soyucok (DN 37) bleibt Admin, wenn er Admin ist — kein Downgrade.
- * Alle übrigen vorhandenen Profile: Bekleidung Benutzer + einsatz_mt Benutzer.
- * Es werden keine Profile angelegt.
  */
 
 import {
@@ -12,7 +12,7 @@ import {
   type EinsatzMtRole,
 } from './portalEntitlements'
 
-export type RoleMatrixStaffKind = 'genehmiger' | 'bekleidung_sb' | 'einsatz_sb' | 'admin_keep'
+export type RoleMatrixStaffKind = 'genehmiger' | 'bekleidung_sb' | 'einsatz_sb'
 
 export type RoleMatrixStaff = {
   names: readonly string[]
@@ -22,7 +22,20 @@ export type RoleMatrixStaff = {
   einsatzMtRole: EinsatzMtRole
 }
 
-export const ROLE_MATRIX_STAFF: readonly RoleMatrixStaff[] = [
+export type MatthiasBekleidungSb = null | 'fenkart_7' | 'wiesner_16'
+
+/** Owner entscheidet Fenkart DN 7 oder Wiesner DN 16. null = noch nicht gesetzt. */
+export const MATTHIAS_BEKLEIDUNG_SB: MatthiasBekleidungSb = null
+
+export const MATTHIAS_CANDIDATES: Record<Exclude<MatthiasBekleidungSb, null>, {
+  names: readonly string[]
+  dienstnummer: string
+}> = {
+  fenkart_7: { names: ['Fenkart Matthias', 'Matthias Fenkart'], dienstnummer: '7' },
+  wiesner_16: { names: ['Wiesner'], dienstnummer: '16' },
+}
+
+export const LOCKED_ROLE_MATRIX_STAFF: readonly RoleMatrixStaff[] = [
   {
     names: ['Hans-Peter Schwendinger', 'Hans Peter Schwendinger', 'Hans Peter'],
     dienstnummer: '1',
@@ -38,30 +51,13 @@ export const ROLE_MATRIX_STAFF: readonly RoleMatrixStaff[] = [
     einsatzMtRole: 'user',
   },
   {
-    names: ['Fenkart Matthias', 'Matthias Fenkart'],
-    dienstnummer: '7',
-    kind: 'bekleidung_sb',
-    bekleidungRoles: ['user', 'sachbearbeiter'],
-    einsatzMtRole: 'user',
-  },
-  {
     names: ['Heinz Petternel'],
     dienstnummer: '18',
     kind: 'einsatz_sb',
     bekleidungRoles: ['user'],
     einsatzMtRole: 'sachbearbeiter',
   },
-  {
-    names: ['Muhammet Soyucok'],
-    dienstnummer: '37',
-    kind: 'admin_keep',
-    bekleidungRoles: ['admin'],
-    einsatzMtRole: 'admin',
-  },
 ]
-
-/** Bekleidung-SB ist Fenkart Matthias DN 7, nicht Wiesner. */
-export const ROLE_MATRIX_NOT_BEKLEIDUNG_SB = ['Wiesner'] as const
 
 export const DEFAULT_OFFICER_BEKLEIDUNG_ROLES = ['user'] as const
 export const DEFAULT_OFFICER_EINSATZ_MT_ROLE: EinsatzMtRole = 'user'
@@ -77,37 +73,49 @@ function normalizeName(raw: string | null | undefined): string {
   return (raw ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-function nameMatchesStaff(profileName: string, staff: RoleMatrixStaff): boolean {
+function nameMatchesStaff(profileName: string, names: readonly string[]): boolean {
   const hay = normalizeName(profileName)
   if (!hay) return false
-  return staff.names.some(name => {
+  return names.some(name => {
     const needle = normalizeName(name)
     return hay === needle || hay.includes(needle)
   })
 }
 
-export function isProtectedAdmin(profile: {
-  name?: string | null
-  dienstnummer?: string | null
-  roles?: readonly string[] | null
-}): boolean {
-  if (profile.roles?.includes('admin')) return true
-  const staff = ROLE_MATRIX_STAFF.find(row => row.kind === 'admin_keep')
-  if (!staff) return false
-  const dn = normalizeDienstnummer(profile.dienstnummer)
-  return dn === staff.dienstnummer || nameMatchesStaff(profile.name ?? '', staff)
+export function roleMatrixStaff(
+  matthias: MatthiasBekleidungSb = MATTHIAS_BEKLEIDUNG_SB,
+): RoleMatrixStaff[] {
+  const staff = [...LOCKED_ROLE_MATRIX_STAFF]
+  if (matthias && MATTHIAS_CANDIDATES[matthias]) {
+    const candidate = MATTHIAS_CANDIDATES[matthias]
+    staff.push({
+      names: candidate.names,
+      dienstnummer: candidate.dienstnummer,
+      kind: 'bekleidung_sb',
+      bekleidungRoles: ['user', 'sachbearbeiter'],
+      einsatzMtRole: 'user',
+    })
+  }
+  return staff
 }
 
-export function matchRoleMatrixStaff(profile: {
-  name?: string | null
-  dienstnummer?: string | null
-}): RoleMatrixStaff | null {
+export function isProtectedAdmin(profile: {
+  roles?: readonly string[] | null
+}): boolean {
+  return Boolean(profile.roles?.includes('admin'))
+}
+
+export function matchRoleMatrixStaff(
+  profile: { name?: string | null; dienstnummer?: string | null },
+  matthias: MatthiasBekleidungSb = MATTHIAS_BEKLEIDUNG_SB,
+): RoleMatrixStaff | null {
+  const staff = roleMatrixStaff(matthias)
   const dn = normalizeDienstnummer(profile.dienstnummer)
   if (dn) {
-    const byDn = ROLE_MATRIX_STAFF.find(row => row.dienstnummer === dn)
+    const byDn = staff.find(row => row.dienstnummer === dn)
     if (byDn) return byDn
   }
-  const byName = ROLE_MATRIX_STAFF.filter(row => nameMatchesStaff(profile.name ?? '', row))
+  const byName = staff.filter(row => nameMatchesStaff(profile.name ?? '', row.names))
   if (byName.length === 1) return byName[0]
   return null
 }
@@ -128,21 +136,23 @@ export type RoleMatrixAssignment = {
   reason: string
 }
 
-export function planRoleMatrixAssignment(profile: RoleMatrixProfile): RoleMatrixAssignment {
+export function planRoleMatrixAssignment(
+  profile: RoleMatrixProfile,
+  matthias: MatthiasBekleidungSb = MATTHIAS_BEKLEIDUNG_SB,
+): RoleMatrixAssignment {
   if (isProtectedAdmin(profile)) {
     const bekleidung = bekleidungRolesFromProfiles(profile.roles ?? ['admin'])
-    const einsatz = parseEinsatzMtRole(profile.einsatzMtRole ? [profile.einsatzMtRole] : ['admin']) ?? 'admin'
     return {
       profileId: profile.id,
       bekleidungRoles: bekleidung.includes('admin') ? bekleidung : ['admin'],
-      einsatzMtRole: einsatz === 'admin' ? 'admin' : 'admin',
+      einsatzMtRole: parseEinsatzMtRole(profile.einsatzMtRole ? [profile.einsatzMtRole] : ['admin']) ?? 'admin',
       skipped: true,
-      reason: 'Admin bleibt unverändert (Muhammet Soyucok DN 37).',
+      reason: 'Admin bleibt unverändert (kein Downgrade).',
     }
   }
 
-  const staff = matchRoleMatrixStaff(profile)
-  if (staff && staff.kind !== 'admin_keep') {
+  const staff = matchRoleMatrixStaff(profile, matthias)
+  if (staff) {
     return {
       profileId: profile.id,
       bekleidungRoles: [...staff.bekleidungRoles],
