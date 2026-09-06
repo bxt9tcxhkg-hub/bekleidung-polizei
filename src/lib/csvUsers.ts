@@ -1,12 +1,12 @@
 import { inferOfficerGender, isJunkRosterRow, usernameFromDienstnummer } from './officerRoster'
 import { planRoleMatrixAssignment } from './roleMatrix'
-import { ET_ROSTER_ORGANISATION } from './usersSeed'
+import { findUserSeedByDienstnummer, organisationFromSeedValue } from './usersSeed'
 
-/** Parkaufsicht nur, wenn die Organisationsspalte das ausdrücklich sagt. */
-export function organisationFromImportRow(explicit: string, rosterStyle: boolean): string {
-  if (rosterStyle) return ET_ROSTER_ORGANISATION
-  if (/parkaufsicht/i.test(explicit.trim())) return 'Parkaufsicht'
-  return ET_ROSTER_ORGANISATION
+/** Seed-DN gewinnt. Sonst nur explizite Parkaufsicht-Spalte — nicht aus „park“ im Namen. */
+export function organisationFromImportRow(explicit: string, dienstnummer: string): string {
+  const seed = findUserSeedByDienstnummer(dienstnummer)
+  if (seed) return seed.organisation
+  return organisationFromSeedValue(explicit)
 }
 
 export interface ImportUser {
@@ -37,14 +37,12 @@ export function rowToUser(row: Record<string, string>): ImportUser | null {
   if (!explicitUsername && isJunkRosterRow({ name, vorname, nachname, dienstnummer })) return null
   const rollen = get('rollen', 'roles', 'rolle', 'role')
   const org = get('organisation', 'org')
-  // Offiziersliste (Vorname/Nachname/DN, kein expliziter Login): immer Stadtpolizei.
-  const rosterStyle = Boolean(vorname && nachname && dienstnummer && !explicitUsername)
   const planned = planRoleMatrixAssignment({ id: '', name, dienstnummer, roles: ['user'] })
   return {
     name,
     username: username.toLowerCase(),
     dienstnummer,
-    organisation: organisationFromImportRow(org, rosterStyle),
+    organisation: organisationFromImportRow(org, dienstnummer),
     roles: rollen ? rollen.split('|').map((s) => s.trim()).filter(Boolean) : planned.bekleidungRoles,
     einsatzMtRole: planned.einsatzMtRole,
     gender: inferOfficerGender(name),

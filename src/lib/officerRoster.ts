@@ -2,7 +2,7 @@
  * Offiziersliste aus users-seed.json.
  * Auth-Anlage nur über create-user: E-Mail = {username}@stadtpolizei-dornbirn.local
  * mit username dn{DN}. Keine erfundenen Adressen.
- * Organisation ist immer Stadtpolizei (Stadtpolizei Dornbirn). Parkaufsicht folgt später.
+ * Organisation kommt aus der Seed-Zeile (Stadtpolizei oder Parkaufsicht).
  */
 
 import { USERNAME_RE } from './workflow'
@@ -12,6 +12,7 @@ import {
   USERS_SEED,
   bekleidungRolesFromSeed,
   parseUsersSeed,
+  type SeedOrganisation,
   type UserSeedOfficer,
 } from './usersSeed'
 
@@ -19,6 +20,7 @@ export type OfficerRosterRow = {
   vorname: string
   nachname: string
   dienstnummer: string
+  organisation?: SeedOrganisation
   gender?: 'male' | 'female'
   bekleidung?: UserSeedOfficer['bekleidung']
   einsatz_mt?: UserSeedOfficer['einsatz_mt']
@@ -28,7 +30,8 @@ export const KNOWN_OFFICER_ROSTER: readonly OfficerRosterRow[] = USERS_SEED.map(
   vorname: row.vorname,
   nachname: row.nachname,
   dienstnummer: row.dienstnummer,
-  gender: /\bstefanie\b/i.test(row.vorname) ? 'female' : 'male',
+  organisation: row.organisation,
+  gender: inferOfficerGender(`${row.vorname} ${row.nachname}`),
   bekleidung: row.bekleidung,
   einsatz_mt: row.einsatz_mt,
 }))
@@ -61,7 +64,7 @@ export function isJunkRosterRow(input: { name?: string; vorname?: string; nachna
 }
 
 export function inferOfficerGender(name: string): 'male' | 'female' {
-  if (/\bstefanie\b/i.test(name)) return 'female'
+  if (/\b(stefanie|irmgard|karin)\b/i.test(name)) return 'female'
   return 'male'
 }
 
@@ -69,19 +72,25 @@ export type RosterImportUser = {
   name: string
   username: string
   dienstnummer: string
-  organisation: typeof ET_ROSTER_ORGANISATION
+  organisation: SeedOrganisation
   roles: string[]
   einsatzMtRole: string
   gender: 'male' | 'female'
 }
 
-function rolesForRow(row: OfficerRosterRow): { roles: string[]; einsatzMtRole: string } {
+function rolesForRow(row: OfficerRosterRow): { roles: string[]; einsatzMtRole: string; organisation: SeedOrganisation } {
   const seed = USERS_SEED.find(item => normalizeDienstnummer(item.dienstnummer) === normalizeDienstnummer(row.dienstnummer))
-  const bekleidung = row.bekleidung ?? seed?.bekleidung ?? 'user'
-  const einsatz = row.einsatz_mt ?? seed?.einsatz_mt ?? 'user'
+  const organisation = row.organisation ?? seed?.organisation ?? ET_ROSTER_ORGANISATION
+  const bekleidung = organisation === 'Parkaufsicht'
+    ? 'user'
+    : (row.bekleidung ?? seed?.bekleidung ?? 'user')
+  const einsatz = organisation === 'Parkaufsicht'
+    ? 'user'
+    : (row.einsatz_mt ?? seed?.einsatz_mt ?? 'user')
   return {
     roles: bekleidungRolesFromSeed(bekleidung),
     einsatzMtRole: einsatz,
+    organisation,
   }
 }
 
@@ -95,7 +104,7 @@ export function rosterRowToImportUser(row: OfficerRosterRow): RosterImportUser |
     name,
     username,
     dienstnummer: normalizeDienstnummer(row.dienstnummer),
-    organisation: ET_ROSTER_ORGANISATION,
+    organisation: planned.organisation,
     roles: planned.roles,
     einsatzMtRole: planned.einsatzMtRole,
     gender: row.gender ?? inferOfficerGender(name),

@@ -483,7 +483,7 @@ export default function Users() {
                 <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Offiziersliste (Vorname, Nachname, Dienstnummer):</p>
                 <p>vorname;nachname;dienstnummer</p>
                 <p>Stefanie;Albrecht;32</p>
-                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilungsliste ist immer Stadtpolizei (Stadtpolizei Dornbirn). Parkaufsicht kommt als eigene Liste später — hier nicht anlegen. Login wird als dn{'{DN}'}@stadtpolizei-dornbirn.local angelegt (keine erfundenen E-Mails). Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
+                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login wird als dn{'{DN}'}@stadtpolizei-dornbirn.local angelegt (keine erfundenen E-Mails). Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">

@@ -1,7 +1,7 @@
 {
   "source": {
     "path": "/workspace/bekleidung-inbox/2026-09-06-einsatztraining/users-seed.json",
-    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. Alle ET-/Zuteilungs-Offiziere sind Stadtpolizei (Stadtpolizei Dornbirn). Parkaufsicht kommt als eigene Liste später — hier nicht anlegen. Weitere der 34 Offiziere nicht erfunden — per gleichem JSON/CSV nachziehen."
+    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste vom Owner: nur Bekleidung Benutzer, keine erfundenen höheren Rollen. Weitere der 34 ET-Offiziere nicht erfunden."
   },
   "officers": [
     {
@@ -43,6 +43,70 @@
       "organisation": "Stadtpolizei",
       "bekleidung": "admin",
       "einsatz_mt": "admin"
+    },
+    {
+      "nachname": "Fässler",
+      "vorname": "Irmgard",
+      "dienstnummer": "70",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Fitz",
+      "vorname": "Werner",
+      "dienstnummer": "90",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Griß",
+      "vorname": "Rainer",
+      "dienstnummer": "40",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Kalfa",
+      "vorname": "Okan",
+      "dienstnummer": "75",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Kusche",
+      "vorname": "Karl",
+      "dienstnummer": "55",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Mandracchia",
+      "vorname": "Alfonso",
+      "dienstnummer": "50",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Ploder",
+      "vorname": "Karin",
+      "dienstnummer": "65",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Schrotter",
+      "vorname": "Gerhard",
+      "dienstnummer": "95",
+      "organisation": "Parkaufsicht",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
     }
   ]
 }

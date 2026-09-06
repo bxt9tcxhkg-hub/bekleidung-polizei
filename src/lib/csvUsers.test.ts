@@ -56,7 +56,7 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     })
   })
 
-  it('setzt ET-Offizierszeilen immer auf Stadtpolizei, auch bei Parkaufsicht-Spalte', () => {
+  it('setzt ET-Offizierszeilen aus der Seed immer auf Stadtpolizei', () => {
     const user = rowToUser({
       vorname: 'Hans-Peter',
       nachname: 'Schwendinger',
@@ -65,6 +65,16 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     })
     expect(user?.organisation).toBe('Stadtpolizei')
     expect(user?.username).toBe('dn1')
+  })
+
+  it('setzt Parkaufsicht-Seedzeilen auf Parkaufsicht, auch ohne Org-Spalte', () => {
+    const user = rowToUser({ vorname: 'Irmgard', nachname: 'Fässler', dienstnummer: '70' })
+    expect(user).toMatchObject({
+      username: 'dn70',
+      organisation: 'Parkaufsicht',
+      roles: ['user'],
+      gender: 'female',
+    })
   })
 
   it('leitet Parkaufsicht nicht aus park im Benutzernamen ab', () => {

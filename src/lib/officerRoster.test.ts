@@ -24,14 +24,19 @@ describe('Offiziersliste', () => {
 
   it('legt bekannte Offiziere als Benutzer an, Stab nur wo Owner feststeht', () => {
     const users = knownRosterImportUsers()
-    expect(KNOWN_OFFICER_ROSTER).toHaveLength(5)
+    expect(KNOWN_OFFICER_ROSTER).toHaveLength(13)
     expect(users.find(u => u.dienstnummer === '1')?.roles).toEqual(['user', 'genehmiger'])
     expect(users.find(u => u.dienstnummer === '32')?.roles).toEqual(['user', 'sachbearbeiter'])
     expect(users.find(u => u.dienstnummer === '18')?.einsatzMtRole).toBe('sachbearbeiter')
     expect(users.find(u => u.dienstnummer === '7')?.roles).toEqual(['user', 'sachbearbeiter'])
     expect(users.find(u => u.dienstnummer === '37')?.roles).toEqual(['admin'])
-    expect(users.every(u => u.organisation === 'Stadtpolizei')).toBe(true)
-    expect(users.some(u => u.organisation === 'Parkaufsicht')).toBe(false)
+    expect(users.filter(u => u.organisation === 'Stadtpolizei')).toHaveLength(5)
+    const park = users.filter(u => u.organisation === 'Parkaufsicht')
+    expect(park).toHaveLength(8)
+    expect(park.every(u => u.roles.every(role => role === 'user'))).toBe(true)
+    expect(park.every(u => u.einsatzMtRole === 'user')).toBe(true)
+    expect(users.find(u => u.dienstnummer === '70')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '65')?.gender).toBe('female')
   })
 
   it('überspringt vorhandene Dienstnummern und plant nur neue', () => {
@@ -49,21 +54,23 @@ describe('Offiziersliste', () => {
     expect(plan.create.map(u => u.username)).toContain('dn1')
   })
 
-  it('legt aus users-seed.json keine Parkaufsicht-Benutzer an', () => {
+  it('legt Parkaufsicht aus users-seed.json nur als Benutzer an', () => {
     const parsed = importUsersFromSeedJson(JSON.stringify({
       officers: [{
-        nachname: 'Probe',
-        vorname: 'Park',
-        dienstnummer: '88',
+        nachname: 'Fässler',
+        vorname: 'Irmgard',
+        dienstnummer: '70',
         organisation: 'Parkaufsicht',
-        bekleidung: 'user',
-        einsatz_mt: 'user',
+        bekleidung: 'genehmiger',
+        einsatz_mt: 'sachbearbeiter',
       }],
     }))
     expect(parsed.ok).toBe(true)
     if (parsed.ok) {
       expect(parsed.users).toHaveLength(1)
-      expect(parsed.users[0].organisation).toBe('Stadtpolizei')
+      expect(parsed.users[0].organisation).toBe('Parkaufsicht')
+      expect(parsed.users[0].roles).toEqual(['user'])
+      expect(parsed.users[0].einsatzMtRole).toBe('user')
     }
   })
 })

@@ -1,7 +1,6 @@
 /**
- * Quelle der Offiziersanlage: users-seed.json (Zuteilung/ET).
- * Rollen stehen an der Zeile. Keine erfundenen Namen über diese Liste hinaus.
- * Organisation der ET-Liste ist immer Stadtpolizei; Parkaufsicht folgt später.
+ * Quelle der Offiziersanlage: users-seed.json (Zuteilung/ET + Parkaufsicht-Liste).
+ * Rollen stehen an der Zeile. Keine erfundenen Namen oder höheren Rollen.
  */
 
 import seedFile from '../data/users-seed.json'
@@ -10,15 +9,17 @@ export const BEKLEIDUNG_SEED_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'a
 export const EINSATZ_MT_SEED_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 /** App-Wert für Stadtpolizei Dornbirn (profiles.organisation). */
 export const ET_ROSTER_ORGANISATION = 'Stadtpolizei' as const
+export const PARKAUFSICHT_ORGANISATION = 'Parkaufsicht' as const
 
 export type BekleidungSeedRole = (typeof BEKLEIDUNG_SEED_ROLES)[number]
 export type EinsatzMtSeedRole = (typeof EINSATZ_MT_SEED_ROLES)[number]
+export type SeedOrganisation = typeof ET_ROSTER_ORGANISATION | typeof PARKAUFSICHT_ORGANISATION
 
 export type UserSeedOfficer = {
   nachname: string
   vorname: string
   dienstnummer: string
-  organisation: typeof ET_ROSTER_ORGANISATION
+  organisation: SeedOrganisation
   bekleidung: BekleidungSeedRole
   einsatz_mt: EinsatzMtSeedRole
 }
@@ -34,6 +35,12 @@ function isBekleidungSeedRole(value: string): value is BekleidungSeedRole {
 
 function isEinsatzMtSeedRole(value: string): value is EinsatzMtSeedRole {
   return (EINSATZ_MT_SEED_ROLES as readonly string[]).includes(value)
+}
+
+export function organisationFromSeedValue(raw: unknown): SeedOrganisation {
+  return /parkaufsicht/i.test(String(raw ?? '').trim())
+    ? PARKAUFSICHT_ORGANISATION
+    : ET_ROSTER_ORGANISATION
 }
 
 export function parseUsersSeed(input: unknown): { ok: true; file: UserSeedFile } | { ok: false; error: string } {
@@ -53,10 +60,16 @@ export function parseUsersSeed(input: unknown): { ok: true; file: UserSeedFile }
     const nachname = String(row.nachname ?? '').trim()
     const vorname = String(row.vorname ?? '').trim()
     const dienstnummer = String(row.dienstnummer ?? '').trim()
-    const bekleidung = String(row.bekleidung ?? 'user').trim()
-    const einsatz = String(row.einsatz_mt ?? 'user').trim()
+    const organisation = organisationFromSeedValue(row.organisation)
+    let bekleidung = String(row.bekleidung ?? 'user').trim()
+    let einsatz = String(row.einsatz_mt ?? 'user').trim()
     if (!nachname || !vorname || !dienstnummer) {
       return { ok: false, error: `Zeile ${index + 1}: nachname, vorname und dienstnummer sind Pflicht.` }
+    }
+    // Parkaufsicht: nur Bekleidung Benutzer. Keine erfundenen höheren Rollen.
+    if (organisation === PARKAUFSICHT_ORGANISATION) {
+      bekleidung = 'user'
+      einsatz = 'user'
     }
     if (!isBekleidungSeedRole(bekleidung) || !isEinsatzMtSeedRole(einsatz)) {
       return { ok: false, error: `Zeile ${index + 1}: ungültige Rolle.` }
@@ -65,7 +78,7 @@ export function parseUsersSeed(input: unknown): { ok: true; file: UserSeedFile }
       nachname,
       vorname,
       dienstnummer,
-      organisation: ET_ROSTER_ORGANISATION,
+      organisation,
       bekleidung,
       einsatz_mt: einsatz,
     })
@@ -80,6 +93,8 @@ if (!parsed.ok) {
 
 export const USERS_SEED_FILE = parsed.file
 export const USERS_SEED = parsed.file.officers
+export const PARKAUFSICHT_SEED = USERS_SEED.filter(row => row.organisation === PARKAUFSICHT_ORGANISATION)
+export const STADTPOLIZEI_SEED = USERS_SEED.filter(row => row.organisation === ET_ROSTER_ORGANISATION)
 
 export function bekleidungRolesFromSeed(role: BekleidungSeedRole): string[] {
   if (role === 'admin') return ['admin']
