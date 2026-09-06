@@ -58,8 +58,14 @@ export function receivedNextStatus(needsTailoring: boolean): 'at_tailor' | 'read
   return needsTailoring ? 'at_tailor' : 'ready_for_issue'
 }
 
-export function isValidInitialPassword(pw: string): boolean {
+/** Persönliches Passwort nach Erstlogin (ChangePasswordModal): 8+ / Zahl / Großbuchstabe. */
+export function isValidPersonalPassword(pw: string): boolean {
   return pw.length >= 8 && /[0-9]/.test(pw) && /[A-Z]/.test(pw)
+}
+
+/** Alias — dasselbe wie isValidPersonalPassword (nicht das einfache Startpasswort). */
+export function isValidInitialPassword(pw: string): boolean {
+  return isValidPersonalPassword(pw)
 }
 
 export function filterAssignableRoles(callerRoles: string[], requested: string[]): string[] {
@@ -92,6 +98,11 @@ export function canDeactivateUsers(callerRoles: string[]): boolean {
     callerRoles.includes('genehmiger') ||
     callerRoles.includes('approver')
   )
+}
+
+/** Startpasswort setzen/zurücksetzen: Admin und Genehmiger, nicht Sachbearbeiter allein. */
+export function canResetUserPassword(callerRoles: string[]): boolean {
+  return canDeactivateUsers(callerRoles)
 }
 
 /** Portal-Benutzerverwaltung: Admin oder Bekleidungs-Genehmiger. */

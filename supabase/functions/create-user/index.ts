@@ -1,9 +1,11 @@
-// Edge Function: legt Auth-User + Profil an (Service Role).
+// Edge Function: legt Auth-User + Profil an oder setzt Startpasswort zurück (Service Role).
 // Wird von src/pages/Users.tsx (Portal-Benutzerseite) aufgerufen.
+// Anlegen: action fehlt / 'create'. Reset: action === 'reset_password' + user_id + initial_password.
 // Auth-E-Mail: {Vorname}.{Nachname}@dornbirn.at (ASCII-Fold; Feurstein2-Ausnahme).
 // profiles.username bleibt NULL bis zum Erstlogin (PC-Anmeldename, nie dn{N}).
 // force_password_change + force_username_set.
 // Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
+// Reset: Admin und Genehmiger (nicht Sachbearbeiter allein).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // Keep in sync with src/lib/appOrigins.ts — never Access-Control-Allow-Origin: *
@@ -137,6 +139,30 @@ function canAssign(callerRoles: string[], role: string): boolean {
   return true
 }
 
+/** Keep in sync with src/lib/workflow.ts canResetUserPassword */
+function canResetUserPassword(callerRoles: string[]): boolean {
+  return (
+    callerRoles.includes('admin') ||
+    callerRoles.includes('genehmiger') ||
+    callerRoles.includes('approver')
+  )
+}
+
+/** Keep in sync with src/lib/startPassword.ts shouldKeepForceUsernameSet */
+function shouldKeepForceUsernameSet(
+  username: string | null | undefined,
+  forceUsernameSet?: boolean | null,
+): boolean {
+  if (forceUsernameSet === true) return true
+  const trimmed = (username ?? '').trim()
+  return !trimmed || isDnPlaceholderUsername(trimmed)
+}
+
+/** Startpasswort: bewusst einfach (Owner-Default 1234). Persönliches Passwort prüft die UI nach Erstlogin. */
+function isValidStartPassword(pw: string): boolean {
+  return pw.trim().length > 0
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) })
   if (req.method !== 'POST') return json(req, { error: 'Method not allowed' }, 405)
@@ -167,6 +193,8 @@ Deno.serve(async (req) => {
   }
 
   let body: {
+    action?: string
+    user_id?: string
     name?: string
     vorname?: string
     nachname?: string
@@ -185,8 +213,60 @@ Deno.serve(async (req) => {
     return json(req, { error: 'Ungültiger JSON-Body' }, 400)
   }
 
+  const password = (body.initial_password ?? '').trim()
+
+  if (body.action === 'reset_password') {
+    if (!canResetUserPassword(callerRoles)) {
+      return json(req, { error: 'Keine Berechtigung' }, 403)
+    }
+    const userId = (body.user_id ?? '').trim()
+    if (!userId) return json(req, { error: 'user_id ist Pflicht.' }, 400)
+    if (!isValidStartPassword(password)) {
+      return json(req, { error: 'Startpasswort ist Pflicht.' }, 400)
+    }
+
+    const { data: profile, error: profileLookupErr } = await admin
+      .from('profiles')
+      .select('username, force_username_set, name')
+      .eq('id', userId)
+      .single()
+    if (profileLookupErr || !profile) {
+      return json(req, { error: 'Benutzer nicht gefunden.' }, 404)
+    }
+
+    const keepUsernameSet = shouldKeepForceUsernameSet(profile.username, profile.force_username_set)
+    const { data: existingAuth, error: getErr } = await admin.auth.admin.getUserById(userId)
+    if (getErr || !existingAuth.user) {
+      return json(req, { error: 'Auth-Konto nicht gefunden.' }, 404)
+    }
+
+    const meta = (existingAuth.user.user_metadata ?? {}) as Record<string, unknown>
+    const { error: updErr } = await admin.auth.admin.updateUserById(userId, {
+      password,
+      user_metadata: {
+        ...meta,
+        force_password_change: true,
+        force_username_set: keepUsernameSet,
+      },
+    })
+    if (updErr) return json(req, { error: updErr.message }, 400)
+
+    if (keepUsernameSet) {
+      const { error: flagErr } = await admin.from('profiles').update({
+        force_username_set: true,
+      }).eq('id', userId)
+      if (flagErr) return json(req, { error: flagErr.message }, 400)
+    }
+
+    return json(req, {
+      id: userId,
+      reset: true,
+      force_password_change: true,
+      force_username_set: keepUsernameSet,
+    })
+  }
+
   const name = (body.name ?? '').trim()
-  const password = body.initial_password ?? ''
   const dienstnummer = body.dienstnummer?.trim() || null
   const email = officerAuthEmail({
     vorname: body.vorname,
@@ -205,8 +285,8 @@ Deno.serve(async (req) => {
   if (username && !USERNAME_RE.test(username)) {
     return json(req, { error: 'PC-Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten. Nicht die Dienstnummer.' }, 400)
   }
-  if (password.length < 8 || !/[0-9]/.test(password) || !/[A-Z]/.test(password)) {
-    return json(req, { error: 'Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.' }, 400)
+  if (!isValidStartPassword(password)) {
+    return json(req, { error: 'Startpasswort ist Pflicht.' }, 400)
   }
 
   const requested = Array.isArray(body.roles) && body.roles.length > 0 ? body.roles : ['user']

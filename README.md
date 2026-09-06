@@ -114,12 +114,46 @@ Ohne `SUPABASE_URL` / `SUPABASE_ANON_KEY` liefern `/upload` und `/files/*` HTTP 
 
 ### Supabase Edge Function `create-user`
 
-Benutzeranlage (inkl. Import) ruft `POST /functions/v1/create-user` auf.
+Benutzeranlage (inkl. Import) und Startpasswort-Reset rufen
+`POST /functions/v1/create-user` auf.
 Quellcode: `supabase/functions/create-user/`.
 
 ```bash
 supabase functions deploy create-user
 ```
+
+**Anlegen / Import:** Body wie bisher (`name`, `initial_password`, optional
+`username` / `vorname` / `nachname` …). Import und «Neuer Benutzer» vorbelegen
+das gemeinsame **Startpasswort `1234`** (Owner-Vorgabe, bewusst schwach und
+nur bis zum Erstlogin). Die UI prüft Startpasswörter nur auf «nicht leer» —
+keine 8-Zeichen-/Großbuchstaben-Regel. Zufällige Einzelpasswörter nur nach
+explizitem Schalter «Zufällig pro Person».
+
+**Persönliches Passwort** (ChangePasswordModal nach Erstlogin) bleibt streng:
+mindestens 8 Zeichen, eine Zahl und einen Großbuchstaben.
+
+**Reset Startpasswort** (Admin/Genehmiger, nicht Sachbearbeiter allein):
+
+```json
+{
+  "action": "reset_password",
+  "user_id": "<profiles.id>",
+  "initial_password": "1234"
+}
+```
+
+Setzt das Auth-Passwort, `force_password_change: true`. `force_username_set`
+bleibt `true`, wenn `profiles.username` fehlt oder noch `dn{N}` ist. Die UI
+zeigt das neue Passwort einmal zum Kopieren.
+
+**Auth-Mindestlänge:** GoTrue/Supabase default ist 6 Zeichen. `1234` (4 Zeichen)
+wird abgelehnt, solange die Projekt-Mindestlänge ≥ 6 ist. Im Dashboard:
+Authentication → Providers → Email → **Minimum password length = 4**
+(und keine Pflicht-Zeichensätze / leaked-password-Protection für dieses
+temporäre Startpasswort). Lokal: `supabase/config.toml`
+`[auth] minimum_password_length = 4`. Kein Fallback auf `123456` im Code —
+wenn Auth `1234` ablehnt, die Mindestlänge senken, nicht das Startpasswort
+komplizieren.
 
 Login-E-Mail (Auth-Identität, nicht `profiles.username`):
 
@@ -208,7 +242,8 @@ Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
 1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260917`) auf das Supabase-Projekt.
-2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig auch wegen CORS (kein `*`).
+2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig
+   auch wegen CORS (kein `*`) und wegen `action: reset_password`.
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
    funktionieren Upload/Dateizugriff nicht mehr (kein JWT mehr im Repo).
 4. **Optional** `GEMINI_API_KEY` für Vorrechnungs-Analyse.

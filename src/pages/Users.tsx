@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Pencil, X, Shield, User, UserX, Upload, Download } from 'lucide-react'
+import { Plus, Pencil, X, Shield, User, UserX, Upload, Download, KeyRound } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
@@ -7,7 +7,16 @@ import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
 import { OFFICER_ROSTER_CSV_TEMPLATE, importUsersFromSeedJson, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
-import { USERNAME_RE, canCreateUsers, canDeactivateUsers, isDnPlaceholderUsername } from '../lib/workflow'
+import { USERNAME_RE, canCreateUsers, canDeactivateUsers, canResetUserPassword, isDnPlaceholderUsername } from '../lib/workflow'
+import {
+  DEFAULT_START_PASSWORD,
+  START_PASSWORD_HINT,
+  START_PASSWORD_REQUIRED_MESSAGE,
+  buildResetPasswordRequest,
+  isValidStartPassword,
+  resolveImportStartPassword,
+  shouldKeepForceUsernameSet,
+} from '../lib/startPassword'
 import {
   AREA_ROLE_LABELS,
   defaultEinsatzMtRoleForNewUser,
@@ -19,21 +28,6 @@ import {
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
 Max Mustermann;mmustermann;1234;Stadtpolizei;user
 Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger`
-
-/** Zufälliges Initialpasswort: 10 Zeichen, mind. 1 Großbuchstabe und 1 Zahl. */
-function generateInitialPassword(): string {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
-  const digits = '23456789'
-  const all = 'abcdefghjkmnpqrstuvwxyz' + upper + digits
-  const pick = (chars: string) => chars[crypto.getRandomValues(new Uint32Array(1))[0] % chars.length]
-  const out = [pick(upper), pick(digits)]
-  while (out.length < 10) out.push(pick(all))
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1)
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out.join('')
-}
 
 const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
 const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole | ''; label: string }[] = [
@@ -62,7 +56,7 @@ type AreaRolesByUser = Record<string, { bekleidung?: string[]; einsatz_mt?: stri
 const emptyForm = () => ({
   name: '',
   username: '',
-  initialPassword: '',
+  initialPassword: DEFAULT_START_PASSWORD,
   dienstnummer: '',
   roles: ['user'] as string[],
   einsatzMtRole: defaultEinsatzMtRoleForNewUser() as EinsatzMtRole | '',
@@ -112,10 +106,19 @@ export default function Users() {
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; err: number } | null>(null)
   const [importCreds, setImportCreds] = useState<{ email: string; username: string | null; password: string }[]>([])
   const [credsCopied, setCredsCopied] = useState(false)
+  const [importStartPassword, setImportStartPassword] = useState(DEFAULT_START_PASSWORD)
+  const [importRandomPerUser, setImportRandomPerUser] = useState(false)
+  const [resetTarget, setResetTarget] = useState<Profile | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetSaving, setResetSaving] = useState(false)
+  const [resetError, setResetError] = useState('')
+  const [resetCopied, setResetCopied] = useState(false)
+  const [revealedStartPassword, setRevealedStartPassword] = useState<{ name: string; password: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const callerRoles = authProfile?.roles ?? []
   const canCreate = canCreateUsers(callerRoles)
   const canDeactivate = canDeactivateUsers(callerRoles)
+  const canReset = canResetUserPassword(callerRoles)
 
   async function load() {
     setLoading(true)
@@ -174,19 +177,33 @@ export default function Users() {
     const username = form.username.trim().toLowerCase()
     if (username && isDnPlaceholderUsername(username)) { setError('PC-Benutzername darf nicht die Dienstnummer (dn…) sein.'); return }
     if (username && !USERNAME_RE.test(username)) { setError('PC-Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.'); return }
-    if (editId && !username) { setError('PC-Benutzername ist Pflicht.'); return }
-    if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
-    if (!editId && (form.initialPassword.length < 8 || !/[0-9]/.test(form.initialPassword) || !/[A-Z]/.test(form.initialPassword))) {
-      setError('Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.'); return
+    if (!editId && !isValidStartPassword(form.initialPassword)) {
+      setError(START_PASSWORD_REQUIRED_MESSAGE); return
+    }
+    const startPassword = form.initialPassword.trim()
+    if (editId && startPassword) {
+      if (!canReset) { setError('Keine Berechtigung zum Setzen des Startpassworts.'); return }
+      if (!isValidStartPassword(startPassword)) { setError(START_PASSWORD_REQUIRED_MESSAGE); return }
     }
     setSaving(true)
     // Bereits vorhandene Rollen bleiben erhalten – nur NEU hinzugefügte Rollen unterliegen der Berechtigungsprüfung.
-    const existingRoles = editId ? (users.find(u => u.id === editId)?.roles ?? []) : []
+    const existing = editId ? users.find(u => u.id === editId) : undefined
+    const existingRoles = existing?.roles ?? []
     let safeRoles = form.roles.filter(r => existingRoles.includes(r) || canAssignRole(r))
     if (safeRoles.length === 0) safeRoles = ['user']
-    const existingActive = editId ? (users.find(u => u.id === editId)?.active ?? true) : form.active
+    const existingActive = existing?.active ?? true
     const active = editId && !canDeactivate ? existingActive : form.active
-    const dbPayload = { name: form.name, username: username || null, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active }
+    const forceUsernameSet = shouldKeepForceUsernameSet(username || null, existing?.force_username_set)
+    const dbPayload = {
+      name: form.name,
+      username: username || null,
+      dienstnummer: form.dienstnummer || null,
+      roles: safeRoles,
+      gender: form.gender,
+      organisation: form.organisation,
+      active,
+      force_username_set: forceUsernameSet,
+    }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -195,7 +212,12 @@ export default function Users() {
         const areaErr = await persistAreaRoles(editId, safeRoles, form.einsatzMtRole)
         if (areaErr) { setError(areaErr); setSaving(false); return }
       }
-      logAudit('Benutzer bearbeitet', username)
+      if (startPassword) {
+        const resetErr = await callResetPassword(editId, startPassword)
+        if (resetErr) { setError(resetErr); setSaving(false); return }
+        setRevealedStartPassword({ name: form.name, password: startPassword })
+      }
+      logAudit('Benutzer bearbeitet', username || form.name)
     } else {
       if (!canCreate) { setError('Keine Berechtigung zum Anlegen.'); setSaving(false); return }
       try {
@@ -203,7 +225,7 @@ export default function Users() {
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ ...dbPayload, initial_password: form.initialPassword }),
+          body: JSON.stringify({ ...dbPayload, initial_password: startPassword }),
         })
         const json = await res.json() as { error?: string; id?: string }
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
@@ -284,8 +306,58 @@ export default function Users() {
     e.target.value = ''
   }
 
+  async function callResetPassword(userId: string, password: string): Promise<string | null> {
+    if (!canReset) return 'Keine Berechtigung zum Setzen des Startpassworts.'
+    if (!isValidStartPassword(password)) return START_PASSWORD_REQUIRED_MESSAGE
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify(buildResetPasswordRequest(userId, password)),
+      })
+      const json = await res.json() as { error?: string }
+      if (!res.ok) return json.error ?? 'Passwort konnte nicht gesetzt werden.'
+      return null
+    } catch {
+      return 'Netzwerkfehler – bitte nochmals versuchen.'
+    }
+  }
+
+  async function submitResetDialog() {
+    if (!resetTarget) return
+    setResetError('')
+    if (!isValidStartPassword(resetPassword)) {
+      setResetError(START_PASSWORD_REQUIRED_MESSAGE)
+      return
+    }
+    setResetSaving(true)
+    const err = await callResetPassword(resetTarget.id, resetPassword)
+    setResetSaving(false)
+    if (err) { setResetError(err); return }
+    setRevealedStartPassword({ name: resetTarget.name, password: resetPassword })
+    logAudit('Startpasswort gesetzt', resetTarget.username ?? resetTarget.name)
+    setResetTarget(null)
+    setResetPassword('')
+  }
+
+  async function copyRevealedPassword() {
+    if (!revealedStartPassword) return
+    try {
+      await navigator.clipboard.writeText(revealedStartPassword.password)
+      setResetCopied(true)
+    } catch {
+      setError('Kopieren nicht möglich – bitte Passwort manuell übertragen.')
+    }
+  }
+
   async function runImport() {
     if (!canCreate) return
+    const resolved = resolveImportStartPassword({
+      mode: importRandomPerUser ? 'random' : 'shared',
+      startPassword: importStartPassword,
+    })
+    if (!resolved.ok) { setImportError(resolved.error); return }
     setImporting(true)
     setImportCreds([])
     setCredsCopied(false)
@@ -294,7 +366,7 @@ export default function Users() {
     const creds: { email: string; username: string | null; password: string }[] = []
     setImportProgress({ done: 0, total: importRows.length, err: 0 })
     for (const row of importRows) {
-      const password = generateInitialPassword()
+      const password = resolved.passwordFor(done + err)
       try {
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
           method: 'POST',
@@ -355,20 +427,36 @@ export default function Users() {
   return (
     <div>
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      {revealedStartPassword && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 rounded-xl flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">Startpasswort für {revealedStartPassword.name} – nur einmal angezeigt</p>
+            <p className="font-mono font-semibold break-all mt-1">{revealedStartPassword.password}</p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button type="button" onClick={() => { void copyRevealedPassword() }} className="text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg">
+              {resetCopied ? 'Kopiert ✓' : 'Kopieren'}
+            </button>
+            <button type="button" onClick={() => { setRevealedStartPassword(null); setResetCopied(false) }} className="text-xs font-medium border border-amber-300 px-3 py-1.5 rounded-lg hover:bg-amber-100">
+              Schließen
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="flex items-start justify-between mb-6 gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>
           <p className="text-gray-500 text-sm mt-1">Portal-Benutzerverwaltung</p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
           {canCreate && (
-            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
-              <Upload className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Import</span>
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false); setImportStartPassword(DEFAULT_START_PASSWORD); setImportRandomPerUser(false) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
+              <Upload className="w-4 h-4 flex-shrink-0" /><span>Import</span>
             </button>
           )}
           {canCreate && (
             <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neuer Benutzer">
-              <Plus className="w-4 h-4 flex-shrink-0" /><span className="hidden sm:inline">Neuer Benutzer</span>
+              <Plus className="w-4 h-4 flex-shrink-0" /><span>Neuer Benutzer</span>
             </button>
           )}
         </div>
@@ -465,6 +553,16 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 justify-end">
+                      {canReset && (
+                        <button
+                          type="button"
+                          onClick={() => { setResetTarget(u); setResetPassword(DEFAULT_START_PASSWORD); setResetError(''); setResetCopied(false) }}
+                          title="Startpasswort"
+                          className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button onClick={() => openEdit(u)} className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -484,13 +582,13 @@ export default function Users() {
 
       {/* Import Modal */}
       {showImport && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[min(92dvh,44rem)] flex flex-col">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b flex-shrink-0">
               <h2 className="font-bold text-gray-900">Benutzer importieren (CSV)</h2>
               <button onClick={() => setShowImport(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
-            <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+            <div className="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 overscroll-contain">
               <div className="bg-gray-50 rounded-xl p-4 text-xs font-mono text-gray-600 space-y-1">
                 <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Offiziersliste (Vorname, Nachname, Dienstnummer):</p>
                 <p>vorname;nachname;dienstnummer</p>
@@ -523,6 +621,34 @@ export default function Users() {
                 </a>
                 <input ref={fileRef} type="file" accept=".csv,.txt,.json,.xlsx,.xls,.ods" className="hidden" onChange={handleFile} />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="import-startpasswort">Startpasswort {importRandomPerUser ? '' : '*'}</label>
+                <input
+                  id="import-startpasswort"
+                  type="text"
+                  autoComplete="off"
+                  disabled={importRandomPerUser}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono disabled:bg-gray-100 disabled:text-gray-400"
+                  value={importStartPassword}
+                  onChange={e => setImportStartPassword(e.target.value)}
+                  placeholder={DEFAULT_START_PASSWORD}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {START_PASSWORD_HINT}
+                </p>
+                <label className="mt-3 flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="rounded mt-0.5"
+                    checked={importRandomPerUser}
+                    onChange={e => setImportRandomPerUser(e.target.checked)}
+                  />
+                  <span className="text-sm text-gray-700">Zufällig pro Person</span>
+                </label>
+                {importRandomPerUser && (
+                  <p className="text-xs text-amber-700 mt-1">Jeder importierte Account erhält ein eigenes Zufallspasswort. Die Liste wird nach dem Import einmal angezeigt.</p>
+                )}
+              </div>
               {importError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{importError}</p>}
               {importProgress && (
                 <p className={`text-sm px-3 py-2 rounded-lg ${importProgress.err === 0 ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
@@ -532,8 +658,8 @@ export default function Users() {
               )}
               {importCreds.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-                  <p className="text-sm font-semibold text-amber-800">Initialpasswörter – werden nur einmal angezeigt!</p>
-                  <p className="text-xs text-amber-700">Bitte jetzt kopieren oder notieren und an die Benutzer verteilen. Login ist die E-Mail. Beim ersten Anmelden müssen Passwort und PC-Benutzername gesetzt werden.</p>
+                  <p className="text-sm font-semibold text-amber-800">Startpasswörter – werden nur einmal angezeigt!</p>
+                  <p className="text-xs text-amber-700">{START_PASSWORD_HINT} Bitte jetzt kopieren. Login ist die E-Mail.</p>
                   <div className="border border-amber-200 rounded-lg overflow-hidden overflow-x-auto bg-white">
                     <table className="w-full text-xs font-mono">
                       <thead><tr className="bg-amber-100/60 border-b border-amber-200 font-sans"><th className="text-left px-3 py-2">Login (E-Mail)</th><th className="text-left px-3 py-2">Initialpasswort</th></tr></thead>
@@ -574,10 +700,14 @@ export default function Users() {
                 </div>
               )}
             </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
+            <div className="flex gap-3 px-5 sm:px-6 py-4 border-t flex-shrink-0">
               <button onClick={() => setShowImport(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Schließen</button>
               {importRows.length > 0 && (
-                <button onClick={runImport} disabled={importing} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
+                <button
+                  onClick={() => { void runImport() }}
+                  disabled={importing || (!importRandomPerUser && !isValidStartPassword(importStartPassword))}
+                  className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60"
+                >
                   {importing ? 'Importiere...' : `${importRows.length} Benutzer importieren`}
                 </button>
               )}
@@ -587,22 +717,40 @@ export default function Users() {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[min(92dvh,44rem)] flex flex-col">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b flex-shrink-0">
               <h2 className="font-bold text-gray-900">{editId ? 'Benutzer bearbeiten' : 'Neuer Benutzer'}</h2>
               <button onClick={() => setShowForm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
-            <div className="px-6 py-4 space-y-4">
+            <div className="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 overscroll-contain">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
                 <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Vorname Nachname" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              {(!editId || canReset) && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{editId ? 'PC-Benutzername *' : 'PC-Benutzername'}</label>
-                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder={editId ? '' : 'leer — setzt die Person beim Erstlogin'} />
-                  {!editId && <p className="text-xs text-gray-400 mt-1">Windows-Anmeldename ohne Domäne. Leer lassen: wird beim ersten Anmelden gesetzt. Nicht die Dienstnummer.</p>}
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{editId ? 'Startpasswort' : 'Initiales Passwort *'}</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                    value={form.initialPassword}
+                    onChange={e => setForm(f => ({ ...f, initialPassword: e.target.value }))}
+                    placeholder={editId ? 'leer = unverändert' : DEFAULT_START_PASSWORD}
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    {editId
+                      ? `${START_PASSWORD_HINT} Leer lassen = Passwort unverändert.`
+                      : START_PASSWORD_HINT}
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">PC-Benutzername</label>
+                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="leer — setzt die Person beim Erstlogin" />
+                  <p className="text-xs text-gray-400 mt-1">Windows-Anmeldename ohne Domäne. Leer lassen: wird beim ersten Anmelden gesetzt. Nicht die Dienstnummer.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Dienstnummer</label>
@@ -635,13 +783,6 @@ export default function Users() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog sichtbar sind.</p>
               </div>
-              {!editId && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Initiales Passwort *</label>
-                  <input type="text" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" value={form.initialPassword} onChange={e => setForm(f => ({ ...f, initialPassword: e.target.value }))} placeholder="z.B. Vorname2025" autoComplete="off" />
-                  <p className="text-xs text-gray-400 mt-1">Der Benutzer muss beim ersten Login ein neues Passwort festlegen.</p>
-                </div>
-              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">Bekleidung</label>
                 <div className="flex gap-3 flex-wrap">
@@ -695,15 +836,52 @@ export default function Users() {
               )}
               {!editId && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-                  Login erfolgt mit Vorname.Nachname@dornbirn.at. Beim ersten Anmelden setzt die Person Passwort und PC-Benutzername (Windows-Anmeldename ohne Domäne).
+                  Login erfolgt mit Vorname.Nachname@dornbirn.at. {START_PASSWORD_HINT} PC-Benutzername (Windows-Anmeldename ohne Domäne) setzt die Person beim Erstlogin.
                 </p>
               )}
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
+            <div className="flex gap-3 px-5 sm:px-6 py-4 border-t flex-shrink-0">
               <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : editId ? 'Speichern' : 'Anlegen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[min(92dvh,28rem)] flex flex-col">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b flex-shrink-0">
+              <h2 className="font-bold text-gray-900">Startpasswort zurücksetzen</h2>
+              <button type="button" onClick={() => setResetTarget(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-5 sm:px-6 py-4 space-y-4 overflow-y-auto flex-1 overscroll-contain">
+              <p className="text-sm text-gray-600">
+                Neues Startpasswort für <span className="font-medium text-gray-900">{resetTarget.name}</span>.
+                Beim nächsten Login muss die Person das Passwort ändern.
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="reset-startpasswort">Startpasswort *</label>
+                <input
+                  id="reset-startpasswort"
+                  type="text"
+                  autoComplete="off"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                  value={resetPassword}
+                  onChange={e => setResetPassword(e.target.value)}
+                  placeholder={DEFAULT_START_PASSWORD}
+                />
+                <p className="text-xs text-gray-400 mt-1">{START_PASSWORD_HINT} Wird danach einmal angezeigt.</p>
+              </div>
+              {resetError && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{resetError}</p>}
+            </div>
+            <div className="flex gap-3 px-5 sm:px-6 py-4 border-t flex-shrink-0">
+              <button type="button" onClick={() => setResetTarget(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button type="button" onClick={() => { void submitResetDialog() }} disabled={resetSaving || !isValidStartPassword(resetPassword)} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
+                {resetSaving ? 'Setze...' : 'Startpasswort setzen'}
               </button>
             </div>
           </div>
