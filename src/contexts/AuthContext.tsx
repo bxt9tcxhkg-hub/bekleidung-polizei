@@ -3,8 +3,12 @@ import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 import { availableRolesFromFlags, flagsFromRoles, type AppRole } from '../lib/authRoles'
+import type { PortalArea } from '../lib/portalEntitlements'
+import { hasAreaEntitlement } from '../lib/portalEntitlements'
 
 export type { AppRole }
+
+export type AreaRoleSnapshot = { area: string; roles: string[] }
 
 interface AuthContextType {
   user: User | null
@@ -17,6 +21,9 @@ interface AuthContextType {
   mustChangePassword: boolean
   availableRoles: AppRole[]
   authError: string
+  /** null = Tabelle nicht lesbar (Migration fehlt). */
+  areaRoles: AreaRoleSnapshot[] | null
+  hasAreaAccess: (area: PortalArea) => boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -32,6 +39,8 @@ const AuthContext = createContext<AuthContextType>({
   mustChangePassword: false,
   availableRoles: [],
   authError: '',
+  areaRoles: null,
+  hasAreaAccess: () => false,
   refreshProfile: async () => {},
   signOut: async () => {},
 })
@@ -39,8 +48,21 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [areaRoles, setAreaRoles] = useState<AreaRoleSnapshot[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState('')
+
+  async function loadAreaRoles(userId: string): Promise<AreaRoleSnapshot[] | null> {
+    const { data, error } = await supabase
+      .from('portal_area_roles')
+      .select('area, roles')
+      .eq('user_id', userId)
+    if (error) {
+      console.error('Bereichsrechte konnten nicht geladen werden:', error.message)
+      return null
+    }
+    return (data ?? []).map(row => ({ area: row.area, roles: row.roles }))
+  }
 
   async function applyProfile(userId: string): Promise<boolean> {
     const { data, error } = await supabase
@@ -54,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut()
       setUser(null)
       setProfile(null)
+      setAreaRoles(null)
       return false
     }
     if (!data.active) {
@@ -61,10 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await supabase.auth.signOut()
       setUser(null)
       setProfile(null)
+      setAreaRoles(null)
       return false
     }
+    const areas = await loadAreaRoles(userId)
     setAuthError('')
     setProfile(data)
+    setAreaRoles(areas)
     return true
   }
 
@@ -95,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         loadedForUserId = null
         setProfile(null)
+        setAreaRoles(null)
       }
     })
 
@@ -110,10 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut()
     setUser(null)
     setProfile(null)
+    setAreaRoles(null)
   }
 
+  const hasAreaAccess = (area: PortalArea) =>
+    hasAreaEntitlement({ area, isStrictAdmin, rows: areaRoles })
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, availableRoles, authError, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, availableRoles, authError, areaRoles, hasAreaAccess, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )

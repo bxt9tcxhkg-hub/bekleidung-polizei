@@ -1,5 +1,5 @@
 // Edge Function: legt Auth-User + Profil an (Service Role).
-// Wird von src/pages/Users.tsx aufgerufen.
+// Wird von src/pages/Users.tsx (Portal-Benutzerseite) aufgerufen.
 // Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -165,6 +165,23 @@ Deno.serve(async (req) => {
   if (profileErr) {
     await admin.auth.admin.deleteUser(created.user.id)
     return json(req, { error: profileErr.message }, 400)
+  }
+
+  const bekleidungRoles = (() => {
+    const mapped = roles.map((r) => (r === 'approver' ? 'genehmiger' : r))
+    const allowed = new Set(['user', 'sachbearbeiter', 'genehmiger', 'admin'])
+    const out = [...new Set(mapped.filter((r) => allowed.has(r)))]
+    return out.length > 0 ? out : ['user']
+  })()
+  const areaRows: { user_id: string; area: string; roles: string[] }[] = [
+    { user_id: created.user.id, area: 'bekleidung', roles: bekleidungRoles },
+  ]
+  if (active) {
+    areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: ['user'] })
+  }
+  const { error: areaErr } = await admin.from('portal_area_roles').upsert(areaRows)
+  if (areaErr) {
+    console.error('portal_area_roles:', areaErr.message)
   }
 
   return json(req, { id: created.user.id, username })

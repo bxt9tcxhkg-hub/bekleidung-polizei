@@ -195,6 +195,16 @@ export interface Grundausstattung {
   products?: Product
 }
 
+export type PortalArea = 'bekleidung' | 'einsatz_mt'
+
+export interface PortalAreaRole {
+  user_id: string
+  area: PortalArea
+  roles: string[]
+  created_at: string | null
+  updated_at: string | null
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 
 export interface SupportTicket {
@@ -233,6 +243,7 @@ type DeliveryRow = Omit<Delivery, 'orders'>
 type GrundausstattungRow = Omit<Grundausstattung, 'products'>
 type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
+type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -304,6 +315,9 @@ export type Database = {
       support_messages: { Row: SupportMessageRow; Insert: Pick<SupportMessageRow, 'ticket_id' | 'author_id' | 'body'> & Partial<Omit<SupportMessageRow, 'ticket_id' | 'author_id' | 'body'>>; Update: Partial<SupportMessageRow>; Relationships: [
         { foreignKeyName: 'support_messages_ticket_id_fkey'; columns: ['ticket_id']; isOneToOne: false; referencedRelation: 'support_tickets'; referencedColumns: ['id'] },
         { foreignKeyName: 'support_messages_author_id_fkey'; columns: ['author_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      portal_area_roles: { Row: PortalAreaRoleRow; Insert: Pick<PortalAreaRoleRow, 'user_id' | 'area' | 'roles'> & Partial<Omit<PortalAreaRoleRow, 'user_id' | 'area' | 'roles'>>; Update: Partial<Pick<PortalAreaRoleRow, 'roles' | 'updated_at'>>; Relationships: [
+        { foreignKeyName: 'portal_area_roles_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
     }
     Views: {
