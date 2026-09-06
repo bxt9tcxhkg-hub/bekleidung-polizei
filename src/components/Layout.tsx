@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, LayoutGrid, ShoppingCart, ShoppingBag, Package,
-  CalendarRange, Footprints, Users, ClipboardList,
+  CalendarRange, Footprints, ClipboardList,
   LogOut, Menu, X, CheckSquare, UserCircle, Wallet, Warehouse, BarChart3, BookOpen, LifeBuoy,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -135,7 +135,6 @@ export default function Layout() {
         { to: '/grundausstattung', label: 'Grundausstattung', icon: BookOpen },
         { to: '/produkte', label: 'Produkte', icon: Package },
         { to: '/quartale', label: 'Quartale', icon: CalendarRange },
-        { to: '/portal/benutzer', label: 'Portal → Benutzer', icon: Users },
         { to: '/auditlog', label: 'Audit-Log', icon: ClipboardList },
       ],
     }] : []),
@@ -147,7 +146,6 @@ export default function Layout() {
         { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
         { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
         { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
-        ...(!isSachbearbeiter ? [{ to: '/portal/benutzer', label: 'Portal → Benutzer', icon: Users }] : []),
         ...(!isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
       ],
     }] : []),

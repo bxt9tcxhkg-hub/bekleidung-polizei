@@ -3,15 +3,21 @@ import {
   PERSONAL_EM_CATEGORIES,
   PERSONAL_EM_CATEGORY_LABELS,
   PERSONAL_EM_FIELDS,
+  aggregatePersonalLagerbestand,
   canManagePersonalEinsatzmittel,
   emptyPersonalEmFormValues,
   formValuesFromRecord,
   formatIsoDate,
   isPersonalEmCategory,
+  isPersonalEmInLager,
   normalizeAblaufMmYyyy,
   officerDisplayName,
   personalEmDetailText,
   personalEmFieldLabel,
+  personalEmLocationLabel,
+  personalEmOfficerLabel,
+  personalItemsInLager,
+  toPersonalLagerAssignment,
   validatePersonalEm,
 } from './personalEinsatzmittel'
 
@@ -69,10 +75,54 @@ describe('normalizeAblaufMmYyyy', () => {
 })
 
 describe('validatePersonalEm', () => {
-  it('verlangt Kategorie und Polizist', () => {
+  it('verlangt Kategorie und Polizist oder Verwahrungsort', () => {
     expect(validatePersonalEm({ category: '', officer_id: 'u1', values: empty }).ok).toBe(false)
     expect(validatePersonalEm({ category: 'schutzweste', officer_id: '', values: empty }).ok).toBe(false)
     expect(validatePersonalEm({ category: 'stg77', officer_id: 'u1', values: empty }).ok).toBe(false)
+    expect(validatePersonalEm({
+      category: 'schutzweste',
+      officer_id: '',
+      verwahrungsort: 'keller',
+      values: empty,
+    }).ok).toBe(false)
+  })
+
+  it('erlaubt Einlagerung ohne Polizist', () => {
+    const result = validatePersonalEm({
+      category: 'glock_17',
+      officer_id: '',
+      verwahrungsort: 'lager',
+      values: { ...empty, waffennummer: 'W-1001' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.payload).toMatchObject({
+      category: 'glock_17',
+      officer_id: null,
+      verwahrungsort: 'lager',
+      waffennummer: 'W-1001',
+    })
+  })
+
+  it('erlaubt Polizist ohne Verwahrungsort und beides zusammen', () => {
+    const assigned = validatePersonalEm({ category: 'schlagstock', officer_id: 'u2', values: empty })
+    expect(assigned.ok).toBe(true)
+    if (assigned.ok) {
+      expect(assigned.payload.officer_id).toBe('u2')
+      expect(assigned.payload.verwahrungsort).toBeNull()
+    }
+
+    const both = validatePersonalEm({
+      category: 'warnweste',
+      officer_id: 'u3',
+      verwahrungsort: 'innendienst',
+      values: empty,
+    })
+    expect(both.ok).toBe(true)
+    if (both.ok) {
+      expect(both.payload.officer_id).toBe('u3')
+      expect(both.payload.verwahrungsort).toBe('innendienst')
+    }
   })
 
   it('nimmt Schutzweste-Felder und setzt fremde Spalten auf null', () => {
@@ -86,6 +136,7 @@ describe('validatePersonalEm', () => {
     expect(result.payload).toMatchObject({
       category: 'schutzweste',
       officer_id: 'u1',
+      verwahrungsort: null,
       groesse: 'L',
       ablaufdatum: '2028-04-01',
       schutzfristen: 'jährlich',
@@ -146,6 +197,11 @@ describe('Anzeigehelfer', () => {
   it('zeigt Polizist mit Dienstnummer', () => {
     expect(officerDisplayName({ name: 'Max Muster', dienstnummer: '1234' })).toBe('Max Muster (1234)')
     expect(officerDisplayName(null)).toBe('–')
+    expect(personalEmOfficerLabel(null, null)).toBe('nicht zugewiesen')
+    expect(personalEmOfficerLabel({ name: 'Eva' }, 'u1')).toBe('Eva')
+    expect(personalEmLocationLabel(null)).toBe('Beim Polizisten')
+    expect(personalEmLocationLabel('lager')).toBe('Lager')
+    expect(personalEmLocationLabel('peter_30')).toBe('Peter 30')
   })
 
   it('füllt das Formular aus einem Datensatz', () => {
@@ -162,6 +218,33 @@ describe('Anzeigehelfer', () => {
       patronen: null,
       ablauf_mm_yyyy: null,
     })).toMatchObject({ groesse: 'M', ablaufdatum: '2029-01-15', magazinanzahl: '3', schutzfristen: '' })
+  })
+})
+
+describe('Lagerbestand persönliche EM', () => {
+  it('zählt eingelagerte Stücke je Kategorie einzeln, auch gleiche Kategorie', () => {
+    const rows = aggregatePersonalLagerbestand([
+      { category: 'glock_17', verwahrungsort: 'lager' },
+      { category: 'glock_17', verwahrungsort: 'lager' },
+      { category: 'glock_17', verwahrungsort: 'peter_1' },
+      { category: 'warnweste', verwahrungsort: 'lager' },
+      { category: 'schutzweste', verwahrungsort: null },
+    ])
+    expect(rows).toHaveLength(9)
+    expect(rows.find(r => r.category === 'glock_17')?.count).toBe(2)
+    expect(rows.find(r => r.category === 'warnweste')?.count).toBe(1)
+    expect(rows.find(r => r.category === 'schutzweste')?.count).toBe(0)
+    expect(rows.find(r => r.category === 'munition')?.count).toBe(0)
+  })
+
+  it('filtert nur Lager-Zeilen und liefert Einlager-Payload ohne Officer', () => {
+    expect(isPersonalEmInLager({ verwahrungsort: 'lager' })).toBe(true)
+    expect(isPersonalEmInLager({ verwahrungsort: 'innendienst' })).toBe(false)
+    expect(personalItemsInLager([
+      { id: 'a', verwahrungsort: 'lager' },
+      { id: 'b', verwahrungsort: null },
+    ]).map(i => i.id)).toEqual(['a'])
+    expect(toPersonalLagerAssignment()).toEqual({ officer_id: null, verwahrungsort: 'lager' })
   })
 })
 

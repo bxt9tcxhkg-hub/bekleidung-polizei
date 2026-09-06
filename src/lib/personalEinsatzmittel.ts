@@ -1,13 +1,16 @@
 /**
- * Persönliche Einsatzmittel (Phase 2a).
+ * Persönliche Einsatzmittel.
  *
  * Eine Tabelle `personal_einsatzmittel` mit category + typisierten nullable
- * Spalten. Nur die vom Owner festgelegten Kategorien und Felder.
+ * Spalten. Officer ist optional, wenn ein Verwahrungsort gesetzt ist
+ * (typisch: Lager nach Austritt). Mehrere Zeilen derselben Kategorie mit
+ * unterschiedlicher Waffennummer sind zulässig.
  * Schreiben: einsatz_mt Sachbearbeiter/Admin oder globales profiles.admin.
  * Lesen: jede einsatz_mt-Rolle (user = nur Lesen).
  */
 
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
+import { isVerwahrungsort, VERWAHRUNGSORT_LABELS, type Verwahrungsort } from './verwahrungsort'
 
 export const PERSONAL_EM_CATEGORIES = [
   'schutzweste',
@@ -117,7 +120,8 @@ export function emptyPersonalEmFormValues(): PersonalEmFormValues {
 
 export type PersonalEmPayload = {
   category: PersonalEmCategory
-  officer_id: string
+  officer_id: string | null
+  verwahrungsort: Verwahrungsort | null
   groesse: string | null
   ablaufdatum: string | null
   schutzfristen: string | null
@@ -166,19 +170,31 @@ function optionalText(raw: string): string | null {
 export function validatePersonalEm(input: {
   category: string
   officer_id: string
+  verwahrungsort?: string
   values: PersonalEmFormValues
 }): PersonalEmValidateResult {
   if (!isPersonalEmCategory(input.category)) {
     return { ok: false, error: 'Bitte eine Kategorie wählen.' }
   }
-  if (!input.officer_id.trim()) {
-    return { ok: false, error: 'Bitte einen Polizisten zuweisen.' }
+
+  const officerId = input.officer_id.trim() || null
+  const ortRaw = (input.verwahrungsort ?? '').trim()
+  let verwahrungsort: Verwahrungsort | null = null
+  if (ortRaw) {
+    if (!isVerwahrungsort(ortRaw)) {
+      return { ok: false, error: 'Bitte einen gültigen Verwahrungsort wählen.' }
+    }
+    verwahrungsort = ortRaw
+  }
+  if (!officerId && !verwahrungsort) {
+    return { ok: false, error: 'Bitte einen Polizisten zuweisen oder einen Verwahrungsort wählen.' }
   }
 
   const allowed = new Set(PERSONAL_EM_FIELDS[input.category])
   const payload: PersonalEmPayload = {
     category: input.category,
-    officer_id: input.officer_id,
+    officer_id: officerId,
+    verwahrungsort,
     groesse: null,
     ablaufdatum: null,
     schutzfristen: null,
@@ -301,6 +317,58 @@ export function officerDisplayName(officer: {
   const name = officer.name?.trim() || officer.username?.trim() || '–'
   if (officer.dienstnummer?.trim()) return `${name} (${officer.dienstnummer.trim()})`
   return name
+}
+
+export function personalEmOfficerLabel(
+  officer: {
+    name?: string | null
+    username?: string | null
+    dienstnummer?: string | null
+  } | null | undefined,
+  officerId: string | null | undefined,
+): string {
+  if (!officerId) return 'nicht zugewiesen'
+  return officerDisplayName(officer)
+}
+
+export function personalEmLocationLabel(verwahrungsort: string | null | undefined): string {
+  if (!verwahrungsort) return 'Beim Polizisten'
+  if (isVerwahrungsort(verwahrungsort)) return VERWAHRUNGSORT_LABELS[verwahrungsort]
+  return verwahrungsort
+}
+
+export function isPersonalEmInLager(item: { verwahrungsort?: string | null }): boolean {
+  return item.verwahrungsort === 'lager'
+}
+
+export type PersonalLagerbestandRow = {
+  category: PersonalEmCategory
+  count: number
+}
+
+/** Eine Zeile = 1 Stück. Nur verwahrungsort = lager. */
+export function aggregatePersonalLagerbestand(
+  items: readonly { category: string; verwahrungsort?: string | null }[],
+): PersonalLagerbestandRow[] {
+  const rows: PersonalLagerbestandRow[] = PERSONAL_EM_CATEGORIES.map(category => ({
+    category,
+    count: 0,
+  }))
+  const index = new Map(rows.map(row => [row.category, row]))
+  for (const item of items) {
+    if (!isPersonalEmInLager(item) || !isPersonalEmCategory(item.category)) continue
+    const row = index.get(item.category)
+    if (row) row.count += 1
+  }
+  return rows
+}
+
+export function personalItemsInLager<T extends { verwahrungsort?: string | null }>(items: readonly T[]): T[] {
+  return items.filter(isPersonalEmInLager)
+}
+
+export function toPersonalLagerAssignment(): { officer_id: null; verwahrungsort: 'lager' } {
+  return { officer_id: null, verwahrungsort: 'lager' }
 }
 
 export function canManagePersonalEinsatzmittel(input: {

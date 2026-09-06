@@ -7,6 +7,7 @@ import {
   receivedNextStatus,
   isValidInitialPassword,
   filterAssignableRoles,
+  canAccessPortalBenutzer,
   canCreateUsers,
   canDeactivateUsers,
   USERNAME_RE,
@@ -94,6 +95,12 @@ describe('filterAssignableRoles', () => {
     expect(filterAssignableRoles(['genehmiger'], ['genehmiger'])).toEqual(['genehmiger'])
     expect(filterAssignableRoles(['admin'], ['admin', 'genehmiger'])).toEqual(['admin', 'genehmiger'])
   })
+
+  it('erlaubt Genehmiger die Vergabe von Sachbearbeiter (Bekleidung)', () => {
+    expect(filterAssignableRoles(['genehmiger'], ['user', 'sachbearbeiter'])).toEqual(['user', 'sachbearbeiter'])
+    expect(filterAssignableRoles(['approver'], ['sachbearbeiter'])).toEqual(['sachbearbeiter'])
+    expect(filterAssignableRoles(['genehmiger'], ['admin'])).toEqual(['user'])
+  })
 })
 
 describe('canCreateUsers / canDeactivateUsers', () => {
@@ -113,5 +120,13 @@ describe('canCreateUsers / canDeactivateUsers', () => {
     expect(canDeactivateUsers(['approver'])).toBe(true)
     expect(canDeactivateUsers(['admin'])).toBe(true)
     expect(canDeactivateUsers(['user'])).toBe(false)
+  })
+
+  it('öffnet die Portal-Benutzerverwaltung für Admin und Genehmiger, nicht für SB allein', () => {
+    expect(canAccessPortalBenutzer(['admin'])).toBe(true)
+    expect(canAccessPortalBenutzer(['genehmiger'])).toBe(true)
+    expect(canAccessPortalBenutzer(['approver'])).toBe(true)
+    expect(canAccessPortalBenutzer(['sachbearbeiter'])).toBe(false)
+    expect(canAccessPortalBenutzer(['user'])).toBe(false)
   })
 })

@@ -52,7 +52,7 @@ export default function App() {
           <Route
             path="/portal/benutzer"
             element={
-              <ProtectedRoute staffOnly>
+              <ProtectedRoute genehmigerOnly>
                 <PortalUsers />
               </ProtectedRoute>
             }

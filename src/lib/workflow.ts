@@ -52,7 +52,7 @@ export function filterAssignableRoles(callerRoles: string[], requested: string[]
   const out = requested.filter((r) => {
     if (r === 'admin') return isAdmin
     if (r === 'genehmiger') return isGenehmiger
-    if (r === 'sachbearbeiter') return isSachbearbeiter
+    if (r === 'sachbearbeiter') return isSachbearbeiter || isGenehmiger
     return true
   })
   return out.length > 0 ? out : ['user']
@@ -70,6 +70,15 @@ export function canCreateUsers(callerRoles: string[]): boolean {
 
 /** Entfernen = deaktivieren (active=false). Nur Genehmiger; Admin bleibt alle Bereiche. */
 export function canDeactivateUsers(callerRoles: string[]): boolean {
+  return (
+    callerRoles.includes('admin') ||
+    callerRoles.includes('genehmiger') ||
+    callerRoles.includes('approver')
+  )
+}
+
+/** Portal-Benutzerverwaltung: Admin oder Bekleidungs-Genehmiger. */
+export function canAccessPortalBenutzer(callerRoles: string[]): boolean {
   return (
     callerRoles.includes('admin') ||
     callerRoles.includes('genehmiger') ||
