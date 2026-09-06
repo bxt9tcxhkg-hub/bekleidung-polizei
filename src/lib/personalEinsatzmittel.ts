@@ -6,7 +6,7 @@
  * (typisch: Lager nach Austritt). Mehrere Zeilen derselben Kategorie mit
  * unterschiedlicher Waffennummer sind zulässig.
  * Schreiben: einsatz_mt Sachbearbeiter/Admin oder globales profiles.admin.
- * Lesen: jede einsatz_mt-Rolle (user = nur Lesen).
+ * Lesen: SB/Admin alle Zeilen; Benutzer nur eigene (officer_id = auth.uid()).
  */
 
 import { isParkaufsichtMember, isStadtpolizeiMember, TRAINING_APPLIES_TO, TRAINING_APPLIES_TO_LABELS, type TrainingAppliesTo } from './einsatztraining'
@@ -490,4 +490,13 @@ export function unassignedActivePersonalEm<T extends {
   removed_at?: string | null
 }>(items: readonly T[]): T[] {
   return items.filter(item => !item.removed_at && !item.officer_id)
+}
+
+/** Benutzer: nur eigene persönliche Einsatzmittel, keine fremden und keine Lager-ohne-Officer. */
+export function ownPersonalEinsatzmittel<T extends { officer_id?: string | null }>(
+  items: readonly T[],
+  officerId: string | null | undefined,
+): T[] {
+  if (!officerId) return []
+  return items.filter(item => item.officer_id === officerId)
 }
