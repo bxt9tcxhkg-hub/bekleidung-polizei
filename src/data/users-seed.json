@@ -1,7 +1,7 @@
 {
   "source": {
     "path": "/workspace/bekleidung-inbox/2026-09-06-einsatztraining/users-seed.json",
-    "note": "Box-Datei auf dieser VM nicht lesbar. Quelle hier: Owner-Rollen plus bestätigte Namen. ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste vom Owner: nur Bekleidung Benutzer, keine erfundenen höheren Rollen. Weitere der 34 ET-Offiziere nicht erfunden."
+    "note": "Vollständige Stadtpolizei-Liste aus ET/Zuteilung (34 Offiziere). Stab-Rollen unverändert. Übrige Stadtpolizei: Bekleidung Benutzer, einsatz_mt Benutzer. Parkaufsicht-Liste vom Owner: nur Bekleidung Benutzer, keine erfundenen höheren Rollen. Keine erfundenen Namen."
   },
   "officers": [
     {
@@ -13,11 +13,99 @@
       "einsatz_mt": "user"
     },
     {
+      "nachname": "Gisinger",
+      "vorname": "Andreas",
+      "dienstnummer": "2",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Feurstein",
+      "vorname": "Martin",
+      "dienstnummer": "3",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
       "nachname": "Fenkart",
       "vorname": "Matthias",
       "dienstnummer": "7",
       "organisation": "Stadtpolizei",
       "bekleidung": "sachbearbeiter",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Klien",
+      "vorname": "Thomas",
+      "dienstnummer": "8",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Greber",
+      "vorname": "Elias",
+      "dienstnummer": "9",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Bachmann",
+      "vorname": "Andreas",
+      "dienstnummer": "11",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Steidl",
+      "vorname": "Alexander",
+      "dienstnummer": "12",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Einetter",
+      "vorname": "Robert",
+      "dienstnummer": "13",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Huber",
+      "vorname": "Jessica",
+      "dienstnummer": "14",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Kaschka",
+      "vorname": "Otto",
+      "dienstnummer": "15",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Wiesner",
+      "vorname": "Matthias",
+      "dienstnummer": "16",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Aydinli",
+      "vorname": "Melissa",
+      "dienstnummer": "17",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
       "einsatz_mt": "user"
     },
     {
@@ -29,11 +117,147 @@
       "einsatz_mt": "sachbearbeiter"
     },
     {
+      "nachname": "Borihan",
+      "vorname": "Direnc",
+      "dienstnummer": "19",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Müller",
+      "vorname": "Julian",
+      "dienstnummer": "20",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Herburger",
+      "vorname": "Stefanie",
+      "dienstnummer": "21",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Sonderegger",
+      "vorname": "Lea",
+      "dienstnummer": "22",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Dreher",
+      "vorname": "Jeanine",
+      "dienstnummer": "23",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Dolliner",
+      "vorname": "Sonja",
+      "dienstnummer": "24",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Aukenthaler",
+      "vorname": "Silvano",
+      "dienstnummer": "25",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Bäuchl",
+      "vorname": "Aaron",
+      "dienstnummer": "26",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Hummer",
+      "vorname": "Hannes",
+      "dienstnummer": "27",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Ellensohn",
+      "vorname": "Jörg",
+      "dienstnummer": "28",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Schwendinger",
+      "vorname": "Dietmar",
+      "dienstnummer": "29",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Wibmer",
+      "vorname": "David",
+      "dienstnummer": "30",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Schwendinger",
+      "vorname": "Verona",
+      "dienstnummer": "31",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
       "nachname": "Albrecht",
       "vorname": "Stefanie",
       "dienstnummer": "32",
       "organisation": "Stadtpolizei",
       "bekleidung": "sachbearbeiter",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Kaiser",
+      "vorname": "Philipp",
+      "dienstnummer": "33",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Alge-Faißt",
+      "vorname": "Ludwig",
+      "dienstnummer": "34",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Nenning",
+      "vorname": "Bernhard",
+      "dienstnummer": "35",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
+    },
+    {
+      "nachname": "Rusch",
+      "vorname": "Johannes",
+      "dienstnummer": "36",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
       "einsatz_mt": "user"
     },
     {
@@ -43,6 +267,14 @@
       "organisation": "Stadtpolizei",
       "bekleidung": "admin",
       "einsatz_mt": "admin"
+    },
+    {
+      "nachname": "Hiller",
+      "vorname": "Gabriel",
+      "dienstnummer": "38",
+      "organisation": "Stadtpolizei",
+      "bekleidung": "user",
+      "einsatz_mt": "user"
     },
     {
       "nachname": "Fässler",

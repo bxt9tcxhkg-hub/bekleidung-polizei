@@ -24,19 +24,34 @@ describe('Offiziersliste', () => {
 
   it('legt bekannte Offiziere als Benutzer an, Stab nur wo Owner feststeht', () => {
     const users = knownRosterImportUsers()
-    expect(KNOWN_OFFICER_ROSTER).toHaveLength(13)
+    expect(KNOWN_OFFICER_ROSTER).toHaveLength(42)
     expect(users.find(u => u.dienstnummer === '1')?.roles).toEqual(['user', 'genehmiger'])
     expect(users.find(u => u.dienstnummer === '32')?.roles).toEqual(['user', 'sachbearbeiter'])
     expect(users.find(u => u.dienstnummer === '18')?.einsatzMtRole).toBe('sachbearbeiter')
     expect(users.find(u => u.dienstnummer === '7')?.roles).toEqual(['user', 'sachbearbeiter'])
     expect(users.find(u => u.dienstnummer === '37')?.roles).toEqual(['admin'])
-    expect(users.filter(u => u.organisation === 'Stadtpolizei')).toHaveLength(5)
+    const stadt = users.filter(u => u.organisation === 'Stadtpolizei')
+    expect(stadt).toHaveLength(34)
+    expect(stadt.find(u => u.dienstnummer === '2')).toMatchObject({
+      name: 'Andreas Gisinger',
+      username: 'dn2',
+      roles: ['user'],
+      einsatzMtRole: 'user',
+    })
+    expect(stadt.filter(u => u.roles.length === 1 && u.roles[0] === 'user' && u.einsatzMtRole === 'user')).toHaveLength(29)
     const park = users.filter(u => u.organisation === 'Parkaufsicht')
     expect(park).toHaveLength(8)
     expect(park.every(u => u.roles.every(role => role === 'user'))).toBe(true)
     expect(park.every(u => u.einsatzMtRole === 'user')).toBe(true)
     expect(users.find(u => u.dienstnummer === '70')?.gender).toBe('female')
     expect(users.find(u => u.dienstnummer === '65')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '14')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '17')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '22')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '23')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '24')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '31')?.gender).toBe('female')
+    expect(users.find(u => u.dienstnummer === '21')?.gender).toBe('female')
   })
 
   it('überspringt vorhandene Dienstnummern und plant nur neue', () => {
