@@ -48,6 +48,12 @@ describe('officerAuthEmail', () => {
       vorname: 'Martin',
       nachname: 'Feurstein',
     })).toBe(FEURSTEIN_MARTIN_EMAIL)
+    expect(officerAuthEmail({
+      vorname: 'MARTIN',
+      nachname: 'FEURSTEIN',
+      dienstnummer: '3',
+    })).toBe('martin.feurstein2@dornbirn.at')
+    expect(FEURSTEIN_MARTIN_EMAIL).toBe(FEURSTEIN_MARTIN_EMAIL.toLowerCase())
     expect(isFeursteinMartinException({
       vorname: 'Martin',
       nachname: 'Feurstein',

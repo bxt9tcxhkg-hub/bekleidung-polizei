@@ -101,7 +101,7 @@ function officerAuthEmail(input: {
   }
   if (!vorname || !nachname) return ''
   if (isFeursteinMartinException(vorname, nachname, input.dienstnummer)) {
-    return FEURSTEIN_MARTIN_EMAIL
+    return FEURSTEIN_MARTIN_EMAIL.toLowerCase()
   }
   const localFirst = foldGermanAscii(vorname).replace(/\s+/g, '')
   const localLast = foldGermanAscii(nachname).replace(/\s+/g, '-')

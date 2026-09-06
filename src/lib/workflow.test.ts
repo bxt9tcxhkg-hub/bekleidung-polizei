@@ -48,6 +48,26 @@ describe('resolveLoginEmail', () => {
     expect(ADMIN_AUTH_EMAIL).toBe('admin@stadtpolizei-dornbirn.local')
   })
 
+  it('schreibt Nicht-Admin-E-Mails klein, damit gemischte Schreibweise Auth trifft', () => {
+    expect(resolveLoginEmail('Hans-Peter.Schwendinger@DORNBIRN.AT')).toEqual({
+      ok: true,
+      email: 'hans-peter.schwendinger@dornbirn.at',
+    })
+    expect(resolveLoginEmail('JULIAN.MUELLER@dornbirn.at')).toEqual({
+      ok: true,
+      email: 'julian.mueller@dornbirn.at',
+    })
+    expect(resolveLoginEmail('  Martin.Feurstein2@Dornbirn.AT  ')).toEqual({
+      ok: true,
+      email: 'martin.feurstein2@dornbirn.at',
+    })
+    expect(resolveLoginEmail('admin')).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
+    expect(resolveLoginEmail('ADMIN@STADTPOLIZEI-DORNBIRN.LOCAL')).toEqual({
+      ok: true,
+      email: ADMIN_AUTH_EMAIL,
+    })
+  })
+
   it('löst nur den gebundenen Admin-Benutzernamen auf', () => {
     expect(isBoundAdminLoginInput('Admin')).toBe(true)
     expect(isBoundAdminLoginInput(' admin ')).toBe(true)

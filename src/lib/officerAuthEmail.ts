@@ -71,7 +71,7 @@ export function officerAuthEmail(input: {
   const { vorname, nachname } = resolveOfficerNames(input)
   if (!vorname || !nachname) return ''
   if (isFeursteinMartinException({ vorname, nachname, dienstnummer: input.dienstnummer })) {
-    return FEURSTEIN_MARTIN_EMAIL
+    return FEURSTEIN_MARTIN_EMAIL.toLowerCase()
   }
   const localFirst = foldGermanAscii(vorname).replace(/\s+/g, '')
   const localLast = foldGermanAscii(nachname).replace(/\s+/g, '-')
