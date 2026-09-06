@@ -29,6 +29,8 @@ export interface UserBudget {
   user_id: string
   year: number
   total_budget: number
+  /** Korrektur zum Bestellverbrauch dieses Kalenderjahres. Rückstellung zum 01.01. */
+  used_adjustment: number
   valid_from: string
   created_at: string | null
   updated_at: string | null
@@ -435,7 +437,7 @@ export type Database = {
       audit_log: { Row: AuditLogRow; Insert: Omit<AuditLogRow, 'id' | 'created_at'>; Update: Partial<AuditLogRow>; Relationships: [
         { foreignKeyName: 'audit_log_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at'>; Update: Partial<UserBudgetRow>; Relationships: [
+      user_budgets: { Row: UserBudgetRow; Insert: Omit<UserBudgetRow, 'id' | 'created_at' | 'updated_at' | 'used_adjustment'> & { used_adjustment?: number }; Update: Partial<UserBudgetRow>; Relationships: [
         { foreignKeyName: 'user_budgets_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       shoe_refund_caps: { Row: ShoeRefundCapRow; Insert: Omit<ShoeRefundCapRow, 'id' | 'created_at'>; Update: Partial<ShoeRefundCapRow>; Relationships: [

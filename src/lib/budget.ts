@@ -27,6 +27,80 @@ export function summarizeBudgetRows(rows: BudgetStatRow[]) {
   return { totalBudget, totalUsed, utilizationPct, overBudgetCount, unusedCount }
 }
 
+/** Kalenderjahr einer Budgetzeile aus valid_from (YYYY-MM-DD). */
+export function budgetYearFromValidFrom(validFrom: string): number {
+  return Number(validFrom.slice(0, 4))
+}
+
+/** Bestellsumme zählt nur im gleichen Kalenderjahr; neues Jahr startet bei 0. */
+export function orderUsedForBudgetYear(
+  currentYearOrderUsed: number,
+  validFrom: string,
+  currentYear: number,
+): number {
+  return budgetYearFromValidFrom(validFrom) === currentYear ? currentYearOrderUsed : 0
+}
+
+/**
+ * Korrektur für das angegebene Kalenderjahr.
+ * Vorjahreszeilen gelten nicht — Rückstellung zum 01.01.
+ */
+export function usedAdjustmentForYear(
+  rows: { year: number; used_adjustment?: number | null; valid_from: string }[],
+  year: number,
+  asOf = today(),
+): number {
+  const current = rows
+    .filter(r => r.year === year && r.valid_from <= asOf)
+    .sort((a, b) => b.valid_from.localeCompare(a.valid_from))[0]
+  return Number(current?.used_adjustment ?? 0)
+}
+
+/** Verbrauch = Bestellsumme des Kalenderjahres + Korrektur. */
+export function effectiveUsed(orderUsed: number, usedAdjustment: number): number {
+  return orderUsed + usedAdjustment
+}
+
+export function remainingBudget(total: number, used: number): number {
+  return total - used
+}
+
+/** Speichert die Differenz, damit Bestellungen weiterzählen. */
+export function usedAdjustmentFromEdited(editedUsed: number, orderUsed: number): number {
+  return editedUsed - orderUsed
+}
+
+export function parseBudgetAmount(raw: string): number | null {
+  const val = parseFloat(raw.replace(',', '.').trim())
+  if (!Number.isFinite(val) || val < 0) return null
+  return val
+}
+
+export function budgetUpsertPayload(input: {
+  userId: string
+  validFrom: string
+  totalBudget: number
+  editedUsed: number
+  currentYearOrderUsed: number
+  currentYear: number
+}): {
+  user_id: string
+  year: number
+  total_budget: number
+  used_adjustment: number
+  valid_from: string
+} {
+  const year = budgetYearFromValidFrom(input.validFrom)
+  const orderUsed = orderUsedForBudgetYear(input.currentYearOrderUsed, input.validFrom, input.currentYear)
+  return {
+    user_id: input.userId,
+    year,
+    total_budget: input.totalBudget,
+    used_adjustment: usedAdjustmentFromEdited(input.editedUsed, orderUsed),
+    valid_from: input.validFrom,
+  }
+}
+
 export async function getCurrentBudget(userId: string, year: number): Promise<number> {
   const { data } = await supabase
     .from('user_budgets')
@@ -41,13 +115,26 @@ export async function getCurrentBudget(userId: string, year: number): Promise<nu
 }
 
 export async function getUsedBudget(userId: string, year: number): Promise<number> {
-  const { data } = await supabase
-    .from('orders')
-    .select('unit_price, quantity')
-    .eq('user_id', userId)
-    .not('status', 'in', '(pending,cancelled)')
-    .gte('created_at', `${year}-01-01`)
-  return (data ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0)
+  const [{ data: orders }, { data: budget }] = await Promise.all([
+    supabase
+      .from('orders')
+      .select('unit_price, quantity')
+      .eq('user_id', userId)
+      .not('status', 'in', '(pending,cancelled)')
+      .gte('created_at', `${year}-01-01`)
+      .lt('created_at', `${year + 1}-01-01`),
+    supabase
+      .from('user_budgets')
+      .select('used_adjustment')
+      .eq('user_id', userId)
+      .eq('year', year)
+      .lte('valid_from', today())
+      .order('valid_from', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+  const orderUsed = (orders ?? []).reduce((s, o) => s + o.unit_price * o.quantity, 0)
+  return effectiveUsed(orderUsed, Number(budget?.used_adjustment ?? 0))
 }
 
 export async function getCurrentShoeRefundCap(): Promise<number> {

@@ -2,9 +2,17 @@ import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_BUDGET,
   DEFAULT_SHOE_CAP,
+  budgetUpsertPayload,
+  budgetYearFromValidFrom,
+  effectiveUsed,
   existingCapIdForDate,
   isBudgetParticipant,
+  orderUsedForBudgetYear,
+  parseBudgetAmount,
+  remainingBudget,
   summarizeBudgetRows,
+  usedAdjustmentForYear,
+  usedAdjustmentFromEdited,
   withoutAdminProfiles,
 } from './budget'
 
@@ -78,6 +86,89 @@ describe('summarizeBudgetRows', () => {
     expect(stats.overBudgetCount).toBe(1)
     expect(stats.totalBudget).toBe(DEFAULT_BUDGET * 3)
     expect(stats.totalUsed).toBe(500)
+  })
+})
+
+describe('Verbrauch und Rückstellung zum 01.01.', () => {
+  it('parst Beträge mit Komma und lehnt negative Werte ab', () => {
+    expect(parseBudgetAmount('120,50')).toBe(120.5)
+    expect(parseBudgetAmount('0')).toBe(0)
+    expect(parseBudgetAmount('-1')).toBeNull()
+    expect(parseBudgetAmount('')).toBeNull()
+    expect(parseBudgetAmount('abc')).toBeNull()
+  })
+
+  it('nimmt das Kalenderjahr aus gültig-ab', () => {
+    expect(budgetYearFromValidFrom('2026-09-06')).toBe(2026)
+    expect(budgetYearFromValidFrom('2027-01-01')).toBe(2027)
+  })
+
+  it('zählt Bestellungen nur im gleichen Kalenderjahr', () => {
+    expect(orderUsedForBudgetYear(180, '2026-06-01', 2026)).toBe(180)
+    expect(orderUsedForBudgetYear(180, '2027-01-01', 2026)).toBe(0)
+  })
+
+  it('nimmt die aktuelle Jahreskorrektur, nicht das Vorjahr', () => {
+    const rows = [
+      { year: 2025, used_adjustment: 80, valid_from: '2025-01-01' },
+      { year: 2026, used_adjustment: 25, valid_from: '2026-01-01' },
+      { year: 2026, used_adjustment: 10, valid_from: '2026-07-01' },
+    ]
+    expect(usedAdjustmentForYear(rows, 2025, '2026-09-06')).toBe(80)
+    expect(usedAdjustmentForYear(rows, 2026, '2026-06-15')).toBe(25)
+    expect(usedAdjustmentForYear(rows, 2026, '2026-09-06')).toBe(10)
+    expect(usedAdjustmentForYear(rows, 2027, '2027-01-01')).toBe(0)
+  })
+
+  it('setzt Verbrauch aus Bestellungen plus Korrektur und rechnet Verbleibend', () => {
+    expect(effectiveUsed(120, 30)).toBe(150)
+    expect(effectiveUsed(0, 0)).toBe(0)
+    expect(usedAdjustmentFromEdited(150, 120)).toBe(30)
+    expect(usedAdjustmentFromEdited(50, 120)).toBe(-70)
+    expect(remainingBudget(350, 150)).toBe(200)
+    expect(remainingBudget(350, 400)).toBe(-50)
+  })
+
+  it('stellt zum 01.01. zurück, außer eine Korrektur für das neue Jahr wird gesetzt', () => {
+    const priorYear = [
+      { year: 2026, used_adjustment: 90, valid_from: '2026-01-01' },
+    ]
+    const asOfNewYear = '2027-01-01'
+    const orderUsed2027 = 0
+    expect(usedAdjustmentForYear(priorYear, 2027, asOfNewYear)).toBe(0)
+    expect(effectiveUsed(orderUsed2027, usedAdjustmentForYear(priorYear, 2027, asOfNewYear))).toBe(0)
+    expect(remainingBudget(DEFAULT_BUDGET, 0)).toBe(DEFAULT_BUDGET)
+
+    const explicit = budgetUpsertPayload({
+      userId: 'u1',
+      validFrom: '2027-01-01',
+      totalBudget: DEFAULT_BUDGET,
+      editedUsed: 40,
+      currentYearOrderUsed: 180,
+      currentYear: 2026,
+    })
+    expect(explicit.year).toBe(2027)
+    expect(explicit.used_adjustment).toBe(40)
+    expect(remainingBudget(explicit.total_budget, effectiveUsed(0, explicit.used_adjustment))).toBe(310)
+  })
+
+  it('speichert die Korrektur relativ zur Bestellsumme des Kalenderjahres', () => {
+    const payload = budgetUpsertPayload({
+      userId: 'u1',
+      validFrom: '2026-09-06',
+      totalBudget: 400,
+      editedUsed: 200,
+      currentYearOrderUsed: 150,
+      currentYear: 2026,
+    })
+    expect(payload).toEqual({
+      user_id: 'u1',
+      year: 2026,
+      total_budget: 400,
+      used_adjustment: 50,
+      valid_from: '2026-09-06',
+    })
+    expect(remainingBudget(payload.total_budget, effectiveUsed(150, payload.used_adjustment))).toBe(200)
   })
 })
 
