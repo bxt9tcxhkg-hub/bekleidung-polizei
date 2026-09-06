@@ -43,7 +43,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     const [sessRes, modRes, compRes, regRes] = await Promise.all([
       supabase
         .from('einsatz_training_sessions')
-        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,period_year,period_half,active)')
+        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,applies_to,period_year,period_half,active)')
         .eq('announced', true)
         .order('session_date', { ascending: true }),
       supabase.from('einsatz_training_modules').select('*').eq('active', true).order('name'),
@@ -136,6 +136,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
       moduleId: session.module_id,
       moduleName: module?.name,
       module,
+      officerOrganisation: profile.organisation,
       completions,
       announced: session.announced,
       capacity: session.capacity,

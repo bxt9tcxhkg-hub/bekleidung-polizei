@@ -27,7 +27,7 @@ import {
   munitionVerbrauchInputFromSession,
   preferGeschossenQuestion,
   shouldAskGeschossen,
-  stadtpolizeiDutyOfficers,
+  officersEligibleForModule,
   validateAttendance,
   validateParticipation,
   validateSession,
@@ -79,7 +79,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     const [sessRes, modRes, compRes, profRes] = await Promise.all([
       supabase
         .from('einsatz_training_sessions')
-        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,period_year,period_half,active)')
+        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,applies_to,period_year,period_half,active)')
         .order('session_date', { ascending: false }),
       supabase.from('einsatz_training_modules').select('*').order('name'),
       supabase.from('einsatz_training_completions').select('*'),
@@ -119,7 +119,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
         .eq('session_id', sessionId),
       supabase
         .from('einsatz_training_participations')
-        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,active)')
+        .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,applies_to,active)')
         .eq('session_id', sessionId),
       canManage
         ? supabase
@@ -165,7 +165,12 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   }, [selected])
 
   const officerById = useMemo(() => new Map(officers.map(o => [o.id, o])), [officers])
-  const dutyOfficers = useMemo(() => stadtpolizeiDutyOfficers(officers), [officers])
+  const dutyOfficers = useMemo(
+    () => selectedModule
+      ? officersEligibleForModule({ module: selectedModule, officers })
+      : officersEligibleForModule({ module: { applies_to: 'polizei' }, officers }),
+    [officers, selectedModule],
+  )
   const addableOfficers = useMemo(() => {
     const taken = new Set(attendance.map(row => row.officer_id))
     return dutyOfficers.filter(o => !taken.has(o.id))
@@ -398,7 +403,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
         {askMunition && (
           <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 mb-4">
             <h4 className="text-sm font-semibold text-gray-900 mb-3">
-              Munition{preferGeschossenQuestion(selectedModule) ? ' (Modul schießt)' : ''}
+              Munition{preferGeschossenQuestion(selectedModule) ? ' (Mit Schießen)' : ''}
             </h4>
             {canManage ? (
               <div className="space-y-4">

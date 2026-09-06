@@ -9,7 +9,11 @@ import type {
   Profile,
 } from '../../lib/types'
 import {
-  TRAINING_MODULE_TYPE_LABELS,
+  SCHIESSEN_LABEL,
+  appliesToLabel,
+  etClassCadenceLabel,
+  etClassFromModule,
+  etClassLabel,
   formatCompletedOn,
   isTrainingPeriodHalf,
   moduleFilterLabel,
@@ -100,8 +104,8 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Offen = aktive Stadtpolizei ohne Abschluss dieses Moduls.
-          Parkaufsicht zählt nicht zur Pflicht-Stadtpolizei.
+          Offen = aktive Mitglieder gemäß Geltung des Moduls ohne Abschluss.
+          Geltung setzt der Sachbearbeiter: Polizei, Parkaufsicht oder Alle.
           Export für Kommandant / Dienstplan.
         </p>
         {selected && (
@@ -111,7 +115,9 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
             onClick={() => generateOffenAnmeldungenPdf({
               moduleName: selected.name,
               moduleType: selected.module_type,
-              periodLabel: selected.module_type === 'pflicht_halbjahr'
+              etClass: etClassFromModule(selected),
+              appliesTo: selected.applies_to,
+              periodLabel: etClassFromModule(selected) === 'intern'
                 && selected.period_year != null
                 && isTrainingPeriodHalf(selected.period_half ?? 0)
                 ? periodLabel(selected.period_year, selected.period_half ?? 1)
@@ -163,8 +169,9 @@ export default function TrainingOffenPanel({ canManage }: { canManage: boolean }
             </select>
             {selected && (
               <p className="text-xs text-gray-500 mt-1">
-                {TRAINING_MODULE_TYPE_LABELS[selected.module_type]}
-                {selected.schiesst ? ' · schießt' : ''}
+                {etClassLabel(selected)} · {etClassCadenceLabel(etClassFromModule(selected))}
+                {' · '}{appliesToLabel(selected.applies_to)}
+                {selected.schiesst ? ` · ${SCHIESSEN_LABEL}` : ''}
               </p>
             )}
           </div>

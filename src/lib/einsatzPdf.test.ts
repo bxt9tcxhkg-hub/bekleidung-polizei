@@ -280,6 +280,8 @@ describe('buildTrainingModulesPdfHtml', () => {
     expect(html).toContain('Erste Hilfe')
     expect(html).toContain('Inaktiv')
     expect(html).toContain('Abschlüsse')
+    expect(html).toContain('Mit Schießen')
+    expect(html).toContain('Geltung')
     expect(html).toContain('15.03.2026')
     expect(html).toContain('Müller (12)')
   })
@@ -290,6 +292,8 @@ describe('buildOffenAnmeldungenPdfHtml', () => {
     const html = buildOffenAnmeldungenPdfHtml({
       moduleName: 'Internes ET',
       moduleType: 'pflicht_halbjahr',
+      etClass: 'intern',
+      appliesTo: 'polizei',
       periodLabel: '2. Halbjahr 2026',
       openOfficers: [{ officerName: 'Huber', dienstnummer: '34' }],
       completedOfficers: [{ officerName: 'Müller (12)', completedOn: '2026-09-01' }],
@@ -302,7 +306,9 @@ describe('buildOffenAnmeldungenPdfHtml', () => {
       now,
     })
     expect(html).toContain('Offen / Anmeldungen · Internes ET')
-    expect(html).toContain('Pflicht (Halbjahr)')
+    expect(html).toContain('Internes Einsatztraining')
+    expect(html).toContain('2 Module pro Jahr')
+    expect(html).toContain('Polizei')
     expect(html).toContain('2. Halbjahr 2026')
     expect(html).toContain('Kommandanten')
     expect(html).toContain('Huber')

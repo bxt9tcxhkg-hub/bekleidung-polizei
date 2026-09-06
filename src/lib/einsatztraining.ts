@@ -1,12 +1,12 @@
 /**
- * Einsatztraining: Owner-Fachlogik 2026-09-06.
+ * Einsatztraining: Owner-Fachlogik 2026-09-06 (Muhammet).
  *
- * Primärachse: pflicht_halbjahr (genau das Pflicht-ET im Halbjahr, alle
- * Stadtpolizei Dornbirn) vs zusatz (interne zusätzliche Module).
- * `kind` intern/extern bleibt nur als Filter/Herkunft der Alt-Daten.
- * Schießen-Flag am Modul. Abschluss sperrt erneute Zuweisung und Anmeldung.
- * Schreiben: einsatz_mt Sachbearbeiter/Admin oder globales profiles.admin.
- * Benutzer: eigener Status + Selbstanmeldung, wenn das Modul offen ist.
+ * UI-Art intern / extern / zusatz, abgeleitet aus den bestehenden Spalten
+ * `module_type` (pflicht_halbjahr | zusatz) und `kind` (intern | extern).
+ * Taktung: Internes ET 2 Module/Jahr, Externes ET 4 Module/Jahr, Zusatz ohne Soll.
+ * Geltung (`applies_to`): Polizei | Parkaufsicht | Alle — setzt der Sachbearbeiter.
+ * Schießen-Flag bleibt `schiesst`; UI-Text immer «Mit Schießen».
+ * Abschluss sperrt erneute Zuweisung und Anmeldung.
  */
 
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
@@ -24,9 +24,29 @@ export const TRAINING_MODULE_TYPES = ['pflicht_halbjahr', 'zusatz'] as const
 export type TrainingModuleType = (typeof TRAINING_MODULE_TYPES)[number]
 
 export const TRAINING_MODULE_TYPE_LABELS: Record<TrainingModuleType, string> = {
-  pflicht_halbjahr: 'Pflicht (Halbjahr)',
+  pflicht_halbjahr: 'Internes Einsatztraining',
   zusatz: 'Zusatzmodul',
 }
+
+export const TRAINING_ET_CLASSES = ['intern', 'extern', 'zusatz'] as const
+export type TrainingEtClass = (typeof TRAINING_ET_CLASSES)[number]
+
+export const TRAINING_ET_CLASS_LABELS: Record<TrainingEtClass, string> = {
+  intern: 'Internes Einsatztraining',
+  extern: 'Externes Einsatztraining',
+  zusatz: 'Zusatzmodul',
+}
+
+export const TRAINING_APPLIES_TO = ['polizei', 'parkaufsicht', 'alle'] as const
+export type TrainingAppliesTo = (typeof TRAINING_APPLIES_TO)[number]
+
+export const TRAINING_APPLIES_TO_LABELS: Record<TrainingAppliesTo, string> = {
+  polizei: 'Polizei',
+  parkaufsicht: 'Parkaufsicht',
+  alle: 'Alle',
+}
+
+export const SCHIESSEN_LABEL = 'Mit Schießen'
 
 export const TRAINING_PERIOD_HALVES = [1, 2] as const
 export type TrainingPeriodHalf = (typeof TRAINING_PERIOD_HALVES)[number]
@@ -39,12 +59,9 @@ export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatus, string> = {
   absent: 'Abwesend',
 }
 
-/**
- * Historische Taktung intern/extern — nicht mehr die Primärachse.
- * Pflicht = 1× im gebundenen Halbjahr; Zusatz ohne Halbjahres-Pflicht.
- */
+/** Owner: intern 2 Module/Jahr, extern 4 Module/Jahr. Keine neue Dienstregel. */
 export const EINSATZTRAINING_CADENCE = {
-  intern: { times: 1, period: 'halbjahr' },
+  intern: { times: 2, period: 'jahr' },
   extern: { times: 4, period: 'jahr' },
 } as const
 
@@ -58,6 +75,14 @@ export function isTrainingModuleType(value: string): value is TrainingModuleType
   return (TRAINING_MODULE_TYPES as readonly string[]).includes(value)
 }
 
+export function isTrainingEtClass(value: string): value is TrainingEtClass {
+  return (TRAINING_ET_CLASSES as readonly string[]).includes(value)
+}
+
+export function isTrainingAppliesTo(value: string): value is TrainingAppliesTo {
+  return (TRAINING_APPLIES_TO as readonly string[]).includes(value)
+}
+
 export function isTrainingPeriodHalf(value: number): value is TrainingPeriodHalf {
   return value === 1 || value === 2
 }
@@ -68,10 +93,12 @@ export function isAttendanceStatus(value: string): value is AttendanceStatus {
 
 export function cadenceLabel(kind: TrainingKind): string {
   const cadence = EINSATZTRAINING_CADENCE[kind]
-  if (cadence.period === 'halbjahr') {
-    return `${cadence.times}× pro Halbjahr`
-  }
-  return `${cadence.times}× pro Jahr`
+  return `${cadence.times} Module pro Jahr`
+}
+
+export function etClassCadenceLabel(etClass: TrainingEtClass): string {
+  if (etClass === 'zusatz') return 'zusätzliche interne Module'
+  return cadenceLabel(etClass)
 }
 
 export function cadenceSummary(): string {
@@ -79,7 +106,29 @@ export function cadenceSummary(): string {
 }
 
 export function fachlogikSummary(): string {
-  return 'Pflicht-ET: alle Mitglieder der Stadtpolizei Dornbirn im jeweiligen Halbjahr. Zusatzmodule: interne zusätzliche Module, Anmeldung nur ohne Abschluss.'
+  return 'Internes Einsatztraining: 2 Module pro Jahr. Externes Einsatztraining: 4 Module pro Jahr. Zusatzmodule: zusätzliche interne Module. Geltung je Modul: Polizei, Parkaufsicht oder Alle.'
+}
+
+export function etClassFromModule(module: {
+  kind?: string | null
+  module_type?: string | null
+}): TrainingEtClass {
+  if (module.module_type === 'pflicht_halbjahr') return 'intern'
+  if (module.kind === 'extern') return 'extern'
+  return 'zusatz'
+}
+
+export function columnsFromEtClass(etClass: TrainingEtClass): {
+  kind: TrainingKind
+  module_type: TrainingModuleType
+} {
+  if (etClass === 'intern') return { kind: 'intern', module_type: 'pflicht_halbjahr' }
+  if (etClass === 'extern') return { kind: 'extern', module_type: 'zusatz' }
+  return { kind: 'intern', module_type: 'zusatz' }
+}
+
+export function normalizeAppliesTo(value: string | null | undefined): TrainingAppliesTo {
+  return isTrainingAppliesTo(value ?? '') ? value as TrainingAppliesTo : 'polizei'
 }
 
 export function currentHalfYear(now: Date = new Date()): { year: number; half: TrainingPeriodHalf } {
@@ -129,10 +178,12 @@ export function canManageEinsatztraining(input: {
 
 export type TrainingModuleInput = {
   name: string
-  kind: string
+  kind?: string
   active: boolean
-  moduleType: string
+  moduleType?: string
+  etClass?: string
   schiesst: boolean
+  appliesTo?: string
   periodYear: string | number | null
   periodHalf: string | number | null
 }
@@ -143,6 +194,7 @@ export type TrainingModulePayload = {
   active: boolean
   module_type: TrainingModuleType
   schiesst: boolean
+  applies_to: TrainingAppliesTo
   period_year: number | null
   period_half: TrainingPeriodHalf | null
 }
@@ -167,26 +219,31 @@ function parseHalf(raw: string | number | null | undefined): TrainingPeriodHalf 
 export function validateTrainingModule(input: TrainingModuleInput): ValidateResult<TrainingModulePayload> {
   const name = input.name.trim()
   if (!name) return { ok: false, error: 'Bitte einen Modulnamen angeben.' }
-  if (!isTrainingModuleType(input.moduleType)) {
-    return { ok: false, error: 'Bitte Pflicht (Halbjahr) oder Zusatzmodul wählen.' }
-  }
-  const kind = isTrainingKind(input.kind) ? input.kind : defaultKindForModuleType(input.moduleType)
-  if (!isTrainingKind(kind)) return { ok: false, error: 'Bitte intern oder extern wählen.' }
 
-  if (input.moduleType === 'pflicht_halbjahr') {
+  const etClass: TrainingEtClass = isTrainingEtClass(input.etClass ?? '')
+    ? input.etClass as TrainingEtClass
+    : etClassFromModule({
+      kind: input.kind,
+      module_type: isTrainingModuleType(input.moduleType ?? '') ? input.moduleType : null,
+    })
+  const columns = columnsFromEtClass(etClass)
+  const appliesTo = normalizeAppliesTo(input.appliesTo)
+
+  if (columns.module_type === 'pflicht_halbjahr') {
     const year = parseYear(input.periodYear)
     const half = parseHalf(input.periodHalf)
     if (year == null || half == null) {
-      return { ok: false, error: 'Pflicht-ET braucht Jahr und Halbjahr (1 oder 2).' }
+      return { ok: false, error: 'Internes Einsatztraining braucht Jahr und Halbjahr (1 oder 2).' }
     }
     return {
       ok: true,
       payload: {
         name,
-        kind,
+        kind: columns.kind,
         active: input.active,
         module_type: 'pflicht_halbjahr',
         schiesst: Boolean(input.schiesst),
+        applies_to: appliesTo,
         period_year: year,
         period_half: half,
       },
@@ -197,10 +254,11 @@ export function validateTrainingModule(input: TrainingModuleInput): ValidateResu
     ok: true,
     payload: {
       name,
-      kind,
+      kind: columns.kind,
       active: input.active,
       module_type: 'zusatz',
       schiesst: Boolean(input.schiesst),
+      applies_to: appliesTo,
       period_year: null,
       period_half: null,
     },
@@ -215,7 +273,9 @@ export type TrainingCompletionRef = {
 
 export type TrainingModulePeriodRef = {
   id: string
+  kind?: TrainingKind | string | null
   module_type?: TrainingModuleType | string | null
+  applies_to?: TrainingAppliesTo | string | null
   period_year?: number | null
   period_half?: number | null
 }
@@ -244,12 +304,31 @@ export function stadtpolizeiDutyOfficers<T extends TrainingOfficerRef>(officers:
   return officers.filter(officer => officer.active !== false && isStadtpolizeiMember(officer))
 }
 
+export function officerMatchesAppliesTo(
+  officer: { organisation?: string | null },
+  appliesTo?: TrainingAppliesTo | string | null,
+): boolean {
+  const audience = normalizeAppliesTo(appliesTo)
+  if (audience === 'polizei') return isStadtpolizeiMember(officer)
+  if (audience === 'parkaufsicht') return isParkaufsichtMember(officer)
+  return isStadtpolizeiMember(officer) || isParkaufsichtMember(officer)
+}
+
+export function officersEligibleForModule<T extends TrainingOfficerRef>(input: {
+  module: Pick<TrainingModulePeriodRef, 'applies_to'>
+  officers: readonly T[]
+}): T[] {
+  return input.officers.filter(
+    officer => officer.active !== false && officerMatchesAppliesTo(officer, input.module.applies_to),
+  )
+}
+
 export function officersOpenForModule<T extends TrainingOfficerRef>(input: {
   module: TrainingModulePeriodRef
   officers: readonly T[]
   completions: readonly TrainingCompletionRef[]
 }): T[] {
-  return stadtpolizeiDutyOfficers(input.officers).filter(
+  return officersEligibleForModule(input).filter(
     officer => !officerHasCompletedModule(input.completions, officer.id, input.module.id, input.module),
   )
 }
@@ -259,7 +338,7 @@ export function officersCompletedForModule<T extends TrainingOfficerRef>(input: 
   officers: readonly T[]
   completions: readonly TrainingCompletionRef[]
 }): T[] {
-  return stadtpolizeiDutyOfficers(input.officers).filter(
+  return officersEligibleForModule(input).filter(
     officer => officerHasCompletedModule(input.completions, officer.id, input.module.id, input.module),
   )
 }
@@ -357,6 +436,7 @@ export type AssignableModule = {
   active: boolean
   module_type?: TrainingModuleType
   schiesst?: boolean
+  applies_to?: TrainingAppliesTo
   period_year?: number | null
   period_half?: number | null
 }
@@ -545,6 +625,7 @@ export type SelfRegisterInput = {
   moduleId: string
   moduleName?: string | null
   module?: TrainingModulePeriodRef | null
+  officerOrganisation?: string | null
   completions: readonly TrainingCompletionRef[]
   announced: boolean
   capacity?: number | null
@@ -565,6 +646,12 @@ export function selfRegisterBlockReason(input: SelfRegisterInput): string | null
   }
   if (!input.isOwnRegistration) {
     return 'Anmeldung nur für das eigene Konto.'
+  }
+  if (
+    input.officerOrganisation !== undefined
+    && !officerMatchesAppliesTo({ organisation: input.officerOrganisation }, input.module?.applies_to)
+  ) {
+    return 'Dieses Modul gilt nicht für Ihre Organisation.'
   }
   const lock = moduleAssignmentBlockReason({
     officerId: input.officerId,
@@ -600,20 +687,34 @@ export function moduleTypeLabel(moduleType: string | null | undefined): string {
     : 'Modul'
 }
 
+export function etClassLabel(module: {
+  kind?: string | null
+  module_type?: string | null
+}): string {
+  return TRAINING_ET_CLASS_LABELS[etClassFromModule(module)]
+}
+
+export function appliesToLabel(appliesTo: string | null | undefined): string {
+  return TRAINING_APPLIES_TO_LABELS[normalizeAppliesTo(appliesTo)]
+}
+
 export function moduleFilterLabel(module: {
   name: string
+  kind?: string | null
   module_type?: string | null
+  applies_to?: string | null
   period_year?: number | null
   period_half?: number | null
   schiesst?: boolean | null
 }): string {
   const bits = [module.name]
-  if (module.module_type === 'pflicht_halbjahr' && module.period_year != null && isTrainingPeriodHalf(module.period_half ?? 0)) {
+  const etClass = etClassFromModule(module)
+  if (etClass === 'intern' && module.period_year != null && isTrainingPeriodHalf(module.period_half ?? 0)) {
     bits.push(periodLabel(module.period_year, module.period_half as TrainingPeriodHalf))
-  } else if (isTrainingModuleType(module.module_type ?? '')) {
-    bits.push(TRAINING_MODULE_TYPE_LABELS[module.module_type as TrainingModuleType])
+  } else {
+    bits.push(TRAINING_ET_CLASS_LABELS[etClass])
   }
-  if (module.schiesst) bits.push('schießt')
+  if (module.schiesst) bits.push(SCHIESSEN_LABEL)
   return bits.join(' · ')
 }
 

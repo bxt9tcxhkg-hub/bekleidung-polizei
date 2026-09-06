@@ -5,29 +5,34 @@ import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
 import type { EinsatzTrainingCompletion, EinsatzTrainingModule } from '../../lib/types'
 import {
-  TRAINING_KINDS,
-  TRAINING_KIND_LABELS,
-  TRAINING_MODULE_TYPES,
-  TRAINING_MODULE_TYPE_LABELS,
+  SCHIESSEN_LABEL,
+  TRAINING_APPLIES_TO,
+  TRAINING_APPLIES_TO_LABELS,
+  TRAINING_ET_CLASSES,
+  TRAINING_ET_CLASS_LABELS,
+  appliesToLabel,
   currentHalfYear,
+  etClassCadenceLabel,
+  etClassFromModule,
+  etClassLabel,
   formatCompletedOn,
-  isTrainingKind,
-  isTrainingModuleType,
+  isTrainingAppliesTo,
+  isTrainingEtClass,
   moduleFilterLabel,
   officerHasCompletedModule,
   periodLabel,
   trainingModuleDeleteConfirm,
   trainingModuleDeleteUserMessage,
   validateTrainingModule,
-  type TrainingKind,
-  type TrainingModuleType,
+  type TrainingAppliesTo,
+  type TrainingEtClass,
 } from '../../lib/einsatztraining'
 import { planOfficialModuleUpserts } from '../../lib/officialTrainingModules'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { generateTrainingModulesPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
 
-type TypeFilter = 'all' | TrainingModuleType
+type ClassFilter = 'all' | TrainingEtClass
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -35,15 +40,14 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
   const { profile } = useAuth()
   const [items, setItems] = useState<EinsatzTrainingModule[]>([])
   const [completions, setCompletions] = useState<EinsatzTrainingCompletion[]>([])
-  const [filter, setFilter] = useState<TypeFilter>('all')
-  const [legacyFilter, setLegacyFilter] = useState<'all' | TrainingKind>('all')
+  const [filter, setFilter] = useState<ClassFilter>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [moduleType, setModuleType] = useState<TrainingModuleType>('pflicht_halbjahr')
-  const [kind, setKind] = useState<TrainingKind>('intern')
+  const [etClass, setEtClass] = useState<TrainingEtClass>('intern')
+  const [appliesTo, setAppliesTo] = useState<TrainingAppliesTo>('polizei')
   const [active, setActive] = useState(true)
   const [schiesst, setSchiesst] = useState(false)
   const current = currentHalfYear()
@@ -80,11 +84,8 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
   }, [])
 
   const visible = useMemo(
-    () => items.filter(item => (
-      (filter === 'all' || item.module_type === filter)
-      && (legacyFilter === 'all' || item.kind === legacyFilter)
-    )),
-    [items, filter, legacyFilter],
+    () => items.filter(item => filter === 'all' || etClassFromModule(item) === filter),
+    [items, filter],
   )
 
   const completionCount = useMemo(() => {
@@ -108,8 +109,8 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     const now = currentHalfYear()
     setEditId(null)
     setName('')
-    setModuleType('pflicht_halbjahr')
-    setKind('intern')
+    setEtClass('intern')
+    setAppliesTo('polizei')
     setActive(true)
     setSchiesst(false)
     setPeriodYear(String(now.year))
@@ -122,8 +123,8 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     const now = currentHalfYear()
     setEditId(item.id)
     setName(item.name)
-    setModuleType(item.module_type)
-    setKind(item.kind)
+    setEtClass(etClassFromModule(item))
+    setAppliesTo(isTrainingAppliesTo(item.applies_to) ? item.applies_to : 'polizei')
     setActive(item.active)
     setSchiesst(item.schiesst)
     setPeriodYear(String(item.period_year ?? now.year))
@@ -142,9 +143,9 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     if (!canManage) return
     const result = validateTrainingModule({
       name,
-      kind,
+      etClass,
+      appliesTo,
       active,
-      moduleType,
       schiesst,
       periodYear,
       periodHalf,
@@ -165,7 +166,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
         setSaving(false)
         return
       }
-      logAudit('Einsatztraining-Modul bearbeitet', `${result.payload.name} (${result.payload.module_type})`)
+      logAudit('Einsatztraining-Modul bearbeitet', `${result.payload.name} (${etClassFromModule(result.payload)})`)
     } else {
       const { error: insertError } = await supabase
         .from('einsatz_training_modules')
@@ -175,7 +176,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
         setSaving(false)
         return
       }
-      logAudit('Einsatztraining-Modul angelegt', `${result.payload.name} (${result.payload.module_type})`)
+      logAudit('Einsatztraining-Modul angelegt', `${result.payload.name} (${etClassFromModule(result.payload)})`)
     }
     closeForm()
     try {
@@ -198,6 +199,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
           kind: module.kind,
           module_type: module.moduleType,
           schiesst: module.schiesst,
+          applies_to: module.appliesTo,
           period_year: module.period_year,
           period_half: module.period_half,
           active: true,
@@ -212,7 +214,13 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     for (const row of plan.reactivations) {
       const { error: updateError } = await supabase
         .from('einsatz_training_modules')
-        .update({ active: true, name: row.name, module_type: row.moduleType, kind: row.kind })
+        .update({
+          active: true,
+          name: row.name,
+          module_type: row.moduleType,
+          kind: row.kind,
+          applies_to: row.appliesTo,
+        })
         .eq('id', row.id)
       if (updateError) {
         setError(updateError.message || 'Offizielle Module konnten nicht aktiviert werden.')
@@ -243,7 +251,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
       setDeletingId(null)
       return
     }
-    logAudit('Einsatztraining-Modul gelöscht', `${item.name} (${item.module_type})`)
+    logAudit('Einsatztraining-Modul gelöscht', `${item.name} (${etClassFromModule(item)})`)
     if (editId === item.id) closeForm()
     setDeletingId(null)
     try {
@@ -257,9 +265,8 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">
-          Pflicht-ET gilt für alle Mitglieder der Stadtpolizei Dornbirn im Halbjahr.
-          Zusatzmodule: Combat, Erste Hilfe COMBAT, Fahrsicherheit, Stockschulung, Szenarien.
-          Schießen-Flag am Modul setzen.
+          Internes Einsatztraining: 2 Module pro Jahr. Externes Einsatztraining: 4 Module pro Jahr.
+          Zusatzmodule ohne Jahressoll. Geltung je Modul: Polizei, Parkaufsicht oder Alle.
         </p>
         <div className="flex flex-wrap items-center gap-2 justify-end">
           <PdfExportButton
@@ -269,8 +276,10 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
                 name: item.name,
                 kind: item.kind,
                 moduleType: item.module_type,
+                etClass: etClassFromModule(item),
+                appliesTo: item.applies_to,
                 schiesst: item.schiesst,
-                periodLabel: item.module_type === 'pflicht_halbjahr' && item.period_year && item.period_half
+                periodLabel: etClassFromModule(item) === 'intern' && item.period_year && item.period_half
                   ? periodLabel(item.period_year, item.period_half)
                   : undefined,
                 active: item.active,
@@ -279,13 +288,13 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
               completions: completions.flatMap(row => {
                 const module = items.find(m => m.id === row.module_id)
                 if (!module) return []
-                if (filter !== 'all' && module.module_type !== filter) return []
-                if (legacyFilter !== 'all' && module.kind !== legacyFilter) return []
+                if (filter !== 'all' && etClassFromModule(module) !== filter) return []
                 return [{
                   officerName: officerDisplayName(row.officer),
                   moduleName: module.name,
                   kind: module.kind,
                   moduleType: module.module_type,
+                  etClass: etClassFromModule(module),
                   completedOn: row.completed_on,
                 }]
               }),
@@ -319,7 +328,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>
       )}
 
-      <div className="flex gap-1 mb-3 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap">
+      <div className="flex gap-1 mb-2 bg-gray-100 p-1 rounded-xl w-fit max-w-full flex-wrap">
         <button
           type="button"
           onClick={() => setFilter('all')}
@@ -329,7 +338,7 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
         >
           Alle
         </button>
-        {TRAINING_MODULE_TYPES.map(id => (
+        {TRAINING_ET_CLASSES.map(id => (
           <button
             key={id}
             type="button"
@@ -338,33 +347,13 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
               filter === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            {TRAINING_MODULE_TYPE_LABELS[id]}
+            {TRAINING_ET_CLASS_LABELS[id]}
           </button>
         ))}
       </div>
-      <div className="flex gap-1 mb-4 bg-gray-50 p-1 rounded-xl w-fit max-w-full flex-wrap">
-        <button
-          type="button"
-          onClick={() => setLegacyFilter('all')}
-          className={`text-xs font-medium px-3 py-1 rounded-lg ${
-            legacyFilter === 'all' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'
-          }`}
-        >
-          Herkunft alle
-        </button>
-        {TRAINING_KINDS.map(id => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setLegacyFilter(id)}
-            className={`text-xs font-medium px-3 py-1 rounded-lg ${
-              legacyFilter === id ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500'
-            }`}
-          >
-            {TRAINING_KIND_LABELS[id]}
-          </button>
-        ))}
-      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        {TRAINING_ET_CLASSES.map(id => `${TRAINING_ET_CLASS_LABELS[id]}: ${etClassCadenceLabel(id)}`).join(' · ')}
+      </p>
 
       {loading ? (
         <div className="flex justify-center py-12">
@@ -382,8 +371,9 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Modul</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">Typ</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Schießt</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Art</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Geltung</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">{SCHIESSEN_LABEL}</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">
                   {canManage ? 'Abschlüsse' : 'Mein Stand'}
@@ -394,10 +384,15 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
             <tbody className="divide-y divide-gray-100">
               {visible.map(item => {
                 const own = ownStatus.find(row => row.module.id === item.id)
+                const art = etClassFromModule(item)
                 return (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900">{moduleFilterLabel(item)}</td>
-                    <td className="px-4 py-3 text-gray-700">{TRAINING_MODULE_TYPE_LABELS[item.module_type]}</td>
+                    <td className="px-4 py-3 text-gray-700">
+                      <div>{etClassLabel(item)}</div>
+                      <div className="text-xs text-gray-500">{etClassCadenceLabel(art)}</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{appliesToLabel(item.applies_to)}</td>
                     <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{item.schiesst ? 'Ja' : 'Nein'}</td>
                     <td className="px-4 py-3 text-gray-700">{item.active ? 'Aktiv' : 'Inaktiv'}</td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
@@ -459,21 +454,23 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-mod-type">Typ *</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-mod-art">Art *</label>
                 <select
-                  id="et-mod-type"
+                  id="et-mod-art"
                   className={inputClass}
-                  value={moduleType}
+                  value={etClass}
                   onChange={e => {
-                    if (isTrainingModuleType(e.target.value)) setModuleType(e.target.value)
+                    if (isTrainingEtClass(e.target.value)) setEtClass(e.target.value)
                   }}
                 >
-                  {TRAINING_MODULE_TYPES.map(id => (
-                    <option key={id} value={id}>{TRAINING_MODULE_TYPE_LABELS[id]}</option>
+                  {TRAINING_ET_CLASSES.map(id => (
+                    <option key={id} value={id}>
+                      {TRAINING_ET_CLASS_LABELS[id]} ({etClassCadenceLabel(id)})
+                    </option>
                   ))}
                 </select>
               </div>
-              {moduleType === 'pflicht_halbjahr' && (
+              {etClass === 'intern' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-mod-year">Jahr *</label>
@@ -501,25 +498,25 @@ export default function TrainingModulesPanel({ canManage }: { canManage: boolean
                   </div>
                 </div>
               )}
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={schiesst} onChange={e => setSchiesst(e.target.checked)} />
-                Schießt (Munition aus dem Pool möglich)
-              </label>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-mod-kind">Herkunft (Filter)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="et-mod-geltung">Geltung *</label>
                 <select
-                  id="et-mod-kind"
+                  id="et-mod-geltung"
                   className={inputClass}
-                  value={kind}
+                  value={appliesTo}
                   onChange={e => {
-                    if (isTrainingKind(e.target.value)) setKind(e.target.value)
+                    if (isTrainingAppliesTo(e.target.value)) setAppliesTo(e.target.value)
                   }}
                 >
-                  {TRAINING_KINDS.map(id => (
-                    <option key={id} value={id}>{TRAINING_KIND_LABELS[id]}</option>
+                  {TRAINING_APPLIES_TO.map(id => (
+                    <option key={id} value={id}>{TRAINING_APPLIES_TO_LABELS[id]}</option>
                   ))}
                 </select>
               </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={schiesst} onChange={e => setSchiesst(e.target.checked)} />
+                {SCHIESSEN_LABEL} (Munition aus dem Pool möglich)
+              </label>
               <label className="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
                 Aktiv (zuweisbar / ausgeschrieben)

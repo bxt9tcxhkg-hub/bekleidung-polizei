@@ -2,22 +2,32 @@ import { describe, expect, it } from 'vitest'
 import {
   ATTENDANCE_STATUS_LABELS,
   EINSATZTRAINING_CADENCE,
+  SCHIESSEN_LABEL,
+  TRAINING_APPLIES_TO,
+  TRAINING_ET_CLASSES,
   TRAINING_KINDS,
   TRAINING_KIND_LABELS,
   TRAINING_MODULE_TYPES,
+  appliesToLabel,
   canManageEinsatztraining,
   canSelfRegister,
   cadenceLabel,
   cadenceSummary,
+  columnsFromEtClass,
+  etClassCadenceLabel,
+  etClassFromModule,
   currentHalfYear,
   formatCompletedOn,
   isAttendanceStatus,
   isDateInHalfYear,
   isModuleLockDbError,
   isStadtpolizeiMember,
+  isTrainingAppliesTo,
+  isTrainingEtClass,
   isTrainingKind,
   isTrainingModuleInUseDbError,
   isTrainingModuleType,
+  officerMatchesAppliesTo,
   trainingModuleDeleteConfirm,
   trainingModuleDeleteUserMessage,
   moduleAssignmentBlockReason,
@@ -47,19 +57,35 @@ const completions = [
 ]
 
 describe('Taktung', () => {
-  it('hält intern/extern nur als Herkunft, Primärachse ist Pflicht vs Zusatz', () => {
-    expect(EINSATZTRAINING_CADENCE.intern).toEqual({ times: 1, period: 'halbjahr' })
+  it('zeigt intern/extern/zusatz mit Owner-Jahressoll, ohne neue Dienstregel', () => {
+    expect(EINSATZTRAINING_CADENCE.intern).toEqual({ times: 2, period: 'jahr' })
     expect(EINSATZTRAINING_CADENCE.extern).toEqual({ times: 4, period: 'jahr' })
-    expect(cadenceLabel('intern')).toBe('1× pro Halbjahr')
-    expect(cadenceLabel('extern')).toBe('4× pro Jahr')
-    expect(cadenceSummary()).toMatch(/Stadtpolizei Dornbirn/)
-    expect(cadenceSummary()).toMatch(/Zusatz/)
+    expect(cadenceLabel('intern')).toBe('2 Module pro Jahr')
+    expect(cadenceLabel('extern')).toBe('4 Module pro Jahr')
+    expect(etClassCadenceLabel('intern')).toBe('2 Module pro Jahr')
+    expect(etClassCadenceLabel('extern')).toBe('4 Module pro Jahr')
+    expect(etClassCadenceLabel('zusatz')).toBe('zusätzliche interne Module')
+    expect(cadenceSummary()).toMatch(/Internes Einsatztraining: 2 Module pro Jahr/)
+    expect(cadenceSummary()).toMatch(/Externes Einsatztraining: 4 Module pro Jahr/)
+    expect(cadenceSummary()).toMatch(/Zusatzmodule/)
+    expect(cadenceSummary()).toMatch(/Geltung/)
     expect([...TRAINING_MODULE_TYPES]).toEqual(['pflicht_halbjahr', 'zusatz'])
+    expect([...TRAINING_ET_CLASSES]).toEqual(['intern', 'extern', 'zusatz'])
     expect(isTrainingModuleType('pflicht_halbjahr')).toBe(true)
     expect(isTrainingModuleType('intern')).toBe(false)
+    expect(isTrainingEtClass('intern')).toBe(true)
+    expect(isTrainingEtClass('pflicht_halbjahr')).toBe(false)
+    expect(etClassFromModule({ module_type: 'pflicht_halbjahr', kind: 'intern' })).toBe('intern')
+    expect(etClassFromModule({ module_type: 'zusatz', kind: 'extern' })).toBe('extern')
+    expect(etClassFromModule({ module_type: 'zusatz', kind: 'intern' })).toBe('zusatz')
+    expect(columnsFromEtClass('intern')).toEqual({ kind: 'intern', module_type: 'pflicht_halbjahr' })
+    expect(columnsFromEtClass('extern')).toEqual({ kind: 'extern', module_type: 'zusatz' })
+    expect(columnsFromEtClass('zusatz')).toEqual({ kind: 'intern', module_type: 'zusatz' })
+    expect(SCHIESSEN_LABEL).toBe('Mit Schießen')
+    expect(SCHIESSEN_LABEL).not.toMatch(/Schießt/)
   })
 
-  it('kennt intern/extern weiter als Filter, ohne Genehmiger-Katalog', () => {
+  it('kennt intern/extern weiter als Spalte, ohne Genehmiger-Katalog', () => {
     expect([...TRAINING_KINDS]).toEqual(['intern', 'extern'])
     expect(isTrainingKind('intern')).toBe(true)
     expect(isTrainingKind('schießen')).toBe(false)
@@ -67,21 +93,25 @@ describe('Taktung', () => {
     expect(isAttendanceStatus('present')).toBe(true)
     expect(isAttendanceStatus('maybe')).toBe(false)
     expect(ATTENDANCE_STATUS_LABELS.absent).toBe('Abwesend')
+    expect([...TRAINING_APPLIES_TO]).toEqual(['polizei', 'parkaufsicht', 'alle'])
+    expect(isTrainingAppliesTo('polizei')).toBe(true)
+    expect(isTrainingAppliesTo('stadtpolizei')).toBe(false)
+    expect(appliesToLabel('alle')).toBe('Alle')
   })
 })
 
 describe('validateTrainingModule', () => {
-  it('verlangt Namen, Typ und bei Pflicht das Halbjahr', () => {
+  it('verlangt Namen, Art und bei intern das Halbjahr; schreibt applies_to', () => {
     expect(validateTrainingModule({
       name: '  ', kind: 'intern', active: true, moduleType: 'zusatz', schiesst: false, periodYear: null, periodHalf: null,
     }).ok).toBe(false)
     expect(validateTrainingModule({
-      name: 'Internes ET', kind: 'intern', active: true, moduleType: 'pflicht_halbjahr', schiesst: true, periodYear: '', periodHalf: 1,
+      name: 'Internes ET', etClass: 'intern', active: true, schiesst: true, periodYear: '', periodHalf: 1,
     }).ok).toBe(false)
-    const pflicht = validateTrainingModule({
-      name: '  Internes ET  ', kind: 'intern', active: true, moduleType: 'pflicht_halbjahr', schiesst: true, periodYear: 2026, periodHalf: 2,
+    const intern = validateTrainingModule({
+      name: '  Internes ET  ', etClass: 'intern', active: true, schiesst: true, periodYear: 2026, periodHalf: 2,
     })
-    expect(pflicht).toEqual({
+    expect(intern).toEqual({
       ok: true,
       payload: {
         name: 'Internes ET',
@@ -89,14 +119,15 @@ describe('validateTrainingModule', () => {
         active: true,
         module_type: 'pflicht_halbjahr',
         schiesst: true,
+        applies_to: 'polizei',
         period_year: 2026,
         period_half: 2,
       },
     })
-    const zusatz = validateTrainingModule({
-      name: 'Combat', kind: 'extern', active: false, moduleType: 'zusatz', schiesst: false, periodYear: 2026, periodHalf: 1,
+    const extern = validateTrainingModule({
+      name: 'Combat', etClass: 'extern', appliesTo: 'alle', active: false, schiesst: false, periodYear: 2026, periodHalf: 1,
     })
-    expect(zusatz).toEqual({
+    expect(extern).toEqual({
       ok: true,
       payload: {
         name: 'Combat',
@@ -104,10 +135,20 @@ describe('validateTrainingModule', () => {
         active: false,
         module_type: 'zusatz',
         schiesst: false,
+        applies_to: 'alle',
         period_year: null,
         period_half: null,
       },
     })
+    const zusatz = validateTrainingModule({
+      name: 'Szenarientraining', kind: 'intern', active: true, moduleType: 'zusatz', schiesst: false, periodYear: null, periodHalf: null,
+    })
+    expect(zusatz.ok).toBe(true)
+    if (zusatz.ok) {
+      expect(zusatz.payload.module_type).toBe('zusatz')
+      expect(zusatz.payload.kind).toBe('intern')
+      expect(zusatz.payload.applies_to).toBe('polizei')
+    }
   })
 })
 
@@ -316,9 +357,16 @@ describe('Offene Liste und Selbstanmeldung', () => {
     { id: 'o4', name: 'Inaktiv', organisation: 'Stadtpolizei', active: false },
   ]
 
-  it('nimmt nur aktive Stadtpolizei ohne Abschluss im Halbjahr', () => {
+  it('nimmt nur aktive Mitglieder gemäß Geltung ohne Abschluss', () => {
     expect(isStadtpolizeiMember({ organisation: 'Stadtpolizei' })).toBe(true)
     expect(isStadtpolizeiMember({ organisation: 'Parkaufsicht' })).toBe(false)
+    expect(officerMatchesAppliesTo({ organisation: 'Stadtpolizei' }, 'polizei')).toBe(true)
+    expect(officerMatchesAppliesTo({ organisation: 'Parkaufsicht' }, 'polizei')).toBe(false)
+    expect(officerMatchesAppliesTo({ organisation: 'Parkaufsicht' }, 'parkaufsicht')).toBe(true)
+    expect(officerMatchesAppliesTo({ organisation: 'Stadtpolizei' }, 'alle')).toBe(true)
+    expect(officerMatchesAppliesTo({ organisation: 'Parkaufsicht' }, 'alle')).toBe(true)
+    expect(officerMatchesAppliesTo({ organisation: '' }, 'polizei')).toBe(true)
+    expect(officerMatchesAppliesTo({ organisation: '' }, 'parkaufsicht')).toBe(false)
     expect(currentHalfYear(new Date(2026, 8, 6))).toEqual({ year: 2026, half: 2 })
     expect(periodLabel(2026, 2)).toBe('2. Halbjahr 2026')
     expect(isDateInHalfYear('2026-09-06', 2026, 2)).toBe(true)
@@ -340,6 +388,16 @@ describe('Offene Liste und Selbstanmeldung', () => {
       officers,
       completions: [{ officer_id: 'o2', module_id: 'm-h1', completed_on: '2026-03-01' }],
     }).map(row => row.id)).toEqual(['o1'])
+    expect(officersOpenForModule({
+      module: { ...pflicht, applies_to: 'parkaufsicht' },
+      officers,
+      completions: [],
+    }).map(row => row.id)).toEqual(['o3'])
+    expect(officersOpenForModule({
+      module: { ...pflicht, applies_to: 'alle' },
+      officers,
+      completions: [],
+    }).map(row => row.id)).toEqual(['o1', 'o2', 'o3'])
   })
 
   it('sperrt Selbstanmeldung nach Abschluss, ohne Ausschreibung oder bei voller Kapazität', () => {
@@ -361,6 +419,16 @@ describe('Offene Liste und Selbstanmeldung', () => {
     expect(selfRegisterBlockReason({ ...base, capacity: 1, registrationCount: 1 })).toMatch(/Plätze/)
     expect(selfRegisterBlockReason({ ...base, alreadyRegistered: true })).toMatch(/bereits angemeldet/)
     expect(selfRegisterBlockReason({ ...base, isOwnRegistration: false })).toMatch(/eigene Konto/)
+    expect(selfRegisterBlockReason({
+      ...base,
+      officerOrganisation: 'Parkaufsicht',
+      module: { ...pflicht, applies_to: 'polizei' },
+    })).toMatch(/Organisation/)
+    expect(selfRegisterBlockReason({
+      ...base,
+      officerOrganisation: 'Parkaufsicht',
+      module: { ...pflicht, applies_to: 'alle' },
+    })).toBeNull()
   })
 })
 
