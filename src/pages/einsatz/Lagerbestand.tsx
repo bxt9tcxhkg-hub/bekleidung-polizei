@@ -13,6 +13,8 @@ import {
   personalEmDetailText,
   personalItemsInLager,
 } from '../../lib/personalEinsatzmittel'
+import { generateLagerbestandPdf } from '../../lib/einsatzPdf'
+import PdfExportButton from './PdfExportButton'
 
 export default function LagerbestandPanel() {
   const [poolItems, setPoolItems] = useState<PoolEinsatzmittel[]>([])
@@ -62,13 +64,23 @@ export default function LagerbestandPanel() {
 
   return (
     <div>
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Lagerbestand</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Stückzahlen je Kategorie und Verwahrungsort. Langwaffen zählen als erfasste Waffen,
-          übrige Pool-Kategorien als Summe von Anzahl bzw. Menge. Eingelagerte persönliche
-          Einsatzmittel zählen je Zeile (mehrere Waffennummern derselben Kategorie bleiben getrennt).
-        </p>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Lagerbestand</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Stückzahlen je Kategorie und Verwahrungsort. Langwaffen zählen als erfasste Waffen,
+            übrige Pool-Kategorien als Summe von Anzahl bzw. Menge. Eingelagerte persönliche
+            Einsatzmittel zählen je Zeile (mehrere Waffennummern derselben Kategorie bleiben getrennt).
+          </p>
+        </div>
+        <PdfExportButton
+          disabled={loading}
+          onClick={() => generateLagerbestandPdf({
+            poolRows,
+            personalCounts,
+            personalItems: personalInLager,
+          })}
+        />
       </div>
 
       {error && (
