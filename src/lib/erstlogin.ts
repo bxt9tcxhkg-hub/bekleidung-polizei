@@ -34,3 +34,35 @@ export function mapErstloginAuthError(
   const message = error?.message?.trim()
   return message || 'Konto konnte nicht eingerichtet werden.'
 }
+
+/** Auth-Metadata nach erfolgreichem Erstlogin: beide Flags zurücksetzen. */
+export function buildErstloginAuthMetadata(): Record<string, unknown> {
+  return {
+    force_password_change: false,
+    force_username_set: false,
+  }
+}
+
+export type ErstloginProfilePatch = {
+  force_username_set: false
+  username?: string
+  force_password_change?: false
+}
+
+/**
+ * Profil-Update nach erfolgreichem Auth-Write.
+ * `force_password_change` nur, wenn die Spalte am geladenen Profil existiert.
+ */
+export function buildErstloginProfilePatch(input: {
+  pcUsername?: string
+  profile?: object | null
+}): ErstloginProfilePatch {
+  const patch: ErstloginProfilePatch = {
+    force_username_set: false,
+  }
+  if (input.pcUsername) patch.username = input.pcUsername
+  if (input.profile && 'force_password_change' in input.profile) {
+    patch.force_password_change = false
+  }
+  return patch
+}

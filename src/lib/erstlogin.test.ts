@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   ERSTLOGIN_SESSION_EXPIRED,
+  buildErstloginAuthMetadata,
+  buildErstloginProfilePatch,
   ensureAuthSession,
   isAuthSessionMissingError,
   mapErstloginAuthError,
@@ -86,5 +88,47 @@ describe('Erstlogin Restschritte nach Teilschreiben', () => {
       username: 'msoyucok',
       ...beamter,
     })).toBe(false)
+  })
+
+  it('schließt den Username-Schritt wenn force_username_set false ist, auch ohne gespeicherten PC-Namen', () => {
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: false,
+      username: null,
+      ...beamter,
+    })).toBe(false)
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: false,
+      username: 'dn7',
+      ...beamter,
+    })).toBe(false)
+  })
+})
+
+describe('Erstlogin Persistenz', () => {
+  it('setzt beide Auth-Flags zurück', () => {
+    expect(buildErstloginAuthMetadata()).toEqual({
+      force_password_change: false,
+      force_username_set: false,
+    })
+  })
+
+  it('schreibt PC-Namen und force_username_set, force_password_change nur wenn die Spalte existiert', () => {
+    expect(buildErstloginProfilePatch({ pcUsername: 'hschwendinger' })).toEqual({
+      force_username_set: false,
+      username: 'hschwendinger',
+    })
+    expect(buildErstloginProfilePatch({
+      pcUsername: 'hschwendinger',
+      profile: { force_username_set: true },
+    })).toEqual({
+      force_username_set: false,
+      username: 'hschwendinger',
+    })
+    expect(buildErstloginProfilePatch({
+      profile: { force_username_set: true, force_password_change: true },
+    })).toEqual({
+      force_username_set: false,
+      force_password_change: false,
+    })
   })
 })

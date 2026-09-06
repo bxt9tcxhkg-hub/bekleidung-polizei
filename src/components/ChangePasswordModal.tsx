@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import {
   ERSTLOGIN_SESSION_EXPIRED,
+  buildErstloginAuthMetadata,
+  buildErstloginProfilePatch,
   ensureAuthSession,
   mapErstloginAuthError,
 } from '../lib/erstlogin'
@@ -11,6 +13,7 @@ import { USERNAME_RE, isDnPlaceholderUsername, isValidPersonalPassword, sanitize
 
 // Erstlogin: nicht schließbar. Passwort und/oder PC-Benutzername je nach Flag.
 // Auth-User zuerst (braucht Session), danach Profil-Username — weniger Hänger bei Session-Verlust.
+// Kein refreshSession beim Mount: TOKEN_REFRESHED darf die App nicht neu mounten.
 export default function ChangePasswordModal() {
   const { user, profile, mustChangePassword, mustSetUsername, refreshProfile } = useAuth()
   const [password, setPassword] = useState('')
@@ -20,10 +23,6 @@ export default function ChangePasswordModal() {
   )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    void supabase.auth.refreshSession()
-  }, [])
 
   const title = mustChangePassword && mustSetUsername
     ? 'Erstes Anmelden'
@@ -66,10 +65,7 @@ export default function ChangePasswordModal() {
       return
     }
     const payload: { password?: string; data: Record<string, unknown> } = {
-      data: {
-        force_password_change: false,
-        force_username_set: false,
-      },
+      data: buildErstloginAuthMetadata(),
     }
     if (mustChangePassword) payload.password = password
     if (mustSetUsername) payload.data.username = pcName
@@ -79,20 +75,21 @@ export default function ChangePasswordModal() {
       setSaving(false)
       return
     }
-    if (mustSetUsername) {
-      const { error: profileErr } = await supabase.from('profiles').update({
-        username: pcName,
-        force_username_set: false,
-      }).eq('id', user.id)
-      if (profileErr) {
-        const unique = /unique|duplicate|already/i.test(profileErr.message)
-        setError(unique
-          ? 'Dieser PC-Benutzername ist bereits vergeben.'
-          : 'PC-Benutzername konnte nicht gespeichert werden. Bitte Verwaltung informieren.')
-        await refreshProfile()
-        setSaving(false)
-        return
-      }
+    const profilePatch = buildErstloginProfilePatch({
+      pcUsername: mustSetUsername ? pcName : undefined,
+      profile,
+    })
+    const { error: profileErr } = await supabase.from('profiles').update(profilePatch).eq('id', user.id)
+    if (profileErr) {
+      const unique = /unique|duplicate|already/i.test(profileErr.message)
+      setError(unique
+        ? 'Dieser PC-Benutzername ist bereits vergeben.'
+        : mustSetUsername
+          ? 'PC-Benutzername konnte nicht gespeichert werden. Bitte Verwaltung informieren.'
+          : 'Profil konnte nicht aktualisiert werden. Bitte Verwaltung informieren.')
+      await refreshProfile()
+      setSaving(false)
+      return
     }
     await refreshProfile()
     setSaving(false)

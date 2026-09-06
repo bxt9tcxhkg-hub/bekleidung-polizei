@@ -63,6 +63,9 @@ export function shouldForceUsernameSet(input: {
   email?: string | null
 }): boolean {
   if (isBoundAdminIdentity(input)) return false
+  // Explizit false: protect_profile erlaubt keinen Selbst-Write mehr —
+  // Modal nicht offen halten, wenn Username leer/dn{N} geblieben ist.
+  if (input.forceUsernameSet === false) return false
   const username = (input.username ?? '').trim()
   if (!username || isDnPlaceholderUsername(username)) return true
   return input.forceUsernameSet === true

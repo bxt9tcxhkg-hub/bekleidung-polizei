@@ -50,6 +50,8 @@ export interface Profile {
   size_preferences: Record<string, string> | null
   /** Erstlogin: PC-Anmeldename muss gesetzt/bestätigt werden. */
   force_username_set?: boolean
+  /** Optional: nur schreiben, wenn die Spalte in `profiles` existiert. */
+  force_password_change?: boolean
 }
 
 export interface Product {

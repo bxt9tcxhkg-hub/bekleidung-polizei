@@ -1,10 +1,11 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 import { availableRolesFromFlags, flagsFromRoles, type AppRole } from '../lib/authRoles'
 import type { PortalArea } from '../lib/portalEntitlements'
 import { hasAreaEntitlement } from '../lib/portalEntitlements'
+import { planAuthStateChange } from '../lib/authStateChange'
 import { shouldForcePasswordChange, shouldForceUsernameSet } from '../lib/workflow'
 
 export type { AppRole }
@@ -54,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [areaRoles, setAreaRoles] = useState<AreaRoleSnapshot[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState('')
+  const profileRequestIdRef = useRef(0)
 
   async function loadAreaRoles(userId: string): Promise<AreaRoleSnapshot[] | null> {
     const { data, error } = await supabase
@@ -68,11 +70,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function applyProfile(userId: string): Promise<boolean> {
+    const requestId = ++profileRequestIdRef.current
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single()
+    if (requestId !== profileRequestIdRef.current) return false
     if (error || !data) {
       console.error('Profil konnte nicht geladen werden:', error?.message)
       setAuthError('Kein Profil gefunden. Bitte wende dich an die Verwaltung.')
@@ -91,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return false
     }
     const areas = await loadAreaRoles(userId)
+    if (requestId !== profileRequestIdRef.current) return false
     setAuthError('')
     setProfile(data)
     setAreaRoles(areas)
@@ -104,27 +109,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let loadedForUserId: string | null = null
+    let profileRequestId = 0
+
+    async function loadProfile(userId: string, showLoading: boolean) {
+      const requestId = ++profileRequestId
+      if (showLoading) setLoading(true)
+      try {
+        await applyProfile(userId)
+      } finally {
+        if (requestId === profileRequestId && showLoading) setLoading(false)
+      }
+    }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) {
         loadedForUserId = session.user.id
-        applyProfile(session.user.id).finally(() => setLoading(false))
+        void loadProfile(session.user.id, true)
       } else setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) {
-        const isInitialEvent = event === 'INITIAL_SESSION' || event === 'SIGNED_IN'
-        if (isInitialEvent && loadedForUserId === session.user.id) return
-        loadedForUserId = session.user.id
-        setLoading(true)
-        applyProfile(session.user.id).finally(() => setLoading(false))
-      } else {
+      const action = planAuthStateChange({
+        event,
+        hasUser: Boolean(session?.user),
+        userId: session?.user?.id ?? null,
+        loadedForUserId,
+      })
+      if (action === 'clear') {
         loadedForUserId = null
         setProfile(null)
         setAreaRoles(null)
+        return
+      }
+      if (!session?.user) return
+      if (action === 'full-reload') {
+        loadedForUserId = session.user.id
+        void loadProfile(session.user.id, true)
+        return
+      }
+      if (action === 'soft-reload') {
+        void loadProfile(session.user.id, false)
       }
     })
 
@@ -138,10 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     email: user?.email,
     username: profile?.username,
   })
-  // Nur Profilstand: gültiger PC-Name + force_username_set false bleibt Username-fertig,
+  // Nur Profilstand: force_username_set === false bleibt Username-fertig (auch ohne PC-Namen),
   // auch wenn Auth-Metadata nach einem fehlgeschlagenen updateUser noch das Flag trägt.
   const mustSetUsername = Boolean(user && profile && shouldForceUsernameSet({
-    forceUsernameSet: profile.force_username_set === true,
+    forceUsernameSet: profile.force_username_set,
     username: profile.username,
     email: user.email,
   }))
