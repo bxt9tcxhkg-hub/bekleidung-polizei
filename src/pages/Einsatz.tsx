@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import PortalChrome from '../components/PortalChrome'
+import PersonalEinsatzmittelPanel from './einsatz/PersonalEinsatzmittel'
 
 type EinsatzTab = 'einsatzmittel' | 'einsatztraining'
 
@@ -16,10 +17,8 @@ export default function Einsatz() {
 
   if (!hasAreaAccess('einsatz_mt')) return <Navigate to="/" replace />
 
-  const active = TABS.find(t => t.id === tab) ?? TABS[0]
-
   return (
-    <PortalChrome>
+    <PortalChrome wide>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Einsatzmittel & Training</h1>
         <p className="text-gray-500 text-sm mt-1">Unterbereiche</p>
@@ -40,10 +39,14 @@ export default function Einsatz() {
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">{active.label}</h2>
-        <p className="text-sm text-gray-500">folgt</p>
-      </div>
+      {tab === 'einsatzmittel' ? (
+        <PersonalEinsatzmittelPanel />
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Einsatztraining</h2>
+          <p className="text-sm text-gray-500">folgt</p>
+        </div>
+      )}
     </PortalChrome>
   )
 }

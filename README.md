@@ -33,7 +33,9 @@ Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:
 | `einsatz_mt` | Benutzer, Sachbearbeiter, Admin (Benutzer = Leserecht; kein Genehmiger) |
 
 `profiles.roles` bleibt Quelle für bestehende Bekleidungs-RLS/`has_role`. Die Portal-Kachel
-«Einsatzmittel & Training» führt auf die Shell `/einsatz` (zwei Unterbereiche, Inhalt folgt).
+«Einsatzmittel & Training» führt auf `/einsatz`. Unterbereich Einsatzmittel: persönliche
+Zuweisungen (Lesen für `user`, Verwalten für Sachbearbeiter/Admin). Pool, Lager und
+Einsatztraining folgen später.
 
 ## Bestell-Workflow
 
@@ -135,6 +137,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260901_user_admin_rights.sql` | Genehmiger darf Profile aktualisieren; Status nur Genehmiger/Admin |
 | `20260903_support_tickets.sql` | Interner Support (Tickets in Supabase, kein Drittanbieter) |
 | `20260906_portal_area_roles.sql` | Portal-Bereichsrechte (`portal_area_roles`), Backfill, Sync-Trigger |
+| `20260907_personal_einsatzmittel.sql` | Persönliche Einsatzmittel (eine Tabelle + category), RLS über `einsatz_mt` |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
@@ -162,7 +165,7 @@ neu erzeugt).
 Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
-1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`) auf das Supabase-Projekt.
+1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`, `20260907`) auf das Supabase-Projekt.
 2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig auch wegen CORS (kein `*`).
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
    funktionieren Upload/Dateizugriff nicht mehr (kein JWT mehr im Repo).
