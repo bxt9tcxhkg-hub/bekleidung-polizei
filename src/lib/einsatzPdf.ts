@@ -8,11 +8,15 @@ import { activeEinsatzmittel } from './einsatzmittelAusbuchung'
 import {
   ATTENDANCE_STATUS_LABELS,
   TRAINING_KIND_LABELS,
+  TRAINING_MODULE_TYPE_LABELS,
   formatCompletedOn,
   formatMunitionVerbrauch,
   isAttendanceStatus,
   isTrainingKind,
+  isTrainingModuleType,
+  moduleTypeLabel,
   type TrainingKind,
+  type TrainingModuleType,
 } from './einsatztraining'
 import { escHtml, openPrintHtml } from './printDocs'
 import {
@@ -115,6 +119,7 @@ export type TrainingSessionPdfRecord = {
   kind: string
   session_date: string
   note?: string | null
+  moduleName?: string | null
   munition_anzahl?: number | null
   munition_marke?: string | null
   munition_kaliber?: string | null
@@ -124,6 +129,9 @@ export type TrainingSessionPdfRecord = {
 export type TrainingModulePdfRow = {
   name: string
   kind: TrainingKind
+  moduleType?: TrainingModuleType | string | null
+  schiesst?: boolean
+  periodLabel?: string
   active: boolean
   completionCount: number
 }
@@ -132,7 +140,23 @@ export type TrainingCompletionPdfRow = {
   officerName: string
   moduleName: string
   kind: TrainingKind
+  moduleType?: TrainingModuleType | string | null
   completedOn: string
+}
+
+export type OffenAnmeldungenPdfInput = {
+  moduleName: string
+  moduleType?: string | null
+  periodLabel?: string | null
+  openOfficers: readonly { officerName: string; dienstnummer?: string | null }[]
+  completedOfficers?: readonly { officerName: string; completedOn: string }[]
+  offerings?: readonly {
+    date: string
+    note?: string | null
+    capacity?: number | null
+    registrations: readonly { officerName: string }[]
+  }[]
+  now?: Date
 }
 
 export function filterPersonalEmForPdf<T extends PersonalEmPdfRecord>(
@@ -465,10 +489,12 @@ export function buildTrainingProtocolPdfHtml(input: {
   const dateLabel = formatCompletedOn(input.session.session_date) || input.session.session_date
   const munition = formatMunitionVerbrauch(input.session) || 'Kein Verbrauch erfasst.'
   const note = input.session.note?.trim() || '–'
+  const moduleName = input.session.moduleName?.trim() || '–'
 
   const meta = `<table class="meta-table">
     <tr><td>Datum</td><td>${escHtml(dateLabel)}</td></tr>
-    <tr><td>Art</td><td>${escHtml(kindLabel)}</td></tr>
+    <tr><td>Modul</td><td>${escHtml(moduleName)}</td></tr>
+    <tr><td>Herkunft</td><td>${escHtml(kindLabel)}</td></tr>
     <tr><td>Hinweis</td><td>${escHtml(note)}</td></tr>
     <tr><td>Munition</td><td>${escHtml(munition)}</td></tr>
   </table>`
@@ -514,8 +540,8 @@ export function buildTrainingProtocolPdfHtml(input: {
 
   const entryCount = attendance.length > 0 ? attendance.length : participations.length
   return reportChrome({
-    title: `Trainingstag-Protokoll · ${kindLabel}`,
-    subtitle: `Einsatztraining ${kindLabel.toLowerCase()} am ${dateLabel}`,
+    title: `Trainingstag-Protokoll · ${moduleName === '–' ? kindLabel : moduleName}`,
+    subtitle: `Einsatztraining am ${dateLabel}`,
     body: meta + tables,
     entryCount,
     now,
@@ -532,8 +558,9 @@ export function buildTrainingModulesPdfHtml(input: {
     .sort((a, b) => compareDe(a.name, b.name) || compareDe(a.kind, b.kind))
     .map(row => `<tr>
       <td>${escHtml(row.name)}</td>
-      <td>${escHtml(TRAINING_KIND_LABELS[row.kind])}</td>
+      <td>${escHtml(row.moduleType && isTrainingModuleType(row.moduleType) ? TRAINING_MODULE_TYPE_LABELS[row.moduleType] : TRAINING_KIND_LABELS[row.kind])}</td>
       <td>${row.active ? 'Aktiv' : 'Inaktiv'}</td>
+      <td>${row.schiesst ? 'Ja' : 'Nein'}</td>
       <td class="num">${row.completionCount}</td>
     </tr>`)
     .join('\n')
@@ -544,13 +571,13 @@ export function buildTrainingModulesPdfHtml(input: {
     : `<div class="section">
       <h2>Abschlüsse</h2>
       <table class="report">
-        <thead><tr><th>Polizist</th><th>Modul</th><th>Art</th><th>Abgeschlossen</th></tr></thead>
+        <thead><tr><th>Polizist</th><th>Modul</th><th>Typ</th><th>Abgeschlossen</th></tr></thead>
         <tbody>${[...completions]
           .sort((a, b) => compareDe(a.officerName, b.officerName) || compareDe(a.moduleName, b.moduleName))
           .map(row => `<tr>
             <td>${escHtml(row.officerName)}</td>
             <td>${escHtml(row.moduleName)}</td>
-            <td>${escHtml(TRAINING_KIND_LABELS[row.kind])}</td>
+            <td>${escHtml(row.moduleType && isTrainingModuleType(row.moduleType) ? TRAINING_MODULE_TYPE_LABELS[row.moduleType] : TRAINING_KIND_LABELS[row.kind])}</td>
             <td>${escHtml(formatCompletedOn(row.completedOn) || row.completedOn)}</td>
           </tr>`)
           .join('\n')}</tbody>
@@ -560,8 +587,8 @@ export function buildTrainingModulesPdfHtml(input: {
   const body = `<div class="section">
     <h2>Module</h2>
     <table class="report">
-      <thead><tr><th>Modul</th><th>Art</th><th>Status</th><th class="num">Abschlüsse</th></tr></thead>
-      <tbody>${moduleRows || emptyRow(4, 'Keine Module erfasst.')}</tbody>
+      <thead><tr><th>Modul</th><th>Typ</th><th>Status</th><th>Schießt</th><th class="num">Abschlüsse</th></tr></thead>
+      <tbody>${moduleRows || emptyRow(5, 'Keine Module erfasst.')}</tbody>
     </table>
   </div>${completionSection}`
 
@@ -612,4 +639,84 @@ export function generateTrainingModulesPdf(input: {
   now?: Date
 }): void {
   openPrintHtml(buildTrainingModulesPdfHtml(input))
+}
+
+export function buildOffenAnmeldungenPdfHtml(input: OffenAnmeldungenPdfInput): string {
+  const now = input.now ?? new Date()
+  const typeLabel = moduleTypeLabel(input.moduleType)
+  const period = input.periodLabel?.trim()
+  const subtitle = [
+    typeLabel,
+    period,
+    'Offene Stadtpolizei-Mitglieder und Anmeldungen für den Kommandanten / Dienstplan',
+  ].filter(Boolean).join(' · ')
+
+  const openRows = input.openOfficers.length === 0
+    ? emptyRow(2, 'Niemand offen.')
+    : [...input.openOfficers]
+      .sort((a, b) => compareDe(a.officerName, b.officerName))
+      .map(row => `<tr>
+        <td>${escHtml(row.officerName)}</td>
+        <td>${escHtml(row.dienstnummer?.trim() || '–')}</td>
+      </tr>`)
+      .join('\n')
+
+  const completed = input.completedOfficers ?? []
+  const completedSection = completed.length === 0
+    ? ''
+    : `<div class="section">
+      <h2>Abgeschlossen</h2>
+      <table class="report">
+        <thead><tr><th>Polizist</th><th>Datum</th></tr></thead>
+        <tbody>${[...completed]
+          .sort((a, b) => compareDe(a.officerName, b.officerName))
+          .map(row => `<tr>
+            <td>${escHtml(row.officerName)}</td>
+            <td>${escHtml(formatCompletedOn(row.completedOn) || row.completedOn)}</td>
+          </tr>`)
+          .join('\n')}</tbody>
+      </table>
+    </div>`
+
+  const offerings = input.offerings ?? []
+  const offeringSection = offerings.length === 0
+    ? ''
+    : offerings.map(offering => {
+      const dateLabel = formatCompletedOn(offering.date) || offering.date
+      const cap = offering.capacity == null ? '' : ` · Kapazität ${offering.capacity}`
+      const rows = offering.registrations.length === 0
+        ? emptyRow(1, 'Keine Anmeldungen.')
+        : [...offering.registrations]
+          .sort((a, b) => compareDe(a.officerName, b.officerName))
+          .map(row => `<tr><td>${escHtml(row.officerName)}</td></tr>`)
+          .join('\n')
+      return `<div class="section">
+        <h2>Anmeldungen ${escHtml(dateLabel)}${escHtml(cap)}</h2>
+        ${offering.note ? `<p class="subtitle">${escHtml(offering.note)}</p>` : ''}
+        <table class="report">
+          <thead><tr><th>Polizist</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`
+    }).join('\n')
+
+  const body = `<div class="section">
+    <h2>Offen</h2>
+    <table class="report">
+      <thead><tr><th>Polizist</th><th>Dienstnummer</th></tr></thead>
+      <tbody>${openRows}</tbody>
+    </table>
+  </div>${completedSection}${offeringSection}`
+
+  return reportChrome({
+    title: `Offen / Anmeldungen · ${input.moduleName}`,
+    subtitle,
+    body,
+    entryCount: input.openOfficers.length,
+    now,
+  })
+}
+
+export function generateOffenAnmeldungenPdf(input: OffenAnmeldungenPdfInput): void {
+  openPrintHtml(buildOffenAnmeldungenPdfHtml(input))
 }
