@@ -205,6 +205,38 @@ export interface PortalAreaRole {
   updated_at: string | null
 }
 
+export type PersonalEmCategory =
+  | 'schutzweste'
+  | 'glock_17'
+  | 'munition'
+  | 'pfefferspray'
+  | 'schlagstock'
+  | 'handfesseln'
+  | 'taschenlampe_kelle'
+  | 'leatherman'
+  | 'warnweste'
+
+export interface PersonalEinsatzmittel {
+  id: string
+  category: PersonalEmCategory
+  officer_id: string
+  groesse: string | null
+  ablaufdatum: string | null
+  schutzfristen: string | null
+  waffennummer: string | null
+  service: string | null
+  magazinanzahl: number | null
+  marke: string | null
+  kaliber: string | null
+  art: string | null
+  patronen: number | null
+  ablauf_mm_yyyy: string | null
+  created_at: string | null
+  updated_at: string | null
+  created_by: string | null
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active'>
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 
 export interface SupportTicket {
@@ -244,6 +276,7 @@ type GrundausstattungRow = Omit<Grundausstattung, 'products'>
 type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
+type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -319,6 +352,10 @@ export type Database = {
       portal_area_roles: { Row: PortalAreaRoleRow; Insert: Pick<PortalAreaRoleRow, 'user_id' | 'area' | 'roles'> & Partial<Omit<PortalAreaRoleRow, 'user_id' | 'area' | 'roles'>>; Update: Partial<Pick<PortalAreaRoleRow, 'roles' | 'updated_at'>>; Relationships: [
         { foreignKeyName: 'portal_area_roles_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      personal_einsatzmittel: { Row: PersonalEinsatzmittelRow; Insert: Pick<PersonalEinsatzmittelRow, 'category' | 'officer_id'> & Partial<Omit<PersonalEinsatzmittelRow, 'category' | 'officer_id'>>; Update: Partial<Omit<PersonalEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'personal_einsatzmittel_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'personal_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -327,6 +364,9 @@ export type Database = {
     Functions: {
       submit_cart: { Args: Record<string, never>; Returns: string | null }
       adjust_inventory: { Args: { p_product: string; p_size: string; p_delta: number }; Returns: number }
+      has_portal_area_role: { Args: { p_area: string; p_role: string }; Returns: boolean }
+      has_portal_area_access: { Args: { p_area: string }; Returns: boolean }
+      can_manage_einsatzmittel: { Args: Record<string, never>; Returns: boolean }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
