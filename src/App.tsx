@@ -88,6 +88,16 @@ export default function App() {
             }
           />
           <Route
+            path="/auditlog"
+            element={
+              <ProtectedRoute adminOnly>
+                <PortalChrome wide>
+                  <AuditLog />
+                </PortalChrome>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             element={
               <ProtectedRoute>
                 <Layout />
@@ -110,7 +120,6 @@ export default function App() {
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
             <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
             <Route path="quartale" element={<ProtectedRoute sachbearbeiterOnly><Quarters /></ProtectedRoute>} />
-            <Route path="auditlog" element={<ProtectedRoute sachbearbeiterOnly><AuditLog /></ProtectedRoute>} />
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />
             <Route path="grundausstattung" element={<ProtectedRoute sachbearbeiterOnly><Grundausstattung /></ProtectedRoute>} />

@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, LayoutGrid, ShoppingCart, ShoppingBag, Package,
-  CalendarRange, Footprints, ClipboardList,
+  CalendarRange, Footprints,
   LogOut, Menu, X, CheckSquare, Wallet, Warehouse, BarChart3, BookOpen,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -133,7 +133,6 @@ export default function Layout() {
         { to: '/grundausstattung', label: 'Grundausstattung', icon: BookOpen },
         { to: '/produkte', label: 'Produkte', icon: Package },
         { to: '/quartale', label: 'Quartale', icon: CalendarRange },
-        { to: '/auditlog', label: 'Audit-Log', icon: ClipboardList },
       ],
     }] : []),
     ...(isGenehmiger ? [{

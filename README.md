@@ -28,7 +28,9 @@ Benutzerverwaltung liegt ausschließlich im **Portal** (`/portal/benutzer`) und 
 **Admin oder Genehmiger** (Bekleidung) bedienbar. In der Bekleidungs-App gibt es keine
 Benutzerseite und keinen Querverweis. «Mein Profil» (`/profil`) und «Hilfe» (`/hilfe`)
 liegen auf der Portal-Startseite und in der Portal-Kopfzeile, nicht in der
-Bekleidungs-Navigation. Dual-Write `profiles.roles` ↔ `portal_area_roles`
+Bekleidungs-Navigation. Das Audit-Log (`/auditlog`) liegt ebenfalls im Portal
+und ist nur für Admin sichtbar, nicht für Sachbearbeiter oder Genehmiger.
+Dual-Write `profiles.roles` ↔ `portal_area_roles`
 (area=`bekleidung`) bleibt; `einsatz_mt`-Rechte bleiben Admin-only.
 Deaktivieren bleibt Genehmiger/Admin (bestehende Shop-Regel).
 Pro Benutzer sind Bereichsrechte in `portal_area_roles` hinterlegt:
