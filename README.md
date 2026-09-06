@@ -173,10 +173,19 @@ Datenfix): vorhandene `profiles.username` / Auth-Metadata die
 `^dn[0-9]+$` entsprechen werden auf NULL gesetzt (idempotent). Live war
 `username` NOT NULL — ohne `DROP NOT NULL` schlägt der Wipe fehl.
 
-Login nur mit voller E-Mail (kein Anhängen von `@dornbirn.at` an Local-Parts).
-PC-Anmeldename und `dn{N}` sind kein Login.
-**Eine Ausnahme:** Benutzername `admin` wird auf die bestehende Auth-Adresse
-`admin@stadtpolizei-dornbirn.local` aufgelöst (Passwort unverändert).
+Login akzeptiert:
+
+1. volle Stadt-E-Mail `vorname.nachname@dornbirn.at` (klein), oder
+2. PC-/Portal-Benutzername (`profiles.username`, sAMAccountName ohne Domäne).
+   Ohne Session ist `profiles` per RLS nicht lesbar. Die App ruft daher die
+   RPC `lookup_login_email` auf (SECURITY DEFINER, Grant an `anon` +
+   `authenticated`): exakter Username → `auth.users.email`. Unbekannter
+   Name: deutsche Fehlermeldung. `dn{N}` gilt nicht als Login.
+3. **Gebundener Admin:** Benutzername `admin` →
+   `admin@stadtpolizei-dornbirn.local` (kein Lookup, Passwort unverändert).
+
+Kein Anhängen von `@dornbirn.at` an Local-Parts — der PC-Name ist nicht
+der E-Mail-Local-Part.
 
 Die Function braucht die Service-Role (von Supabase automatisch als
 `SUPABASE_SERVICE_ROLE_KEY` bereitgestellt). Anlegen: aktive Sachbearbeiter,
@@ -218,6 +227,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260918_budget_used_adjustment.sql` | `user_budgets.used_adjustment`, Verbrauchskorrektur je Kalenderjahr, `submit_cart` berücksichtigt Korrektur |
 | `20260919_einsatztraining_fachlogik.sql` | Pflicht/Zusatz, schiesst, Halbjahr, Ausschreibung/Anmeldung |
 | `20260920_einsatztraining_geltung.sql` | Geltung `applies_to` (Polizei/Parkaufsicht/Alle), Selbstanmeldung prüft Organisation |
+| `20260921_lookup_login_email.sql` | RPC `lookup_login_email`: anon, Username → Auth-E-Mail |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

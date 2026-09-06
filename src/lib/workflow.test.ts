@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import {
   resolveLoginEmail,
+  resolveLoginEmailForAuth,
+  lookupUsernameAuthEmail,
   LOGIN_EMAIL_REQUIRED_ERROR,
+  LOGIN_USERNAME_UNKNOWN_ERROR,
   ADMIN_AUTH_EMAIL,
   ADMIN_LOGIN_USERNAME,
   isBoundAdminIdentity,
   isBoundAdminLoginInput,
+  isUsernameLoginResult,
   shouldForcePasswordChange,
   shouldForceUsernameSet,
   decideSubmitStatus,
@@ -25,13 +29,33 @@ import {
 } from './workflow'
 
 describe('resolveLoginEmail', () => {
-  it('lehnt Local-Parts, PC-Namen und dn-Platzhalter ab', () => {
-    for (const input of ['mmustermann', 'dn7', '  Max.User  ', 'Hans-Peter.Schwendinger', '', 'user@', '@dornbirn.at']) {
+  it('lehnt leere und ungültige Eingaben ab', () => {
+    for (const input of ['', '   ', 'user@', '@dornbirn.at', 'stadt\\', 'Name Mit Leerzeichen']) {
       expect(resolveLoginEmail(input)).toEqual({
         ok: false,
         error: LOGIN_EMAIL_REQUIRED_ERROR,
       })
     }
+  })
+
+  it('erkennt PC-Benutzernamen (sAMAccountName, Domäne abstreifen)', () => {
+    expect(resolveLoginEmail('msoyucok')).toEqual({ ok: true, username: 'msoyucok' })
+    expect(resolveLoginEmail('  MSOYUCOK  ')).toEqual({ ok: true, username: 'msoyucok' })
+    expect(resolveLoginEmail('STADT\\msoyucok')).toEqual({ ok: true, username: 'msoyucok' })
+    expect(resolveLoginEmail('mmustermann')).toEqual({ ok: true, username: 'mmustermann' })
+    expect(resolveLoginEmail('max.user-1')).toEqual({ ok: true, username: 'max.user-1' })
+    expect(isUsernameLoginResult(resolveLoginEmail('msoyucok'))).toBe(true)
+  })
+
+  it('lehnt dn-Platzhalter als Login-Namen ab', () => {
+    expect(resolveLoginEmail('dn7')).toEqual({
+      ok: false,
+      error: LOGIN_USERNAME_UNKNOWN_ERROR,
+    })
+    expect(resolveLoginEmail('DN32')).toEqual({
+      ok: false,
+      error: LOGIN_USERNAME_UNKNOWN_ERROR,
+    })
   })
 
   it('nimmt volle E-Mail-Adressen (trim, klein), auch bestehende Admins', () => {
@@ -75,6 +99,75 @@ describe('resolveLoginEmail', () => {
     expect(resolveLoginEmail('admin')).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
     expect(resolveLoginEmail('  ADMIN  ')).toEqual({ ok: true, email: ADMIN_AUTH_EMAIL })
     expect(ADMIN_LOGIN_USERNAME).toBe('admin')
+    expect(isUsernameLoginResult(resolveLoginEmail('admin'))).toBe(false)
+  })
+})
+
+describe('resolveLoginEmailForAuth / lookupUsernameAuthEmail', () => {
+  it('lässt E-Mail und Admin ohne Lookup durch', async () => {
+    const lookup = async () => {
+      throw new Error('Lookup darf bei E-Mail/Admin nicht laufen')
+    }
+    expect(await resolveLoginEmailForAuth('Muhammet.Soyucok@dornbirn.at', lookup)).toEqual({
+      ok: true,
+      email: 'muhammet.soyucok@dornbirn.at',
+    })
+    expect(await resolveLoginEmailForAuth('admin', lookup)).toEqual({
+      ok: true,
+      email: ADMIN_AUTH_EMAIL,
+    })
+  })
+
+  it('löst PC-Benutzernamen über den Lookup zur Auth-E-Mail auf', async () => {
+    const lookup = async (username: string) => {
+      expect(username).toBe('msoyucok')
+      return 'muhammet.soyucok@dornbirn.at'
+    }
+    expect(await resolveLoginEmailForAuth('MSOYUCOK', lookup)).toEqual({
+      ok: true,
+      email: 'muhammet.soyucok@dornbirn.at',
+    })
+    expect(await resolveLoginEmailForAuth('STADT\\msoyucok', lookup)).toEqual({
+      ok: true,
+      email: 'muhammet.soyucok@dornbirn.at',
+    })
+  })
+
+  it('meldet unbekannten Benutzernamen auf Deutsch', async () => {
+    expect(await resolveLoginEmailForAuth('unbekannt', async () => null)).toEqual({
+      ok: false,
+      error: LOGIN_USERNAME_UNKNOWN_ERROR,
+    })
+    expect(await resolveLoginEmailForAuth('dn7', async () => 'x@dornbirn.at')).toEqual({
+      ok: false,
+      error: LOGIN_USERNAME_UNKNOWN_ERROR,
+    })
+  })
+
+  it('ruft lookup_login_email mit bereinigtem Username auf', async () => {
+    const rpc = async (fn: 'lookup_login_email', args: { p_username: string }) => {
+      expect(fn).toBe('lookup_login_email')
+      expect(args.p_username).toBe('msoyucok')
+      return { data: 'Muhammet.Soyucok@DORNBIRN.AT', error: null }
+    }
+    expect(await lookupUsernameAuthEmail({ rpc }, 'STADT\\MSOYUCOK')).toBe(
+      'muhammet.soyucok@dornbirn.at',
+    )
+  })
+
+  it('liefert null bei RPC-Fehler, leerem oder ungültigem Ergebnis', async () => {
+    expect(await lookupUsernameAuthEmail({
+      rpc: async () => ({ data: null, error: { message: 'boom' } }),
+    }, 'msoyucok')).toBeNull()
+    expect(await lookupUsernameAuthEmail({
+      rpc: async () => ({ data: '', error: null }),
+    }, 'msoyucok')).toBeNull()
+    expect(await lookupUsernameAuthEmail({
+      rpc: async () => ({ data: 'kein-email', error: null }),
+    }, 'msoyucok')).toBeNull()
+    expect(await lookupUsernameAuthEmail({
+      rpc: async () => ({ data: 'x@dornbirn.at', error: null }),
+    }, 'dn7')).toBeNull()
   })
 })
 
