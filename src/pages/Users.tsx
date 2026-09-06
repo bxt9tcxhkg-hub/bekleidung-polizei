@@ -597,7 +597,7 @@ export default function Users() {
                 <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Offiziersliste (Vorname, Nachname, Dienstnummer):</p>
                 <p>vorname;nachname;dienstnummer</p>
                 <p>Stefanie;Albrecht;32</p>
-                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login-E-Mail: Vorname.Nachname@dornbirn.at (Umlaute als ae/oe/ue/ss). Ausnahme: Martin Feurstein / DN 3 → Martin.Feurstein2@dornbirn.at. PC-Benutzername setzt jede Person beim Erstlogin. Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
+                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login-E-Mail: vorname.nachname@dornbirn.at (Umlaute als ae/oe/ue/ss). Ausnahme: Martin Feurstein / DN 3 → martin.feurstein2@dornbirn.at. PC-Benutzername setzt jede Person beim Erstlogin. Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
@@ -840,7 +840,7 @@ export default function Users() {
               )}
               {!editId && (
                 <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">
-                  Login erfolgt mit Vorname.Nachname@dornbirn.at. {START_PASSWORD_HINT} PC-Benutzername (Windows-Anmeldename ohne Domäne) setzt die Person beim Erstlogin.
+                  Login erfolgt mit vorname.nachname@dornbirn.at. {START_PASSWORD_HINT} PC-Benutzername (Windows-Anmeldename ohne Domäne) setzt die Person beim Erstlogin.
                 </p>
               )}
               {error && <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}

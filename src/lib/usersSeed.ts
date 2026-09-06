@@ -1,7 +1,7 @@
 /**
  * Quelle der Offiziersanlage: users-seed.json (Zuteilung/ET + Parkaufsicht-Liste).
- * Rollen stehen an der Zeile. Login-E-Mail: Vorname.Nachname@dornbirn.at
- * (Ausnahme Feurstein Martin / DN 3). Username bleibt leer bis zum Erstlogin.
+ * Rollen stehen an der Zeile. Login-E-Mail: vorname.nachname@dornbirn.at
+ * (klein; Ausnahme Feurstein Martin / DN 3). Username bleibt leer bis zum Erstlogin.
  * Keine erfundenen Namen oder höheren Rollen.
  */
 

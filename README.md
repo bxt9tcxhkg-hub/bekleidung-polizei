@@ -153,11 +153,11 @@ zeigt das neue Passwort einmal zum Kopieren. Das gebundene Admin-Konto
 
 Login-E-Mail (Auth-Identität, nicht `profiles.username`):
 
-`{Vorname}.{Nachname}@dornbirn.at`
+`vorname.nachname@dornbirn.at` (Local-Part und Domain klein)
 
-Umlaute im Local-Part werden ASCII-gefaltet (`Ä→Ae`, `Ö→Oe`, `Ü→Ue`, `ß→ss`).
-Bindestriche bleiben (`Hans-Peter.Schwendinger@dornbirn.at`).
-**Eine Ausnahme:** Feurstein Martin / DN 3 → `Martin.Feurstein2@dornbirn.at`.
+Umlaute im Local-Part werden ASCII-gefaltet (`Ä→Ae`, `Ö→Oe`, `Ü→Ue`, `ß→ss`),
+danach kleingeschrieben. Bindestriche bleiben (`hans-peter.schwendinger@dornbirn.at`).
+**Eine Ausnahme:** Feurstein Martin / DN 3 → `martin.feurstein2@dornbirn.at`.
 
 `profiles.username` ist der **Windows-/PC-Anmeldename** (sAMAccountName, ohne
 Domäne, Kleinbuchstaben, `USERNAME_RE`). Beim Anlegen bleibt er **leer**

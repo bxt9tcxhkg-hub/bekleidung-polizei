@@ -1,7 +1,7 @@
 /**
  * Offiziersliste aus users-seed.json.
- * Auth-Anlage nur über create-user: E-Mail = {Vorname}.{Nachname}@dornbirn.at
- * (ASCII-Fold). Ausnahme: Feurstein Martin / DN 3 → Martin.Feurstein2@dornbirn.at.
+ * Auth-Anlage nur über create-user: E-Mail = vorname.nachname@dornbirn.at
+ * (klein, ASCII-Fold). Ausnahme: Feurstein Martin / DN 3 → martin.feurstein2@dornbirn.at.
  * profiles.username bleibt leer bis zum Erstlogin (PC-Anmeldename).
  * Organisation aus der Seed-Zeile.
  */

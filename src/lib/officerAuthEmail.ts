@@ -1,10 +1,10 @@
 /**
- * Auth-Login-E-Mail für Offiziere: {Vorname}.{Nachname}@dornbirn.at
+ * Auth-Login-E-Mail für Offiziere: vorname.nachname@dornbirn.at (alles klein).
  * ASCII-Fold für den Local-Part (SMTP/Supabase). Eine Ausnahme: Feurstein Martin / DN 3.
  */
 
 export const AUTH_EMAIL_DOMAIN = 'dornbirn.at'
-export const FEURSTEIN_MARTIN_EMAIL = 'Martin.Feurstein2@dornbirn.at'
+export const FEURSTEIN_MARTIN_EMAIL = 'martin.feurstein2@dornbirn.at'
 
 export function foldGermanAscii(input: string): string {
   return input
@@ -61,7 +61,7 @@ export function resolveOfficerNames(input: {
   return { vorname, nachname }
 }
 
-/** Login-E-Mail. Leer wenn Vor- und Nachname fehlen. */
+/** Login-E-Mail (klein). Leer wenn Vor- und Nachname fehlen. */
 export function officerAuthEmail(input: {
   vorname?: string
   nachname?: string
@@ -71,11 +71,11 @@ export function officerAuthEmail(input: {
   const { vorname, nachname } = resolveOfficerNames(input)
   if (!vorname || !nachname) return ''
   if (isFeursteinMartinException({ vorname, nachname, dienstnummer: input.dienstnummer })) {
-    return FEURSTEIN_MARTIN_EMAIL
+    return FEURSTEIN_MARTIN_EMAIL.toLowerCase()
   }
   const localFirst = foldGermanAscii(vorname).replace(/\s+/g, '')
   const localLast = foldGermanAscii(nachname).replace(/\s+/g, '-')
   if (!localFirst || !localLast) return ''
-  return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`
+  return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`.toLowerCase()
 }
 

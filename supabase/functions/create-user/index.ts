@@ -1,7 +1,7 @@
 // Edge Function: legt Auth-User + Profil an oder setzt Startpasswort zurück (Service Role).
 // Wird von src/pages/Users.tsx (Portal-Benutzerseite) aufgerufen.
 // Anlegen: action fehlt / 'create'. Reset: action === 'reset_password' + user_id + initial_password.
-// Auth-E-Mail: {Vorname}.{Nachname}@dornbirn.at (ASCII-Fold; Feurstein2-Ausnahme).
+// Auth-E-Mail: vorname.nachname@dornbirn.at (klein, ASCII-Fold; Feurstein2-Ausnahme).
 // profiles.username bleibt NULL bis zum Erstlogin (PC-Anmeldename, nie dn{N}).
 // force_password_change + force_username_set.
 // Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
@@ -47,7 +47,7 @@ function corsHeaders(req: Request): Record<string, string> {
 const USERNAME_RE = /^[a-z0-9._-]+$/
 const DN_PLACEHOLDER_USERNAME_RE = /^dn[0-9]+$/i
 const AUTH_EMAIL_DOMAIN = 'dornbirn.at'
-const FEURSTEIN_MARTIN_EMAIL = 'Martin.Feurstein2@dornbirn.at'
+const FEURSTEIN_MARTIN_EMAIL = 'martin.feurstein2@dornbirn.at'
 
 /** Keep in sync with src/lib/officerAuthEmail.ts */
 function foldGermanAscii(input: string): string {
@@ -101,12 +101,12 @@ function officerAuthEmail(input: {
   }
   if (!vorname || !nachname) return ''
   if (isFeursteinMartinException(vorname, nachname, input.dienstnummer)) {
-    return FEURSTEIN_MARTIN_EMAIL
+    return FEURSTEIN_MARTIN_EMAIL.toLowerCase()
   }
   const localFirst = foldGermanAscii(vorname).replace(/\s+/g, '')
   const localLast = foldGermanAscii(nachname).replace(/\s+/g, '-')
   if (!localFirst || !localLast) return ''
-  return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`
+  return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`.toLowerCase()
 }
 
 function isDnPlaceholderUsername(value: string): boolean {
@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
   const active = body.active !== false
 
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
+    email: email.toLowerCase(),
     password,
     email_confirm: true,
     user_metadata: {

@@ -21,20 +21,21 @@ describe('foldGermanAscii', () => {
 })
 
 describe('officerAuthEmail', () => {
-  it('baut Vorname.Nachname@dornbirn.at und behält Bindestriche', () => {
+  it('baut vorname.nachname@dornbirn.at klein und behält Bindestriche', () => {
     expect(officerAuthEmail({
       vorname: 'Hans-Peter',
       nachname: 'Schwendinger',
       dienstnummer: '1',
-    })).toBe('Hans-Peter.Schwendinger@dornbirn.at')
+    })).toBe('hans-peter.schwendinger@dornbirn.at')
     expect(officerAuthEmail({
       vorname: 'Julian',
       nachname: 'Müller',
-    })).toBe('Julian.Mueller@dornbirn.at')
+    })).toBe('julian.mueller@dornbirn.at')
     expect(officerAuthEmail({
       vorname: 'Ludwig',
       nachname: 'Alge-Faißt',
-    })).toBe('Ludwig.Alge-Faisst@dornbirn.at')
+    })).toBe('ludwig.alge-faisst@dornbirn.at')
+    expect(FEURSTEIN_MARTIN_EMAIL).toBe('martin.feurstein2@dornbirn.at')
   })
 
   it('nimmt Feurstein Martin / DN 3 als einzige Ausnahme', () => {
@@ -47,6 +48,12 @@ describe('officerAuthEmail', () => {
       vorname: 'Martin',
       nachname: 'Feurstein',
     })).toBe(FEURSTEIN_MARTIN_EMAIL)
+    expect(officerAuthEmail({
+      vorname: 'MARTIN',
+      nachname: 'FEURSTEIN',
+      dienstnummer: '3',
+    })).toBe('martin.feurstein2@dornbirn.at')
+    expect(FEURSTEIN_MARTIN_EMAIL).toBe(FEURSTEIN_MARTIN_EMAIL.toLowerCase())
     expect(isFeursteinMartinException({
       vorname: 'Martin',
       nachname: 'Feurstein',
@@ -56,7 +63,7 @@ describe('officerAuthEmail', () => {
       vorname: 'Andreas',
       nachname: 'Gisinger',
       dienstnummer: '2',
-    })).toBe('Andreas.Gisinger@dornbirn.at')
+    })).toBe('andreas.gisinger@dornbirn.at')
   })
 
   it('zerlegt den Anzeigenamen Vorname Nachname', () => {
@@ -65,7 +72,7 @@ describe('officerAuthEmail', () => {
       nachname: 'Schwendinger',
     })
     expect(officerAuthEmail({ name: 'Irmgard Fässler', dienstnummer: '70' }))
-      .toBe('Irmgard.Faessler@dornbirn.at')
+      .toBe('irmgard.faessler@dornbirn.at')
   })
 
   it('erzeugt für die Seed-Liste eindeutige dornbirn.at-Adressen', () => {
@@ -74,7 +81,7 @@ describe('officerAuthEmail', () => {
     expect(emails.every(email => email.endsWith(`@${AUTH_EMAIL_DOMAIN}`))).toBe(true)
     expect(new Set(emails).size).toBe(emails.length)
     expect(users.find(u => u.dienstnummer === '3')?.email).toBe(FEURSTEIN_MARTIN_EMAIL)
-    expect(users.find(u => u.dienstnummer === '1')?.email).toBe('Hans-Peter.Schwendinger@dornbirn.at')
+    expect(users.find(u => u.dienstnummer === '1')?.email).toBe('hans-peter.schwendinger@dornbirn.at')
     expect(users.every(u => !u.username)).toBe(true)
   })
 })
