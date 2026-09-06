@@ -68,7 +68,7 @@ export default function ShoeRefunds() {
 
   function selectUser(u: Profile) {
     setForm(f => ({ ...f, user_id: u.id }))
-    setUserSearch(u.name || u.username)
+    setUserSearch(u.name || u.username || '')
     setUserDropdown(false)
   }
 

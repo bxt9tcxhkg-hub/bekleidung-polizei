@@ -5,7 +5,6 @@ import {
   foldGermanAscii,
   isFeursteinMartinException,
   officerAuthEmail,
-  provisionalUsernameFromEmail,
   splitOfficerName,
 } from './officerAuthEmail'
 import { knownRosterImportUsers } from './officerRoster'
@@ -76,7 +75,6 @@ describe('officerAuthEmail', () => {
     expect(new Set(emails).size).toBe(emails.length)
     expect(users.find(u => u.dienstnummer === '3')?.email).toBe(FEURSTEIN_MARTIN_EMAIL)
     expect(users.find(u => u.dienstnummer === '1')?.email).toBe('Hans-Peter.Schwendinger@dornbirn.at')
-    expect(provisionalUsernameFromEmail(FEURSTEIN_MARTIN_EMAIL)).toBe('martin.feurstein2')
-    expect(provisionalUsernameFromEmail('Hans-Peter.Schwendinger@dornbirn.at')).toBe('hans-peter.schwendinger')
+    expect(users.every(u => !u.username)).toBe(true)
   })
 })

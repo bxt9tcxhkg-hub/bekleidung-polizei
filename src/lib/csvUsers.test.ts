@@ -40,9 +40,15 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     expect(parseCsvUsers('name;benutzername')).toEqual([])
   })
 
-  it('ignoriert Zeilen ohne Name/Benutzername', () => {
+  it('ignoriert Zeilen ohne Name', () => {
     expect(rowToUser({ name: '', benutzername: 'x' })).toBeNull()
     expect(rowToUser({ name: 'A', username: 'a' })?.username).toBe('a')
+  })
+
+  it('übernimmt keinen DN-Platzhalter als Username', () => {
+    const user = rowToUser({ vorname: 'Stefanie', nachname: 'Albrecht', dienstnummer: '32', benutzername: 'dn32' })
+    expect(user?.email).toBe('Stefanie.Albrecht@dornbirn.at')
+    expect(user?.username).toBeNull()
   })
 
   it('erzeugt aus Vorname/Nachname die Login-E-Mail @dornbirn.at', () => {
@@ -50,7 +56,7 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     expect(user).toMatchObject({
       name: 'Stefanie Albrecht',
       email: 'Stefanie.Albrecht@dornbirn.at',
-      username: 'stefanie.albrecht',
+      username: null,
       dienstnummer: '32',
       organisation: 'Stadtpolizei',
       roles: ['user', 'sachbearbeiter'],
@@ -67,14 +73,14 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     })
     expect(user?.organisation).toBe('Stadtpolizei')
     expect(user?.email).toBe('Hans-Peter.Schwendinger@dornbirn.at')
-    expect(user?.username).toBe('hans-peter.schwendinger')
+    expect(user?.username).toBeNull()
   })
 
   it('setzt Parkaufsicht-Seedzeilen auf Parkaufsicht, auch ohne Org-Spalte', () => {
     const user = rowToUser({ vorname: 'Irmgard', nachname: 'Fässler', dienstnummer: '70' })
     expect(user).toMatchObject({
       email: 'Irmgard.Faessler@dornbirn.at',
-      username: 'irmgard.faessler',
+      username: null,
       organisation: 'Parkaufsicht',
       roles: ['user'],
       gender: 'female',
@@ -84,7 +90,7 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
   it('setzt Feurstein Martin / DN 3 auf Martin.Feurstein2@dornbirn.at', () => {
     const user = rowToUser({ vorname: 'Martin', nachname: 'Feurstein', dienstnummer: '3' })
     expect(user?.email).toBe('Martin.Feurstein2@dornbirn.at')
-    expect(user?.username).toBe('martin.feurstein2')
+    expect(user?.username).toBeNull()
   })
 
   it('leitet Parkaufsicht nicht aus park im Benutzernamen ab', () => {

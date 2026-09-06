@@ -11,6 +11,7 @@ import {
   canCreateUsers,
   canDeactivateUsers,
   USERNAME_RE,
+  isDnPlaceholderUsername,
   sanitizePcUsername,
 } from './workflow'
 
@@ -87,6 +88,11 @@ describe('isValidInitialPassword / USERNAME_RE', () => {
     expect(USERNAME_RE.test('Max')).toBe(false)
     expect(USERNAME_RE.test('user name')).toBe(false)
     expect(USERNAME_RE.test('stadt\\user')).toBe(false)
+    expect(isDnPlaceholderUsername('dn7')).toBe(true)
+    expect(isDnPlaceholderUsername('dn32')).toBe(true)
+    expect(isDnPlaceholderUsername('DN3')).toBe(true)
+    expect(isDnPlaceholderUsername('hans-peter.schwendinger')).toBe(false)
+    expect(isDnPlaceholderUsername(null)).toBe(false)
   })
 
   it('nimmt vom PC-Anmeldenamen nur den sAMAccountName', () => {

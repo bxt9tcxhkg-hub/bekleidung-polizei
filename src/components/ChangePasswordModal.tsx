@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { USERNAME_RE, isValidInitialPassword, sanitizePcUsername } from '../lib/workflow'
+import { USERNAME_RE, isDnPlaceholderUsername, isValidInitialPassword, sanitizePcUsername } from '../lib/workflow'
 
 // Erstlogin: nicht schließbar. Passwort und/oder PC-Benutzername je nach Flag.
 // Nach updateUser (USER_UPDATED) und Profil-Update verschwindet das Modal.
@@ -10,7 +10,9 @@ export default function ChangePasswordModal() {
   const { user, profile, mustChangePassword, mustSetUsername, refreshProfile } = useAuth()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [username, setUsername] = useState(profile?.username ?? '')
+  const [username, setUsername] = useState(
+    profile?.username && !isDnPlaceholderUsername(profile.username) ? profile.username : '',
+  )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -37,6 +39,10 @@ export default function ChangePasswordModal() {
       if (password !== confirm) { setError('Passwörter stimmen nicht überein.'); return }
     }
     if (mustSetUsername) {
+      if (isDnPlaceholderUsername(pcName)) {
+        setError('PC-Benutzername darf nicht die Dienstnummer sein. Bitte den Windows-Anmeldenamen eintragen.')
+        return
+      }
       if (!pcName || !USERNAME_RE.test(pcName)) {
         setError('PC-Benutzername: nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich. Ohne Domäne (nicht STADT\\name).')
         return

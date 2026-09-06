@@ -2,12 +2,11 @@
  * Offiziersliste aus users-seed.json.
  * Auth-Anlage nur über create-user: E-Mail = {Vorname}.{Nachname}@dornbirn.at
  * (ASCII-Fold). Ausnahme: Feurstein Martin / DN 3 → Martin.Feurstein2@dornbirn.at.
- * profiles.username ist der PC-Anmeldename (Erstlogin); hier nur ein Platzhalter
- * aus dem E-Mail-Local-Part. Organisation aus der Seed-Zeile.
+ * profiles.username bleibt leer bis zum Erstlogin (PC-Anmeldename).
+ * Organisation aus der Seed-Zeile.
  */
 
-import { USERNAME_RE } from './workflow'
-import { officerAuthEmail, provisionalUsernameFromEmail } from './officerAuthEmail'
+import { officerAuthEmail } from './officerAuthEmail'
 import { normalizeDienstnummer } from './roleMatrix'
 import {
   ET_ROSTER_ORGANISATION,
@@ -46,11 +45,6 @@ export const OFFICER_ROSTER_CSV_TEMPLATE = [
 
 const JUNK_NAME = /^(name|vorname|nachname|summe|gesamt|lagerstand|dienstnummer|dn|dg)$/i
 
-export function usernameFromDienstnummer(raw: string | null | undefined): string {
-  const dn = normalizeDienstnummer(raw)
-  return dn ? `dn${dn}` : ''
-}
-
 export function officerDisplayName(vorname: string, nachname: string): string {
   return [vorname.trim(), nachname.trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ')
 }
@@ -75,7 +69,7 @@ export type RosterImportUser = {
   vorname: string
   nachname: string
   email: string
-  username: string
+  username: string | null
   dienstnummer: string
   organisation: SeedOrganisation
   roles: string[]
@@ -108,15 +102,14 @@ export function rosterRowToImportUser(row: OfficerRosterRow): RosterImportUser |
     name,
     dienstnummer: row.dienstnummer,
   })
-  const username = provisionalUsernameFromEmail(email)
-  if (!name || !email || !USERNAME_RE.test(username)) return null
+  if (!name || !email) return null
   const planned = rolesForRow(row)
   return {
     name,
     vorname: row.vorname.trim(),
     nachname: row.nachname.trim(),
     email,
-    username,
+    username: null,
     dienstnummer: normalizeDienstnummer(row.dienstnummer),
     organisation: planned.organisation,
     roles: planned.roles,
@@ -177,12 +170,13 @@ export function planRosterEnsure(
       skipped.push({ name: row.name, reason: `Login-E-Mail ${row.email} ist doppelt.` })
       continue
     }
-    if (takenUsernames.has(row.username)) {
+    const username = (row.username ?? '').trim().toLowerCase()
+    if (username && takenUsernames.has(username)) {
       skipped.push({ name: row.name, reason: `Benutzername ${row.username} ist vergeben.` })
       continue
     }
     create.push(row)
-    takenUsernames.add(row.username)
+    if (username) takenUsernames.add(username)
     takenEmails.add(emailKey)
   }
   return { create, already, skipped }

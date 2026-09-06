@@ -130,10 +130,13 @@ Bindestriche bleiben (`Hans-Peter.Schwendinger@dornbirn.at`).
 **Eine Ausnahme:** Feurstein Martin / DN 3 → `Martin.Feurstein2@dornbirn.at`.
 
 `profiles.username` ist der **Windows-/PC-Anmeldename** (sAMAccountName, ohne
-Domäne, Kleinbuchstaben, `USERNAME_RE`). Beim Anlegen setzt `create-user`
-`force_password_change` und `force_username_set` (Auth-`user_metadata` plus
-`profiles.force_username_set`). Der Erstlogin fordert neues Passwort und
-PC-Benutzername. Platzhalter-Username ist der kleingeschriebene E-Mail-Local-Part.
+Domäne, Kleinbuchstaben, `USERNAME_RE`). Beim Anlegen bleibt er **leer**
+(`NULL`) — nicht die Dienstnummer, nicht `dn{N}`, nicht der E-Mail-Local-Part.
+`create-user` setzt `force_password_change` und `force_username_set`. Der
+Erstlogin fordert neues Passwort und PC-Benutzername.
+
+Migration `20260917` leert vorhandene `profiles.username` / Auth-Metadata
+die dem Muster `^dn[0-9]+$` entsprechen (idempotent).
 
 Bestehende Admins können weiterhin ihre volle E-Mail eingeben (auch andere Domain).
 Ohne `@` hängt die Login-Seite `@dornbirn.at` an.

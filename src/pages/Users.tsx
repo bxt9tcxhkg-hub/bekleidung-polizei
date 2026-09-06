@@ -7,7 +7,7 @@ import { logAudit } from '../lib/audit'
 import type { Profile } from '../lib/types'
 import { parseCsvUsers, rowToUser, type ImportUser } from '../lib/csvUsers'
 import { OFFICER_ROSTER_CSV_TEMPLATE, importUsersFromSeedJson, knownRosterImportUsers, planRosterEnsure } from '../lib/officerRoster'
-import { USERNAME_RE, canCreateUsers, canDeactivateUsers } from '../lib/workflow'
+import { USERNAME_RE, canCreateUsers, canDeactivateUsers, isDnPlaceholderUsername } from '../lib/workflow'
 import {
   AREA_ROLE_LABELS,
   defaultEinsatzMtRoleForNewUser,
@@ -110,7 +110,7 @@ export default function Users() {
   const [importError, setImportError] = useState('')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; err: number } | null>(null)
-  const [importCreds, setImportCreds] = useState<{ email: string; username: string; password: string }[]>([])
+  const [importCreds, setImportCreds] = useState<{ email: string; username: string | null; password: string }[]>([])
   const [credsCopied, setCredsCopied] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const callerRoles = authProfile?.roles ?? []
@@ -154,7 +154,7 @@ export default function Users() {
   function openEdit(u: Profile) {
     setForm({
       name: u.name,
-      username: u.username,
+      username: u.username ?? '',
       initialPassword: '',
       dienstnummer: u.dienstnummer ?? '',
       roles: u.roles,
@@ -172,6 +172,7 @@ export default function Users() {
     setError('')
     if (!form.name) { setError('Name ist Pflicht.'); return }
     const username = form.username.trim().toLowerCase()
+    if (username && isDnPlaceholderUsername(username)) { setError('PC-Benutzername darf nicht die Dienstnummer (dn…) sein.'); return }
     if (username && !USERNAME_RE.test(username)) { setError('PC-Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.'); return }
     if (editId && !username) { setError('PC-Benutzername ist Pflicht.'); return }
     if (!editId && !form.initialPassword) { setError('Initiales Passwort ist Pflicht.'); return }
@@ -185,7 +186,7 @@ export default function Users() {
     if (safeRoles.length === 0) safeRoles = ['user']
     const existingActive = editId ? (users.find(u => u.id === editId)?.active ?? true) : form.active
     const active = editId && !canDeactivate ? existingActive : form.active
-    const dbPayload = { name: form.name, username, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active }
+    const dbPayload = { name: form.name, username: username || null, dienstnummer: form.dienstnummer || null, roles: safeRoles, gender: form.gender, organisation: form.organisation, active }
 
     if (editId) {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
@@ -210,7 +211,7 @@ export default function Users() {
           const areaErr = await persistAreaRoles(json.id, safeRoles, form.einsatzMtRole)
           if (areaErr) { setError(areaErr); setSaving(false); return }
         }
-        logAudit('Benutzer angelegt', username)
+        logAudit('Benutzer angelegt', username || form.name)
       } catch {
         setError('Netzwerkfehler – bitte nochmals versuchen.'); setSaving(false); return
       }
@@ -225,7 +226,7 @@ export default function Users() {
     if (!canDeactivate) return
     const { error } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
     if (error) { setError(`Status konnte nicht geändert werden: ${error.message}`); return }
-    logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username)
+    logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username ?? u.name)
     load()
   }
 
@@ -236,7 +237,7 @@ export default function Users() {
     if (!confirm(`Benutzer "${u.name}" deaktivieren?\n\nDas Konto wird nicht gelöscht, sondern nur deaktiviert. Es kann jederzeit wieder aktiviert werden.`)) return
     const { error } = await supabase.from('profiles').update({ active: false }).eq('id', u.id)
     if (error) { setError(`Benutzer konnte nicht deaktiviert werden: ${error.message}`); return }
-    logAudit('Benutzer deaktiviert', u.username)
+    logAudit('Benutzer deaktiviert', u.username ?? u.name)
     setError('')
     load()
   }
@@ -290,7 +291,7 @@ export default function Users() {
     setCredsCopied(false)
     const { data: { session } } = await supabase.auth.getSession()
     let done = 0, err = 0
-    const creds: { email: string; username: string; password: string }[] = []
+    const creds: { email: string; username: string | null; password: string }[] = []
     setImportProgress({ done: 0, total: importRows.length, err: 0 })
     for (const row of importRows) {
       const password = generateInitialPassword()
@@ -302,7 +303,7 @@ export default function Users() {
             name: row.name,
             vorname: row.vorname,
             nachname: row.nachname,
-            username: row.username,
+            username: row.username || null,
             dienstnummer: row.dienstnummer || null,
             organisation: row.organisation,
             roles: row.roles,
@@ -311,12 +312,12 @@ export default function Users() {
             initial_password: password,
           }),
         })
-        const json = await res.json() as { error?: string; email?: string; username?: string }
+        const json = await res.json() as { error?: string; email?: string; username?: string | null }
         if (res.ok) {
           done++
           creds.push({
             email: json.email ?? row.email,
-            username: json.username ?? row.username,
+            username: json.username ?? row.username ?? null,
             password,
           })
         } else err++
@@ -411,7 +412,7 @@ export default function Users() {
                       <span className="font-medium text-gray-900 truncate max-w-xs">{u.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username}</td>
+                  <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username || '—'}</td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
@@ -600,8 +601,8 @@ export default function Users() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{editId ? 'PC-Benutzername *' : 'PC-Benutzername'}</label>
-                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder={editId ? '' : 'optional, sonst aus der E-Mail'} />
-                  {!editId && <p className="text-xs text-gray-400 mt-1">Windows-Anmeldename ohne Domäne. Leer = Platzhalter; beim Erstlogin Pflicht.</p>}
+                  <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder={editId ? '' : 'leer — setzt die Person beim Erstlogin'} />
+                  {!editId && <p className="text-xs text-gray-400 mt-1">Windows-Anmeldename ohne Domäne. Leer lassen: wird beim ersten Anmelden gesetzt. Nicht die Dienstnummer.</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Dienstnummer</label>

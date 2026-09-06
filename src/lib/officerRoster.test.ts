@@ -6,19 +6,17 @@ import {
   knownRosterImportUsers,
   planRosterEnsure,
   rosterRowToImportUser,
-  usernameFromDienstnummer,
 } from './officerRoster'
 
 describe('Offiziersliste', () => {
-  it('bildet den Login aus Vorname.Nachname@dornbirn.at, nicht aus der DN', () => {
-    expect(usernameFromDienstnummer('07')).toBe('dn7')
+  it('bildet den Login aus Vorname.Nachname@dornbirn.at, Username bleibt leer', () => {
     expect(rosterRowToImportUser({
       vorname: 'Hans-Peter',
       nachname: 'Schwendinger',
       dienstnummer: '1',
     })).toMatchObject({
       email: 'Hans-Peter.Schwendinger@dornbirn.at',
-      username: 'hans-peter.schwendinger',
+      username: null,
     })
     expect(rosterRowToImportUser({
       vorname: 'Martin',
@@ -47,7 +45,7 @@ describe('Offiziersliste', () => {
     expect(stadt.find(u => u.dienstnummer === '2')).toMatchObject({
       name: 'Andreas Gisinger',
       email: 'Andreas.Gisinger@dornbirn.at',
-      username: 'andreas.gisinger',
+      username: null,
       roles: ['user'],
       einsatzMtRole: 'user',
     })
@@ -65,6 +63,8 @@ describe('Offiziersliste', () => {
     expect(users.find(u => u.dienstnummer === '24')?.gender).toBe('female')
     expect(users.find(u => u.dienstnummer === '31')?.gender).toBe('female')
     expect(users.find(u => u.dienstnummer === '21')?.gender).toBe('female')
+    expect(users.every(u => u.username == null)).toBe(true)
+    expect(users.every(u => !/^dn[0-9]+$/i.test(u.email))).toBe(true)
   })
 
   it('überspringt vorhandene Dienstnummern und plant nur neue', () => {
@@ -73,10 +73,10 @@ describe('Offiziersliste', () => {
       nachname: 'Fenkart',
       dienstnummer: '7',
     })
-    expect(fenkart?.username).toBe('matthias.fenkart')
+    expect(fenkart?.username).toBeNull()
     expect(fenkart?.email).toBe('Matthias.Fenkart@dornbirn.at')
     const plan = planRosterEnsure(knownRosterImportUsers(), [
-      { id: 'x', name: 'Fenkart Matthias', username: 'matthias.fenkart', dienstnummer: '7' },
+      { id: 'x', name: 'Fenkart Matthias', username: null, dienstnummer: '7' },
     ])
     expect(plan.already.map(u => u.dienstnummer)).toContain('7')
     expect(plan.create.map(u => u.dienstnummer)).not.toContain('7')

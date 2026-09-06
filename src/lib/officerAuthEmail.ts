@@ -79,7 +79,3 @@ export function officerAuthEmail(input: {
   return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`
 }
 
-export function provisionalUsernameFromEmail(email: string): string {
-  const local = email.split('@')[0] ?? ''
-  return local.trim().toLowerCase()
-}

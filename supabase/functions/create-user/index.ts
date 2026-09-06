@@ -42,6 +42,7 @@ function corsHeaders(req: Request): Record<string, string> {
 }
 
 const USERNAME_RE = /^[a-z0-9._-]+$/
+const DN_PLACEHOLDER_USERNAME_RE = /^dn[0-9]+$/i
 const AUTH_EMAIL_DOMAIN = 'dornbirn.at'
 const FEURSTEIN_MARTIN_EMAIL = 'Martin.Feurstein2@dornbirn.at'
 
@@ -105,8 +106,8 @@ function officerAuthEmail(input: {
   return `${localFirst}.${localLast}@${AUTH_EMAIL_DOMAIN}`
 }
 
-function provisionalUsernameFromEmail(email: string): string {
-  return (email.split('@')[0] ?? '').trim().toLowerCase()
+function isDnPlaceholderUsername(value: string): boolean {
+  return DN_PLACEHOLDER_USERNAME_RE.test(value)
 }
 
 function json(req: Request, body: unknown, status = 200) {
@@ -193,14 +194,15 @@ Deno.serve(async (req) => {
     dienstnummer,
   })
   const requestedUsername = (body.username ?? '').trim().toLowerCase()
-  const username = requestedUsername || provisionalUsernameFromEmail(email)
+  const username = requestedUsername && !isDnPlaceholderUsername(requestedUsername)
+    ? requestedUsername
+    : null
   if (!name) return json(req, { error: 'Name ist Pflicht.' }, 400)
   if (!email) {
     return json(req, { error: 'Login-E-Mail konnte nicht gebildet werden (Vor- und Nachname nötig).' }, 400)
   }
-  if (!username) return json(req, { error: 'Benutzername ist Pflicht oder muss aus der E-Mail ableitbar sein.' }, 400)
-  if (!USERNAME_RE.test(username)) {
-    return json(req, { error: 'Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten.' }, 400)
+  if (username && !USERNAME_RE.test(username)) {
+    return json(req, { error: 'PC-Benutzername darf nur Kleinbuchstaben, Zahlen, Punkt, Bindestrich und Unterstrich enthalten. Nicht die Dienstnummer.' }, 400)
   }
   if (password.length < 8 || !/[0-9]/.test(password) || !/[A-Z]/.test(password)) {
     return json(req, { error: 'Initiales Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.' }, 400)
@@ -221,10 +223,10 @@ Deno.serve(async (req) => {
     user_metadata: {
       force_password_change: true,
       force_username_set: true,
-      username,
       name,
       gender,
       organisation,
+      ...(username ? { username } : {}),
     },
   })
   if (createErr || !created.user) {

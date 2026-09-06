@@ -4,6 +4,11 @@ export const AUTH_EMAIL_DOMAIN = 'dornbirn.at'
 /** @deprecated Alias — Login-Domain ist dornbirn.at. */
 export const LOCAL_AUTH_DOMAIN = AUTH_EMAIL_DOMAIN
 export const USERNAME_RE = /^[a-z0-9._-]+$/
+export const DN_PLACEHOLDER_USERNAME_RE = /^dn[0-9]+$/i
+
+export function isDnPlaceholderUsername(value: string | null | undefined): boolean {
+  return DN_PLACEHOLDER_USERNAME_RE.test((value ?? '').trim())
+}
 
 /** Login-E-Mail: volle Adresse bleibt, sonst Local-Part @dornbirn.at. Bestehende Admins mit voller E-Mail (auch anderer Domain). */
 export function loginEmailFromInput(input: string): string {
