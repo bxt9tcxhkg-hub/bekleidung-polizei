@@ -1,13 +1,53 @@
--- Erstlogin: PC-Anmeldename (profiles.username) nach force_username_set.
--- Username bleibt NULL bis zum Erstlogin — nie dn{N} oder E-Mail-Local-Part.
--- Flag in profiles (nicht nur user_metadata — Metadata ist user-editierbar).
--- Idempotent: ADD COLUMN IF NOT EXISTS, DROP NOT NULL, CREATE OR REPLACE, UPDATE … WHERE.
+-- Live: profiles.username ist NOT NULL. Erst Constraint lockern, dann DN-Werte leeren.
+-- Username bleibt NULL bis zum Erstlogin (PC-Anmeldename). Nie dn{N}.
+-- Idempotent: DROP NOT NULL, DROP CHECK, UPDATE … WHERE, CREATE OR REPLACE.
+
+-- 1) NOT NULL (und ggf. CHECK, der leer/null verbietet)
+ALTER TABLE public.profiles
+  ALTER COLUMN username DROP NOT NULL;
+
+DO $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT c.conname
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = 'public'
+      AND t.relname = 'profiles'
+      AND c.contype = 'c'
+      AND pg_get_constraintdef(c.oid) ~* 'username'
+  LOOP
+    EXECUTE format('ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS %I', r.conname);
+  END LOOP;
+END $$;
 
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS force_username_set boolean NOT NULL DEFAULT false;
 
-ALTER TABLE public.profiles
-  ALTER COLUMN username DROP NOT NULL;
+-- UNIQUE bleibt; mehrere NULL sind in Postgres erlaubt.
+-- Partielle Unique nur auf gesetzte PC-Namen (idempotent, falls der alte UNIQUE-Name existiert).
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_username_key;
+DROP INDEX IF EXISTS profiles_username_key;
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_username_unique
+  ON public.profiles (username)
+  WHERE username IS NOT NULL;
+
+-- 2) Datenfix: falsche DN-Usernames (dn7, dn32, …). Zweiter Lauf ändert 0 Zeilen.
+UPDATE public.profiles
+SET
+  username = NULL,
+  force_username_set = true
+WHERE username ~* '^dn[0-9]+$';
+
+UPDATE auth.users
+SET raw_user_meta_data = (
+  COALESCE(raw_user_meta_data, '{}'::jsonb)
+  - 'username'
+) || jsonb_build_object('force_username_set', true)
+WHERE COALESCE(raw_user_meta_data->>'username', '') ~* '^dn[0-9]+$';
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
@@ -38,20 +78,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
--- Live: falsche DN-Usernames (dn7, dn32, …) leeren. Zweiter Lauf ändert 0 Zeilen.
-UPDATE public.profiles
-SET
-  username = NULL,
-  force_username_set = true
-WHERE username ~* '^dn[0-9]+$';
-
-UPDATE auth.users
-SET raw_user_meta_data = (
-  COALESCE(raw_user_meta_data, '{}'::jsonb)
-  - 'username'
-) || jsonb_build_object('force_username_set', true)
-WHERE COALESCE(raw_user_meta_data->>'username', '') ~* '^dn[0-9]+$';
 
 -- Staff darf weiter alles außer active (Genehmiger/Admin).
 -- Normale Benutzer: eigener PC-Benutzername nur solange force_username_set.

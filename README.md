@@ -135,8 +135,10 @@ Domäne, Kleinbuchstaben, `USERNAME_RE`). Beim Anlegen bleibt er **leer**
 `create-user` setzt `force_password_change` und `force_username_set`. Der
 Erstlogin fordert neues Passwort und PC-Benutzername.
 
-Migration `20260917` leert vorhandene `profiles.username` / Auth-Metadata
-die dem Muster `^dn[0-9]+$` entsprechen (idempotent).
+Migration `20260917` (zuerst `ALTER COLUMN username DROP NOT NULL`, dann
+Datenfix): vorhandene `profiles.username` / Auth-Metadata die
+`^dn[0-9]+$` entsprechen werden auf NULL gesetzt (idempotent). Live war
+`username` NOT NULL — ohne `DROP NOT NULL` schlägt der Wipe fehl.
 
 Bestehende Admins können weiterhin ihre volle E-Mail eingeben (auch andere Domain).
 Ohne `@` hängt die Login-Seite `@dornbirn.at` an.
@@ -177,7 +179,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260914_official_et_roles.sql` | Offizielle ET-Module + Rollen aus users-seed.json |
 | `20260915_et_roster_stadtpolizei.sql` | Stadtpolizei-Organisation für ET-Liste |
 | `20260916_parkaufsicht_roster.sql` | Parkaufsicht-Organisation für Owner-Liste |
-| `20260917_force_username_set.sql` | `profiles.force_username_set` + Erstlogin darf eigenen PC-Benutzernamen setzen |
+| `20260917_force_username_set.sql` | `username` nullable (`DROP NOT NULL`), Wipe `dn{N}`, `force_username_set`, Erstlogin setzt PC-Namen |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

@@ -1,7 +1,8 @@
 // Edge Function: legt Auth-User + Profil an (Service Role).
 // Wird von src/pages/Users.tsx (Portal-Benutzerseite) aufgerufen.
 // Auth-E-Mail: {Vorname}.{Nachname}@dornbirn.at (ASCII-Fold; Feurstein2-Ausnahme).
-// profiles.username = PC-Anmeldename (Platzhalter + force_username_set).
+// profiles.username bleibt NULL bis zum Erstlogin (PC-Anmeldename, nie dn{N}).
+// force_password_change + force_username_set.
 // Anlegen: aktive Sachbearbeiter, Genehmiger (inkl. approver) und Admins.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
