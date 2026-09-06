@@ -206,6 +206,7 @@ describe('buildLagerbestandPdfHtml', () => {
       now,
     })
     expect(html).toContain('Lagerbestand Einsatzmittel')
+    expect(html).toContain('A4 landscape')
     expect(html).toContain('Schild')
     expect(html).toContain('Lager')
     expect(html).toContain('L-1')

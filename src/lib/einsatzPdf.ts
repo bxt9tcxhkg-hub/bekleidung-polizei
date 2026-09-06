@@ -267,10 +267,12 @@ function reportChrome(input: {
   body: string
   entryCount: number
   now: Date
+  landscape?: boolean
 }): string {
+  const pageSize = input.landscape ? 'A4 landscape' : 'A4'
   return `<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><title>${escHtml(input.title)}</title><style>
-  @page { size: A4; margin: 14mm 14mm 16mm 14mm; }
+  @page { size: ${pageSize}; margin: 14mm 14mm 16mm 14mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Calibri, Arial, sans-serif; font-size: 10pt; color: #111; line-height: 1.4; }
   .page-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #166534; padding-bottom: 8px; margin-bottom: 14px; }
@@ -424,6 +426,7 @@ export function buildLagerbestandPdfHtml(input: {
     body,
     entryCount: input.poolRows.reduce((sum, row) => sum + row.total, 0) + personalTotal,
     now,
+    landscape: true,
   })
 }
 
