@@ -63,8 +63,9 @@ export function shouldForceUsernameSet(input: {
   email?: string | null
 }): boolean {
   if (isBoundAdminIdentity(input)) return false
-  if (input.forceUsernameSet === true) return true
-  return !(input.username ?? '').trim()
+  const username = (input.username ?? '').trim()
+  if (!username || isDnPlaceholderUsername(username)) return true
+  return input.forceUsernameSet === true
 }
 
 /**

@@ -117,6 +117,18 @@ describe('bound Admin Erstlogin', () => {
       username: 'hschwendinger',
       email: 'hans-peter.schwendinger@dornbirn.at',
     })).toBe(false)
+    expect(shouldForceUsernameSet({
+      username: 'dn7',
+      email: 'hans-peter.schwendinger@dornbirn.at',
+    })).toBe(true)
+  })
+
+  it('hält den Username-Schritt nicht offen, wenn das Profil den PC-Namen schon hat', () => {
+    expect(shouldForceUsernameSet({
+      forceUsernameSet: false,
+      username: 'msoyucok',
+      email: 'msoyucok@dornbirn.at',
+    })).toBe(false)
   })
 })
 
