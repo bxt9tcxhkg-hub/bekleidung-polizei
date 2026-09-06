@@ -36,8 +36,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[min(92dvh,40rem)] overflow-y-auto overscroll-contain p-5 sm:p-8">
         <div className="flex flex-col items-center mb-8">
           <div className="mb-4 h-14 w-14 rounded-xl bg-white p-1 flex items-center justify-center">
             <img

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { USERNAME_RE, isDnPlaceholderUsername, isValidInitialPassword, sanitizePcUsername } from '../lib/workflow'
+import { USERNAME_RE, isDnPlaceholderUsername, isValidPersonalPassword, sanitizePcUsername } from '../lib/workflow'
 
 // Erstlogin: nicht schließbar. Passwort und/oder PC-Benutzername je nach Flag.
 // Nach updateUser (USER_UPDATED) und Profil-Update verschwindet das Modal.
@@ -32,7 +32,7 @@ export default function ChangePasswordModal() {
     setError('')
     const pcName = mustSetUsername ? sanitizePcUsername(username) : ''
     if (mustChangePassword) {
-      if (!isValidInitialPassword(password)) {
+      if (!isValidPersonalPassword(password)) {
         setError('Passwort muss mindestens 8 Zeichen haben und mindestens eine Zahl und einen Großbuchstaben enthalten.')
         return
       }
@@ -85,13 +85,13 @@ export default function ChangePasswordModal() {
       : 'Passwort festlegen'
 
   return (
-    <div className="fixed inset-0 bg-blue-950/90 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 relative">
+    <div className="fixed inset-0 bg-blue-950/90 z-[100] flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[min(92dvh,40rem)] overflow-y-auto overscroll-contain p-5 sm:p-8 relative">
         <div className="flex flex-col items-center mb-6">
           <div className="bg-blue-800 p-3 rounded-xl mb-4">
             <KeyRound className="w-8 h-8 text-white" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+          <h2 className="text-xl font-bold text-gray-900 text-center">{title}</h2>
           <p className="text-gray-500 text-sm mt-1 text-center">
             {intro}
           </p>

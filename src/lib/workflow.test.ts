@@ -6,10 +6,12 @@ import {
   nextIssueStatus,
   receivedNextStatus,
   isValidInitialPassword,
+  isValidPersonalPassword,
   filterAssignableRoles,
   canAccessPortalBenutzer,
   canCreateUsers,
   canDeactivateUsers,
+  canResetUserPassword,
   USERNAME_RE,
   isDnPlaceholderUsername,
   sanitizePcUsername,
@@ -74,8 +76,10 @@ describe('nextIssueStatus / receivedNextStatus', () => {
 })
 
 describe('isValidInitialPassword / USERNAME_RE', () => {
-  it('prüft Passwortregeln wie das Benutzerformular', () => {
+  it('prüft die persönliche Passwortregel (Erstlogin-Modal), nicht das Startpasswort', () => {
+    expect(isValidPersonalPassword('Abcdefg1')).toBe(true)
     expect(isValidInitialPassword('Abcdefg1')).toBe(true)
+    expect(isValidPersonalPassword('1234')).toBe(false)
     expect(isValidInitialPassword('short1A')).toBe(false)
     expect(isValidInitialPassword('abcdefgh')).toBe(false)
     expect(isValidInitialPassword('ABCDEFGH1')).toBe(true)
@@ -138,6 +142,14 @@ describe('canCreateUsers / canDeactivateUsers', () => {
     expect(canDeactivateUsers(['approver'])).toBe(true)
     expect(canDeactivateUsers(['admin'])).toBe(true)
     expect(canDeactivateUsers(['user'])).toBe(false)
+  })
+
+  it('erlaubt Startpasswort-Reset nur Genehmiger und Admin', () => {
+    expect(canResetUserPassword(['admin'])).toBe(true)
+    expect(canResetUserPassword(['genehmiger'])).toBe(true)
+    expect(canResetUserPassword(['approver'])).toBe(true)
+    expect(canResetUserPassword(['sachbearbeiter'])).toBe(false)
+    expect(canResetUserPassword(['user'])).toBe(false)
   })
 
   it('öffnet die Portal-Benutzerverwaltung für Admin und Genehmiger, nicht für SB allein', () => {
