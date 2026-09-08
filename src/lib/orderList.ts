@@ -1,7 +1,7 @@
 import type { Order, OrderStatus } from './types'
 
 export type OrderListLine = Omit<Order, 'products' | 'quarters'> & {
-  products?: { name: string; category?: string; needs_tailoring?: boolean } | null
+  products?: { name: string; category?: string; needs_tailoring?: boolean; sizes?: string[] } | null
   quarters?: { name: string; year?: number; quarter_num?: number } | null
 }
 
@@ -11,6 +11,11 @@ export type OrderListGroup = {
   year: number
   quarterNum: number
   lines: OrderListLine[]
+}
+
+/** Benutzer dürfen eingereichte Positionen bis zur tatsächlichen Lieferantenbestellung ändern. */
+export function isUserOrderEditable(status: OrderStatus): boolean {
+  return status === 'approved' || status === 'pending_approval'
 }
 
 /** Eine Sammelliste pro Quartal; ausgegebene Zeilen bleiben in der Gruppe. */

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { groupOrdersByQuarter, orderLineMengeLabel } from './orderList'
+import { groupOrdersByQuarter, isUserOrderEditable, orderLineMengeLabel } from './orderList'
 import type { OrderListLine } from './orderList'
-import { ORDER_STATUS_LABELS } from './types'
+import { ORDER_STATUS_LABELS, type OrderStatus } from './types'
 
 function line(partial: Partial<OrderListLine> & Pick<OrderListLine, 'id' | 'quarter_id' | 'status'>): OrderListLine {
   return {
@@ -30,28 +30,9 @@ describe('groupOrdersByQuarter', () => {
 
   it('fasst Zeilen desselben Quartals zusammen und lässt Ausgegeben in der Gruppe', () => {
     const groups = groupOrdersByQuarter([
-      line({
-        id: '1',
-        quarter_id: 'q1',
-        status: 'ready_for_issue',
-        quarters: { name: 'Q3 2026', year: 2026, quarter_num: 3 },
-        products: { name: 'Hemd' },
-      }),
-      line({
-        id: '2',
-        quarter_id: 'q1',
-        status: 'issued',
-        created_at: '2026-09-01T11:00:00Z',
-        quarters: { name: 'Q3 2026', year: 2026, quarter_num: 3 },
-        products: { name: 'Hose' },
-      }),
-      line({
-        id: '3',
-        quarter_id: 'q2',
-        status: 'approved',
-        quarters: { name: 'Q2 2026', year: 2026, quarter_num: 2 },
-        products: { name: 'Jacke' },
-      }),
+      line({ id: '1', quarter_id: 'q1', status: 'ready_for_issue', quarters: { name: 'Q3 2026', year: 2026, quarter_num: 3 }, products: { name: 'Hemd' } }),
+      line({ id: '2', quarter_id: 'q1', status: 'issued', created_at: '2026-09-01T11:00:00Z', quarters: { name: 'Q3 2026', year: 2026, quarter_num: 3 }, products: { name: 'Hose' } }),
+      line({ id: '3', quarter_id: 'q2', status: 'approved', quarters: { name: 'Q2 2026', year: 2026, quarter_num: 2 }, products: { name: 'Jacke' } }),
     ])
     expect(groups).toHaveLength(2)
     expect(groups[0].quarterName).toBe('Q3 2026')
@@ -61,9 +42,7 @@ describe('groupOrdersByQuarter', () => {
   })
 
   it('ordnet Zeilen ohne Quartal in eine eigene Gruppe', () => {
-    const groups = groupOrdersByQuarter([
-      line({ id: 'x', quarter_id: '', status: 'approved' }),
-    ])
+    const groups = groupOrdersByQuarter([line({ id: 'x', quarter_id: '', status: 'approved' })])
     expect(groups).toHaveLength(1)
     expect(groups[0].quarterId).toBe('ohne-quartal')
     expect(groups[0].quarterName).toBe('Ohne Quartal')
@@ -78,6 +57,19 @@ describe('orderLineMengeLabel', () => {
 
   it('zeigt bei Teilausgabe ausgegeben / bestellt', () => {
     expect(orderLineMengeLabel(3, 1, 'partially_issued')).toBe('1 / 3')
+  })
+})
+
+describe('isUserOrderEditable', () => {
+  const editableStatuses = ['approved', 'pending_approval'] satisfies OrderStatus[]
+  const lockedStatuses = ['pending', 'ordered_supplier', 'at_tailor', 'ready_for_issue', 'partially_issued', 'issued', 'cancelled'] satisfies OrderStatus[]
+
+  it.each(editableStatuses)('erlaubt %s vor der Bestellung', status => {
+    expect(isUserOrderEditable(status)).toBe(true)
+  })
+
+  it.each(lockedStatuses)('sperrt %s', status => {
+    expect(isUserOrderEditable(status)).toBe(false)
   })
 })
 

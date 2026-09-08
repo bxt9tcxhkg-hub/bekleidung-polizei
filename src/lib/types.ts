@@ -534,6 +534,7 @@ export type Database = {
     }
     Functions: {
       submit_cart: { Args: Record<string, never>; Returns: string | null }
+      update_editable_order: { Args: { p_order_id: string; p_size: string; p_quantity: number }; Returns: string }
       adjust_inventory: { Args: { p_product: string; p_size: string; p_delta: number }; Returns: number }
       has_portal_area_role: { Args: { p_area: string; p_role: string }; Returns: boolean }
       has_portal_area_access: { Args: { p_area: string }; Returns: boolean }
