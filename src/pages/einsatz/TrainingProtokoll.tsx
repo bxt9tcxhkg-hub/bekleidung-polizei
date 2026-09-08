@@ -71,6 +71,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   const [geschossen, setGeschossen] = useState<GeschossenAnswer>('')
   const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
   const [savingMunition, setSavingMunition] = useState(false)
+  const [savingRemarkId, setSavingRemarkId] = useState<string | null>(null)
 
   const selected = sessions.find(s => s.id === selectedId) ?? null
   const selectedModule = selected?.module ?? modules.find(m => m.id === selected?.module_id) ?? null
@@ -321,6 +322,28 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     await Promise.all([loadProtocol(selectedId), reloadCompletions()])
   }
 
+  function setRemarkDraft(rowId: string, remark: string) {
+    setAttendance(current => current.map(row => row.id === rowId ? { ...row, remark } : row))
+  }
+
+  async function saveRemark(row: EinsatzTrainingAttendance) {
+    if (!canManage) return
+    setSavingRemarkId(row.id)
+    setError('')
+    const remark = row.remark?.trim() || null
+    const { error: updateError } = await supabase
+      .from('einsatz_training_attendance')
+      .update({ remark })
+      .eq('id', row.id)
+    if (updateError) {
+      setError(updateError.message || 'Bemerkung konnte nicht gespeichert werden.')
+    } else {
+      setAttendance(current => current.map(item => item.id === row.id ? { ...item, remark } : item))
+      logAudit('Bemerkung Einsatztraining gespeichert', `${selected?.session_date ?? ''} · ${officerDisplayName(row.officer ?? officerById.get(row.officer_id))}`)
+    }
+    setSavingRemarkId(null)
+  }
+
   const selectedPoolId = selected?.munition_pool_id ?? null
   const selectedMarke = selected?.munition_marke ?? null
   const selectedArt = selected?.munition_art ?? null
@@ -499,7 +522,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                 : null
               return (
                 <div key={row.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-start gap-3 justify-between">
                     <div>
                       <p className="font-medium text-gray-900">{officerDisplayName(officer)}</p>
                       <p className="text-xs text-gray-500">{ATTENDANCE_STATUS_LABELS[row.status]}</p>
@@ -513,17 +536,38 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                       )}
                     </div>
                     {canManage && (
-                      <select
-                        className={`${inputClass} sm:w-44`}
-                        value={row.status}
-                        onChange={e => {
-                          if (isAttendanceStatus(e.target.value)) void setStatus(row, e.target.value)
-                        }}
-                        aria-label={`Anwesenheit ${officerDisplayName(officer)}`}
-                      >
-                        <option value="present">Anwesend</option>
-                        <option value="absent">Abwesend</option>
-                      </select>
+                      <div className="w-full sm:w-80 space-y-2">
+                        <select
+                          className={inputClass}
+                          value={row.status}
+                          onChange={e => {
+                            if (isAttendanceStatus(e.target.value)) void setStatus(row, e.target.value)
+                          }}
+                          aria-label={`Anwesenheit ${officerDisplayName(officer)}`}
+                        >
+                          <option value="present">Anwesend</option>
+                          <option value="absent">Abwesend</option>
+                        </select>
+                        <textarea
+                          className={inputClass}
+                          rows={2}
+                          maxLength={1000}
+                          value={row.remark ?? ''}
+                          onChange={event => setRemarkDraft(row.id, event.target.value)}
+                          placeholder="Bemerkung des Sachbearbeiters"
+                          aria-label={`Bemerkung ${officerDisplayName(officer)}`}
+                        />
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => { void saveRemark(row) }}
+                            disabled={savingRemarkId === row.id}
+                            className="text-sm font-medium text-blue-800 hover:text-blue-950 disabled:opacity-60"
+                          >
+                            {savingRemarkId === row.id ? 'Speichern...' : 'Bemerkung speichern'}
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

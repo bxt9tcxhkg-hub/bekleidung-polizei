@@ -7,6 +7,50 @@ export interface AuthEnv {
   SUPABASE_ANON_KEY?: string
 }
 
+export function bearerHeaders(request: Request, env: AuthEnv): HeadersInit | null {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ') || !env.SUPABASE_ANON_KEY) return null
+  return {
+    apikey: env.SUPABASE_ANON_KEY,
+    Authorization: authHeader,
+    'Content-Type': 'application/json',
+  }
+}
+
+export async function canManageEinsatz(request: Request, env: AuthEnv): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/can_manage_einsatzmittel`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })
+    return response.ok && await response.json() === true
+  } catch {
+    return false
+  }
+}
+
+export async function canReadEinsatzMaterial(request: Request, env: AuthEnv, key: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  const encodedKey = encodeURIComponent(key)
+  try {
+    const response = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/einsatz_materials?select=id&file_key=eq.${encodedKey}&archived_at=is.null&limit=1`,
+      { headers },
+    )
+    if (!response.ok) return false
+    const rows = await response.json() as { id: string }[]
+    return rows.length > 0
+  } catch {
+    return false
+  }
+}
+
 /**
  * Liest den Access-Token aus dem Authorization-Header (Bearer)
  * und prüft ihn gegen Supabase Auth. Query-Parameter werden nicht akzeptiert.

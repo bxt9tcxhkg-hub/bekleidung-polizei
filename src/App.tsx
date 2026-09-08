@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import EinsatzLayout from './components/EinsatzLayout'
 import PortalChrome from './components/PortalChrome'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -25,7 +26,10 @@ const Lager = lazy(() => import('./pages/Lager'))
 const Analyse = lazy(() => import('./pages/Analyse'))
 const Grundausstattung = lazy(() => import('./pages/Grundausstattung'))
 const Hilfe = lazy(() => import('./pages/Hilfe'))
-const Einsatz = lazy(() => import('./pages/Einsatz'))
+const EinsatzDashboard = lazy(() => import('./pages/EinsatzDashboard'))
+const Einsatzmittel = lazy(() => import('./pages/Einsatzmittel'))
+const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
+const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
 
 const PageSpinner = () => (
@@ -62,10 +66,15 @@ export default function App() {
             path="/einsatz"
             element={
               <ProtectedRoute>
-                <Einsatz />
+                <EinsatzLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route index element={<EinsatzDashboard />} />
+            <Route path="einsatzmittel" element={<Einsatzmittel />} />
+            <Route path="training" element={<Einsatztraining />} />
+            <Route path="unterlagen" element={<EinsatzMaterials />} />
+          </Route>
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
           <Route
             path="/profil"

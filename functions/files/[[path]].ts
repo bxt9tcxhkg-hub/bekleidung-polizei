@@ -1,4 +1,4 @@
-import { isAuthenticated, unauthorized, serviceUnavailable, type AuthEnv } from '../_auth'
+import { canReadEinsatzMaterial, isAuthenticated, unauthorized, serviceUnavailable, type AuthEnv } from '../_auth'
 
 interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
@@ -9,6 +9,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
 
   const key = (context.params['path'] as string[]).join('/')
+
+  if (key.startsWith('einsatz-unterlagen/') && !(await canReadEinsatzMaterial(context.request, context.env, key))) {
+    return new Response('Forbidden', { status: 403 })
+  }
 
   const object = await context.env.BEKLEIDUNG.get(key)
   if (!object) {

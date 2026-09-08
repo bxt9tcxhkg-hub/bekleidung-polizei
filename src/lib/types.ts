@@ -251,6 +251,33 @@ export interface PersonalEinsatzmittel {
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'> | null
 }
 
+export type PersonalEmRequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn'
+
+export interface PersonalEinsatzmittelRequest {
+  id: string
+  requester_id: string
+  category: PersonalEmCategory
+  verwahrungsort: Verwahrungsort | null
+  groesse: string | null
+  ablaufdatum: string | null
+  schutzfristen: string | null
+  waffennummer: string | null
+  service: string | null
+  magazinanzahl: number | null
+  marke: string | null
+  kaliber: string | null
+  art: string | null
+  patronen: number | null
+  ablauf_mm_yyyy: string | null
+  status: PersonalEmRequestStatus
+  review_note: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+  requester?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username'> | null
+}
+
 export type PoolEmCategory =
   | 'langwaffe_stg77'
   | 'magazine'
@@ -329,9 +356,42 @@ export interface EinsatzTrainingAttendance {
   session_id: string
   officer_id: string
   status: TrainingAttendanceStatus
+  remark: string | null
   created_at: string | null
   updated_at: string | null
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
+}
+
+export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining'
+
+export interface EinsatzMaterialTab {
+  id: string
+  area: EinsatzMaterialArea
+  name: string
+  description: string | null
+  sort_order: number
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EinsatzMaterial {
+  id: string
+  tab_id: string
+  title: string
+  description: string | null
+  file_key: string | null
+  file_name: string | null
+  mime_type: string | null
+  file_size: number | null
+  external_url: string | null
+  published: boolean
+  important: boolean
+  archived_at: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface EinsatzTrainingParticipation {
@@ -407,6 +467,7 @@ type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
+type PersonalEinsatzmittelRequestRow = Omit<PersonalEinsatzmittelRequest, 'requester'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
 type EinsatzTrainingModuleRow = Omit<EinsatzTrainingModule, never>
 type EinsatzTrainingSessionRow = Omit<EinsatzTrainingSession, 'module'>
@@ -414,6 +475,8 @@ type EinsatzTrainingAttendanceRow = Omit<EinsatzTrainingAttendance, 'officer'>
 type EinsatzTrainingParticipationRow = Omit<EinsatzTrainingParticipation, 'module' | 'officer'>
 type EinsatzTrainingCompletionRow = Omit<EinsatzTrainingCompletion, 'module' | 'officer'>
 type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer' | 'session'>
+type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
+type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -494,6 +557,10 @@ export type Database = {
         { foreignKeyName: 'personal_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'personal_einsatzmittel_removed_by_fkey'; columns: ['removed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      personal_einsatzmittel_requests: { Row: PersonalEinsatzmittelRequestRow; Insert: Pick<PersonalEinsatzmittelRequestRow, 'requester_id' | 'category'> & Partial<Omit<PersonalEinsatzmittelRequestRow, 'id' | 'created_at' | 'updated_at' | 'requester_id' | 'category'>>; Update: Partial<Omit<PersonalEinsatzmittelRequestRow, 'id' | 'created_at' | 'requester_id'>>; Relationships: [
+        { foreignKeyName: 'personal_einsatzmittel_requests_requester_id_fkey'; columns: ['requester_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'personal_einsatzmittel_requests_reviewed_by_fkey'; columns: ['reviewed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
       pool_einsatzmittel: { Row: PoolEinsatzmittelRow; Insert: Pick<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'> & Partial<Omit<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'>>; Update: Partial<Omit<PoolEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'pool_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'pool_einsatzmittel_removed_by_fkey'; columns: ['removed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
@@ -527,6 +594,10 @@ export type Database = {
         { foreignKeyName: 'einsatz_training_registrations_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_training_registrations_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      einsatz_material_tabs: { Row: EinsatzMaterialTabRow; Insert: Pick<EinsatzMaterialTabRow, 'area' | 'name'> & Partial<Omit<EinsatzMaterialTabRow, 'id' | 'created_at' | 'updated_at' | 'area' | 'name'>>; Update: Partial<Omit<EinsatzMaterialTabRow, 'id' | 'created_at'>>; Relationships: [] }
+      einsatz_materials: { Row: EinsatzMaterialRow; Insert: Pick<EinsatzMaterialRow, 'tab_id' | 'title'> & Partial<Omit<EinsatzMaterialRow, 'id' | 'created_at' | 'updated_at' | 'tab_id' | 'title'>>; Update: Partial<Omit<EinsatzMaterialRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_materials_tab_id_fkey'; columns: ['tab_id']; isOneToOne: false; referencedRelation: 'einsatz_material_tabs'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -539,6 +610,7 @@ export type Database = {
       has_portal_area_role: { Args: { p_area: string; p_role: string }; Returns: boolean }
       has_portal_area_access: { Args: { p_area: string }; Returns: boolean }
       can_manage_einsatzmittel: { Args: Record<string, never>; Returns: boolean }
+      review_personal_einsatzmittel_request: { Args: { p_request_id: string; p_approved: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_einsatztraining: { Args: { p_session_id: string }; Returns: boolean }
       lookup_login_email: { Args: { p_username: string }; Returns: string | null }
     }
