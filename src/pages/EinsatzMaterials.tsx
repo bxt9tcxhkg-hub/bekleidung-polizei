@@ -7,6 +7,8 @@ import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
 import { supabase } from '../lib/supabase'
 import type { EinsatzMaterial, EinsatzMaterialArea, EinsatzMaterialTab } from '../lib/types'
 
+const MAX_MATERIAL_FILE_SIZE = 100 * 1024 * 1024
+
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
   einsatzmittel: 'Einsatzmittel',
@@ -169,12 +171,15 @@ export default function EinsatzMaterials() {
 
   async function uploadFile(selectedFile: File): Promise<{ key: string; name: string }> {
     const { data: sessionData } = await supabase.auth.getSession()
-    const form = new FormData()
-    form.append('file', selectedFile)
     const response = await fetch('/einsatz-upload', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${sessionData.session?.access_token ?? ''}` },
-      body: form,
+      headers: {
+        Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+        'Content-Type': selectedFile.type || 'application/octet-stream',
+        'Content-Length': String(selectedFile.size),
+        'X-File-Name': encodeURIComponent(selectedFile.name),
+      },
+      body: selectedFile,
     })
     if (!response.ok) {
       const data = await response.json().catch(() => null) as { error?: string } | null
@@ -197,8 +202,8 @@ export default function EinsatzMaterials() {
       setError('Bitte einen gültigen HTTPS-Link eingeben.')
       return
     }
-    if (file && file.size > 20 * 1024 * 1024) {
-      setError('Datei zu groß (max. 20 MB).')
+    if (file && file.size > MAX_MATERIAL_FILE_SIZE) {
+      setError('Datei zu groß (max. 100 MB).')
       return
     }
 
