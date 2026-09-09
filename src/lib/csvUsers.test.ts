@@ -97,4 +97,9 @@ Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger
     const user = rowToUser({ name: 'Parker Test', benutzername: 'parkert', dienstnummer: '99' })
     expect(user?.organisation).toBe('Stadtpolizei')
   })
+
+  it('übernimmt Verwaltung als eigene Organisation', () => {
+    const user = rowToUser({ name: 'Vera Verwaltung', benutzername: 'vverwaltung', dienstnummer: '999', organisation: 'Verwaltung' })
+    expect(user?.organisation).toBe('Verwaltung')
+  })
 })

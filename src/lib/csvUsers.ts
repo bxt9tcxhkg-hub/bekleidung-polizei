@@ -8,6 +8,7 @@ import { USERNAME_RE, isDnPlaceholderUsername } from './workflow'
 export function organisationFromImportRow(explicit: string, dienstnummer: string): string {
   const seed = findUserSeedByDienstnummer(dienstnummer)
   if (seed) return seed.organisation
+  if (/verwaltung/i.test(explicit.trim())) return 'Verwaltung'
   return organisationFromSeedValue(explicit)
 }
 

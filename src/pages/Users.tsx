@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Pencil, X, Shield, User, UserX, Upload, Download, KeyRound } from 'lucide-react'
+import { Plus, Pencil, X, Shield, User, Upload, Download, KeyRound, Printer, Search, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabase'
 import { useAuth as _useAuth } from '../contexts/AuthContext'
@@ -29,7 +29,10 @@ const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
 Max Mustermann;mmustermann;1234;Stadtpolizei;user
 Maria Muster;mmuster;5678;Parkaufsicht;user|genehmiger`
 
-const ORGS = ['Stadtpolizei', 'Parkaufsicht'] as const
+const ORGS = ['Stadtpolizei', 'Parkaufsicht', 'Verwaltung'] as const
+type Organisation = (typeof ORGS)[number]
+type OrgFilter = 'all' | Organisation
+type RoleFilter = 'all' | 'sachbearbeiter' | 'genehmiger' | 'admin'
 const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole | ''; label: string }[] = [
   { value: 'user', label: AREA_ROLE_LABELS.user },
   { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
@@ -92,7 +95,9 @@ export default function Users() {
   const { isStrictAdmin, isGenehmiger, isSachbearbeiter, profile: authProfile } = _useAuth()
   const [users, setUsers] = useState<Profile[]>([])
   const [areaByUser, setAreaByUser] = useState<AreaRolesByUser>({})
-  const [orgFilter, setOrgFilter] = useState<'all' | 'Stadtpolizei' | 'Parkaufsicht'>('all')
+  const [orgFilter, setOrgFilter] = useState<OrgFilter>('all')
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -114,6 +119,10 @@ export default function Users() {
   const [resetError, setResetError] = useState('')
   const [resetCopied, setResetCopied] = useState(false)
   const [revealedStartPassword, setRevealedStartPassword] = useState<{ name: string; password: string } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleteSaving, setDeleteSaving] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
   const callerRoles = authProfile?.roles ?? []
   const canCreate = canCreateUsers(callerRoles)
@@ -252,16 +261,42 @@ export default function Users() {
     load()
   }
 
-  // Es existiert keine 'delete-user' Edge Function – ein Löschen der profiles-Zeile
-  // würde den Auth-Account verwaisen lassen. Daher wird der Benutzer nur deaktiviert.
-  async function deactivateUser(u: Profile) {
-    if (!canDeactivate) return
-    if (!confirm(`Benutzer "${u.name}" deaktivieren?\n\nDas Konto wird nicht gelöscht, sondern nur deaktiviert. Es kann jederzeit wieder aktiviert werden.`)) return
-    const { error } = await supabase.from('profiles').update({ active: false }).eq('id', u.id)
-    if (error) { setError(`Benutzer konnte nicht deaktiviert werden: ${error.message}`); return }
-    logAudit('Benutzer deaktiviert', u.username ?? u.name)
+  async function moveUser(u: Profile, organisation: Organisation) {
+    if (!isStrictAdmin || u.id === authProfile?.id || u.organisation === organisation) return
+    const previous = u.organisation
+    setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation } : row))
+    const { error: moveError } = await supabase.from('profiles').update({ organisation }).eq('id', u.id)
+    if (moveError) {
+      setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation: previous } : row))
+      setError(`Organisation konnte nicht geändert werden: ${moveError.message}`)
+      return
+    }
     setError('')
-    load()
+    logAudit('Benutzer verschoben', `${u.name}: ${previous} → ${organisation}`)
+  }
+
+  async function deleteUserPermanently() {
+    if (!deleteTarget || !isStrictAdmin || deleteConfirmation.trim() !== deleteTarget.name) return
+    setDeleteSaving(true)
+    setDeleteError('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'delete_user', user_id: deleteTarget.id }),
+      })
+      const json = await res.json() as { error?: string }
+      if (!res.ok) { setDeleteError(json.error ?? 'Benutzer konnte nicht gelöscht werden.'); return }
+      logAudit('Benutzer endgültig gelöscht', deleteTarget.name)
+      setDeleteTarget(null)
+      setDeleteConfirmation('')
+      await load()
+    } catch {
+      setDeleteError('Netzwerkfehler – bitte nochmals versuchen.')
+    } finally {
+      setDeleteSaving(false)
+    }
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -428,6 +463,37 @@ export default function Users() {
     }))
   }
 
+  const normalizedSearch = search.trim().toLocaleLowerCase('de-AT')
+  const filteredUsers = users.filter(user => {
+    if (orgFilter !== 'all' && user.organisation !== orgFilter) return false
+    if (roleFilter !== 'all') {
+      const einsatzRole = parseEinsatzMtRole(areaByUser[user.id]?.einsatz_mt)
+      if (!user.roles.includes(roleFilter) && einsatzRole !== roleFilter) return false
+    }
+    if (!normalizedSearch) return true
+    return [user.name, user.dienstnummer, user.username]
+      .some(value => (value ?? '').toLocaleLowerCase('de-AT').includes(normalizedSearch))
+  })
+  const organisationCounts = Object.fromEntries(
+    ORGS.map(org => [org, users.filter(user => user.organisation === org).length]),
+  ) as Record<Organisation, number>
+
+  function printDirectory() {
+    const escapeHtml = (value: string) => value
+      .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;').replaceAll("'", '&#039;')
+    const roleText = (user: Profile) => {
+      const bekleidung = user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')
+      const em = parseEinsatzMtRole(areaByUser[user.id]?.einsatz_mt)
+      return `Bekleidung: ${bekleidung || '–'}; Einsatzmittel & Training: ${em ? AREA_ROLE_LABELS[em] : 'kein Zugriff'}`
+    }
+    const rows = filteredUsers.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.dienstnummer ?? '–')}</td><td>${escapeHtml(user.organisation ?? 'Stadtpolizei')}</td><td>${escapeHtml(roleText(user))}</td><td>${user.active ? 'Aktiv' : 'Inaktiv'}</td></tr>`).join('')
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (!printWindow) { setError('Druckansicht konnte nicht geöffnet werden. Bitte Pop-ups erlauben.'); return }
+    printWindow.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Mitarbeiterliste</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial,sans-serif;color:#111;font-size:10pt}h1{font-size:18pt;margin:0 0 4mm}.meta{color:#555;margin-bottom:6mm}.notice{border:1px solid #999;padding:3mm;margin-bottom:5mm;font-weight:700}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:2.2mm;text-align:left;vertical-align:top}th{background:#eee}tr{break-inside:avoid}.footer{margin-top:5mm;color:#666;font-size:8pt}</style></head><body><h1>Mitarbeiterliste</h1><div class="meta">Bereich: ${escapeHtml(orgFilter === 'all' ? 'Alle Organisationen' : orgFilter)} · Stand: ${escapeHtml(new Date().toLocaleString('de-AT'))}</div><div class="notice">Nur für den internen Dienstgebrauch. Vor unbefugter Einsicht schützen und nach Gebrauch datenschutzgerecht vernichten.</div><table><thead><tr><th>Name</th><th>Dienstnummer</th><th>Organisation</th><th>Funktionsrechte</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Die Druckansicht enthält bewusst keine Login-Daten, Passwörter oder Geschlechtsangaben.</div><script>window.addEventListener('load',()=>{window.print();window.close()})</script></body></html>`)
+    printWindow.document.close()
+  }
+
   return (
     <div>
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
@@ -453,6 +519,9 @@ export default function Users() {
           <p className="text-gray-500 text-sm mt-1">Portal-Benutzerverwaltung</p>
         </div>
         <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
+          <button onClick={printDirectory} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Datenschutzfreundliche Mitarbeiterliste drucken">
+            <Printer className="w-4 h-4 flex-shrink-0" /><span>Drucken</span>
+          </button>
           {canCreate && (
             <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false); setImportStartPassword(DEFAULT_START_PASSWORD); setImportRandomPerUser(false) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
               <Upload className="w-4 h-4 flex-shrink-0" /><span>Import</span>
@@ -466,13 +535,26 @@ export default function Users() {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
-        {(['all', 'Stadtpolizei', 'Parkaufsicht'] as const).map(o => (
+      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit max-w-full overflow-x-auto">
+        {(['all', ...ORGS] as const).map(o => (
           <button key={o} onClick={() => setOrgFilter(o)}
             className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${orgFilter === o ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            {o === 'all' ? 'Alle' : o}
+            {o === 'all' ? `Alle (${users.length})` : `${o} (${organisationCounts[o]})`}
           </button>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_13rem] gap-3 mb-4">
+        <label className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input value={search} onChange={event => setSearch(event.target.value)} className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Name, Dienstnummer oder Benutzername suchen" />
+        </label>
+        <select value={roleFilter} onChange={event => setRoleFilter(event.target.value as RoleFilter)} className="border border-gray-300 bg-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="all">Alle Funktionsrechte</option>
+          <option value="sachbearbeiter">Sachbearbeiter</option>
+          <option value="genehmiger">Genehmiger</option>
+          <option value="admin">Administratoren</option>
+        </select>
       </div>
 
       {loading ? (
@@ -494,7 +576,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {users.filter(u => orgFilter === 'all' || u.organisation === orgFilter).map(u => (
+              {filteredUsers.map(u => (
                 <tr key={u.id} className={`hover:bg-gray-50 ${!u.active ? 'opacity-50' : ''}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -507,9 +589,20 @@ export default function Users() {
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username || '—'}</td>
                   <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
-                      {u.organisation ?? 'Stadtpolizei'}
-                    </span>
+                    {isStrictAdmin && u.id !== authProfile?.id ? (
+                      <select
+                        value={ORGS.includes(u.organisation as Organisation) ? u.organisation : 'Stadtpolizei'}
+                        onChange={event => { void moveUser(u, event.target.value as Organisation) }}
+                        className="border border-gray-300 bg-white rounded-lg px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        aria-label={`${u.name} einer Organisation zuordnen`}
+                      >
+                        {ORGS.map(org => <option key={org} value={org}>{org}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : u.organisation === 'Verwaltung' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {u.organisation ?? 'Stadtpolizei'}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     {!u.roles.includes('admin') && (
@@ -570,9 +663,9 @@ export default function Users() {
                       <button onClick={() => openEdit(u)} className="p-2 hover:bg-gray-100 rounded-md text-gray-500 hover:text-gray-900">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      {canDeactivate && (
-                        <button onClick={() => deactivateUser(u)} title="Deaktivieren" className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-600 disabled:opacity-30" disabled={!u.active}>
-                          <UserX className="w-3.5 h-3.5" />
+                      {isStrictAdmin && u.id !== authProfile?.id && !isBoundAdminIdentity({ username: u.username }) && (
+                        <button onClick={() => { setDeleteTarget(u); setDeleteConfirmation(''); setDeleteError('') }} title="Endgültig löschen" className="p-2 hover:bg-red-50 rounded-md text-red-400 hover:text-red-700">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -780,7 +873,7 @@ export default function Users() {
                 <div className="flex gap-2">
                   {ORGS.map(org => (
                     <button key={org} type="button" onClick={() => setForm(f => ({ ...f, organisation: org }))}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : org === 'Verwaltung' ? 'bg-violet-700 text-white border-violet-700' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
                       {org}
                     </button>
                   ))}
@@ -849,6 +942,32 @@ export default function Users() {
               <button onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={save} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : editId ? 'Speichern' : 'Anlegen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b">
+              <h2 className="font-bold text-red-800">Benutzer endgültig löschen</h2>
+              <button type="button" onClick={() => setDeleteTarget(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-5 sm:px-6 py-4 space-y-4">
+              <p className="text-sm text-gray-700">Das Auth-Konto von <strong>{deleteTarget.name}</strong> wird endgültig entfernt. Diese Aktion kann nicht rückgängig gemacht werden.</p>
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">Bestehen bereits dienstliche Vorgänge oder Nachweise, verhindert das System die Löschung. In diesem Fall bleibt nur die Deaktivierung, damit die Historie erhalten bleibt.</p>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Zur Bestätigung den vollständigen Namen eingeben</label>
+                <input value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" placeholder={deleteTarget.name} autoComplete="off" />
+              </div>
+              {deleteError && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{deleteError}</p>}
+            </div>
+            <div className="flex gap-3 px-5 sm:px-6 py-4 border-t">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button type="button" onClick={() => { void deleteUserPermanently() }} disabled={deleteSaving || deleteConfirmation.trim() !== deleteTarget.name} className="flex-1 bg-red-700 hover:bg-red-800 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-40">
+                {deleteSaving ? 'Lösche…' : 'Endgültig löschen'}
               </button>
             </div>
           </div>

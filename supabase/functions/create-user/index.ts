@@ -1,6 +1,7 @@
 // Edge Function: legt Auth-User + Profil an oder setzt Startpasswort zurück (Service Role).
 // Wird von src/pages/Users.tsx (Portal-Benutzerseite) aufgerufen.
-// Anlegen: action fehlt / 'create'. Reset: action === 'reset_password' + user_id + initial_password.
+// Anlegen: action fehlt / 'create'. Reset: action === 'reset_password'.
+// Löschen: action === 'delete_user' (nur Admin; nur Konten ohne dienstliche Historie).
 // Auth-E-Mail: vorname.nachname@dornbirn.at (klein, ASCII-Fold; Feurstein2-Ausnahme).
 // profiles.username bleibt NULL bis zum Erstlogin (PC-Anmeldename, nie dn{N}).
 // force_password_change + force_username_set.
@@ -167,7 +168,7 @@ function isBoundAdminAccount(username: string | null | undefined, email: string 
   return u === ADMIN_LOGIN_USERNAME || e === ADMIN_AUTH_EMAIL
 }
 
-/** Startpasswort: bewusst einfach (Owner-Default 123456). Persönliches Passwort prüft die UI nach Erstlogin. */
+/** Startpasswort muss gesetzt sein; persönliche Passwortrichtlinien prüft die UI nach dem Erstlogin. */
 function isValidStartPassword(pw: string): boolean {
   return pw.trim().length > 0
 }
@@ -223,6 +224,66 @@ Deno.serve(async (req) => {
   }
 
   const password = (body.initial_password ?? '').trim()
+
+  if (body.action === 'delete_user') {
+    if (!callerRoles.includes('admin')) {
+      return json(req, { error: 'Nur Administratoren dürfen Benutzer endgültig löschen.' }, 403)
+    }
+    const userId = (body.user_id ?? '').trim()
+    if (!userId) return json(req, { error: 'user_id ist Pflicht.' }, 400)
+    if (userId === authData.user.id) {
+      return json(req, { error: 'Das eigene Konto kann nicht gelöscht werden.' }, 400)
+    }
+
+    const { data: target, error: targetErr } = await admin
+      .from('profiles')
+      .select('username, name')
+      .eq('id', userId)
+      .single()
+    if (targetErr || !target) return json(req, { error: 'Benutzer nicht gefunden.' }, 404)
+    const { data: targetAuth, error: targetAuthErr } = await admin.auth.admin.getUserById(userId)
+    if (targetAuthErr || !targetAuth.user) return json(req, { error: 'Auth-Konto nicht gefunden.' }, 404)
+    if (isBoundAdminAccount(target.username, targetAuth.user.email)) {
+      return json(req, { error: 'Das gebundene Admin-Konto kann nicht gelöscht werden.' }, 400)
+    }
+
+    const historyRefs: Array<{ table: string; columns: string[] }> = [
+      { table: 'audit_log', columns: ['user_id'] },
+      { table: 'deliveries', columns: ['created_by'] },
+      { table: 'orders', columns: ['user_id'] },
+      { table: 'shoe_refunds', columns: ['user_id', 'created_by', 'reviewed_by'] },
+      { table: 'stock_orders', columns: ['requested_by', 'approved_by'] },
+      { table: 'support_tickets', columns: ['user_id'] },
+      { table: 'support_messages', columns: ['author_id'] },
+      { table: 'personal_einsatzmittel', columns: ['officer_id', 'created_by', 'removed_by'] },
+      { table: 'personal_einsatzmittel_requests', columns: ['requester_id', 'reviewed_by'] },
+      { table: 'einsatz_training_attendance', columns: ['officer_id'] },
+      { table: 'einsatz_training_participations', columns: ['officer_id', 'created_by'] },
+      { table: 'einsatz_training_completions', columns: ['officer_id'] },
+      { table: 'einsatz_training_registrations', columns: ['officer_id'] },
+      { table: 'einsatz_training_sessions', columns: ['created_by', 'munition_recorded_by'] },
+      { table: 'einsatz_training_modules', columns: ['created_by'] },
+      { table: 'einsatz_material_tabs', columns: ['created_by'] },
+      { table: 'einsatz_materials', columns: ['created_by'] },
+      { table: 'grundausstattung', columns: ['created_by'] },
+      { table: 'pool_einsatzmittel', columns: ['created_by', 'removed_by'] },
+    ]
+    const historyChecks = await Promise.all(historyRefs.map(({ table, columns }) =>
+      admin.from(table).select('*', { head: true, count: 'exact' })
+        .or(columns.map((column) => `${column}.eq.${userId}`).join(','))
+    ))
+    if (historyChecks.some((check) => check.error)) {
+      console.error('Historienprüfung fehlgeschlagen', historyChecks.find((check) => check.error)?.error?.message)
+      return json(req, { error: 'Die dienstliche Historie konnte nicht sicher geprüft werden. Keine Löschung durchgeführt.' }, 500)
+    }
+    if (historyChecks.some((check) => (check.count ?? 0) > 0)) {
+      return json(req, { error: 'Dieser Benutzer ist bereits mit dienstlichen Vorgängen verknüpft und kann daher nicht endgültig gelöscht werden. Bitte stattdessen deaktivieren.' }, 409)
+    }
+
+    const { error: deleteErr } = await admin.auth.admin.deleteUser(userId)
+    if (deleteErr) return json(req, { error: deleteErr.message }, 400)
+    return json(req, { id: userId, deleted: true })
+  }
 
   if (body.action === 'reset_password') {
     if (!canResetUserPassword(callerRoles)) {
@@ -306,7 +367,11 @@ Deno.serve(async (req) => {
   if (roles.length === 0) roles.push('user')
 
   const gender = body.gender === 'female' ? 'female' : 'male'
-  const organisation = body.organisation === 'Parkaufsicht' ? 'Parkaufsicht' : 'Stadtpolizei'
+  const organisation = body.organisation === 'Parkaufsicht'
+    ? 'Parkaufsicht'
+    : body.organisation === 'Verwaltung'
+      ? 'Verwaltung'
+      : 'Stadtpolizei'
   const active = body.active !== false
 
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
