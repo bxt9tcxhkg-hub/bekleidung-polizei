@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plus, X } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -72,6 +72,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   const [poolMunition, setPoolMunition] = useState<PoolMunitionChoice[]>([])
   const [savingMunition, setSavingMunition] = useState(false)
   const [savingRemarkId, setSavingRemarkId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const selected = sessions.find(s => s.id === selectedId) ?? null
   const selectedModule = selected?.module ?? modules.find(m => m.id === selected?.module_id) ?? null
@@ -326,6 +327,58 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     setAttendance(current => current.map(row => row.id === rowId ? { ...row, remark } : row))
   }
 
+  async function removeAttendance(row: EinsatzTrainingAttendance) {
+    if (!canManage || !selectedId) return
+    const officer = row.officer ?? officerById.get(row.officer_id)
+    const label = officerDisplayName(officer)
+    if (!window.confirm(`${label} wirklich aus diesem Protokoll entfernen? Der zugehörige Modulabschluss wird ebenfalls entfernt.`)) return
+    setDeletingId(row.id)
+    setError('')
+    const { error: participationError } = await supabase
+      .from('einsatz_training_participations')
+      .delete()
+      .eq('session_id', selectedId)
+      .eq('officer_id', row.officer_id)
+    if (participationError) {
+      setError(participationError.message || 'Modulabschluss konnte nicht entfernt werden.')
+      setDeletingId(null)
+      return
+    }
+    const { error: attendanceError } = await supabase
+      .from('einsatz_training_attendance')
+      .delete()
+      .eq('id', row.id)
+    if (attendanceError) {
+      setError(attendanceError.message || 'Person konnte nicht aus dem Protokoll entfernt werden.')
+      setDeletingId(null)
+      return
+    }
+    logAudit('Person aus Einsatztraining-Protokoll entfernt', `${selected?.session_date ?? ''} · ${label}`)
+    setDeletingId(null)
+    await Promise.all([loadProtocol(selectedId), reloadCompletions()])
+  }
+
+  async function removeSession(session: EinsatzTrainingSession) {
+    if (!canManage) return
+    const label = `${formatCompletedOn(session.session_date)} · ${session.module?.name ?? 'Trainingstag'}`
+    if (!window.confirm(`Trainingstag „${label}“ wirklich löschen? Anmeldungen, Anwesenheiten und Abschlüsse dieses Trainingstags werden ebenfalls entfernt.`)) return
+    setDeletingId(session.id)
+    setError('')
+    const { error: deleteError } = await supabase
+      .from('einsatz_training_sessions')
+      .delete()
+      .eq('id', session.id)
+    if (deleteError) {
+      setError(deleteError.message || 'Trainingstag konnte nicht gelöscht werden.')
+      setDeletingId(null)
+      return
+    }
+    logAudit('Einsatztraining-Trainingstag gelöscht', label)
+    setSelectedId(null)
+    setDeletingId(null)
+    await loadList()
+  }
+
   async function saveRemark(row: EinsatzTrainingAttendance) {
     if (!canManage) return
     setSavingRemarkId(row.id)
@@ -415,13 +468,27 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
               Anwesend schließt das Modul ab.
             </p>
           </div>
-          <PdfExportButton
-            onClick={() => generateTrainingProtocolPdf({
-              session: { ...selected, moduleName: selectedModule?.name },
-              attendance,
-              participations,
-            })}
-          />
+          <div className="flex items-center gap-2">
+            <PdfExportButton
+              onClick={() => generateTrainingProtocolPdf({
+                session: { ...selected, moduleName: selectedModule?.name },
+                attendance,
+                participations,
+              })}
+            />
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => { void removeSession(selected) }}
+                disabled={deletingId === selected.id}
+                className="border border-red-200 text-red-700 p-2.5 rounded-lg hover:bg-red-50 disabled:opacity-60"
+                title="Trainingstag löschen"
+                aria-label="Trainingstag löschen"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {askMunition && (
@@ -557,7 +624,15 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                           placeholder="Bemerkung des Sachbearbeiters"
                           aria-label={`Bemerkung ${officerDisplayName(officer)}`}
                         />
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-3">
+                          <button
+                            type="button"
+                            onClick={() => { void removeAttendance(row) }}
+                            disabled={deletingId === row.id}
+                            className="text-sm font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
+                          >
+                            Entfernen
+                          </button>
                           <button
                             type="button"
                             onClick={() => { void saveRemark(row) }}
@@ -622,6 +697,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Modul</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Hinweis</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Munition</th>
+                {canManage && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -643,6 +719,20 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                     {formatMunitionVerbrauch(session) || '–'}
                   </td>
+                  {canManage && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => { void removeSession(session) }}
+                        disabled={deletingId === session.id}
+                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-60"
+                        title="Trainingstag löschen"
+                        aria-label="Trainingstag löschen"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

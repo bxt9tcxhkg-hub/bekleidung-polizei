@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -323,6 +323,26 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     await unregisterOfficer(session, profile.id)
   }
 
+  async function removeSession(session: EinsatzTrainingSession) {
+    if (!canManage) return
+    const label = `${formatCompletedOn(session.session_date)} · ${session.module?.name ?? 'Ausschreibung'}`
+    if (!window.confirm(`Ausschreibung „${label}“ wirklich löschen? Zugehörige Anmeldungen werden ebenfalls entfernt.`)) return
+    setBusyId(session.id)
+    setError('')
+    const { error: deleteError } = await supabase
+      .from('einsatz_training_sessions')
+      .delete()
+      .eq('id', session.id)
+    if (deleteError) {
+      setError(deleteError.message || 'Ausschreibung konnte nicht gelöscht werden.')
+      setBusyId(null)
+      return
+    }
+    logAudit('Einsatztraining-Ausschreibung gelöscht', label)
+    setBusyId(null)
+    await load()
+  }
+
   return (
     <div>
       <div className="flex items-start justify-between gap-3 mb-4">
@@ -429,6 +449,18 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
                     )}
                   </div>
                   <div className="flex gap-2">
+                    {canManage && (
+                      <button
+                        type="button"
+                        disabled={busyId === session.id}
+                        onClick={() => { void removeSession(session) }}
+                        className="border border-red-200 text-red-700 p-2 rounded-lg hover:bg-red-50 disabled:opacity-60"
+                        title="Ausschreibung löschen"
+                        aria-label="Ausschreibung löschen"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                     {own ? (
                       <button
                         type="button"
