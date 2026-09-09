@@ -1,11 +1,9 @@
-import type { SupportTicketStatus } from './types'
+import type { SupportTicket, SupportTicketKind, SupportTicketStatus, SupportTicketTopic } from './types'
 
-export type { SupportTicketStatus }
+export type { SupportTicketKind, SupportTicketStatus, SupportTicketTopic }
 
 export const SUPPORT_SUBJECT_MAX = 120
 export const SUPPORT_BODY_MAX = 4000
-
-export type SupportTicketKind = 'help' | 'improvement' | 'idea'
 
 export const SUPPORT_KIND_LABELS: Record<SupportTicketKind, string> = {
   help: 'Hilfe / Problem',
@@ -19,24 +17,94 @@ export const SUPPORT_KIND_COLORS: Record<SupportTicketKind, string> = {
   idea: 'bg-violet-50 text-violet-700',
 }
 
+export const SUPPORT_TOPIC_LABELS: Record<SupportTicketTopic, string> = {
+  general: 'Allgemein / Portal',
+  bekleidung: 'Bekleidung',
+  einsatz_mt: 'Einsatzmittel & Training',
+  zentrale: 'Zentrale',
+  innendienst: 'Innendienst',
+  aussendienst: 'Außendienststreifen',
+  schulungen: 'Schulungen',
+  fuhrpark: 'Fuhrpark & Fahrzeuge',
+  ueberstunden: 'Überstundenmeldung',
+}
+
 const SUPPORT_KIND_PREFIXES: Record<SupportTicketKind, string> = {
   help: '',
   improvement: '[Verbesserung] ',
   idea: '[Idee] ',
 }
 
-export function supportSubjectForStorage(kind: SupportTicketKind, rawSubject: string): SupportFieldResult {
-  return validateSupportSubject(`${SUPPORT_KIND_PREFIXES[kind]}${rawSubject.trim()}`)
+const SUPPORT_TOPIC_PREFIXES: Record<SupportTicketTopic, string> = {
+  general: '',
+  bekleidung: '[Bekleidung] ',
+  einsatz_mt: '[Einsatzmittel & Training] ',
+  zentrale: '[Zentrale] ',
+  innendienst: '[Innendienst] ',
+  aussendienst: '[Außendienst] ',
+  schulungen: '[Schulungen] ',
+  fuhrpark: '[Fuhrpark] ',
+  ueberstunden: '[Überstunden] ',
 }
 
-export function parseSupportSubject(storedSubject: string): { kind: SupportTicketKind; subject: string } {
-  if (storedSubject.startsWith(SUPPORT_KIND_PREFIXES.improvement)) {
-    return { kind: 'improvement', subject: storedSubject.slice(SUPPORT_KIND_PREFIXES.improvement.length) }
+export function supportSubjectForStorage(kind: SupportTicketKind, topic: SupportTicketTopic, rawSubject: string): SupportFieldResult {
+  void kind
+  void topic
+  return validateSupportSubject(rawSubject)
+}
+
+export function supportSubjectInputMax(kind: SupportTicketKind, topic: SupportTicketTopic): number {
+  void kind
+  void topic
+  return SUPPORT_SUBJECT_MAX
+}
+
+export function parseSupportSubject(storedSubject: string): { kind: SupportTicketKind; topic: SupportTicketTopic; subject: string } {
+  let kind: SupportTicketKind = 'help'
+  let subject = storedSubject
+  for (const candidate of ['improvement', 'idea'] as const) {
+    const prefix = SUPPORT_KIND_PREFIXES[candidate]
+    if (subject.startsWith(prefix)) {
+      kind = candidate
+      subject = subject.slice(prefix.length)
+      break
+    }
   }
-  if (storedSubject.startsWith(SUPPORT_KIND_PREFIXES.idea)) {
-    return { kind: 'idea', subject: storedSubject.slice(SUPPORT_KIND_PREFIXES.idea.length) }
+  let topic: SupportTicketTopic = 'general'
+  for (const candidate of Object.keys(SUPPORT_TOPIC_PREFIXES) as SupportTicketTopic[]) {
+    const prefix = SUPPORT_TOPIC_PREFIXES[candidate]
+    if (prefix && subject.startsWith(prefix)) {
+      topic = candidate
+      subject = subject.slice(prefix.length)
+      break
+    }
   }
-  return { kind: 'help', subject: storedSubject }
+  return { kind, topic, subject }
+}
+
+export function supportTicketPresentation(ticket: Pick<SupportTicket, 'subject'> & Partial<Pick<SupportTicket, 'kind' | 'topic'>>) {
+  const legacy = parseSupportSubject(ticket.subject)
+  return {
+    kind: ticket.kind ?? legacy.kind,
+    topic: ticket.topic ?? legacy.topic,
+    subject: legacy.subject,
+  }
+}
+
+export function supportManagedTopics(params: {
+  isAdmin: boolean
+  areaRoles: ReadonlyArray<{ area: string; roles: readonly string[] }> | null
+}): SupportTicketTopic[] {
+  const allTopics = Object.keys(SUPPORT_TOPIC_LABELS) as SupportTicketTopic[]
+  if (params.isAdmin) return allTopics
+  if (!params.areaRoles) return []
+
+  const managed = new Set<SupportTicketTopic>()
+  for (const row of params.areaRoles) {
+    if (!row.roles.some(role => role === 'sachbearbeiter' || role === 'admin')) continue
+    if (row.area === 'bekleidung' || row.area === 'einsatz_mt') managed.add(row.area)
+  }
+  return allTopics.filter(topic => managed.has(topic))
 }
 
 export const SUPPORT_STATUS_LABELS: Record<SupportTicketStatus, string> = {

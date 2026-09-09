@@ -7,14 +7,17 @@ import {
   SUPPORT_BODY_MAX,
   SUPPORT_KIND_COLORS,
   SUPPORT_KIND_LABELS,
+  SUPPORT_TOPIC_LABELS,
   SUPPORT_STATUS_COLORS,
   SUPPORT_STATUS_LABELS,
-  SUPPORT_SUBJECT_MAX,
   sortSupportTickets,
-  parseSupportSubject,
+  supportManagedTopics,
   supportSubjectForStorage,
+  supportSubjectInputMax,
+  supportTicketPresentation,
   validateSupportBody,
   type SupportTicketKind,
+  type SupportTicketTopic,
 } from '../lib/supportTickets'
 
 const FILTERS: Array<SupportTicketStatus | 'all'> = ['all', 'open', 'answered', 'closed']
@@ -30,18 +33,22 @@ function authorLabel(message: SupportMessage): string {
 }
 
 export default function Hilfe() {
-  const { profile, isAdmin, isStrictAdmin } = useAuth()
-  const canManage = isAdmin || isStrictAdmin
+  const { profile, isAdmin, isStrictAdmin, areaRoles } = useAuth()
+  const fullAdmin = isAdmin || isStrictAdmin
+  const managedTopics = supportManagedTopics({ isAdmin: fullAdmin, areaRoles })
+  const canManage = managedTopics.length > 0
   const [tickets, setTickets] = useState<SupportTicket[]>([])
   const [messages, setMessages] = useState<SupportMessage[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState<SupportTicketStatus | 'all'>('all')
+  const [topicFilter, setTopicFilter] = useState<SupportTicketTopic | 'all'>('all')
   const [loading, setLoading] = useState(true)
   const [threadLoading, setThreadLoading] = useState(false)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [subject, setSubject] = useState('')
   const [kind, setKind] = useState<SupportTicketKind>('help')
+  const [topic, setTopic] = useState<SupportTicketTopic>('general')
   const [newBody, setNewBody] = useState('')
   const [reply, setReply] = useState('')
   const [saving, setSaving] = useState(false)
@@ -53,11 +60,10 @@ export default function Hilfe() {
       .from('support_tickets')
       .select('*, profiles(id,name,username,dienstnummer)')
       .order('last_message_at', { ascending: false })
-    if (!canManage) query.eq('user_id', profile.id)
     const { data, error: loadError } = await query
     if (loadError) throw loadError
     setTickets(sortSupportTickets((data ?? []) as SupportTicket[]))
-  }, [profile, canManage])
+  }, [profile])
 
   const loadMessages = useCallback(async (ticketId: string) => {
     const { data, error: loadError } = await supabase
@@ -91,7 +97,11 @@ export default function Hilfe() {
   }, [selectedId, loadMessages])
 
   const selected = tickets.find(t => t.id === selectedId) ?? null
-  const visible = filter === 'all' ? tickets : tickets.filter(t => t.status === filter)
+  const canManageSelected = selected != null && managedTopics.includes(supportTicketPresentation(selected).topic)
+  const statusFiltered = filter === 'all' ? tickets : tickets.filter(t => t.status === filter)
+  const visible = topicFilter === 'all'
+    ? statusFiltered
+    : statusFiltered.filter(ticket => supportTicketPresentation(ticket).topic === topicFilter)
   const counts = {
     all: tickets.length,
     open: tickets.filter(t => t.status === 'open').length,
@@ -103,13 +113,14 @@ export default function Hilfe() {
     setShowForm(false)
     setSubject('')
     setKind('help')
+    setTopic('general')
     setNewBody('')
   }
 
   async function createTicket() {
     if (!profile) return
     setError('')
-    const subjectOk = supportSubjectForStorage(kind, subject)
+    const subjectOk = supportSubjectForStorage(kind, topic, subject)
     if (!subjectOk.ok) { setError(subjectOk.error); return }
     const bodyOk = validateSupportBody(newBody)
     if (!bodyOk.ok) { setError(bodyOk.error); return }
@@ -117,7 +128,7 @@ export default function Hilfe() {
     setSaving(true)
     const { data: ticket, error: ticketError } = await supabase
       .from('support_tickets')
-      .insert({ user_id: profile.id, subject: subjectOk.value })
+      .insert({ user_id: profile.id, subject: subjectOk.value, kind, topic })
       .select('*, profiles(id,name,username,dienstnummer)')
       .single()
 
@@ -166,7 +177,7 @@ export default function Hilfe() {
       ticket_id: selected.id,
       author_id: profile.id,
       body: bodyOk.value,
-      from_admin: canManage && selected.user_id !== profile.id,
+      from_admin: canManageSelected && selected.user_id !== profile.id,
     })
     if (messageError) {
       setError('Nachricht konnte nicht gesendet werden.')
@@ -183,7 +194,7 @@ export default function Hilfe() {
   }
 
   async function closeTicket() {
-    if (!selected || !canManage) return
+    if (!selected || !canManageSelected) return
     setClosing(true)
     setError('')
     const { error: closeError } = await supabase
@@ -201,7 +212,7 @@ export default function Hilfe() {
     setClosing(false)
   }
 
-  const showComposer = selected != null && (canManage || selected.status !== 'closed')
+  const showComposer = selected != null && (canManageSelected || selected.status !== 'closed')
 
   return (
     <div>
@@ -211,7 +222,11 @@ export default function Hilfe() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Hilfe & Ideen</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {canManage ? 'Alle Hilfeanfragen, Verbesserungen und Ideen' : 'Hilfe erhalten oder Verbesserungen und neue Ideen einbringen'}
+            {fullAdmin
+              ? 'Alle Hilfeanfragen, Verbesserungen und Ideen'
+              : canManage
+                ? 'Eigene Anliegen und Vorgänge aus deinen Zuständigkeitsbereichen'
+                : 'Hilfe erhalten oder Verbesserungen und neue Ideen einbringen'}
           </p>
           <p className="text-xs text-gray-400 mt-1">Antworten kommen hier in der App, kein Live-Chat.</p>
         </div>
@@ -239,6 +254,15 @@ export default function Hilfe() {
             </span>
           </button>
         ))}
+        <select
+          value={topicFilter}
+          onChange={event => setTopicFilter(event.target.value as SupportTicketTopic | 'all')}
+          className="flex-shrink-0 border border-gray-300 bg-white rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Nach Themenbereich filtern"
+        >
+          <option value="all">Alle Themen</option>
+          {(Object.keys(SUPPORT_TOPIC_LABELS) as SupportTicketTopic[]).map(id => <option key={id} value={id}>{SUPPORT_TOPIC_LABELS[id]}</option>)}
+        </select>
       </div>
 
       {loading ? (
@@ -256,7 +280,7 @@ export default function Hilfe() {
               <ul className="divide-y divide-gray-100">
                 {visible.map(ticket => {
                   const active = ticket.id === selectedId
-                  const parsedSubject = parseSupportSubject(ticket.subject)
+                  const parsedSubject = supportTicketPresentation(ticket)
                   return (
                     <li key={ticket.id}>
                       <button
@@ -272,6 +296,9 @@ export default function Hilfe() {
                         </div>
                         <span className={`inline-flex mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_KIND_COLORS[parsedSubject.kind]}`}>
                           {SUPPORT_KIND_LABELS[parsedSubject.kind]}
+                        </span>
+                        <span className="inline-flex ml-1.5 mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                          {SUPPORT_TOPIC_LABELS[parsedSubject.topic]}
                         </span>
                         {canManage && (
                           <p className="text-xs text-gray-500 mt-1 truncate">
@@ -307,9 +334,12 @@ export default function Hilfe() {
                   </button>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="font-semibold text-gray-900 truncate">{parseSupportSubject(selected.subject).subject}</h2>
-                      <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_KIND_COLORS[parseSupportSubject(selected.subject).kind]}`}>
-                        {SUPPORT_KIND_LABELS[parseSupportSubject(selected.subject).kind]}
+                      <h2 className="font-semibold text-gray-900 truncate">{supportTicketPresentation(selected).subject}</h2>
+                      <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_KIND_COLORS[supportTicketPresentation(selected).kind]}`}>
+                        {SUPPORT_KIND_LABELS[supportTicketPresentation(selected).kind]}
+                      </span>
+                      <span className="inline-flex ml-1.5 mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                        {SUPPORT_TOPIC_LABELS[supportTicketPresentation(selected).topic]}
                       </span>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {canManage && (selected.profiles?.name || selected.profiles?.username)
@@ -345,7 +375,7 @@ export default function Hilfe() {
                   )}
                 </div>
 
-                {selected.status === 'closed' && !canManage && (
+                {selected.status === 'closed' && !canManageSelected && (
                   <div className="px-4 py-3 border-t border-gray-200">
                     <p className="text-sm text-gray-500">Diese Anfrage ist geschlossen.</p>
                   </div>
@@ -359,10 +389,10 @@ export default function Hilfe() {
                       className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                       value={reply}
                       onChange={e => setReply(e.target.value)}
-                      placeholder={canManage ? 'Antwort schreiben…' : 'Nachricht schreiben…'}
+                      placeholder={canManageSelected ? 'Antwort schreiben…' : 'Nachricht schreiben…'}
                     />
                     <div className="flex flex-wrap gap-2 justify-end">
-                      {canManage && selected.status !== 'closed' && (
+                      {canManageSelected && selected.status !== 'closed' && (
                         <button
                           type="button"
                           onClick={closeTicket}
@@ -379,7 +409,7 @@ export default function Hilfe() {
                         className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60"
                       >
                         <Send className="w-4 h-4" />
-                        {canManage ? 'Beantworten' : 'Senden'}
+                        {canManageSelected ? 'Beantworten' : 'Senden'}
                       </button>
                     </div>
                   </div>
@@ -422,10 +452,21 @@ export default function Hilfe() {
                 </div>
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="support-topic">Themenbereich</label>
+                <select
+                  id="support-topic"
+                  value={topic}
+                  onChange={event => setTopic(event.target.value as SupportTicketTopic)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {(Object.keys(SUPPORT_TOPIC_LABELS) as SupportTicketTopic[]).map(id => <option key={id} value={id}>{SUPPORT_TOPIC_LABELS[id]}</option>)}
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Betreff</label>
                 <input
                   type="text"
-                  maxLength={SUPPORT_SUBJECT_MAX}
+                  maxLength={supportSubjectInputMax(kind, topic)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={subject}
                   onChange={e => setSubject(e.target.value)}

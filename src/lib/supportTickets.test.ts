@@ -3,10 +3,13 @@ import {
   SUPPORT_BODY_MAX,
   SUPPORT_STATUS_LABELS,
   SUPPORT_KIND_LABELS,
+  SUPPORT_TOPIC_LABELS,
   SUPPORT_SUBJECT_MAX,
   sortSupportTickets,
+  supportManagedTopics,
   parseSupportSubject,
   supportSubjectForStorage,
+  supportSubjectInputMax,
   validateSupportBody,
   validateSupportSubject,
 } from './supportTickets'
@@ -46,14 +49,32 @@ describe('validateSupportSubject', () => {
 
 describe('Anfragearten', () => {
   it('speichert und erkennt Verbesserungen und Ideen', () => {
-    expect(supportSubjectForStorage('improvement', '  Bessere Suche  ')).toEqual({ ok: true, value: '[Verbesserung] Bessere Suche' })
-    expect(parseSupportSubject('[Verbesserung] Bessere Suche')).toEqual({ kind: 'improvement', subject: 'Bessere Suche' })
-    expect(parseSupportSubject('[Idee] Fahrzeug-QR-Code')).toEqual({ kind: 'idea', subject: 'Fahrzeug-QR-Code' })
+    expect(supportSubjectForStorage('improvement', 'fuhrpark', '  Bessere Suche  ')).toEqual({ ok: true, value: 'Bessere Suche' })
+    expect(parseSupportSubject('[Verbesserung] [Fuhrpark] Bessere Suche')).toEqual({ kind: 'improvement', topic: 'fuhrpark', subject: 'Bessere Suche' })
+    expect(parseSupportSubject('[Idee] Fahrzeug-QR-Code')).toEqual({ kind: 'idea', topic: 'general', subject: 'Fahrzeug-QR-Code' })
+    expect(supportSubjectInputMax('improvement', 'fuhrpark')).toBe(SUPPORT_SUBJECT_MAX)
   })
 
   it('behandelt bestehende Anfragen weiterhin als Hilfe', () => {
-    expect(parseSupportSubject('Passwort funktioniert nicht')).toEqual({ kind: 'help', subject: 'Passwort funktioniert nicht' })
+    expect(parseSupportSubject('Passwort funktioniert nicht')).toEqual({ kind: 'help', topic: 'general', subject: 'Passwort funktioniert nicht' })
     expect(SUPPORT_KIND_LABELS.help).toBe('Hilfe / Problem')
+    expect(SUPPORT_TOPIC_LABELS.einsatz_mt).toBe('Einsatzmittel & Training')
+  })
+})
+
+describe('Bereichsbezogene Bearbeitung', () => {
+  it('gibt Sachbearbeitern nur ihre zugewiesenen Hilfebereiche', () => {
+    expect(supportManagedTopics({
+      isAdmin: false,
+      areaRoles: [
+        { area: 'bekleidung', roles: ['sachbearbeiter'] },
+        { area: 'einsatz_mt', roles: ['user'] },
+      ],
+    })).toEqual(['bekleidung'])
+  })
+
+  it('gibt Administratoren alle Hilfebereiche', () => {
+    expect(supportManagedTopics({ isAdmin: true, areaRoles: null })).toEqual(Object.keys(SUPPORT_TOPIC_LABELS))
   })
 })
 

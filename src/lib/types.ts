@@ -428,6 +428,8 @@ export interface EinsatzTrainingRegistration {
 }
 
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
+export type SupportTicketKind = 'help' | 'improvement' | 'idea'
+export type SupportTicketTopic = 'general' | 'bekleidung' | 'einsatz_mt' | 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
 
 export interface SupportTicket {
   id: string
@@ -435,6 +437,8 @@ export interface SupportTicket {
   updated_at: string
   user_id: string
   subject: string
+  kind: SupportTicketKind
+  topic: SupportTicketTopic
   status: SupportTicketStatus
   last_message_at: string
   profiles?: Profile
