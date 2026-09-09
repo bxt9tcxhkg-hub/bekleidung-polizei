@@ -216,6 +216,7 @@ Deno.serve(async (req) => {
     active?: boolean
     initial_password?: string
     einsatz_mt_role?: string
+    einsatz_mt_roles?: string[]
   }
   try {
     body = await req.json()
@@ -419,11 +420,18 @@ Deno.serve(async (req) => {
     { user_id: created.user.id, area: 'bekleidung', roles: bekleidungRoles },
   ]
   if (active) {
-    const requestedEinsatz = body.einsatz_mt_role
-    const einsatzMt = callerRoles.includes('admin') && (requestedEinsatz === 'sachbearbeiter' || requestedEinsatz === 'admin')
-      ? requestedEinsatz
-      : 'user'
-    areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: [einsatzMt] })
+    const allowedEinsatzRoles = new Set(['user', 'sachbearbeiter', 'admin'])
+    const requestedEinsatzRoles = Array.isArray(body.einsatz_mt_roles)
+      ? body.einsatz_mt_roles
+      : body.einsatz_mt_role
+        ? [body.einsatz_mt_role]
+        : ['user']
+    const einsatzMtRoles = callerRoles.includes('admin')
+      ? [...new Set(requestedEinsatzRoles.filter((role) => allowedEinsatzRoles.has(role)))]
+      : ['user']
+    if (einsatzMtRoles.length > 0) {
+      areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: einsatzMtRoles })
+    }
   }
   const { error: areaErr } = await admin.from('portal_area_roles').upsert(areaRows)
   if (areaErr) {

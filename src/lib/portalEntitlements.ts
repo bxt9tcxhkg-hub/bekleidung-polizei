@@ -109,11 +109,17 @@ export function profilesRolesFromBekleidung(roles: readonly string[]): string[] 
 }
 
 export function parseEinsatzMtRole(roles: readonly string[] | null | undefined): EinsatzMtRole | null {
-  if (!roles || roles.length === 0) return null
-  const allowed = roles.map(canonicalizeRoleName).filter(role => isAllowedAreaRole('einsatz_mt', role))
+  const allowed = parseEinsatzMtRoles(roles)
   const highest = highestAreaRole(allowed)
   if (highest === 'user' || highest === 'sachbearbeiter' || highest === 'admin') return highest
   return null
+}
+
+export function parseEinsatzMtRoles(roles: readonly string[] | null | undefined): EinsatzMtRole[] {
+  if (!roles || roles.length === 0) return []
+  return sortAreaRoles(
+    roles.map(canonicalizeRoleName).filter(role => isAllowedAreaRole('einsatz_mt', role)),
+  ) as EinsatzMtRole[]
 }
 
 export function rolesForArea(

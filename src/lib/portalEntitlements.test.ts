@@ -9,6 +9,7 @@ import {
   highestAreaRole,
   isAllowedAreaRole,
   parseEinsatzMtRole,
+  parseEinsatzMtRoles,
   profilesRolesFromBekleidung,
   rolesForArea,
   sortAreaRoles,
@@ -70,6 +71,14 @@ describe('einsatz_mt Rolle', () => {
     expect(parseEinsatzMtRole(['user', 'sachbearbeiter'])).toBe('sachbearbeiter')
     expect(parseEinsatzMtRole(['admin'])).toBe('admin')
     expect(highestAreaRole(['user', 'admin'])).toBe('admin')
+  })
+
+  it('behält mehrere erlaubte Rollen', () => {
+    expect(parseEinsatzMtRoles(['admin', 'user', 'sachbearbeiter', 'user'])).toEqual([
+      'user',
+      'sachbearbeiter',
+      'admin',
+    ])
   })
 
   it('liefert null ohne Zeile / ohne erlaubte Rolle', () => {

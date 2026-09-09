@@ -20,7 +20,7 @@ import {
 import {
   AREA_ROLE_LABELS,
   defaultEinsatzMtRoleForNewUser,
-  parseEinsatzMtRole,
+  parseEinsatzMtRoles,
   profilesRolesFromBekleidung,
   type EinsatzMtRole,
 } from '../lib/portalEntitlements'
@@ -33,11 +33,10 @@ const ORGS = ['Stadtpolizei', 'Parkaufsicht', 'Verwaltung'] as const
 type Organisation = (typeof ORGS)[number]
 type OrgFilter = 'all' | Organisation
 type RoleFilter = 'all' | 'sachbearbeiter' | 'genehmiger' | 'admin'
-const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole | ''; label: string }[] = [
+const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole; label: string }[] = [
   { value: 'user', label: AREA_ROLE_LABELS.user },
   { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
   { value: 'admin', label: AREA_ROLE_LABELS.admin },
-  { value: '', label: 'Kein Zugriff' },
 ]
 const BEKLEIDUNG_ROLE_LABEL: Record<string, string> = {
   user: 'Benutzer',
@@ -62,7 +61,7 @@ const emptyForm = () => ({
   initialPassword: DEFAULT_START_PASSWORD,
   dienstnummer: '',
   roles: ['user'] as string[],
-  einsatzMtRole: defaultEinsatzMtRoleForNewUser() as EinsatzMtRole | '',
+  einsatzMtRoles: [defaultEinsatzMtRoleForNewUser()] as EinsatzMtRole[],
   gender: 'male' as 'male' | 'female',
   organisation: 'Stadtpolizei' as string,
   active: true,
@@ -71,7 +70,7 @@ const emptyForm = () => ({
 async function persistAreaRoles(
   userId: string,
   bekleidungRoles: string[],
-  einsatzMt: EinsatzMtRole | '',
+  einsatzMt: EinsatzMtRole[],
 ): Promise<string | null> {
   const { error: bekErr } = await supabase.from('portal_area_roles').upsert({
     user_id: userId,
@@ -79,11 +78,11 @@ async function persistAreaRoles(
     roles: profilesRolesFromBekleidung(bekleidungRoles),
   })
   if (bekErr) return bekErr.message
-  if (einsatzMt) {
+  if (einsatzMt.length > 0) {
     const { error } = await supabase.from('portal_area_roles').upsert({
       user_id: userId,
       area: 'einsatz_mt',
-      roles: [einsatzMt],
+      roles: einsatzMt,
     })
     return error?.message ?? null
   }
@@ -170,7 +169,7 @@ export default function Users() {
       initialPassword: '',
       dienstnummer: u.dienstnummer ?? '',
       roles: u.roles,
-      einsatzMtRole: parseEinsatzMtRole(areaByUser[u.id]?.einsatz_mt) ?? '',
+      einsatzMtRoles: parseEinsatzMtRoles(areaByUser[u.id]?.einsatz_mt),
       gender: u.gender ?? 'male',
       organisation: u.organisation ?? 'Stadtpolizei',
       active: u.active,
@@ -218,7 +217,7 @@ export default function Users() {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
       if (isStrictAdmin && !isSelfEdit) {
-        const areaErr = await persistAreaRoles(editId, safeRoles, form.einsatzMtRole)
+        const areaErr = await persistAreaRoles(editId, safeRoles, form.einsatzMtRoles)
         if (areaErr) { setError(areaErr); setSaving(false); return }
       }
       if (startPassword) {
@@ -239,7 +238,7 @@ export default function Users() {
         const json = await res.json() as { error?: string; id?: string }
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
         if (isStrictAdmin && json.id) {
-          const areaErr = await persistAreaRoles(json.id, safeRoles, form.einsatzMtRole)
+          const areaErr = await persistAreaRoles(json.id, safeRoles, form.einsatzMtRoles)
           if (areaErr) { setError(areaErr); setSaving(false); return }
         }
         logAudit('Benutzer angelegt', username || form.name)
@@ -419,7 +418,7 @@ export default function Users() {
             organisation: row.organisation,
             roles: row.roles,
             gender: row.gender,
-            einsatz_mt_role: isStrictAdmin ? row.einsatzMtRole : undefined,
+            einsatz_mt_roles: isStrictAdmin && row.einsatzMtRole ? [row.einsatzMtRole] : undefined,
             initial_password: password,
           }),
         })
@@ -463,12 +462,22 @@ export default function Users() {
     }))
   }
 
+  function toggleEinsatzMtRole(role: EinsatzMtRole) {
+    if (isSelfEdit) return
+    setForm(current => ({
+      ...current,
+      einsatzMtRoles: current.einsatzMtRoles.includes(role)
+        ? current.einsatzMtRoles.filter(existing => existing !== role)
+        : parseEinsatzMtRoles([...current.einsatzMtRoles, role]),
+    }))
+  }
+
   const normalizedSearch = search.trim().toLocaleLowerCase('de-AT')
   const filteredUsers = users.filter(user => {
     if (orgFilter !== 'all' && user.organisation !== orgFilter) return false
     if (roleFilter !== 'all') {
-      const einsatzRole = parseEinsatzMtRole(areaByUser[user.id]?.einsatz_mt)
-      if (!user.roles.includes(roleFilter) && einsatzRole !== roleFilter) return false
+      const einsatzRoles = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
+      if (!user.roles.includes(roleFilter) && !einsatzRoles.includes(roleFilter as EinsatzMtRole)) return false
     }
     if (!normalizedSearch) return true
     return [user.name, user.dienstnummer, user.username]
@@ -484,8 +493,8 @@ export default function Users() {
       .replaceAll('"', '&quot;').replaceAll("'", '&#039;')
     const roleText = (user: Profile) => {
       const bekleidung = user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')
-      const em = parseEinsatzMtRole(areaByUser[user.id]?.einsatz_mt)
-      return `Bekleidung: ${bekleidung || '–'}; Einsatzmittel & Training: ${em ? AREA_ROLE_LABELS[em] : 'kein Zugriff'}`
+      const em = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
+      return `Bekleidung: ${bekleidung || '–'}; Einsatzmittel & Training: ${em.length > 0 ? em.map(role => AREA_ROLE_LABELS[role]).join(', ') : 'kein Zugriff'}`
     }
     const rows = filteredUsers.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.dienstnummer ?? '–')}</td><td>${escapeHtml(user.organisation ?? 'Stadtpolizei')}</td><td>${escapeHtml(roleText(user))}</td><td>${user.active ? 'Aktiv' : 'Inaktiv'}</td></tr>`).join('')
     const printWindow = window.open('', '_blank')
@@ -567,7 +576,7 @@ export default function Users() {
               <div className="bg-white rounded-xl border border-gray-200 py-10 px-4 text-center text-sm text-gray-500">Keine Mitarbeiter gefunden.</div>
             )}
             {filteredUsers.map(user => {
-              const einsatzRole = parseEinsatzMtRole(areaByUser[user.id]?.einsatz_mt)
+              const einsatzRoles = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
               const protectedAccount = user.id === authProfile?.id || isBoundAdminIdentity({ username: user.username })
               return (
                 <article key={user.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${!user.active ? 'opacity-60' : ''}`}>
@@ -602,7 +611,7 @@ export default function Users() {
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-gray-400 mb-1">Einsatzmittel & Training</p>
-                      <p className="font-medium text-gray-700">{einsatzRole ? AREA_ROLE_LABELS[einsatzRole] : 'Kein Zugriff'}</p>
+                      <p className="font-medium text-gray-700">{einsatzRoles.length > 0 ? einsatzRoles.map(role => AREA_ROLE_LABELS[role]).join(', ') : 'Kein Zugriff'}</p>
                     </div>
                   </div>
 
@@ -683,12 +692,16 @@ export default function Users() {
                   <td className="px-4 py-3 hidden md:table-cell">
                     {(() => {
                       const emRoles = areaByUser[u.id]?.einsatz_mt
-                      const em = parseEinsatzMtRole(emRoles)
-                      if (em) {
+                      const em = parseEinsatzMtRoles(emRoles)
+                      if (em.length > 0) {
                         return (
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${BEKLEIDUNG_ROLE_COLOR[em] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {AREA_ROLE_LABELS[em]}
-                          </span>
+                          <div className="flex gap-1 flex-wrap">
+                            {em.map(role => (
+                              <span key={role} className={`text-xs font-medium px-2 py-0.5 rounded-full ${BEKLEIDUNG_ROLE_COLOR[role] ?? 'bg-gray-100 text-gray-600'}`}>
+                                {AREA_ROLE_LABELS[role]}
+                              </span>
+                            ))}
+                          </div>
                         )
                       }
                       if (isStrictAdmin || emRoles) {
@@ -967,13 +980,13 @@ export default function Users() {
                   <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Einsatzmittel &amp; Training</legend>
                   <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
                     {EINSATZ_MT_OPTIONS.map(option => (
-                      <label key={option.label} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${form.einsatzMtRole === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'} ${isSelfEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
-                        <input type="radio" name="einsatz-mt-role" value={option.value} checked={form.einsatzMtRole === option.value} disabled={isSelfEdit} onChange={() => setForm(current => ({ ...current, einsatzMtRole: option.value }))} />
+                      <label key={option.label} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${form.einsatzMtRoles.includes(option.value) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'} ${isSelfEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input type="checkbox" value={option.value} checked={form.einsatzMtRoles.includes(option.value)} disabled={isSelfEdit} onChange={() => toggleEinsatzMtRole(option.value)} className="rounded" />
                         <span className="text-sm font-medium text-gray-700">{option.label}</span>
                       </label>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">Benutzer = Leserecht. In diesem Bereich gibt es keinen Genehmiger.</p>
+                  <p className="text-xs text-gray-400 mt-2">Mehrere Funktionen können gleichzeitig vergeben werden. Ohne Auswahl besteht kein Zugriff.</p>
                 </fieldset>
               )}
               {(!editId || canDeactivate) && (
