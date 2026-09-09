@@ -488,8 +488,9 @@ export default function Users() {
       return `Bekleidung: ${bekleidung || '–'}; Einsatzmittel & Training: ${em ? AREA_ROLE_LABELS[em] : 'kein Zugriff'}`
     }
     const rows = filteredUsers.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.dienstnummer ?? '–')}</td><td>${escapeHtml(user.organisation ?? 'Stadtpolizei')}</td><td>${escapeHtml(roleText(user))}</td><td>${user.active ? 'Aktiv' : 'Inaktiv'}</td></tr>`).join('')
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    const printWindow = window.open('', '_blank')
     if (!printWindow) { setError('Druckansicht konnte nicht geöffnet werden. Bitte Pop-ups erlauben.'); return }
+    printWindow.opener = null
     printWindow.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Mitarbeiterliste</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial,sans-serif;color:#111;font-size:10pt}h1{font-size:18pt;margin:0 0 4mm}.meta{color:#555;margin-bottom:6mm}.notice{border:1px solid #999;padding:3mm;margin-bottom:5mm;font-weight:700}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:2.2mm;text-align:left;vertical-align:top}th{background:#eee}tr{break-inside:avoid}.footer{margin-top:5mm;color:#666;font-size:8pt}</style></head><body><h1>Mitarbeiterliste</h1><div class="meta">Bereich: ${escapeHtml(orgFilter === 'all' ? 'Alle Organisationen' : orgFilter)} · Stand: ${escapeHtml(new Date().toLocaleString('de-AT'))}</div><div class="notice">Nur für den internen Dienstgebrauch. Vor unbefugter Einsicht schützen und nach Gebrauch datenschutzgerecht vernichten.</div><table><thead><tr><th>Name</th><th>Dienstnummer</th><th>Organisation</th><th>Funktionsrechte</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Die Druckansicht enthält bewusst keine Login-Daten, Passwörter oder Geschlechtsangaben.</div><script>window.addEventListener('load',()=>{window.print();window.close()})</script></body></html>`)
     printWindow.document.close()
   }
