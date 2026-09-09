@@ -36,8 +36,10 @@ type RoleFilter = 'all' | 'sachbearbeiter' | 'genehmiger' | 'admin'
 const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole; label: string }[] = [
   { value: 'user', label: AREA_ROLE_LABELS.user },
   { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
-  { value: 'admin', label: AREA_ROLE_LABELS.admin },
 ]
+
+const isPortalAdmin = (user: Pick<Profile, 'roles'>) => user.roles.includes('admin')
+const clothingRoles = (roles: readonly string[]) => roles.filter(role => role !== 'admin')
 const BEKLEIDUNG_ROLE_LABEL: Record<string, string> = {
   user: 'Benutzer',
   sachbearbeiter: 'Sachbearbeiter',
@@ -72,11 +74,12 @@ async function persistAreaRoles(
   bekleidungRoles: string[],
   einsatzMt: EinsatzMtRole[],
 ): Promise<string | null> {
-  const { error: bekErr } = bekleidungRoles.length > 0
+  const areaBekleidungRoles = clothingRoles(bekleidungRoles)
+  const { error: bekErr } = areaBekleidungRoles.length > 0
     ? await supabase.from('portal_area_roles').upsert({
         user_id: userId,
         area: 'bekleidung',
-        roles: profilesRolesFromBekleidung(bekleidungRoles),
+        roles: profilesRolesFromBekleidung(areaBekleidungRoles),
       })
     : await supabase.from('portal_area_roles').delete().eq('user_id', userId).eq('area', 'bekleidung')
   if (bekErr) return bekErr.message
@@ -171,7 +174,7 @@ export default function Users() {
       initialPassword: '',
       dienstnummer: u.dienstnummer ?? '',
       roles: u.roles,
-      einsatzMtRoles: parseEinsatzMtRoles(areaByUser[u.id]?.einsatz_mt),
+      einsatzMtRoles: parseEinsatzMtRoles(areaByUser[u.id]?.einsatz_mt).filter(role => role !== 'admin'),
       gender: u.gender ?? 'male',
       organisation: u.organisation ?? 'Stadtpolizei',
       active: u.active,
@@ -210,7 +213,7 @@ export default function Users() {
       roles: safeRoles,
       gender: form.gender,
       organisation: form.organisation,
-      ...(form.organisation === 'Stadtpolizei' ? {} : { dienstgrad: null }),
+      ...((safeRoles.includes('admin') || form.organisation !== 'Stadtpolizei') ? { dienstgrad: null } : {}),
       active,
       force_username_set: forceUsernameSet,
     }
@@ -219,7 +222,7 @@ export default function Users() {
       const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
       if (error) { setError(error.message); setSaving(false); return }
       if (isStrictAdmin && !isSelfEdit) {
-        const areaErr = await persistAreaRoles(editId, safeRoles, form.einsatzMtRoles)
+        const areaErr = await persistAreaRoles(editId, safeRoles, safeRoles.includes('admin') ? [] : form.einsatzMtRoles)
         if (areaErr) { setError(areaErr); setSaving(false); return }
       }
       if (startPassword) {
@@ -240,7 +243,7 @@ export default function Users() {
         const json = await res.json() as { error?: string; id?: string }
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
         if (isStrictAdmin && json.id) {
-          const areaErr = await persistAreaRoles(json.id, safeRoles, form.einsatzMtRoles)
+          const areaErr = await persistAreaRoles(json.id, safeRoles, safeRoles.includes('admin') ? [] : form.einsatzMtRoles)
           if (areaErr) { setError(areaErr); setSaving(false); return }
         }
         logAudit('Benutzer angelegt', username || form.name)
@@ -263,7 +266,7 @@ export default function Users() {
   }
 
   async function moveUser(u: Profile, organisation: Organisation) {
-    if (!isStrictAdmin || u.id === authProfile?.id || u.organisation === organisation) return
+    if (!isStrictAdmin || isPortalAdmin(u) || u.id === authProfile?.id || u.organisation === organisation) return
     const previous = u.organisation
     const previousDienstgrad = u.dienstgrad ?? null
     const dienstgrad = organisation === 'Stadtpolizei' ? previousDienstgrad : null
@@ -460,10 +463,13 @@ export default function Users() {
   function toggleRole(role: string) {
     if (isSelfEdit) return
     if (!canAssignRole(role)) return
-    setForm(f => ({
-      ...f,
-      roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role],
-    }))
+    setForm(f => {
+      if (role === 'admin') {
+        const enablingAdmin = !f.roles.includes('admin')
+        return { ...f, roles: enablingAdmin ? ['admin'] : ['user'], einsatzMtRoles: enablingAdmin ? [] : [defaultEinsatzMtRoleForNewUser()] }
+      }
+      return { ...f, roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role] }
+    })
   }
 
   function toggleEinsatzMtRole(role: EinsatzMtRole) {
@@ -478,7 +484,7 @@ export default function Users() {
 
   const normalizedSearch = search.trim().toLocaleLowerCase('de-AT')
   const filteredUsers = users.filter(user => {
-    if (orgFilter !== 'all' && user.organisation !== orgFilter) return false
+    if (orgFilter !== 'all' && (isPortalAdmin(user) || user.organisation !== orgFilter)) return false
     if (roleFilter !== 'all') {
       const einsatzRoles = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
       if (!user.roles.includes(roleFilter) && !einsatzRoles.includes(roleFilter as EinsatzMtRole)) return false
@@ -488,7 +494,7 @@ export default function Users() {
       .some(value => (value ?? '').toLocaleLowerCase('de-AT').includes(normalizedSearch))
   })
   const organisationCounts = Object.fromEntries(
-    ORGS.map(org => [org, users.filter(user => user.organisation === org).length]),
+    ORGS.map(org => [org, users.filter(user => !isPortalAdmin(user) && user.organisation === org).length]),
   ) as Record<Organisation, number>
 
   function printDirectory() {
@@ -496,15 +502,16 @@ export default function Users() {
       .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;').replaceAll("'", '&#039;')
     const roleText = (user: Profile) => {
-      const bekleidung = user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')
+      if (isPortalAdmin(user)) return 'Portalweite Rolle: Admin'
+      const bekleidung = clothingRoles(user.roles).map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')
       const em = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
       return `Bekleidung: ${bekleidung || 'kein Zugriff'}; Einsatzmittel & Training: ${em.length > 0 ? em.map(role => AREA_ROLE_LABELS[role]).join(', ') : 'kein Zugriff'}`
     }
-    const rows = filteredUsers.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.dienstnummer ?? '–')}</td><td>${escapeHtml(user.organisation ?? 'Stadtpolizei')}</td><td>${escapeHtml(roleText(user))}</td><td>${user.active ? 'Aktiv' : 'Inaktiv'}</td></tr>`).join('')
+    const rows = filteredUsers.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.dienstnummer ?? '–')}</td><td>${escapeHtml(isPortalAdmin(user) ? 'Übergeordnet' : (user.organisation ?? 'Stadtpolizei'))}</td><td>${escapeHtml(roleText(user))}</td><td>${user.active ? 'Aktiv' : 'Inaktiv'}</td></tr>`).join('')
     const printWindow = window.open('', '_blank')
     if (!printWindow) { setError('Druckansicht konnte nicht geöffnet werden. Bitte Pop-ups erlauben.'); return }
     printWindow.opener = null
-    printWindow.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Mitarbeiterliste</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial,sans-serif;color:#111;font-size:10pt}h1{font-size:18pt;margin:0 0 4mm}.meta{color:#555;margin-bottom:6mm}.notice{border:1px solid #999;padding:3mm;margin-bottom:5mm;font-weight:700}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:2.2mm;text-align:left;vertical-align:top}th{background:#eee}tr{break-inside:avoid}.footer{margin-top:5mm;color:#666;font-size:8pt}</style></head><body><h1>Mitarbeiterliste</h1><div class="meta">Bereich: ${escapeHtml(orgFilter === 'all' ? 'Alle Organisationen' : orgFilter)} · Stand: ${escapeHtml(new Date().toLocaleString('de-AT'))}</div><div class="notice">Nur für den internen Dienstgebrauch. Vor unbefugter Einsicht schützen und nach Gebrauch datenschutzgerecht vernichten.</div><table><thead><tr><th>Name</th><th>Dienstnummer</th><th>Organisation</th><th>Funktionsrechte</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Die Druckansicht enthält bewusst keine Login-Daten, Passwörter oder Geschlechtsangaben.</div><script>window.addEventListener('load',()=>{window.print();window.close()})</script></body></html>`)
+    printWindow.document.write(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Mitarbeiterliste</title><style>@page{size:A4 landscape;margin:14mm}body{font-family:Arial,sans-serif;color:#111;font-size:10pt}h1{font-size:18pt;margin:0 0 4mm}.meta{color:#555;margin-bottom:6mm}.notice{border:1px solid #999;padding:3mm;margin-bottom:5mm;font-weight:700}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:2.2mm;text-align:left;vertical-align:top}th{background:#eee}tr{break-inside:avoid}.footer{margin-top:5mm;color:#666;font-size:8pt}</style></head><body><h1>Mitarbeiterliste</h1><div class="meta">Bereich: ${escapeHtml(orgFilter === 'all' ? 'Alle Organisationen' : orgFilter)} · Stand: ${escapeHtml(new Date().toLocaleString('de-AT'))}</div><div class="notice">Nur für den internen Dienstgebrauch. Vor unbefugter Einsicht schützen und nach Gebrauch datenschutzgerecht vernichten.</div><table><thead><tr><th>Name</th><th>Dienstnummer</th><th>Zuordnung</th><th>Funktionsrechte</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Die Druckansicht enthält bewusst keine Login-Daten, Passwörter oder Geschlechtsangaben.</div><script>window.addEventListener('load',()=>{window.print();window.close()})</script></body></html>`)
     printWindow.document.close()
   }
 
@@ -581,13 +588,13 @@ export default function Users() {
             )}
             {filteredUsers.map(user => {
               const einsatzRoles = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
-              const protectedAccount = user.id === authProfile?.id || isBoundAdminIdentity({ username: user.username })
+              const protectedAccount = isPortalAdmin(user) || user.id === authProfile?.id || isBoundAdminIdentity({ username: user.username })
               return (
                 <article key={user.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${!user.active ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h2 className="font-semibold text-gray-900 truncate">{user.name}</h2>
-                      {user.organisation === 'Stadtpolizei' && user.dienstgrad && <p className="text-xs font-medium text-blue-700 mt-0.5">{user.dienstgrad}</p>}
+                      {!isPortalAdmin(user) && user.organisation === 'Stadtpolizei' && user.dienstgrad && <p className="text-xs font-medium text-blue-700 mt-0.5">{user.dienstgrad}</p>}
                       <p className="text-xs text-gray-500 mt-0.5">{user.dienstnummer ? `DNr. ${user.dienstnummer}` : 'Keine Dienstnummer'}{user.username ? ` · ${user.username}` : ''}</p>
                     </div>
                     {canDeactivate ? (
@@ -605,14 +612,14 @@ export default function Users() {
                         {ORGS.map(org => <option key={org} value={org}>{org}</option>)}
                       </select>
                     ) : (
-                      <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${user.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : user.organisation === 'Verwaltung' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{user.organisation ?? 'Stadtpolizei'}</span>
+                      <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${isPortalAdmin(user) ? 'bg-purple-100 text-purple-700' : user.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : user.organisation === 'Verwaltung' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{isPortalAdmin(user) ? 'Übergeordnet' : (user.organisation ?? 'Stadtpolizei')}</span>
                     )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-gray-400 mb-1">Bekleidung</p>
-                      <p className="font-medium text-gray-700">{user.roles.length > 0 ? user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ') : 'Kein Zugriff'}</p>
+                      <p className="font-medium text-gray-700">{clothingRoles(user.roles).length > 0 ? clothingRoles(user.roles).map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ') : 'Kein Zugriff'}</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-gray-400 mb-1">Einsatzmittel & Training</p>
@@ -641,7 +648,7 @@ export default function Users() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">PC-Benutzername</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstgrad / DNr.</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Zuordnung</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Bekleidung</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Einsatzmittel &amp; Training</th>
@@ -661,9 +668,9 @@ export default function Users() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username || '—'}</td>
-                  <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.organisation === 'Stadtpolizei' && u.dienstgrad ? `${u.dienstgrad} · ` : ''}{u.dienstnummer ? `DNr. ${u.dienstnummer}` : '–'}</td>
+                  <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{!isPortalAdmin(u) && u.organisation === 'Stadtpolizei' && u.dienstgrad ? `${u.dienstgrad} · ` : ''}{u.dienstnummer ? `DNr. ${u.dienstnummer}` : '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    {isStrictAdmin && u.id !== authProfile?.id ? (
+                    {isStrictAdmin && !isPortalAdmin(u) && u.id !== authProfile?.id ? (
                       <select
                         value={ORGS.includes(u.organisation as Organisation) ? u.organisation : 'Stadtpolizei'}
                         onChange={event => { void moveUser(u, event.target.value as Organisation) }}
@@ -673,8 +680,8 @@ export default function Users() {
                         {ORGS.map(org => <option key={org} value={org}>{org}</option>)}
                       </select>
                     ) : (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : u.organisation === 'Verwaltung' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
-                        {u.organisation ?? 'Stadtpolizei'}
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isPortalAdmin(u) ? 'bg-purple-100 text-purple-700' : u.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : u.organisation === 'Verwaltung' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>
+                        {isPortalAdmin(u) ? 'Übergeordnet' : (u.organisation ?? 'Stadtpolizei')}
                       </span>
                     )}
                   </td>
@@ -687,12 +694,12 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     <div className="flex gap-1 flex-wrap">
-                      {u.roles.map(r => (
+                      {clothingRoles(u.roles).map(r => (
                         <span key={r} className={`text-xs font-medium px-2 py-0.5 rounded-full ${BEKLEIDUNG_ROLE_COLOR[r] ?? 'bg-gray-100 text-gray-600'}`}>
                           {BEKLEIDUNG_ROLE_LABEL[r] ?? r}
                         </span>
                       ))}
-                      {u.roles.length === 0 && <span className="text-xs text-gray-400">Kein Zugriff</span>}
+                      {clothingRoles(u.roles).length === 0 && <span className="text-xs text-gray-400">Kein Zugriff</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
@@ -948,23 +955,41 @@ export default function Users() {
                 <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog angezeigt werden (Herren-, Damen- und Unisex-Artikel).</p>
               </div>
               )}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {ORGS.map(org => (
-                    <button key={org} type="button" onClick={() => setForm(f => ({ ...f, organisation: org }))}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : org === 'Verwaltung' ? 'bg-violet-700 text-white border-violet-700' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
-                      {org}
-                    </button>
-                  ))}
+              {form.roles.includes('admin') ? (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Zuordnung</label>
+                  <p className="text-sm font-medium text-purple-700 px-3 py-2.5 bg-purple-50 border border-purple-100 rounded-lg">Portalweit · übergeordnete Rolle</p>
+                  <p className="text-xs text-gray-400 mt-1">Admins gehören keiner Organisationseinheit an.</p>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog sichtbar sind.</p>
-              </div>
-              <fieldset className="border border-gray-200 rounded-xl p-3.5">
+              ) : (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {ORGS.map(org => (
+                      <button key={org} type="button" onClick={() => setForm(f => ({ ...f, organisation: org }))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : org === 'Verwaltung' ? 'bg-violet-700 text-white border-violet-700' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                        {org}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog sichtbar sind.</p>
+                </div>
+              )}
+              {isStrictAdmin && (
+                <fieldset className="border border-purple-200 bg-purple-50/40 rounded-xl p-3.5">
+                  <legend className="px-1 text-sm font-semibold text-purple-800">Portalweite Rolle</legend>
+                  <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${isSelfEdit ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' : 'cursor-pointer bg-white border-purple-200 hover:bg-purple-50'}`}>
+                    <input type="checkbox" checked={form.roles.includes('admin')} onChange={() => toggleRole('admin')} disabled={isSelfEdit} className="rounded disabled:cursor-not-allowed" />
+                    <span className="text-sm font-medium text-gray-700">Admin</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-2">Übergeordneter Zugriff auf das gesamte Portal; keine Zuordnung zu Stadtpolizei, Parkaufsicht oder Verwaltung.</p>
+                </fieldset>
+              )}
+              <fieldset className={`border border-gray-200 rounded-xl p-3.5 ${form.roles.includes('admin') ? 'opacity-50' : ''}`}>
                 <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Bekleidung</legend>
                 <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
-                  {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter'], ['admin', 'Admin'], ['genehmiger', 'Genehmiger']] as [string, string][]).map(([role, label]) => {
-                    const restricted = isSelfEdit || !canAssignRole(role)
+                  {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as [string, string][]).map(([role, label]) => {
+                    const restricted = isSelfEdit || form.roles.includes('admin') || !canAssignRole(role)
                     return (
                       <label key={role} className={`flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2.5 ${restricted ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'cursor-pointer hover:bg-gray-50'}`}>
                         <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} disabled={restricted} className="rounded disabled:cursor-not-allowed" />
@@ -977,11 +1002,11 @@ export default function Users() {
                 {isSelfEdit && (
                   <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
                 )}
-                {!isSelfEdit && !isStrictAdmin && (
-                  <p className="text-xs text-gray-400 mt-1">Die Admin-Rolle kann nur von Admins vergeben werden{!isGenehmiger ? ', die Genehmiger-Rolle nur von Admins oder Genehmigern' : ''}.</p>
+                {!isSelfEdit && !isStrictAdmin && !isGenehmiger && (
+                  <p className="text-xs text-gray-400 mt-1">Die Genehmiger-Rolle kann nur von Admins oder Genehmigern vergeben werden.</p>
                 )}
               </fieldset>
-              {isStrictAdmin && (
+              {isStrictAdmin && !form.roles.includes('admin') && (
                 <fieldset className="border border-gray-200 rounded-xl p-3.5">
                   <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Einsatzmittel &amp; Training</legend>
                   <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">

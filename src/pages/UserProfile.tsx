@@ -80,7 +80,7 @@ export default function UserProfile() {
       .update({
         name: form.name.trim(),
         dienstnummer: form.dienstnummer.trim() || null,
-        dienstgrad: profile!.organisation === 'Stadtpolizei' ? (form.dienstgrad || null) : null,
+        dienstgrad: !isStrictAdmin && profile!.organisation === 'Stadtpolizei' ? (form.dienstgrad || null) : null,
         gender: form.gender,
         size_preferences: sizePref,
       })
@@ -160,7 +160,7 @@ export default function UserProfile() {
                 placeholder="z. B. 1234"
               />
             </div>
-            {profile?.organisation === 'Stadtpolizei' && (
+            {!isStrictAdmin && profile?.organisation === 'Stadtpolizei' && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Dienstgrad</label>
                 <select
@@ -191,7 +191,7 @@ export default function UserProfile() {
 
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
-              <p className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded-lg">{profile?.organisation ?? 'Stadtpolizei'}</p>
+              <p className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded-lg">{isStrictAdmin ? 'Portalweit · übergeordnete Rolle' : (profile?.organisation ?? 'Stadtpolizei')}</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">PC-Benutzername</label>

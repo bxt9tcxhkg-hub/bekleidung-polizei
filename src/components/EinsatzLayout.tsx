@@ -94,7 +94,7 @@ export default function EinsatzLayout() {
             <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
             <p className="text-blue-300 text-xs truncate">
               {[
-                profile?.dienstgrad,
+                profile?.roles.includes('admin') ? null : profile?.dienstgrad,
                 canManage ? 'Sachbearbeitung' : 'Benutzer',
                 profile?.dienstnummer ? `DNr. ${profile.dienstnummer}` : null,
               ].filter(Boolean).join(' · ')}

@@ -32,6 +32,8 @@ const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
 const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
 const PlannedArea = lazy(() => import('./pages/PlannedArea'))
+const Fleet = lazy(() => import('./pages/Fleet'))
+const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 
 const PageSpinner = () => (
   <div className="flex justify-center py-16">
@@ -81,7 +83,8 @@ export default function App() {
           <Route path="/planung/innendienst" element={<ProtectedRoute adminOnly><PlannedArea area="innendienst" /></ProtectedRoute>} />
           <Route path="/planung/aussendienst" element={<ProtectedRoute adminOnly><PlannedArea area="aussendienst" /></ProtectedRoute>} />
           <Route path="/planung/schulungen" element={<ProtectedRoute adminOnly><PlannedArea area="schulungen" /></ProtectedRoute>} />
-          <Route path="/planung/fuhrpark" element={<ProtectedRoute adminOnly><PlannedArea area="fuhrpark" /></ProtectedRoute>} />
+          <Route path="/planung/fuhrpark" element={<ProtectedRoute adminOnly><Fleet /></ProtectedRoute>} />
+          <Route path="/planung/fuhrpark/:vehicleId" element={<ProtectedRoute adminOnly><FleetVehicle /></ProtectedRoute>} />
           <Route path="/planung/ueberstunden" element={<ProtectedRoute adminOnly><PlannedArea area="ueberstunden" /></ProtectedRoute>} />
           <Route
             path="/profil"
