@@ -221,7 +221,7 @@ export default function ShoeRefunds() {
                     {canManage && (
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900">{r.profiles?.name}</p>
-                        <p className="text-xs text-gray-400">{r.profiles?.dienstnummer ? `DG ${r.profiles.dienstnummer}` : ''}</p>
+                        <p className="text-xs text-gray-400">{r.profiles?.dienstnummer ? `DNr. ${r.profiles.dienstnummer}` : ''}</p>
                       </td>
                     )}
                     <td className="px-4 py-3 text-gray-700">{new Date(r.refund_date).toLocaleDateString('de-AT')}</td>
@@ -300,7 +300,7 @@ export default function ShoeRefunds() {
                           <button type="button" onMouseDown={() => selectUser(u)}
                             className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors">
                             <p className="text-sm font-medium text-gray-900">{u.name || u.username}</p>
-                            {u.dienstnummer && <p className="text-xs text-gray-400">DG {u.dienstnummer}</p>}
+                            {u.dienstnummer && <p className="text-xs text-gray-400">DNr. {u.dienstnummer}</p>}
                           </button>
                         </li>
                       ))}

@@ -366,5 +366,5 @@ function requesterLabel(row: RequestWithProfile): string {
   const requester = row.requester
   if (!requester) return 'Unbekannter Benutzer'
   const name = requester.name?.trim() || requester.username
-  return requester.dienstnummer ? `${name} · DG ${requester.dienstnummer}` : name
+  return requester.dienstnummer ? `${name} · DNr. ${requester.dienstnummer}` : name
 }

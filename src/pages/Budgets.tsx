@@ -335,7 +335,7 @@ export default function Budgets() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Benutzer</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">DG</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">DNr.</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Budget</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Verbraucht</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Verbleibend</th>
@@ -486,7 +486,7 @@ export default function Budgets() {
             <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
               <div>
                 <h2 className="font-bold text-gray-900">{drilldown.profile.name}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Bestellungen {CURRENT_YEAR}{drilldown.profile.dienstnummer ? ` · DG ${drilldown.profile.dienstnummer}` : ''}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Bestellungen {CURRENT_YEAR}{drilldown.profile.dienstnummer ? ` · DNr. ${drilldown.profile.dienstnummer}` : ''}</p>
               </div>
               <button onClick={() => setDrilldown(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>

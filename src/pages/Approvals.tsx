@@ -167,7 +167,7 @@ export default function Approvals() {
                         </div>
                         <div className="flex-1">
                           <p className="font-semibold text-gray-900">{user?.name ?? '–'}</p>
-                          <p className="text-xs text-gray-500">{user?.dienstnummer ? `DG ${user.dienstnummer}` : user?.username}</p>
+                          <p className="text-xs text-gray-500">{user?.dienstnummer ? `DNr. ${user.dienstnummer}` : user?.username}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-xs text-amber-700 font-medium flex items-center gap-1 justify-end">

@@ -3,6 +3,7 @@ import { UserCircle, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { sizeLabel } from '../lib/sizes'
+import { POLICE_RANKS, type PoliceRank } from '../lib/types'
 import ChangePasswordForm from '../components/ChangePasswordForm'
 
 type SizeOptGroup = { group: string; sizes: string[] }
@@ -56,7 +57,7 @@ const FEMALE_SIZE_FIELDS: SizeField[] = [
 
 export default function UserProfile() {
   const { profile, isStrictAdmin, refreshProfile } = useAuth()
-  const [form, setForm] = useState({ name: '', dienstnummer: '', gender: 'male' as 'male' | 'female' })
+  const [form, setForm] = useState({ name: '', dienstnummer: '', dienstgrad: '' as PoliceRank | '', gender: 'male' as 'male' | 'female' })
   const [sizePref, setSizePref] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -64,7 +65,7 @@ export default function UserProfile() {
 
   useEffect(() => {
     if (profile) {
-      setForm({ name: profile.name ?? '', dienstnummer: profile.dienstnummer ?? '', gender: profile.gender ?? 'male' })
+      setForm({ name: profile.name ?? '', dienstnummer: profile.dienstnummer ?? '', dienstgrad: profile.dienstgrad ?? '', gender: profile.gender ?? 'male' })
       setSizePref(profile.size_preferences ?? {})
     }
   }, [profile])
@@ -79,6 +80,7 @@ export default function UserProfile() {
       .update({
         name: form.name.trim(),
         dienstnummer: form.dienstnummer.trim() || null,
+        dienstgrad: profile!.organisation === 'Stadtpolizei' ? (form.dienstgrad || null) : null,
         gender: form.gender,
         size_preferences: sizePref,
       })
@@ -158,6 +160,20 @@ export default function UserProfile() {
                 placeholder="z. B. 1234"
               />
             </div>
+            {profile?.organisation === 'Stadtpolizei' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Dienstgrad</label>
+                <select
+                  value={form.dienstgrad}
+                  onChange={e => setForm(f => ({ ...f, dienstgrad: e.target.value as PoliceRank | '' }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">– nicht angegeben –</option>
+                  {POLICE_RANKS.map(rank => <option key={rank} value={rank}>{rank}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Kann im eigenen Profil jederzeit angepasst werden.</p>
+              </div>
+            )}
             {!isStrictAdmin && (
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Geschlecht</label>

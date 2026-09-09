@@ -37,11 +37,25 @@ export interface UserBudget {
   profiles?: Profile
 }
 
+export const POLICE_RANKS = [
+  'Aspirant',
+  'Inspektor',
+  'Revierinspektor',
+  'Gruppeninspektor',
+  'Bezirksinspektor',
+  'Abteilungsinspektor',
+  'Kontrollinspektor',
+  'Chefinspektor',
+] as const
+
+export type PoliceRank = (typeof POLICE_RANKS)[number]
+
 export interface Profile {
   id: string
   username: string | null
   name: string
   dienstnummer: string | null
+  dienstgrad?: PoliceRank | null
   gender: 'male' | 'female'
   organisation: string
   roles: string[]

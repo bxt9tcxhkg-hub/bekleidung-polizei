@@ -90,8 +90,11 @@ function SidebarNav({
         <div className="px-3 py-2 mb-2">
           <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
           <p className="text-blue-300 text-xs truncate">
-            {sidebarRoleLabels({ isAdmin, isSachbearbeiter, isGenehmiger }).join(' · ')}
-            {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}
+            {[
+              profile?.dienstgrad,
+              ...sidebarRoleLabels({ isAdmin, isSachbearbeiter, isGenehmiger }),
+              profile?.dienstnummer ? `DNr. ${profile.dienstnummer}` : null,
+            ].filter(Boolean).join(' · ')}
           </p>
         </div>
         <button

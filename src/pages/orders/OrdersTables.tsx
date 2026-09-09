@@ -71,7 +71,7 @@ export default function OrdersTables({
               return (
                 <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                  <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : o.profiles?.username}</p></td>
+                  <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DNr. ${o.profiles.dienstnummer}` : o.profiles?.username}</p></td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-500 text-sm hidden sm:table-cell">{o.quarters?.name}</td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
@@ -111,7 +111,7 @@ export default function OrdersTables({
               return (
                 <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                  <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                  <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DNr. ${o.profiles.dienstnummer}` : ''}</p></td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
@@ -149,7 +149,7 @@ export default function OrdersTables({
             {paginated.map(o => (
               <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                 <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DNr. ${o.profiles.dienstnummer}` : ''}</p></td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3 text-center font-semibold text-gray-800">{o.quantity}</td>
@@ -189,7 +189,7 @@ export default function OrdersTables({
               return (
                 <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                   <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                  <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                  <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DNr. ${o.profiles.dienstnummer}` : ''}</p></td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700 hidden sm:table-cell">{o.quantity}</td>
@@ -231,7 +231,7 @@ export default function OrdersTables({
             {paginated.map(o => (
               <tr key={o.id} className={`hover:bg-gray-50 ${selectedIds.has(o.id) ? 'bg-blue-50' : ''}`}>
                 <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DNr. ${o.profiles.dienstnummer}` : ''}</p></td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size}</td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3 text-center text-gray-700">{o.quantity}</td>
@@ -258,7 +258,7 @@ export default function OrdersTables({
             {paginated.map(o => (
               <tr key={o.id} className={`hover:bg-gray-50 opacity-75 ${selectedIds.has(o.id) ? 'bg-blue-50 !opacity-100' : ''}`}>
                 <td className="px-3 py-2.5 md:px-4 md:py-3"><input type="checkbox" className="rounded" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} /></td>
-                <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DG ${o.profiles.dienstnummer}` : ''}</p></td>
+                <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.profiles?.name}</p><p className="text-xs text-gray-400">{o.profiles?.dienstnummer ? `DNr. ${o.profiles.dienstnummer}` : ''}</p></td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3"><p className="font-medium text-gray-900 truncate max-w-xs">{o.products?.name}</p><p className="text-xs text-gray-400">{o.products?.category}</p></td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3 text-gray-600">{o.size} · {o.quantity}×</td>
                 <td className="px-3 py-2.5 md:px-4 md:py-3 text-red-600">{o.cancel_reason ?? '–'}</td>

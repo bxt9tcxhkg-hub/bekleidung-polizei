@@ -303,7 +303,7 @@ export default function Hilfe() {
                         {canManage && (
                           <p className="text-xs text-gray-500 mt-1 truncate">
                             {ticket.profiles?.name || ticket.profiles?.username || '–'}
-                            {ticket.profiles?.dienstnummer ? ` · DG ${ticket.profiles.dienstnummer}` : ''}
+                            {ticket.profiles?.dienstnummer ? ` · DNr. ${ticket.profiles.dienstnummer}` : ''}
                           </p>
                         )}
                         <p className="text-xs text-gray-400 mt-1">{formatWhen(ticket.last_message_at)}</p>

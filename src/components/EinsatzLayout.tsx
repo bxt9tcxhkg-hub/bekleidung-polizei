@@ -93,8 +93,11 @@ export default function EinsatzLayout() {
           <div className="px-3 py-2 mb-2">
             <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
             <p className="text-blue-300 text-xs truncate">
-              {canManage ? 'Sachbearbeitung' : 'Benutzer'}
-              {profile?.dienstnummer ? ` · DG ${profile.dienstnummer}` : ''}
+              {[
+                profile?.dienstgrad,
+                canManage ? 'Sachbearbeitung' : 'Benutzer',
+                profile?.dienstnummer ? `DNr. ${profile.dienstnummer}` : null,
+              ].filter(Boolean).join(' · ')}
             </p>
           </div>
           <button

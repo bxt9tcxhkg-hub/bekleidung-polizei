@@ -210,6 +210,7 @@ export default function Users() {
       roles: safeRoles,
       gender: form.gender,
       organisation: form.organisation,
+      ...(form.organisation === 'Stadtpolizei' ? {} : { dienstgrad: null }),
       active,
       force_username_set: forceUsernameSet,
     }
@@ -264,10 +265,12 @@ export default function Users() {
   async function moveUser(u: Profile, organisation: Organisation) {
     if (!isStrictAdmin || u.id === authProfile?.id || u.organisation === organisation) return
     const previous = u.organisation
-    setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation } : row))
-    const { error: moveError } = await supabase.from('profiles').update({ organisation }).eq('id', u.id)
+    const previousDienstgrad = u.dienstgrad ?? null
+    const dienstgrad = organisation === 'Stadtpolizei' ? previousDienstgrad : null
+    setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation, dienstgrad } : row))
+    const { error: moveError } = await supabase.from('profiles').update({ organisation, dienstgrad }).eq('id', u.id)
     if (moveError) {
-      setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation: previous } : row))
+      setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation: previous, dienstgrad: previousDienstgrad } : row))
       setError(`Organisation konnte nicht geändert werden: ${moveError.message}`)
       return
     }
@@ -584,7 +587,8 @@ export default function Users() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h2 className="font-semibold text-gray-900 truncate">{user.name}</h2>
-                      <p className="text-xs text-gray-500 mt-0.5">{user.dienstnummer ? `DG ${user.dienstnummer}` : 'Keine Dienstnummer'}{user.username ? ` · ${user.username}` : ''}</p>
+                      {user.organisation === 'Stadtpolizei' && user.dienstgrad && <p className="text-xs font-medium text-blue-700 mt-0.5">{user.dienstgrad}</p>}
+                      <p className="text-xs text-gray-500 mt-0.5">{user.dienstnummer ? `DNr. ${user.dienstnummer}` : 'Keine Dienstnummer'}{user.username ? ` · ${user.username}` : ''}</p>
                     </div>
                     {canDeactivate ? (
                       <button onClick={() => toggleActive(user)} className={`flex-shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${user.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -636,7 +640,7 @@ export default function Users() {
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">PC-Benutzername</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstnummer</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Dienstgrad / DNr.</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Organisation</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Bekleidung</th>
@@ -657,7 +661,7 @@ export default function Users() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username || '—'}</td>
-                  <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.dienstnummer ?? '–'}</td>
+                  <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">{u.organisation === 'Stadtpolizei' && u.dienstgrad ? `${u.dienstgrad} · ` : ''}{u.dienstnummer ? `DNr. ${u.dienstnummer}` : '–'}</td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     {isStrictAdmin && u.id !== authProfile?.id ? (
                       <select
@@ -766,7 +770,7 @@ export default function Users() {
                 <p className="font-semibold text-gray-700 font-sans text-xs mb-2">Offiziersliste (Vorname, Nachname, Dienstnummer):</p>
                 <p>vorname;nachname;dienstnummer</p>
                 <p>Stefanie;Albrecht;32</p>
-                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login-E-Mail: vorname.nachname@dornbirn.at (Umlaute als ae/oe/ue/ss). Ausnahme: Martin Feurstein / DN 3 → martin.feurstein2@dornbirn.at. PC-Benutzername setzt jede Person beim Erstlogin. Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
+                <p className="font-sans text-gray-500 mt-2">ET-/Zuteilung = Stadtpolizei. Parkaufsicht-Liste = Parkaufsicht, nur Bekleidung Benutzer. Login-E-Mail: vorname.nachname@dornbirn.at (Umlaute als ae/oe/ue/ss). Ausnahme: Martin Feurstein / DNr. 3 → martin.feurstein2@dornbirn.at. PC-Benutzername setzt jede Person beim Erstlogin. Vorhandene Dienstnummern werden übersprungen. Alternative: name;benutzername;dienstnummer;organisation;rollen</p>
               </div>
               <div className="flex flex-wrap gap-3">
                 <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50">
@@ -856,7 +860,7 @@ export default function Users() {
                   <p className="text-sm font-medium text-gray-700 mb-2">{importRows.length} Benutzer erkannt – Vorschau:</p>
                   <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
                     <table className="w-full text-xs">
-                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Login-E-Mail</th><th className="text-left px-3 py-2">Organisation</th><th className="text-left px-3 py-2">DG-Nr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
+                      <thead><tr className="bg-gray-50 border-b"><th className="text-left px-3 py-2">Name</th><th className="text-left px-3 py-2">Login-E-Mail</th><th className="text-left px-3 py-2">Organisation</th><th className="text-left px-3 py-2">DNr.</th><th className="text-left px-3 py-2">Rollen</th></tr></thead>
                       <tbody className="divide-y divide-gray-100">
                         {importRows.map((r, i) => (
                           <tr key={i} className="hover:bg-gray-50">

@@ -130,7 +130,7 @@ export function generateAusgabeliste(orders: Order[], now = new Date()): void {
           <td class="sig-col"></td>
         </tr>`
     }).join('\n')
-    const dg = u.dienstnummer ? ` · DG ${u.dienstnummer}` : ''
+    const dg = u.dienstnummer ? ` · DNr. ${u.dienstnummer}` : ''
     return `<div class="user-block">
         <div class="user-header">${u.name}${dg}</div>
         <table class="items-table">
