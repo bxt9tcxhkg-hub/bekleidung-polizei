@@ -72,11 +72,13 @@ async function persistAreaRoles(
   bekleidungRoles: string[],
   einsatzMt: EinsatzMtRole[],
 ): Promise<string | null> {
-  const { error: bekErr } = await supabase.from('portal_area_roles').upsert({
-    user_id: userId,
-    area: 'bekleidung',
-    roles: profilesRolesFromBekleidung(bekleidungRoles),
-  })
+  const { error: bekErr } = bekleidungRoles.length > 0
+    ? await supabase.from('portal_area_roles').upsert({
+        user_id: userId,
+        area: 'bekleidung',
+        roles: profilesRolesFromBekleidung(bekleidungRoles),
+      })
+    : await supabase.from('portal_area_roles').delete().eq('user_id', userId).eq('area', 'bekleidung')
   if (bekErr) return bekErr.message
   if (einsatzMt.length > 0) {
     const { error } = await supabase.from('portal_area_roles').upsert({
@@ -197,8 +199,7 @@ export default function Users() {
     // Bereits vorhandene Rollen bleiben erhalten – nur NEU hinzugefügte Rollen unterliegen der Berechtigungsprüfung.
     const existing = editId ? users.find(u => u.id === editId) : undefined
     const existingRoles = existing?.roles ?? []
-    let safeRoles = form.roles.filter(r => existingRoles.includes(r) || canAssignRole(r))
-    if (safeRoles.length === 0) safeRoles = ['user']
+    const safeRoles = form.roles.filter(r => existingRoles.includes(r) || canAssignRole(r))
     const existingActive = existing?.active ?? true
     const active = editId && !canDeactivate ? existingActive : form.active
     const forceUsernameSet = shouldKeepForceUsernameSet(username || null, existing?.force_username_set)
@@ -494,7 +495,7 @@ export default function Users() {
     const roleText = (user: Profile) => {
       const bekleidung = user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')
       const em = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
-      return `Bekleidung: ${bekleidung || '–'}; Einsatzmittel & Training: ${em.length > 0 ? em.map(role => AREA_ROLE_LABELS[role]).join(', ') : 'kein Zugriff'}`
+      return `Bekleidung: ${bekleidung || 'kein Zugriff'}; Einsatzmittel & Training: ${em.length > 0 ? em.map(role => AREA_ROLE_LABELS[role]).join(', ') : 'kein Zugriff'}`
     }
     const rows = filteredUsers.map(user => `<tr><td>${escapeHtml(user.name)}</td><td>${escapeHtml(user.dienstnummer ?? '–')}</td><td>${escapeHtml(user.organisation ?? 'Stadtpolizei')}</td><td>${escapeHtml(roleText(user))}</td><td>${user.active ? 'Aktiv' : 'Inaktiv'}</td></tr>`).join('')
     const printWindow = window.open('', '_blank')
@@ -607,7 +608,7 @@ export default function Users() {
                   <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-gray-400 mb-1">Bekleidung</p>
-                      <p className="font-medium text-gray-700">{user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')}</p>
+                      <p className="font-medium text-gray-700">{user.roles.length > 0 ? user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ') : 'Kein Zugriff'}</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-2.5">
                       <p className="text-gray-400 mb-1">Einsatzmittel & Training</p>
@@ -687,6 +688,7 @@ export default function Users() {
                           {BEKLEIDUNG_ROLE_LABEL[r] ?? r}
                         </span>
                       ))}
+                      {u.roles.length === 0 && <span className="text-xs text-gray-400">Kein Zugriff</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">

@@ -56,6 +56,10 @@ describe('Sync profiles.roles ↔ bekleidung', () => {
     ])
   })
 
+  it('bewahrt eine vollständig abgewählte Bekleidungsberechtigung', () => {
+    expect(profilesRolesFromBekleidung([])).toEqual([])
+  })
+
   it('fällt bei leerer oder unbekannter Liste auf user zurück', () => {
     expect(bekleidungRolesFromProfiles([])).toEqual(['user'])
     expect(bekleidungRolesFromProfiles(['unbekannt'])).toEqual(['user'])

@@ -363,9 +363,8 @@ Deno.serve(async (req) => {
     return json(req, { error: 'Startpasswort ist Pflicht.' }, 400)
   }
 
-  const requested = Array.isArray(body.roles) && body.roles.length > 0 ? body.roles : ['user']
+  const requested = Array.isArray(body.roles) ? body.roles : ['user']
   const roles = requested.filter((r) => canAssign(callerRoles, r))
-  if (roles.length === 0) roles.push('user')
 
   const gender = body.gender === 'female' ? 'female' : 'male'
   const organisation = body.organisation === 'Parkaufsicht'
@@ -414,11 +413,12 @@ Deno.serve(async (req) => {
     const mapped = roles.map((r) => (r === 'approver' ? 'genehmiger' : r))
     const allowed = new Set(['user', 'sachbearbeiter', 'genehmiger', 'admin'])
     const out = [...new Set(mapped.filter((r) => allowed.has(r)))]
-    return out.length > 0 ? out : ['user']
+    return out
   })()
-  const areaRows: { user_id: string; area: string; roles: string[] }[] = [
-    { user_id: created.user.id, area: 'bekleidung', roles: bekleidungRoles },
-  ]
+  const areaRows: { user_id: string; area: string; roles: string[] }[] = []
+  if (bekleidungRoles.length > 0) {
+    areaRows.push({ user_id: created.user.id, area: 'bekleidung', roles: bekleidungRoles })
+  }
   if (active) {
     const allowedEinsatzRoles = new Set(['user', 'sachbearbeiter', 'admin'])
     const requestedEinsatzRoles = Array.isArray(body.einsatz_mt_roles)
@@ -433,9 +433,11 @@ Deno.serve(async (req) => {
       areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: einsatzMtRoles })
     }
   }
-  const { error: areaErr } = await admin.from('portal_area_roles').upsert(areaRows)
-  if (areaErr) {
-    console.error('portal_area_roles:', areaErr.message)
+  if (areaRows.length > 0) {
+    const { error: areaErr } = await admin.from('portal_area_roles').upsert(areaRows)
+    if (areaErr) {
+      console.error('portal_area_roles:', areaErr.message)
+    }
   }
 
   return json(req, { id: created.user.id, username, email })

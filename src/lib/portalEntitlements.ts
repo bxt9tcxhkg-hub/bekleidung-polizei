@@ -105,6 +105,7 @@ export function bekleidungRolesFromProfiles(roles: readonly string[]): string[] 
 
 /** Bekleidungs-Bereichsrollen → profiles.roles (kanonisch, Dual-Write). */
 export function profilesRolesFromBekleidung(roles: readonly string[]): string[] {
+  if (roles.length === 0) return []
   return bekleidungRolesFromProfiles(roles)
 }
 
