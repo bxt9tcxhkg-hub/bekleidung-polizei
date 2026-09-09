@@ -514,32 +514,32 @@ export default function Users() {
           </div>
         </div>
       )}
-      <div className="flex items-start justify-between mb-6 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold text-gray-900">Benutzer</h1>
           <p className="text-gray-500 text-sm mt-1">Portal-Benutzerverwaltung</p>
         </div>
-        <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
-          <button onClick={printDirectory} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Datenschutzfreundliche Mitarbeiterliste drucken">
+        <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto sm:flex-shrink-0">
+          <button onClick={printDirectory} className="flex items-center justify-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Datenschutzfreundliche Mitarbeiterliste drucken">
             <Printer className="w-4 h-4 flex-shrink-0" /><span>Drucken</span>
           </button>
           {canCreate && (
-            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false); setImportStartPassword(DEFAULT_START_PASSWORD); setImportRandomPerUser(false) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
+            <button onClick={() => { setShowImport(true); setImportRows([]); setImportProgress(null); setImportError(''); setImportCreds([]); setCredsCopied(false); setImportStartPassword(DEFAULT_START_PASSWORD); setImportRandomPerUser(false) }} className="flex items-center justify-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg hover:bg-gray-50 transition-colors" title="Import">
               <Upload className="w-4 h-4 flex-shrink-0" /><span>Import</span>
             </button>
           )}
           {canCreate && (
-            <button onClick={openNew} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neuer Benutzer">
+            <button onClick={openNew} className="col-span-2 flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors" title="Neuer Benutzer">
               <Plus className="w-4 h-4 flex-shrink-0" /><span>Neuer Benutzer</span>
             </button>
           )}
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit max-w-full overflow-x-auto">
+      <div className="grid grid-cols-2 sm:flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-full sm:w-fit max-w-full">
         {(['all', ...ORGS] as const).map(o => (
           <button key={o} onClick={() => setOrgFilter(o)}
-            className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${orgFilter === o ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            className={`text-sm font-medium px-3 py-2 rounded-lg transition-all whitespace-nowrap ${orgFilter === o ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             {o === 'all' ? `Alle (${users.length})` : `${o} (${organisationCounts[o]})`}
           </button>
         ))}
@@ -561,7 +561,66 @@ export default function Users() {
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+        <>
+          <div className="md:hidden space-y-3">
+            {filteredUsers.length === 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 py-10 px-4 text-center text-sm text-gray-500">Keine Mitarbeiter gefunden.</div>
+            )}
+            {filteredUsers.map(user => {
+              const einsatzRole = parseEinsatzMtRole(areaByUser[user.id]?.einsatz_mt)
+              const protectedAccount = user.id === authProfile?.id || isBoundAdminIdentity({ username: user.username })
+              return (
+                <article key={user.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${!user.active ? 'opacity-60' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="font-semibold text-gray-900 truncate">{user.name}</h2>
+                      <p className="text-xs text-gray-500 mt-0.5">{user.dienstnummer ? `DG ${user.dienstnummer}` : 'Keine Dienstnummer'}{user.username ? ` · ${user.username}` : ''}</p>
+                    </div>
+                    {canDeactivate ? (
+                      <button onClick={() => toggleActive(user)} className={`flex-shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${user.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {user.active ? 'Aktiv' : 'Inaktiv'}
+                      </button>
+                    ) : (
+                      <span className={`flex-shrink-0 text-xs font-medium px-2.5 py-1 rounded-full ${user.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{user.active ? 'Aktiv' : 'Inaktiv'}</span>
+                    )}
+                  </div>
+
+                  <div className="mt-3">
+                    {isStrictAdmin && !protectedAccount ? (
+                      <select value={ORGS.includes(user.organisation as Organisation) ? user.organisation : 'Stadtpolizei'} onChange={event => { void moveUser(user, event.target.value as Organisation) }} className="w-full border border-gray-300 bg-white rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label={`${user.name} einer Organisation zuordnen`}>
+                        {ORGS.map(org => <option key={org} value={org}>{org}</option>)}
+                      </select>
+                    ) : (
+                      <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full ${user.organisation === 'Parkaufsicht' ? 'bg-orange-100 text-orange-700' : user.organisation === 'Verwaltung' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'}`}>{user.organisation ?? 'Stadtpolizei'}</span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                    <div className="bg-gray-50 rounded-lg p-2.5">
+                      <p className="text-gray-400 mb-1">Bekleidung</p>
+                      <p className="font-medium text-gray-700">{user.roles.map(role => BEKLEIDUNG_ROLE_LABEL[role] ?? role).join(', ')}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2.5">
+                      <p className="text-gray-400 mb-1">Einsatzmittel & Training</p>
+                      <p className="font-medium text-gray-700">{einsatzRole ? AREA_ROLE_LABELS[einsatzRole] : 'Kein Zugriff'}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-gray-100">
+                    {canReset && !isBoundAdminIdentity({ username: user.username }) && (
+                      <button type="button" onClick={() => { setResetTarget(user); setResetPassword(DEFAULT_START_PASSWORD); setResetError(''); setResetCopied(false) }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100"><KeyRound className="w-4 h-4" /> Passwort</button>
+                    )}
+                    <button onClick={() => openEdit(user)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-blue-700 hover:bg-blue-50"><Pencil className="w-4 h-4" /> Bearbeiten</button>
+                    {isStrictAdmin && !protectedAccount && (
+                      <button onClick={() => { setDeleteTarget(user); setDeleteConfirmation(''); setDeleteError('') }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50"><Trash2 className="w-4 h-4" /> Löschen</button>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+
+          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -675,7 +734,8 @@ export default function Users() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
 
       {/* Import Modal */}
@@ -871,7 +931,7 @@ export default function Users() {
               )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Organisation</label>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {ORGS.map(org => (
                     <button key={org} type="button" onClick={() => setForm(f => ({ ...f, organisation: org }))}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.organisation === org ? (org === 'Parkaufsicht' ? 'bg-orange-600 text-white border-orange-600' : org === 'Verwaltung' ? 'bg-violet-700 text-white border-violet-700' : 'bg-blue-700 text-white border-blue-700') : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
@@ -881,47 +941,40 @@ export default function Users() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog sichtbar sind.</p>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-2">Bekleidung</label>
-                <div className="flex gap-3 flex-wrap">
+              <fieldset className="border border-gray-200 rounded-xl p-3.5">
+                <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Bekleidung</legend>
+                <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
                   {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter'], ['admin', 'Admin'], ['genehmiger', 'Genehmiger']] as [string, string][]).map(([role, label]) => {
                     const restricted = isSelfEdit || !canAssignRole(role)
                     return (
-                      <label key={role} className={`flex items-center gap-2 ${restricted ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                      <label key={role} className={`flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2.5 ${restricted ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'cursor-pointer hover:bg-gray-50'}`}>
                         <input type="checkbox" checked={form.roles.includes(role)} onChange={() => toggleRole(role)} disabled={restricted} className="rounded disabled:cursor-not-allowed" />
-                        <span className="text-sm text-gray-700">{label}</span>
+                        <span className="text-sm font-medium text-gray-700">{label}</span>
                       </label>
                     )
                   })}
                 </div>
+                <p className="text-xs text-gray-400 mt-2">Mehrere Funktionen können gleichzeitig vergeben werden.</p>
                 {isSelfEdit && (
                   <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
                 )}
                 {!isSelfEdit && !isStrictAdmin && (
                   <p className="text-xs text-gray-400 mt-1">Die Admin-Rolle kann nur von Admins vergeben werden{!isGenehmiger ? ', die Genehmiger-Rolle nur von Admins oder Genehmigern' : ''}.</p>
                 )}
-              </div>
+              </fieldset>
               {isStrictAdmin && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor="einsatz-mt-role">Einsatzmittel &amp; Training</label>
-                  <select
-                    id="einsatz-mt-role"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                    value={form.einsatzMtRole}
-                    disabled={isSelfEdit}
-                    onChange={e => {
-                      const value = e.target.value
-                      if (value === '' || value === 'user' || value === 'sachbearbeiter' || value === 'admin') {
-                        setForm(f => ({ ...f, einsatzMtRole: value }))
-                      }
-                    }}
-                  >
-                    {EINSATZ_MT_OPTIONS.map(opt => (
-                      <option key={opt.label} value={opt.value}>{opt.label}</option>
+                <fieldset className="border border-gray-200 rounded-xl p-3.5">
+                  <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Einsatzmittel &amp; Training</legend>
+                  <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
+                    {EINSATZ_MT_OPTIONS.map(option => (
+                      <label key={option.label} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${form.einsatzMtRole === option.value ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'} ${isSelfEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input type="radio" name="einsatz-mt-role" value={option.value} checked={form.einsatzMtRole === option.value} disabled={isSelfEdit} onChange={() => setForm(current => ({ ...current, einsatzMtRole: option.value }))} />
+                        <span className="text-sm font-medium text-gray-700">{option.label}</span>
+                      </label>
                     ))}
-                  </select>
-                  <p className="text-xs text-gray-400 mt-1">Benutzer = Leserecht. Kein Genehmiger in diesem Bereich.</p>
-                </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Benutzer = Leserecht. In diesem Bereich gibt es keinen Genehmiger.</p>
+                </fieldset>
               )}
               {(!editId || canDeactivate) && (
                 <div className="flex items-center gap-3">
