@@ -1,5 +1,18 @@
 import { Link } from 'react-router-dom'
-import { ClipboardList, LifeBuoy, Shirt, Target, UserCircle, Users, type LucideIcon } from 'lucide-react'
+import {
+  Building2,
+  Car,
+  ClipboardList,
+  Clock3,
+  GraduationCap,
+  LifeBuoy,
+  Radio,
+  Shirt,
+  Target,
+  UserCircle,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import PortalChrome from '../components/PortalChrome'
 import {
@@ -26,6 +39,28 @@ const ACCOUNT_ICONS: Record<PortalAccountId, LucideIcon> = {
 const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
   auditlog: ClipboardList,
 }
+
+type PlannedPortalArea = {
+  id: 'zentrale' | 'innendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
+  title: string
+  description: string
+  path: string
+  icon: LucideIcon
+}
+
+const OPERATIONAL_AREAS: PlannedPortalArea[] = [
+  { id: 'zentrale', title: 'Zentrale', description: 'Interne operative Informationen und Arbeitshilfen', path: '/planung/zentrale', icon: Radio },
+  { id: 'innendienst', title: 'Innendienst', description: 'Kasse, Bescheide, Gebühren und Verfahrenshilfen', path: '/planung/innendienst', icon: Building2 },
+]
+
+const ORGANISATIONAL_AREAS: PlannedPortalArea[] = [
+  { id: 'schulungen', title: 'Schulungen', description: 'PAD, weitere Schulungen und Rechtsinformationen', path: '/planung/schulungen', icon: GraduationCap },
+  { id: 'fuhrpark', title: 'Fuhrpark & Fahrzeuge', description: 'Kontrollen, Mängel, Pflege und Werkstatttermine', path: '/planung/fuhrpark', icon: Car },
+]
+
+const PERSONAL_AREAS: PlannedPortalArea[] = [
+  { id: 'ueberstunden', title: 'Überstundenmeldung', description: 'Überstunden erfassen und zur Prüfung abgeben', path: '/planung/ueberstunden', icon: Clock3 },
+]
 
 function AppTile({ app }: { app: PortalApp }) {
   const Icon = APP_ICONS[app.id]
@@ -67,6 +102,55 @@ function AppTile({ app }: { app: PortalApp }) {
         <p className="text-sm text-gray-500 mt-1">{app.description}</p>
       ) : null}
     </Link>
+  )
+}
+
+function PlannedTile({ area, admin }: { area: PlannedPortalArea; admin: boolean }) {
+  const Icon = area.icon
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className={`p-2.5 rounded-lg ${admin ? 'bg-amber-50' : 'bg-gray-100'}`}>
+          <Icon className={`w-5 h-5 ${admin ? 'text-amber-700' : 'text-gray-400'}`} />
+        </div>
+        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">In Planung</span>
+      </div>
+      <h2 className={`text-lg font-semibold ${admin ? 'text-gray-900' : 'text-gray-500'}`}>{area.title}</h2>
+      <p className="text-sm text-gray-500 mt-1">{area.description}</p>
+      {admin ? <p className="text-xs font-medium text-amber-700 mt-3">Grundstruktur ansehen</p> : null}
+    </>
+  )
+
+  if (admin) {
+    return <Link to={area.path} className="rounded-xl border border-dashed border-amber-300 bg-white p-5 hover:border-amber-500 hover:shadow-sm transition-all block">{content}</Link>
+  }
+  return <div aria-disabled="true" title="In Planung" className="rounded-xl border border-gray-200 bg-gray-50 p-5 opacity-65 cursor-not-allowed select-none">{content}</div>
+}
+
+function PortalSection({
+  title,
+  description,
+  tone,
+  children,
+}: {
+  title: string
+  description: string
+  tone: 'operativ' | 'organisation' | 'persoenlich'
+  children: React.ReactNode
+}) {
+  const toneClass = tone === 'operativ'
+    ? 'border-red-500 bg-red-50/60'
+    : tone === 'organisation'
+      ? 'border-blue-600 bg-blue-50/50'
+      : 'border-emerald-600 bg-emerald-50/50'
+  return (
+    <section className={`rounded-2xl border-l-4 ${toneClass} p-4 sm:p-5 mb-6`}>
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>
+    </section>
   )
 }
 
@@ -152,11 +236,18 @@ export default function Portal() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {apps.map(app => (
-          <AppTile key={app.id} app={app} />
-        ))}
-      </div>
+      <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
+        {OPERATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+      </PortalSection>
+
+      <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">
+        {apps.map(app => <AppTile key={app.id} app={app} />)}
+        {ORGANISATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+      </PortalSection>
+
+      <PortalSection title="Mein Bereich" description="Persönliche Meldungen und Anträge" tone="persoenlich">
+        {PERSONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+      </PortalSection>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 pt-8 border-t border-gray-200">
         {adminLinks.map(link => (
