@@ -79,6 +79,7 @@ export default function App() {
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
           <Route path="/planung/zentrale" element={<ProtectedRoute adminOnly><PlannedArea area="zentrale" /></ProtectedRoute>} />
           <Route path="/planung/innendienst" element={<ProtectedRoute adminOnly><PlannedArea area="innendienst" /></ProtectedRoute>} />
+          <Route path="/planung/aussendienst" element={<ProtectedRoute adminOnly><PlannedArea area="aussendienst" /></ProtectedRoute>} />
           <Route path="/planung/schulungen" element={<ProtectedRoute adminOnly><PlannedArea area="schulungen" /></ProtectedRoute>} />
           <Route path="/planung/fuhrpark" element={<ProtectedRoute adminOnly><PlannedArea area="fuhrpark" /></ProtectedRoute>} />
           <Route path="/planung/ueberstunden" element={<ProtectedRoute adminOnly><PlannedArea area="ueberstunden" /></ProtectedRoute>} />

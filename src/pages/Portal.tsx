@@ -7,6 +7,7 @@ import {
   GraduationCap,
   LifeBuoy,
   Radio,
+  Shield,
   Shirt,
   Target,
   UserCircle,
@@ -41,7 +42,7 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
 }
 
 type PlannedPortalArea = {
-  id: 'zentrale' | 'innendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
+  id: 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
   title: string
   description: string
   path: string
@@ -51,6 +52,7 @@ type PlannedPortalArea = {
 const OPERATIONAL_AREAS: PlannedPortalArea[] = [
   { id: 'zentrale', title: 'Zentrale', description: 'Interne operative Informationen und Arbeitshilfen', path: '/planung/zentrale', icon: Radio },
   { id: 'innendienst', title: 'Innendienst', description: 'Kasse, Bescheide, Gebühren und Verfahrenshilfen', path: '/planung/innendienst', icon: Building2 },
+  { id: 'aussendienst', title: 'Außendienststreifen', description: 'Kontrollaufträge, aktuelle Hinweise und Kontrollbehelfe', path: '/planung/aussendienst', icon: Shield },
 ]
 
 const ORGANISATIONAL_AREAS: PlannedPortalArea[] = [
