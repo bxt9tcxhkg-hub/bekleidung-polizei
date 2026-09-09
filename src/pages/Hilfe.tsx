@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LifeBuoy, Plus, Send, X } from 'lucide-react'
+import { Lightbulb, LifeBuoy, Plus, Send, Sparkles, Wrench, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { SupportMessage, SupportTicket, SupportTicketStatus } from '../lib/types'
 import {
   SUPPORT_BODY_MAX,
+  SUPPORT_KIND_COLORS,
+  SUPPORT_KIND_LABELS,
   SUPPORT_STATUS_COLORS,
   SUPPORT_STATUS_LABELS,
   SUPPORT_SUBJECT_MAX,
   sortSupportTickets,
+  parseSupportSubject,
+  supportSubjectForStorage,
   validateSupportBody,
-  validateSupportSubject,
+  type SupportTicketKind,
 } from '../lib/supportTickets'
 
 const FILTERS: Array<SupportTicketStatus | 'all'> = ['all', 'open', 'answered', 'closed']
@@ -37,6 +41,7 @@ export default function Hilfe() {
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [subject, setSubject] = useState('')
+  const [kind, setKind] = useState<SupportTicketKind>('help')
   const [newBody, setNewBody] = useState('')
   const [reply, setReply] = useState('')
   const [saving, setSaving] = useState(false)
@@ -97,13 +102,14 @@ export default function Hilfe() {
   function resetForm() {
     setShowForm(false)
     setSubject('')
+    setKind('help')
     setNewBody('')
   }
 
   async function createTicket() {
     if (!profile) return
     setError('')
-    const subjectOk = validateSupportSubject(subject)
+    const subjectOk = supportSubjectForStorage(kind, subject)
     if (!subjectOk.ok) { setError(subjectOk.error); return }
     const bodyOk = validateSupportBody(newBody)
     if (!bodyOk.ok) { setError(bodyOk.error); return }
@@ -203,9 +209,9 @@ export default function Hilfe() {
 
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Hilfe</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Hilfe & Ideen</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {canManage ? 'Alle Hilfe-Anfragen' : 'Deine Anfragen an die Verwaltung'}
+            {canManage ? 'Alle Hilfeanfragen, Verbesserungen und Ideen' : 'Hilfe erhalten oder Verbesserungen und neue Ideen einbringen'}
           </p>
           <p className="text-xs text-gray-400 mt-1">Antworten kommen hier in der App, kein Live-Chat.</p>
         </div>
@@ -214,7 +220,7 @@ export default function Hilfe() {
           className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2.5 sm:px-4 rounded-lg transition-colors flex-shrink-0"
         >
           <Plus className="w-4 h-4 flex-shrink-0" />
-          <span className="hidden sm:inline">Neue Anfrage</span>
+          <span className="hidden sm:inline">Neue Anfrage oder Idee</span>
         </button>
       </div>
 
@@ -250,6 +256,7 @@ export default function Hilfe() {
               <ul className="divide-y divide-gray-100">
                 {visible.map(ticket => {
                   const active = ticket.id === selectedId
+                  const parsedSubject = parseSupportSubject(ticket.subject)
                   return (
                     <li key={ticket.id}>
                       <button
@@ -258,11 +265,14 @@ export default function Hilfe() {
                         className={`w-full text-left px-4 py-3 transition-colors ${active ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-medium text-gray-900 text-sm truncate">{ticket.subject}</p>
+                          <p className="font-medium text-gray-900 text-sm truncate">{parsedSubject.subject}</p>
                           <span className={`flex-shrink-0 inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_STATUS_COLORS[ticket.status]}`}>
                             {SUPPORT_STATUS_LABELS[ticket.status]}
                           </span>
                         </div>
+                        <span className={`inline-flex mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_KIND_COLORS[parsedSubject.kind]}`}>
+                          {SUPPORT_KIND_LABELS[parsedSubject.kind]}
+                        </span>
                         {canManage && (
                           <p className="text-xs text-gray-500 mt-1 truncate">
                             {ticket.profiles?.name || ticket.profiles?.username || '–'}
@@ -297,7 +307,10 @@ export default function Hilfe() {
                   </button>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="font-semibold text-gray-900 truncate">{selected.subject}</h2>
+                      <h2 className="font-semibold text-gray-900 truncate">{parseSupportSubject(selected.subject).subject}</h2>
+                      <span className={`inline-flex mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_KIND_COLORS[parseSupportSubject(selected.subject).kind]}`}>
+                        {SUPPORT_KIND_LABELS[parseSupportSubject(selected.subject).kind]}
+                      </span>
                       <p className="text-xs text-gray-400 mt-0.5">
                         {canManage && (selected.profiles?.name || selected.profiles?.username)
                           ? `${selected.profiles?.name || selected.profiles?.username} · `
@@ -381,10 +394,33 @@ export default function Hilfe() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Neue Anfrage</h2>
+              <h2 className="font-bold text-gray-900">Neue Anfrage oder Idee</h2>
               <button type="button" onClick={resetForm} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
+              <div>
+                <p className="block text-xs font-medium text-gray-600 mb-2">Art des Anliegens</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {([
+                    { id: 'help' as const, icon: LifeBuoy },
+                    { id: 'improvement' as const, icon: Wrench },
+                    { id: 'idea' as const, icon: Lightbulb },
+                  ]).map(option => {
+                    const Icon = option.icon
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setKind(option.id)}
+                        className={`rounded-xl border px-3 py-3 text-left transition-colors ${kind === option.id ? 'border-blue-500 bg-blue-50 text-blue-800' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      >
+                        <Icon className="w-4 h-4 mb-1.5" />
+                        <span className="text-xs font-medium">{SUPPORT_KIND_LABELS[option.id]}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Betreff</label>
                 <input
@@ -404,7 +440,7 @@ export default function Hilfe() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   value={newBody}
                   onChange={e => setNewBody(e.target.value)}
-                  placeholder="Dein Anliegen"
+                  placeholder={kind === 'help' ? 'Beschreibe dein Anliegen' : kind === 'improvement' ? 'Was könnte verbessert werden?' : 'Beschreibe deine neue Idee'}
                 />
               </div>
             </div>
@@ -416,7 +452,7 @@ export default function Hilfe() {
                 disabled={saving}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60"
               >
-                Senden
+                <span className="inline-flex items-center justify-center gap-2"><Sparkles className="w-4 h-4" /> Einreichen</span>
               </button>
             </div>
           </div>

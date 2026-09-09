@@ -5,6 +5,40 @@ export type { SupportTicketStatus }
 export const SUPPORT_SUBJECT_MAX = 120
 export const SUPPORT_BODY_MAX = 4000
 
+export type SupportTicketKind = 'help' | 'improvement' | 'idea'
+
+export const SUPPORT_KIND_LABELS: Record<SupportTicketKind, string> = {
+  help: 'Hilfe / Problem',
+  improvement: 'Verbesserung',
+  idea: 'Neue Idee',
+}
+
+export const SUPPORT_KIND_COLORS: Record<SupportTicketKind, string> = {
+  help: 'bg-slate-100 text-slate-700',
+  improvement: 'bg-emerald-50 text-emerald-700',
+  idea: 'bg-violet-50 text-violet-700',
+}
+
+const SUPPORT_KIND_PREFIXES: Record<SupportTicketKind, string> = {
+  help: '',
+  improvement: '[Verbesserung] ',
+  idea: '[Idee] ',
+}
+
+export function supportSubjectForStorage(kind: SupportTicketKind, rawSubject: string): SupportFieldResult {
+  return validateSupportSubject(`${SUPPORT_KIND_PREFIXES[kind]}${rawSubject.trim()}`)
+}
+
+export function parseSupportSubject(storedSubject: string): { kind: SupportTicketKind; subject: string } {
+  if (storedSubject.startsWith(SUPPORT_KIND_PREFIXES.improvement)) {
+    return { kind: 'improvement', subject: storedSubject.slice(SUPPORT_KIND_PREFIXES.improvement.length) }
+  }
+  if (storedSubject.startsWith(SUPPORT_KIND_PREFIXES.idea)) {
+    return { kind: 'idea', subject: storedSubject.slice(SUPPORT_KIND_PREFIXES.idea.length) }
+  }
+  return { kind: 'help', subject: storedSubject }
+}
+
 export const SUPPORT_STATUS_LABELS: Record<SupportTicketStatus, string> = {
   open: 'Offen',
   answered: 'Beantwortet',

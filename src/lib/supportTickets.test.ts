@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   SUPPORT_BODY_MAX,
   SUPPORT_STATUS_LABELS,
+  SUPPORT_KIND_LABELS,
   SUPPORT_SUBJECT_MAX,
   sortSupportTickets,
+  parseSupportSubject,
+  supportSubjectForStorage,
   validateSupportBody,
   validateSupportSubject,
 } from './supportTickets'
@@ -38,6 +41,19 @@ describe('validateSupportSubject', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toContain(String(SUPPORT_SUBJECT_MAX))
     expect(validateSupportSubject('B'.repeat(SUPPORT_SUBJECT_MAX)).ok).toBe(true)
+  })
+})
+
+describe('Anfragearten', () => {
+  it('speichert und erkennt Verbesserungen und Ideen', () => {
+    expect(supportSubjectForStorage('improvement', '  Bessere Suche  ')).toEqual({ ok: true, value: '[Verbesserung] Bessere Suche' })
+    expect(parseSupportSubject('[Verbesserung] Bessere Suche')).toEqual({ kind: 'improvement', subject: 'Bessere Suche' })
+    expect(parseSupportSubject('[Idee] Fahrzeug-QR-Code')).toEqual({ kind: 'idea', subject: 'Fahrzeug-QR-Code' })
+  })
+
+  it('behandelt bestehende Anfragen weiterhin als Hilfe', () => {
+    expect(parseSupportSubject('Passwort funktioniert nicht')).toEqual({ kind: 'help', subject: 'Passwort funktioniert nicht' })
+    expect(SUPPORT_KIND_LABELS.help).toBe('Hilfe / Problem')
   })
 })
 
