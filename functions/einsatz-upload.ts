@@ -1,10 +1,9 @@
 import { canManageEinsatz, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { countUploadBytes, uploadSize } from './_upload'
 
 interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
 }
-
-const MAX_FILE_SIZE = 100 * 1024 * 1024
 
 const ALLOWED_TYPES = new Set([
   'application/pdf',
@@ -28,7 +27,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   const encodedName = context.request.headers.get('X-File-Name')
   const contentType = context.request.headers.get('Content-Type') ?? ''
-  const contentLength = Number(context.request.headers.get('Content-Length') ?? '')
+  const contentLength = uploadSize(context.request.headers)
   let fileName = ''
   try {
     fileName = decodeURIComponent(encodedName ?? '')
@@ -38,11 +37,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!fileName || !context.request.body) {
     return new Response(JSON.stringify({ error: 'Keine Datei ausgewählt.' }), { status: 400 })
   }
-  if (!Number.isSafeInteger(contentLength) || contentLength < 1) {
-    return new Response(JSON.stringify({ error: 'Dateigröße konnte nicht geprüft werden.' }), { status: 400 })
-  }
-  if (contentLength > MAX_FILE_SIZE) {
-    return new Response(JSON.stringify({ error: 'Datei zu groß (max. 100 MB).' }), { status: 400 })
+  if (contentLength === null) {
+    return new Response(JSON.stringify({ error: 'Ungültige Dateigröße (max. 100 MB). Bitte die Seite neu laden und erneut versuchen.' }), { status: 400 })
   }
   if (!ALLOWED_TYPES.has(contentType)) {
     return new Response(JSON.stringify({ error: 'Dieser Dateityp ist nicht erlaubt.' }), { status: 400 })
@@ -50,9 +46,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   const extension = (fileName.split('.').pop() ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
   const key = `einsatz-unterlagen/${crypto.randomUUID()}.${extension}`
-  await context.env.BEKLEIDUNG.put(key, context.request.body, {
-    httpMetadata: { contentType },
-  })
+  // R2 requires a stream with known length. FixedLengthStream also rejects truncation.
+  const fixed = new FixedLengthStream(contentLength)
+  try {
+    await Promise.all([
+      context.request.body.pipeThrough(countUploadBytes(contentLength)).pipeTo(fixed.writable),
+      context.env.BEKLEIDUNG.put(key, fixed.readable, { httpMetadata: { contentType } }),
+    ])
+  } catch {
+    return new Response(JSON.stringify({ error: 'Upload fehlgeschlagen oder Datei unvollständig.' }), { status: 400 })
+  }
 
   return new Response(JSON.stringify({ key, name: fileName }), {
     headers: { 'Content-Type': 'application/json' },

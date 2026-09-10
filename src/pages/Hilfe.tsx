@@ -126,40 +126,21 @@ export default function Hilfe() {
     if (!bodyOk.ok) { setError(bodyOk.error); return }
 
     setSaving(true)
-    const { data: ticket, error: ticketError } = await supabase
-      .from('support_tickets')
-      .insert({ user_id: profile.id, subject: subjectOk.value, kind, topic })
-      .select('*, profiles(id,name,username,dienstnummer)')
-      .single()
-
-    if (ticketError || !ticket) {
-      setError('Anfrage konnte nicht angelegt werden.')
+    const { data: ticketId, error: ticketError } = await supabase.rpc('create_support_request', {
+      p_subject: subjectOk.value, p_kind: kind, p_topic: topic, p_body: bodyOk.value,
+    })
+    if (ticketError || !ticketId) {
+      setError('Anfrage konnte nicht angelegt werden. Bitte erneut versuchen.')
       setSaving(false)
       return
     }
-
-    const created = ticket as SupportTicket
-    const { error: messageError } = await supabase.from('support_messages').insert({
-      ticket_id: created.id,
-      author_id: profile.id,
-      body: bodyOk.value,
-      from_admin: false,
-    })
-
-    if (messageError) {
-      setSelectedId(created.id)
-      setReply(bodyOk.value)
-      setError('Die Nachricht konnte nicht gespeichert werden. Bitte erneut senden.')
-    } else {
-      setSelectedId(created.id)
-      setReply('')
-    }
-
+    setSelectedId(ticketId)
+    setReply('')
     setFilter('all')
     resetForm()
     try {
       await loadTickets()
-      if (!messageError) await loadMessages(created.id)
+      await loadMessages(ticketId)
     } catch {
       setError('Anfrage gespeichert, Liste konnte nicht aktualisiert werden.')
     }

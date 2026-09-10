@@ -7,7 +7,6 @@ import type { Product, StockOrder } from '../../lib/types'
 import { sortedSizes } from '../../lib/sizes'
 import {
   buildInventoryMap,
-  inventoryDeltaOnGoodsIn,
   inventoryKey,
   inventoryLineLabel,
   isInventoryDeleteBlocked,
@@ -255,27 +254,10 @@ export function useLager() {
   async function markReceived(order: StockOrder) {
     setSaving(true)
     const needsTailoring = !!order.products?.needs_tailoring
-    const delta = inventoryDeltaOnGoodsIn(order.quantity, needsTailoring)
-    if (delta !== 0) {
-      const { error: adjError } = await supabase.rpc('adjust_inventory', {
-        p_product: order.product_id,
-        p_size: order.size,
-        p_delta: delta,
-      })
-      if (adjError) {
-        setSaving(false)
-        setError('Wareneingang konnte nicht gebucht werden. Bitte erneut versuchen.')
-        return
-      }
-    }
-    const { error: statusError } = await supabase.from('stock_orders').update({
-      status: 'received',
-      received_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('id', order.id)
+    const { error: statusError } = await supabase.rpc('receive_stock_order', { p_order_id: order.id })
     setSaving(false)
     if (statusError) {
-      setError('Bestand wurde gebucht, aber der Bestellstatus konnte nicht aktualisiert werden.')
+      setError('Wareneingang konnte nicht gespeichert werden. Bestand und Status wurden nicht geändert.')
       await loadAll()
       return
     }

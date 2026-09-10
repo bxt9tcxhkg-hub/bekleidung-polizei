@@ -68,10 +68,45 @@ export async function isAuthenticated(request: Request, env: AuthEnv): Promise<b
     const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
       headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
     })
-    return res.ok
+    if (!res.ok) return false
+    const user = await res.json() as { id?: string }
+    if (!user.id) return false
+    const profile = await fetch(`${supabaseUrl}/rest/v1/profiles?select=id&id=eq.${encodeURIComponent(user.id)}&active=eq.true&limit=1`, {
+      headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+    })
+    if (!profile.ok) return false
+    const rows: unknown = await profile.json()
+    return Array.isArray(rows) && rows.length === 1
   } catch {
     return false
   }
+}
+
+/** Concrete object authorization uses the caller's database RLS. Unknown folders fail closed. */
+export async function canReadFile(request: Request, env: AuthEnv, key: string): Promise<boolean> {
+  if (key.startsWith('einsatz-unterlagen/')) return canReadEinsatzMaterial(request, env, key)
+  const headers = bearerHeaders(request, env)
+  if (!headers || !env.SUPABASE_URL || !key.startsWith('vorrechnungen/')) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/deliveries?select=id&vorrechnung_url=eq.${encodeURIComponent(`/files/${key}`)}&limit=1`, { headers })
+    if (!response.ok) return false
+    const rows: unknown = await response.json()
+    return Array.isArray(rows) && rows.length > 0
+  } catch { return false }
+}
+
+export async function canManageBekleidung(request: Request, env: AuthEnv): Promise<boolean> {
+  const headers = bearerHeaders(request, env)
+  if (!headers || !env.SUPABASE_URL) return false
+  try {
+    for (const role of ['admin', 'sachbearbeiter']) {
+      const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_role`, {
+        method: 'POST', headers, body: JSON.stringify({ role }),
+      })
+      if (response.ok && await response.json() === true) return true
+    }
+    return false
+  } catch { return false }
 }
 
 export function unauthorized(): Response {
