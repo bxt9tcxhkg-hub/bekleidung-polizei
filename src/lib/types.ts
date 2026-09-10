@@ -220,7 +220,7 @@ export interface Grundausstattung {
   products?: Product
 }
 
-export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen' | 'fuhrpark'
+export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen' | 'fuhrpark' | 'zentrale'
 
 export interface PortalAreaRole {
   user_id: string
@@ -426,6 +426,28 @@ export interface FleetVehicle {
   updated_at: string
 }
 
+export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'verbot' | 'fahndung' | 'brief' | 'schluessel' | 'kontakt' | 'alarmierung' | 'uebergabe' | 'unterlage'
+export type ZentraleEntryPriority = 'normal' | 'hoch' | 'kritisch'
+export type ZentraleEntryStatus = 'offen' | 'in_bearbeitung' | 'erledigt'
+
+export interface ZentraleEntry {
+  id: string
+  category: ZentraleEntryCategory
+  title: string
+  description: string | null
+  priority: ZentraleEntryPriority
+  status: ZentraleEntryStatus
+  valid_from: string | null
+  valid_until: string | null
+  location: string | null
+  responsible: string | null
+  reference: string | null
+  restricted: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface EinsatzTrainingParticipation {
   id: string
   session_id: string
@@ -514,6 +536,7 @@ type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer
 type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, never>
+type ZentraleEntryRow = Omit<ZentraleEntry, never>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -638,6 +661,9 @@ export type Database = {
       fleet_vehicles: { Row: FleetVehicleRow; Insert: Pick<FleetVehicleRow, 'name' | 'kind'> & Partial<Omit<FleetVehicleRow, 'id' | 'created_at' | 'updated_at' | 'name' | 'kind'>>; Update: Partial<Omit<FleetVehicleRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'fleet_vehicles_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -648,8 +674,10 @@ export type Database = {
       move_einsatz_material: { Args: { p_material_id: string; p_target_tab_id: string }; Returns: undefined }
       save_portal_profile_v2: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null }; Returns: undefined }
       save_portal_profile_v3: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null }; Returns: undefined }
+      save_portal_profile_v4: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null; p_zentrale_roles: string[] | null }; Returns: undefined }
       can_manage_schulungen: { Args: Record<string, never>; Returns: boolean }
       can_manage_fuhrpark: { Args: Record<string, never>; Returns: boolean }
+      can_manage_zentrale: { Args: Record<string, never>; Returns: boolean }
       remove_training_attendance: { Args: { p_attendance_id: string }; Returns: undefined }
       save_training_munition: { Args: { p_session_id: string; p_previous_pool_id: string | null; p_previous_quantity: number | null; p_pool_id: string | null; p_quantity: number | null; p_marke: string | null; p_kaliber: string | null; p_art: string | null }; Returns: undefined }
       save_portal_profile: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null }; Returns: undefined }

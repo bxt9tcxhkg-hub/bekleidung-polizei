@@ -22,12 +22,15 @@ import {
   defaultEinsatzMtRoleForNewUser,
   defaultFuhrparkRoleForNewUser,
   defaultSchulungenRoleForNewUser,
+  defaultZentraleRoleForNewUser,
   parseEinsatzMtRoles,
   parseFuhrparkRoles,
   parseSchulungenRoles,
+  parseZentraleRoles,
   type EinsatzMtRole,
   type FuhrparkRole,
   type SchulungenRole,
+  type ZentraleRole,
 } from '../lib/portalEntitlements'
 
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
@@ -50,6 +53,11 @@ const FUHRPARK_OPTIONS: { value: FuhrparkRole; label: string }[] = [
   { value: 'user', label: AREA_ROLE_LABELS.user },
   { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
 ]
+const ZENTRALE_OPTIONS: { value: ZentraleRole; label: string }[] = [
+  { value: 'user', label: AREA_ROLE_LABELS.user },
+  { value: 'zentralist', label: AREA_ROLE_LABELS.zentralist },
+  { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
+]
 
 const isPortalAdmin = (user: Pick<Profile, 'roles'>) => user.roles.includes('admin')
 const clothingRoles = (roles: readonly string[]) => roles.filter(role => role !== 'admin')
@@ -68,7 +76,7 @@ const BEKLEIDUNG_ROLE_COLOR: Record<string, string> = {
   approver: 'bg-green-100 text-green-700',
 }
 
-type AreaRolesByUser = Record<string, { bekleidung?: string[]; einsatz_mt?: string[]; schulungen?: string[]; fuhrpark?: string[] }>
+type AreaRolesByUser = Record<string, { bekleidung?: string[]; einsatz_mt?: string[]; schulungen?: string[]; fuhrpark?: string[]; zentrale?: string[] }>
 
 const emptyForm = () => ({
   name: '',
@@ -79,6 +87,7 @@ const emptyForm = () => ({
   einsatzMtRoles: [defaultEinsatzMtRoleForNewUser()] as EinsatzMtRole[],
   schulungenRoles: [defaultSchulungenRoleForNewUser()] as SchulungenRole[],
   fuhrparkRoles: [defaultFuhrparkRoleForNewUser()] as FuhrparkRole[],
+  zentraleRoles: [defaultZentraleRoleForNewUser()] as ZentraleRole[],
   gender: 'male' as 'male' | 'female',
   organisation: 'Stadtpolizei' as string,
   active: true,
@@ -134,6 +143,7 @@ export default function Users() {
       if (row.area === 'einsatz_mt') current.einsatz_mt = row.roles
       if (row.area === 'schulungen') current.schulungen = row.roles
       if (row.area === 'fuhrpark') current.fuhrpark = row.roles
+      if (row.area === 'zentrale') current.zentrale = row.roles
       map[row.user_id] = current
     }
     setAreaByUser(map)
@@ -168,6 +178,7 @@ export default function Users() {
       einsatzMtRoles: parseEinsatzMtRoles(areaByUser[u.id]?.einsatz_mt).filter(role => role !== 'admin'),
       schulungenRoles: parseSchulungenRoles(areaByUser[u.id]?.schulungen).filter(role => role !== 'admin'),
       fuhrparkRoles: parseFuhrparkRoles(areaByUser[u.id]?.fuhrpark).filter(role => role !== 'admin'),
+      zentraleRoles: parseZentraleRoles(areaByUser[u.id]?.zentrale).filter(role => role !== 'admin'),
       gender: u.gender ?? 'male',
       organisation: u.organisation ?? 'Stadtpolizei',
       active: u.active,
@@ -212,12 +223,13 @@ export default function Users() {
     }
 
     if (editId) {
-      const { error } = await supabase.rpc('save_portal_profile_v3', {
+      const { error } = await supabase.rpc('save_portal_profile_v4', {
         p_user_id: editId,
         p_patch: dbPayload,
         p_einsatz_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : null,
         p_schulungen_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.schulungenRoles) : null,
         p_fuhrpark_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.fuhrparkRoles) : null,
+        p_zentrale_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.zentraleRoles) : null,
       })
       if (error) { setError(error.message); setSaving(false); return }
       if (startPassword) {
@@ -239,6 +251,7 @@ export default function Users() {
             einsatz_mt_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : undefined,
             schulungen_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.schulungenRoles) : undefined,
             fuhrpark_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.fuhrparkRoles) : undefined,
+            zentrale_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.zentraleRoles) : undefined,
           }),
         })
         const json = await res.json() as { error?: string; id?: string }
@@ -469,6 +482,7 @@ export default function Users() {
           einsatzMtRoles: enablingAdmin ? [] : [defaultEinsatzMtRoleForNewUser()],
           schulungenRoles: enablingAdmin ? [] : [defaultSchulungenRoleForNewUser()],
           fuhrparkRoles: enablingAdmin ? [] : [defaultFuhrparkRoleForNewUser()],
+          zentraleRoles: enablingAdmin ? [] : [defaultZentraleRoleForNewUser()],
         }
       }
       return { ...f, roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role] }
@@ -502,6 +516,16 @@ export default function Users() {
       fuhrparkRoles: current.fuhrparkRoles.includes(role)
         ? current.fuhrparkRoles.filter(existing => existing !== role)
         : parseFuhrparkRoles([...current.fuhrparkRoles, role]),
+    }))
+  }
+
+  function toggleZentraleRole(role: ZentraleRole) {
+    if (isSelfEdit) return
+    setForm(current => ({
+      ...current,
+      zentraleRoles: current.zentraleRoles.includes(role)
+        ? current.zentraleRoles.filter(existing => existing !== role)
+        : parseZentraleRoles([...current.zentraleRoles, role]),
     }))
   }
 
@@ -1071,6 +1095,20 @@ export default function Users() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-400 mt-2">Benutzer sehen Fahrzeuge. Sachbearbeiter können Fahrzeuge anlegen, bearbeiten und löschen.</p>
+                </fieldset>
+              )}
+              {isStrictAdmin && !form.roles.includes('admin') && (
+                <fieldset className="border border-red-200 bg-red-50/30 rounded-xl p-3.5">
+                  <legend className="px-1 text-sm font-semibold text-red-900">Rechte · Zentrale</legend>
+                  <div className="grid grid-cols-1 min-[390px]:grid-cols-3 gap-2 mt-1">
+                    {ZENTRALE_OPTIONS.map(option => (
+                      <label key={option.label} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${form.zentraleRoles.includes(option.value) ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-white hover:bg-gray-50'} ${isSelfEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input type="checkbox" value={option.value} checked={form.zentraleRoles.includes(option.value)} disabled={isSelfEdit} onChange={() => toggleZentraleRole(option.value)} className="rounded" />
+                        <span className="text-sm font-medium text-gray-700">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Zentralisten und Sachbearbeiter können operative Einträge verwalten. Sensible Einträge sind nur für diese Rollen und Admins sichtbar.</p>
                 </fieldset>
               )}
               {(!editId || canDeactivate) && (

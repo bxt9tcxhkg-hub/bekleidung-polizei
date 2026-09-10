@@ -6,6 +6,7 @@
  *   Sachbearbeiter, Genehmiger, Admin). approver wird als genehmiger gelesen.
  * - einsatz_mt, schulungen und fuhrpark: mehrere Rollen aus Benutzer | Sachbearbeiter | Admin
  *   (kein Genehmiger). Benutzer = Leserecht, Sachbearbeiter = Verwaltung.
+ * - zentrale: Benutzer | Zentralist | Sachbearbeiter | Admin.
  *
  * Dual-Write: area=bekleidung.roles ↔ profiles.roles. profiles.roles bleibt
  * Quelle für bestehende Bekleidungs-RLS / has_role.
@@ -17,25 +18,28 @@
 
 import type { PortalApp } from './portalApps'
 
-export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen', 'fuhrpark'] as const
+export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen', 'fuhrpark', 'zentrale'] as const
 export type PortalArea = (typeof PORTAL_AREAS)[number]
 
 export const BEKLEIDUNG_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
 export const EINSATZ_MT_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const SCHULUNGEN_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const FUHRPARK_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
+export const ZENTRALE_ROLES = ['user', 'zentralist', 'sachbearbeiter', 'admin'] as const
 
 export type BekleidungRole = (typeof BEKLEIDUNG_ROLES)[number]
 export type EinsatzMtRole = (typeof EINSATZ_MT_ROLES)[number]
 export type SchulungenRole = (typeof SCHULUNGEN_ROLES)[number]
 export type FuhrparkRole = (typeof FUHRPARK_ROLES)[number]
-export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole | FuhrparkRole
+export type ZentraleRole = (typeof ZENTRALE_ROLES)[number]
+export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole | FuhrparkRole | ZentraleRole
 
 export const AREA_ROLES = {
   bekleidung: BEKLEIDUNG_ROLES,
   einsatz_mt: EINSATZ_MT_ROLES,
   schulungen: SCHULUNGEN_ROLES,
   fuhrpark: FUHRPARK_ROLES,
+  zentrale: ZENTRALE_ROLES,
 } as const
 
 export const AREA_LABELS: Record<PortalArea, string> = {
@@ -43,20 +47,23 @@ export const AREA_LABELS: Record<PortalArea, string> = {
   einsatz_mt: 'Einsatzmittel & Training',
   schulungen: 'Schulungen',
   fuhrpark: 'Fuhrpark & Fahrzeuge',
+  zentrale: 'Zentrale',
 }
 
 export const AREA_ROLE_LABELS: Record<PortalAreaRoleName, string> = {
   user: 'Benutzer',
   sachbearbeiter: 'Sachbearbeiter',
+  zentralist: 'Zentralist',
   genehmiger: 'Genehmiger',
   admin: 'Admin',
 }
 
 const ROLE_RANK: Record<string, number> = {
   user: 0,
-  sachbearbeiter: 1,
-  genehmiger: 2,
-  admin: 3,
+  zentralist: 1,
+  sachbearbeiter: 2,
+  genehmiger: 3,
+  admin: 4,
 }
 
 export type PortalAreaRoleRow = {
@@ -147,6 +154,14 @@ export function parseFuhrparkRoles(roles: readonly string[] | null | undefined):
 }
 
 export function defaultFuhrparkRoleForNewUser(): FuhrparkRole {
+  return 'user'
+}
+
+export function parseZentraleRoles(roles: readonly string[] | null | undefined): ZentraleRole[] {
+  return sortAreaRoles((roles ?? []).filter(role => isAllowedAreaRole('zentrale', role))) as ZentraleRole[]
+}
+
+export function defaultZentraleRoleForNewUser(): ZentraleRole {
   return 'user'
 }
 

@@ -7,6 +7,7 @@ import {
   defaultEinsatzMtRoleForNewUser,
   defaultFuhrparkRoleForNewUser,
   defaultSchulungenRoleForNewUser,
+  defaultZentraleRoleForNewUser,
   hasAreaEntitlement,
   highestAreaRole,
   isAllowedAreaRole,
@@ -14,6 +15,7 @@ import {
   parseEinsatzMtRoles,
   parseFuhrparkRoles,
   parseSchulungenRoles,
+  parseZentraleRoles,
   profilesRolesFromBekleidung,
   rolesForArea,
   sortAreaRoles,
@@ -41,6 +43,12 @@ describe('Bereichsrollen', () => {
     expect([...AREA_ROLES.fuhrpark]).toEqual(['user', 'sachbearbeiter', 'admin'])
     expect(parseFuhrparkRoles(['sachbearbeiter', 'user', 'genehmiger'])).toEqual(['user', 'sachbearbeiter'])
     expect(defaultFuhrparkRoleForNewUser()).toBe('user')
+  })
+
+  it('kennt in der Zentrale zusätzlich die Rolle Zentralist', () => {
+    expect([...AREA_ROLES.zentrale]).toEqual(['user', 'zentralist', 'sachbearbeiter', 'admin'])
+    expect(parseZentraleRoles(['zentralist', 'user', 'genehmiger'])).toEqual(['user', 'zentralist'])
+    expect(defaultZentraleRoleForNewUser()).toBe('user')
   })
 
   it('sortiert Rollen user < sachbearbeiter < genehmiger < admin', () => {
@@ -155,6 +163,12 @@ describe('hasAreaEntitlement / visiblePortalApps', () => {
     const rows = [{ area: 'fuhrpark', roles: ['user'] }]
     expect(hasAreaEntitlement({ area: 'fuhrpark', isStrictAdmin: false, rows })).toBe(true)
     expect(hasAreaEntitlement({ area: 'schulungen', isStrictAdmin: false, rows })).toBe(false)
+  })
+
+  it('erteilt Zugriff auf die Zentrale nur mit eigener Bereichszeile', () => {
+    const rows = [{ area: 'zentrale', roles: ['user'] }]
+    expect(hasAreaEntitlement({ area: 'zentrale', isStrictAdmin: false, rows })).toBe(true)
+    expect(hasAreaEntitlement({ area: 'fuhrpark', isStrictAdmin: false, rows })).toBe(false)
   })
 
   it('fällt ohne Tabelle auf Bekleidung sichtbar / Einsatz unsichtbar zurück', () => {

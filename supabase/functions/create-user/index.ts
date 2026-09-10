@@ -219,6 +219,7 @@ Deno.serve(async (req) => {
     einsatz_mt_roles?: string[]
     schulungen_roles?: string[]
     fuhrpark_roles?: string[]
+    zentrale_roles?: string[]
   }
   try {
     body = await req.json()
@@ -447,6 +448,14 @@ Deno.serve(async (req) => {
       : ['user']
     if (fuhrparkRoles.length > 0) {
       areaRows.push({ user_id: created.user.id, area: 'fuhrpark', roles: fuhrparkRoles })
+    }
+    const allowedZentraleRoles = new Set(['user', 'zentralist', 'sachbearbeiter', 'admin'])
+    const requestedZentraleRoles = Array.isArray(body.zentrale_roles) ? body.zentrale_roles : ['user']
+    const zentraleRoles = callerRoles.includes('admin')
+      ? [...new Set(requestedZentraleRoles.filter((role) => allowedZentraleRoles.has(role)))]
+      : ['user']
+    if (zentraleRoles.length > 0) {
+      areaRows.push({ user_id: created.user.id, area: 'zentrale', roles: zentraleRoles })
     }
   }
   if (areaRows.length > 0) {
