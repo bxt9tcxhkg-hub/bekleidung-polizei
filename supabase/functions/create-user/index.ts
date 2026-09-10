@@ -218,6 +218,7 @@ Deno.serve(async (req) => {
     einsatz_mt_role?: string
     einsatz_mt_roles?: string[]
     schulungen_roles?: string[]
+    fuhrpark_roles?: string[]
   }
   try {
     body = await req.json()
@@ -439,6 +440,13 @@ Deno.serve(async (req) => {
       : ['user']
     if (schulungenRoles.length > 0) {
       areaRows.push({ user_id: created.user.id, area: 'schulungen', roles: schulungenRoles })
+    }
+    const requestedFuhrparkRoles = Array.isArray(body.fuhrpark_roles) ? body.fuhrpark_roles : ['user']
+    const fuhrparkRoles = callerRoles.includes('admin')
+      ? [...new Set(requestedFuhrparkRoles.filter((role) => allowedEinsatzRoles.has(role)))]
+      : ['user']
+    if (fuhrparkRoles.length > 0) {
+      areaRows.push({ user_id: created.user.id, area: 'fuhrpark', roles: fuhrparkRoles })
     }
   }
   if (areaRows.length > 0) {

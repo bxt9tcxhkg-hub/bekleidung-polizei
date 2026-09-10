@@ -42,7 +42,7 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
 }
 
 type PlannedPortalArea = {
-  id: 'zentrale' | 'innendienst' | 'aussendienst' | 'fuhrpark' | 'ueberstunden'
+  id: 'zentrale' | 'innendienst' | 'aussendienst' | 'ueberstunden'
   title: string
   description: string
   path: string
@@ -53,10 +53,6 @@ const OPERATIONAL_AREAS: PlannedPortalArea[] = [
   { id: 'zentrale', title: 'Zentrale', description: 'Interne operative Informationen und Arbeitshilfen', path: '/planung/zentrale', icon: Radio },
   { id: 'innendienst', title: 'Innendienst', description: 'Kasse, Bescheide, Gebühren und Verfahrenshilfen', path: '/planung/innendienst', icon: Building2 },
   { id: 'aussendienst', title: 'Außendienststreifen', description: 'Kontrollaufträge, aktuelle Hinweise und Kontrollbehelfe', path: '/planung/aussendienst', icon: Shield },
-]
-
-const ORGANISATIONAL_AREAS: PlannedPortalArea[] = [
-  { id: 'fuhrpark', title: 'Fuhrpark & Fahrzeuge', description: 'Kontrollen, Mängel, Pflege und Werkstatttermine', path: '/planung/fuhrpark', icon: Car },
 ]
 
 const PERSONAL_AREAS: PlannedPortalArea[] = [
@@ -246,7 +242,9 @@ export default function Portal() {
         {hasAreaAccess('schulungen') ? (
           <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} />
         ) : null}
-        {ORGANISATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+        {hasAreaAccess('fuhrpark') ? (
+          <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} />
+        ) : null}
       </PortalSection>
 
       <PortalSection title="Mein Bereich" description="Persönliche Meldungen und Anträge" tone="persoenlich">

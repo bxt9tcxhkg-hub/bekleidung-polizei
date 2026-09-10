@@ -5,12 +5,14 @@ import {
   bekleidungRolesFromProfiles,
   canonicalizeRoleName,
   defaultEinsatzMtRoleForNewUser,
+  defaultFuhrparkRoleForNewUser,
   defaultSchulungenRoleForNewUser,
   hasAreaEntitlement,
   highestAreaRole,
   isAllowedAreaRole,
   parseEinsatzMtRole,
   parseEinsatzMtRoles,
+  parseFuhrparkRoles,
   parseSchulungenRoles,
   profilesRolesFromBekleidung,
   rolesForArea,
@@ -33,6 +35,12 @@ describe('Bereichsrollen', () => {
     expect([...AREA_ROLES.schulungen]).toEqual(['user', 'sachbearbeiter', 'admin'])
     expect(parseSchulungenRoles(['sachbearbeiter', 'user', 'genehmiger'])).toEqual(['user', 'sachbearbeiter'])
     expect(defaultSchulungenRoleForNewUser()).toBe('user')
+  })
+
+  it('führt den Fuhrpark als eigenständigen Bereich mit Benutzer und Sachbearbeiter', () => {
+    expect([...AREA_ROLES.fuhrpark]).toEqual(['user', 'sachbearbeiter', 'admin'])
+    expect(parseFuhrparkRoles(['sachbearbeiter', 'user', 'genehmiger'])).toEqual(['user', 'sachbearbeiter'])
+    expect(defaultFuhrparkRoleForNewUser()).toBe('user')
   })
 
   it('sortiert Rollen user < sachbearbeiter < genehmiger < admin', () => {
@@ -141,6 +149,12 @@ describe('hasAreaEntitlement / visiblePortalApps', () => {
     const rows = [{ area: 'schulungen', roles: ['user'] }]
     expect(hasAreaEntitlement({ area: 'schulungen', isStrictAdmin: false, rows })).toBe(true)
     expect(hasAreaEntitlement({ area: 'einsatz_mt', isStrictAdmin: false, rows })).toBe(false)
+  })
+
+  it('erteilt Fuhrparkzugriff nur mit eigener Fuhrparkzeile', () => {
+    const rows = [{ area: 'fuhrpark', roles: ['user'] }]
+    expect(hasAreaEntitlement({ area: 'fuhrpark', isStrictAdmin: false, rows })).toBe(true)
+    expect(hasAreaEntitlement({ area: 'schulungen', isStrictAdmin: false, rows })).toBe(false)
   })
 
   it('fällt ohne Tabelle auf Bekleidung sichtbar / Einsatz unsichtbar zurück', () => {

@@ -4,7 +4,7 @@
  * Modell: eine Zeile pro (user_id, area) mit `roles text[]`.
  * - bekleidung: mehrere Rollen gleichzeitig (wie profiles.roles: Benutzer,
  *   Sachbearbeiter, Genehmiger, Admin). approver wird als genehmiger gelesen.
- * - einsatz_mt und schulungen: mehrere Rollen aus Benutzer | Sachbearbeiter | Admin
+ * - einsatz_mt, schulungen und fuhrpark: mehrere Rollen aus Benutzer | Sachbearbeiter | Admin
  *   (kein Genehmiger). Benutzer = Leserecht, Sachbearbeiter = Verwaltung.
  *
  * Dual-Write: area=bekleidung.roles ↔ profiles.roles. profiles.roles bleibt
@@ -17,28 +17,32 @@
 
 import type { PortalApp } from './portalApps'
 
-export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen'] as const
+export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen', 'fuhrpark'] as const
 export type PortalArea = (typeof PORTAL_AREAS)[number]
 
 export const BEKLEIDUNG_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
 export const EINSATZ_MT_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const SCHULUNGEN_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
+export const FUHRPARK_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 
 export type BekleidungRole = (typeof BEKLEIDUNG_ROLES)[number]
 export type EinsatzMtRole = (typeof EINSATZ_MT_ROLES)[number]
 export type SchulungenRole = (typeof SCHULUNGEN_ROLES)[number]
-export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole
+export type FuhrparkRole = (typeof FUHRPARK_ROLES)[number]
+export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole | FuhrparkRole
 
 export const AREA_ROLES = {
   bekleidung: BEKLEIDUNG_ROLES,
   einsatz_mt: EINSATZ_MT_ROLES,
   schulungen: SCHULUNGEN_ROLES,
+  fuhrpark: FUHRPARK_ROLES,
 } as const
 
 export const AREA_LABELS: Record<PortalArea, string> = {
   bekleidung: 'Bekleidung',
   einsatz_mt: 'Einsatzmittel & Training',
   schulungen: 'Schulungen',
+  fuhrpark: 'Fuhrpark & Fahrzeuge',
 }
 
 export const AREA_ROLE_LABELS: Record<PortalAreaRoleName, string> = {
@@ -135,6 +139,14 @@ export function parseSchulungenRoles(roles: readonly string[] | null | undefined
 }
 
 export function defaultSchulungenRoleForNewUser(): SchulungenRole {
+  return 'user'
+}
+
+export function parseFuhrparkRoles(roles: readonly string[] | null | undefined): FuhrparkRole[] {
+  return sortAreaRoles((roles ?? []).filter(role => isAllowedAreaRole('fuhrpark', role))) as FuhrparkRole[]
+}
+
+export function defaultFuhrparkRoleForNewUser(): FuhrparkRole {
   return 'user'
 }
 

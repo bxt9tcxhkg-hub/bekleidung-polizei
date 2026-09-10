@@ -1,56 +1,89 @@
-import { ArrowLeft, Bike, Car, ChevronRight, Construction } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Bike, Car, ChevronRight, Plus, X } from 'lucide-react'
+import { Link, Navigate } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
-import { FLEET_VEHICLES, vehicleTitle } from '../data/fleet'
+import { useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
+import { supabase } from '../lib/supabase'
+import type { FleetVehicle, FleetVehicleKind } from '../lib/types'
+
+const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 export default function Fleet() {
+  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
+  const roles = areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []
+  const canManage = isStrictAdmin || roles.includes('sachbearbeiter') || roles.includes('admin')
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [name, setName] = useState('')
+  const [kind, setKind] = useState<FleetVehicleKind>('Dienstfahrzeug')
+  const [make, setMake] = useState('')
+  const [model, setModel] = useState('')
+  const [callSign, setCallSign] = useState('')
+  const [licensePlate, setLicensePlate] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data, error: loadError } = await supabase.from('fleet_vehicles').select('*').eq('active', true).order('kind').order('name')
+    if (loadError) {
+      setError('Fahrzeuge konnten nicht geladen werden.')
+      setVehicles([])
+    } else {
+      setError('')
+      setVehicles((data ?? []) as FleetVehicle[])
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+  if (!hasAreaAccess('fuhrpark')) return <Navigate to="/" replace />
+
+  function openForm() {
+    setName(''); setKind('Dienstfahrzeug'); setMake(''); setModel(''); setCallSign(''); setLicensePlate(''); setError(''); setShowForm(true)
+  }
+
+  async function saveVehicle() {
+    if (!name.trim()) { setError('Bitte eine Bezeichnung für das Fahrzeug eingeben.'); return }
+    setSaving(true)
+    const { error: insertError } = await supabase.from('fleet_vehicles').insert({
+      name: name.trim(), kind, make: make.trim() || null, model: model.trim() || null,
+      call_sign: callSign.trim() || null, license_plate: licensePlate.trim().toUpperCase() || null,
+      created_by: profile?.id ?? null,
+    })
+    setSaving(false)
+    if (insertError) {
+      setError(insertError.message.includes('duplicate') ? 'Rufname oder Kennzeichen ist bereits vergeben.' : 'Fahrzeug konnte nicht angelegt werden.')
+      return
+    }
+    logAudit('Fahrzeug angelegt', name.trim())
+    setShowForm(false)
+    await load()
+  }
+
   return (
     <PortalChrome wide>
-      <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-6">
-        <ArrowLeft className="w-4 h-4" /> Zurück zum Portal
-      </Link>
-
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 flex items-start gap-4">
-        <div className="bg-amber-100 text-amber-700 p-2.5 rounded-xl"><Construction className="w-5 h-5" /></div>
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">Grundstruktur · nur für Admin sichtbar</span>
-          <h1 className="text-2xl font-bold text-gray-900 mt-1">Fuhrpark &amp; Fahrzeuge</h1>
-          <p className="text-gray-600 mt-2">Fahrzeug auswählen, um Stammdaten, Kontrollen, Bestand, Mängel und Termine fahrzeugbezogen weiterzuführen.</p>
-        </div>
+      <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-6"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
+        <div><h1 className="text-2xl font-bold text-gray-900">Fuhrpark &amp; Fahrzeuge</h1><p className="text-gray-500 text-sm mt-1">Dienstfahrzeuge auswählen und fahrzeugbezogen verwalten.</p></div>
+        {canManage ? <button type="button" onClick={openForm} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Fahrzeug anlegen</button> : null}
       </div>
+      {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
+      {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : vehicles.length === 0 ? (
+        <div className="rounded-2xl border border-gray-200 bg-white px-5 py-12 text-center"><Car className="w-10 h-10 text-gray-300 mx-auto mb-3" /><p className="font-medium text-gray-700">Noch keine Fahrzeuge vorhanden</p>{canManage ? <button type="button" onClick={openForm} className="mt-3 text-sm font-medium text-blue-800">Erstes Fahrzeug anlegen</button> : null}</div>
+      ) : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{vehicles.map(vehicle => {
+        const Icon = vehicle.kind === 'Motorrad' ? Bike : Car
+        return <Link key={vehicle.id} to={`/fuhrpark/${vehicle.id}`} className="group rounded-2xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all"><div className="flex items-start gap-4"><div className="bg-blue-50 text-blue-700 p-3 rounded-xl"><Icon className="w-6 h-6" /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.kind}</p><h2 className="font-bold text-gray-900 mt-1">{vehicle.name}</h2></div><ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-700 flex-shrink-0" /></div><dl className="text-sm mt-4 space-y-2"><div className="flex justify-between gap-3"><dt className="text-gray-500">Rufname</dt><dd className="font-medium text-gray-700 text-right">{vehicle.call_sign ?? 'Noch offen'}</dd></div><div className="flex justify-between gap-3"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium text-gray-700 text-right">{vehicle.license_plate ?? 'Noch offen'}</dd></div></dl><p className="text-xs font-semibold text-blue-700 mt-4">Fahrzeug öffnen</p></div></div></Link>
+      })}</div>}
 
-      <section>
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-gray-900">Dienstfahrzeuge</h2>
-          <p className="text-sm text-gray-500 mt-1">Jedes Fahrzeug besitzt einen eigenen Bearbeitungsbereich.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {FLEET_VEHICLES.map(vehicle => {
-            const Icon = vehicle.kind === 'Motorrad' ? Bike : Car
-            return (
-              <Link key={vehicle.id} to={`/planung/fuhrpark/${vehicle.id}`} className="group rounded-2xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all">
-                <div className="flex items-start gap-4">
-                  <div className="bg-blue-50 text-blue-700 p-3 rounded-xl"><Icon className="w-6 h-6" /></div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.kind}</p>
-                        <h3 className="font-bold text-gray-900 mt-1">{vehicleTitle(vehicle)}</h3>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-700 flex-shrink-0" />
-                    </div>
-                    <dl className="text-sm mt-4 space-y-2">
-                      <div className="flex justify-between gap-3"><dt className="text-gray-500">Rufname</dt><dd className="font-medium text-gray-700 text-right">{vehicle.callSign ?? 'Details folgen'}</dd></div>
-                      <div className="flex justify-between gap-3"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium text-gray-700 text-right">{vehicle.licensePlate ?? 'Noch offen'}</dd></div>
-                    </dl>
-                    <p className="text-xs font-semibold text-blue-700 mt-4">Fahrzeug öffnen</p>
-                  </div>
-                </div>
-              </Link>
-            )
-          })}
-        </div>
-      </section>
+      {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Fahrzeug anlegen</h2><button type="button" onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
+        <label className="block text-xs font-medium text-gray-600">Bezeichnung *<input className={inputClass} maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="z. B. Mercedes-Benz Vito" /></label>
+        <label className="block text-xs font-medium text-gray-600">Fahrzeugart<select className={inputClass} value={kind} onChange={event => setKind(event.target.value as FleetVehicleKind)}><option>Dienstfahrzeug</option><option>Motorrad</option></select></label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><label className="block text-xs font-medium text-gray-600">Hersteller<input className={inputClass} maxLength={60} value={make} onChange={event => setMake(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Modell<input className={inputClass} maxLength={60} value={model} onChange={event => setModel(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Rufname<input className={inputClass} maxLength={80} value={callSign} onChange={event => setCallSign(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Kennzeichen<input className={inputClass} maxLength={20} value={licensePlate} onChange={event => setLicensePlate(event.target.value)} /></label></div>
+        {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
+      </div><div className="flex gap-3 px-5 sm:px-6 py-4 border-t"><button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving} onClick={() => { void saveVehicle() }} className="flex-1 bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Anlegen'}</button></div></div></div> : null}
     </PortalChrome>
   )
 }

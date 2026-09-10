@@ -220,7 +220,7 @@ export interface Grundausstattung {
   products?: Product
 }
 
-export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen'
+export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen' | 'fuhrpark'
 
 export interface PortalAreaRole {
   user_id: string
@@ -409,6 +409,23 @@ export interface EinsatzMaterial {
   updated_at: string
 }
 
+export type FleetVehicleKind = 'Dienstfahrzeug' | 'Motorrad'
+
+export interface FleetVehicle {
+  id: string
+  name: string
+  kind: FleetVehicleKind
+  make: string | null
+  model: string | null
+  call_sign: string | null
+  license_plate: string | null
+  notes: string | null
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface EinsatzTrainingParticipation {
   id: string
   session_id: string
@@ -496,6 +513,7 @@ type EinsatzTrainingCompletionRow = Omit<EinsatzTrainingCompletion, 'module' | '
 type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer' | 'session'>
 type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
+type FleetVehicleRow = Omit<FleetVehicle, never>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -617,6 +635,9 @@ export type Database = {
       einsatz_materials: { Row: EinsatzMaterialRow; Insert: Pick<EinsatzMaterialRow, 'tab_id' | 'title'> & Partial<Omit<EinsatzMaterialRow, 'id' | 'created_at' | 'updated_at' | 'tab_id' | 'title'>>; Update: Partial<Omit<EinsatzMaterialRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_materials_tab_id_fkey'; columns: ['tab_id']; isOneToOne: false; referencedRelation: 'einsatz_material_tabs'; referencedColumns: ['id'] },
       ] }
+      fleet_vehicles: { Row: FleetVehicleRow; Insert: Pick<FleetVehicleRow, 'name' | 'kind'> & Partial<Omit<FleetVehicleRow, 'id' | 'created_at' | 'updated_at' | 'name' | 'kind'>>; Update: Partial<Omit<FleetVehicleRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'fleet_vehicles_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -626,7 +647,9 @@ export type Database = {
       create_support_request: { Args: { p_subject: string; p_kind: string; p_topic: string; p_body: string }; Returns: string }
       move_einsatz_material: { Args: { p_material_id: string; p_target_tab_id: string }; Returns: undefined }
       save_portal_profile_v2: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null }; Returns: undefined }
+      save_portal_profile_v3: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null }; Returns: undefined }
       can_manage_schulungen: { Args: Record<string, never>; Returns: boolean }
+      can_manage_fuhrpark: { Args: Record<string, never>; Returns: boolean }
       remove_training_attendance: { Args: { p_attendance_id: string }; Returns: undefined }
       save_training_munition: { Args: { p_session_id: string; p_previous_pool_id: string | null; p_previous_quantity: number | null; p_pool_id: string | null; p_quantity: number | null; p_marke: string | null; p_kaliber: string | null; p_art: string | null }; Returns: undefined }
       save_portal_profile: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null }; Returns: undefined }

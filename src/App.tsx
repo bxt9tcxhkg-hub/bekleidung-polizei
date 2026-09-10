@@ -93,8 +93,10 @@ export default function App() {
             }
           />
           <Route path="/planung/schulungen" element={<Navigate to="/schulungen" replace />} />
-          <Route path="/planung/fuhrpark" element={<ProtectedRoute adminOnly><Fleet /></ProtectedRoute>} />
-          <Route path="/planung/fuhrpark/:vehicleId" element={<ProtectedRoute adminOnly><FleetVehicle /></ProtectedRoute>} />
+          <Route path="/fuhrpark" element={<ProtectedRoute><Fleet /></ProtectedRoute>} />
+          <Route path="/fuhrpark/:vehicleId" element={<ProtectedRoute><FleetVehicle /></ProtectedRoute>} />
+          <Route path="/planung/fuhrpark" element={<Navigate to="/fuhrpark" replace />} />
+          <Route path="/planung/fuhrpark/:vehicleId" element={<Navigate to="/fuhrpark" replace />} />
           <Route path="/planung/ueberstunden" element={<ProtectedRoute adminOnly><PlannedArea area="ueberstunden" /></ProtectedRoute>} />
           <Route
             path="/profil"
