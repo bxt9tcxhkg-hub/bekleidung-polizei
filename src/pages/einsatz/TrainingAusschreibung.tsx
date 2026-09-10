@@ -326,7 +326,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
   async function removeSession(session: EinsatzTrainingSession) {
     if (!canManage) return
     const label = `${formatCompletedOn(session.session_date)} · ${session.module?.name ?? 'Ausschreibung'}`
-    if (!window.confirm(`Ausschreibung „${label}“ wirklich löschen? Zugehörige Anmeldungen werden ebenfalls entfernt.`)) return
+    if (!window.confirm(`Ausschreibung „${label}“ wirklich löschen? Verknüpfte Einträge müssen vorher einzeln entfernt werden. Ein erfasster Munitionsverbrauch verhindert das Löschen.`)) return
     setBusyId(session.id)
     setError('')
     const { error: deleteError } = await supabase

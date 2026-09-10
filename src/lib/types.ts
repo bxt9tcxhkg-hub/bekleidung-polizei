@@ -178,6 +178,7 @@ export interface StockOrder {
 }
 
 export interface AuditLog {
+  source?: 'client' | 'database'
   id: string
   action: string
   details: string | null
@@ -622,6 +623,13 @@ export type Database = {
       budget_usage: { Row: BudgetUsageRow; Relationships: [] }
     }
     Functions: {
+      create_support_request: { Args: { p_subject: string; p_kind: string; p_topic: string; p_body: string }; Returns: string }
+      remove_training_attendance: { Args: { p_attendance_id: string }; Returns: undefined }
+      save_training_munition: { Args: { p_session_id: string; p_previous_pool_id: string | null; p_previous_quantity: number | null; p_pool_id: string | null; p_quantity: number | null; p_marke: string | null; p_kaliber: string | null; p_art: string | null }; Returns: undefined }
+      save_portal_profile: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null }; Returns: undefined }
+      receive_stock_order: { Args: { p_order_id: string }; Returns: undefined }
+      book_order_inventory: { Args: { p_order_id: string; p_expected_updated_at: string | null; p_action: 'issue' | 'receive' | 'step_back'; p_quantity?: number }; Returns: undefined }
+
       submit_cart: { Args: Record<string, never>; Returns: string | null }
       update_editable_order: { Args: { p_order_id: string; p_size: string; p_quantity: number }; Returns: string }
       adjust_inventory: { Args: { p_product: string; p_size: string; p_delta: number }; Returns: number }

@@ -1,8 +1,6 @@
 import { supabase } from '../../lib/supabase'
 import {
-  planPoolMunitionAdjustments,
   validateGeschossenMunition,
-  withMunitionRecordedBy,
   type GeschossenAnswer,
   type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
@@ -20,43 +18,17 @@ export async function saveMunitionVerbrauch(input: {
   const validated = validateGeschossenMunition({ geschossen: input.geschossen, form: input.form })
   if (!validated.ok) return validated
 
-  const neededIds = [validated.payload.munition_pool_id, input.previous.munition_pool_id]
-    .filter((id): id is string => Boolean(id))
-  const stocks: Record<string, number | null> = {}
-  if (neededIds.length > 0) {
-    const { data, error } = await supabase
-      .from('pool_einsatzmittel')
-      .select('id,anzahl')
-      .in('id', neededIds)
-    if (error) return { ok: false, error: error.message || 'Pool-Munition konnte nicht gelesen werden.' }
-    for (const row of data ?? []) stocks[row.id] = row.anzahl
-  }
-
-  const plan = planPoolMunitionAdjustments({
-    previous: { poolId: input.previous.munition_pool_id, anzahl: input.previous.munition_anzahl },
-    next: { poolId: validated.payload.munition_pool_id, anzahl: validated.payload.munition_anzahl },
-    stocks,
+  const { error } = await supabase.rpc('save_training_munition', {
+    p_session_id: input.sessionId,
+    p_previous_pool_id: input.previous.munition_pool_id,
+    p_previous_quantity: input.previous.munition_anzahl,
+    p_pool_id: validated.payload.munition_pool_id,
+    p_quantity: validated.payload.munition_anzahl,
+    p_marke: validated.payload.munition_marke,
+    p_kaliber: validated.payload.munition_kaliber,
+    p_art: validated.payload.munition_art,
   })
-  if (!plan.ok) return plan
-
-  const recorded = withMunitionRecordedBy(validated.payload, input.recordedBy)
-  const { error: sessionError } = await supabase
-    .from('einsatz_training_sessions')
-    .update(recorded)
-    .eq('id', input.sessionId)
-  if (sessionError) {
-    return { ok: false, error: sessionError.message || 'Munition konnte nicht gespeichert werden.' }
-  }
-
-  for (const adj of plan.payload.adjustments) {
-    const { error } = await supabase
-      .from('pool_einsatzmittel')
-      .update({ anzahl: adj.nextAnzahl })
-      .eq('id', adj.poolId)
-    if (error) {
-      return { ok: false, error: 'Verbrauch gespeichert, Pool-Bestand konnte nicht angepasst werden.' }
-    }
-  }
+  if (error) return { ok: false, error: error.message || 'Verbrauch konnte nicht gespeichert werden.' }
   return { ok: true }
 }
 

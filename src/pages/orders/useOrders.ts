@@ -9,11 +9,8 @@ import { previousOrderStatus, nextIssueStatus } from '../../lib/workflow'
 import {
   buildInventoryMap,
   canShortcutToReadyForIssue,
-  inventoryDeltaOnIssue,
   inventoryKey,
-  planGoodsIn,
 } from '../../lib/inventory'
-import { ensureOpenTailorJob } from '../../lib/tailorJobs'
 import { buildMassaDraft, sendMassaOrder, type MassaOrderDraft, type MassaSendResult } from '../../lib/massaOrder'
 import { generateKurzbrief } from '../../lib/printDocs'
 import { ADMIN_TABS, PAGE_SIZE, type AdminTab } from './types'
@@ -111,29 +108,9 @@ export function useOrders() {
     if (!items.length) return
     setSaving(true)
     setError('')
-    const results = await Promise.all(items.map(o => {
-      const prevStatus = previousOrderStatus(o.status, !!o.products?.needs_tailoring)
-      if (!prevStatus) return Promise.resolve({ error: null })
-      const base: { status: OrderStatus; updated_at: string; cancel_reason?: null } = { status: prevStatus, updated_at: new Date().toISOString() }
-      if (o.status === 'cancelled') base.cancel_reason = null
-      if (o.status === 'ordered_supplier')
-        return supabase.from('orders').update({ ...base, quantity_received: null }).eq('id', o.id)
-      if (o.status === 'partially_issued' || o.status === 'issued') {
-        const restore = o.quantity_issued ?? 0
-        if (restore > 0) {
-          return supabase.rpc('adjust_inventory', {
-            p_product: o.product_id,
-            p_size: o.size,
-            p_delta: restore,
-          }).then(adj => {
-            if (adj.error) return adj
-            return supabase.from('orders').update({ ...base, quantity_issued: null }).eq('id', o.id)
-          })
-        }
-        return supabase.from('orders').update({ ...base, quantity_issued: null }).eq('id', o.id)
-      }
-      return supabase.from('orders').update(base).eq('id', o.id)
-    }))
+    const results = await Promise.all(items.filter(o => previousOrderStatus(o.status, !!o.products?.needs_tailoring)).map(o =>
+      supabase.rpc('book_order_inventory', { p_order_id: o.id, p_expected_updated_at: o.updated_at, p_action: 'step_back' }),
+    ))
     setSaving(false)
     if (results.some(r => r.error)) {
       setError('Rückgängig machen fehlgeschlagen. Bitte erneut versuchen.')
@@ -193,17 +170,9 @@ export function useOrders() {
     const newStatus: OrderStatus = nextIssueStatus(newTotal, available)
     setSaving(true)
     setError('')
-    const { error: adjErr } = await supabase.rpc('adjust_inventory', {
-      p_product: order.product_id,
-      p_size: order.size,
-      p_delta: inventoryDeltaOnIssue(qtyNow),
+    const { error: err } = await supabase.rpc('book_order_inventory', {
+      p_order_id: order.id, p_expected_updated_at: order.updated_at, p_action: 'issue', p_quantity: qtyNow,
     })
-    if (adjErr) {
-      setSaving(false)
-      setError('Bestand konnte nicht abgebucht werden. Ausgabe abgebrochen.')
-      return
-    }
-    const { error: err } = await supabase.from('orders').update({ status: newStatus, quantity_issued: newTotal, updated_at: new Date().toISOString() }).eq('id', order.id)
     setSaving(false)
     if (err) {
       setError('Ausgabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
@@ -307,42 +276,9 @@ export function useOrders() {
     }
     setSaving(true)
     for (const o of items) {
-      const plan = planGoodsIn({
-        id: o.id,
-        quantity: o.quantity,
-        quantityReceived: quantities[o.id],
-        needsTailoring: !!o.products?.needs_tailoring,
+      const { error: updErr } = await supabase.rpc('book_order_inventory', {
+        p_order_id: o.id, p_expected_updated_at: o.updated_at, p_action: 'receive', p_quantity: quantities[o.id],
       })
-      if (plan.inventoryDelta !== 0) {
-        const adj = await supabase.rpc('adjust_inventory', {
-          p_product: o.product_id,
-          p_size: o.size,
-          p_delta: plan.inventoryDelta,
-        })
-        if (adj.error) {
-          setSaving(false)
-          setError('Wareneingang: Bestand konnte nicht gebucht werden.')
-          load()
-          return
-        }
-      }
-      let tailorJobId: string | null = null
-      if (plan.needsTailorJob) {
-        const job = await ensureOpenTailorJob(o.quarter_id)
-        if (job.error || !job.id) {
-          setSaving(false)
-          setError('Schneider-Auftrag konnte nicht angelegt werden.')
-          load()
-          return
-        }
-        tailorJobId = job.id
-      }
-      const { error: updErr } = await supabase.from('orders').update({
-        status: plan.status,
-        quantity_received: plan.quantityReceived,
-        updated_at: new Date().toISOString(),
-        ...(tailorJobId ? { tailor_job_id: tailorJobId } : {}),
-      }).eq('id', o.id)
       if (updErr) {
         setSaving(false)
         setError('Wareneingang konnte nicht vollständig gespeichert werden.')

@@ -7,7 +7,7 @@ import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
 import { supabase } from '../lib/supabase'
 import type { EinsatzMaterial, EinsatzMaterialArea, EinsatzMaterialTab } from '../lib/types'
 
-const MAX_MATERIAL_FILE_SIZE = 100 * 1024 * 1024
+const MAX_MATERIAL_FILE_SIZE = 100_000_000
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
@@ -176,7 +176,7 @@ export default function EinsatzMaterials() {
       headers: {
         Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
         'Content-Type': selectedFile.type || 'application/octet-stream',
-        'Content-Length': String(selectedFile.size),
+        'X-File-Size': String(selectedFile.size),
         'X-File-Name': encodeURIComponent(selectedFile.name),
       },
       body: selectedFile,
@@ -209,7 +209,7 @@ export default function EinsatzMaterials() {
 
     setSaving(true)
     try {
-      const uploaded = file ? await uploadFile(file) : null
+      const uploaded = sourceType === 'file' && file ? await uploadFile(file) : null
       const { error: insertError } = await supabase.from('einsatz_materials').insert({
         tab_id: activeTab.id,
         title: title.trim(),
