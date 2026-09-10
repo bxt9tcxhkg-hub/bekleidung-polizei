@@ -13,12 +13,17 @@ const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
 const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
   einsatzmittel: 'Einsatzmittel',
   einsatztraining: 'Einsatztraining',
+  schulungen: 'Schulungen',
 }
 
-export default function EinsatzMaterials() {
+export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMaterialArea }) {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
-  const [area, setArea] = useState<EinsatzMaterialArea>('einsatzmittel')
+  const [area, setArea] = useState<EinsatzMaterialArea>(fixedArea ?? 'einsatzmittel')
+  const activeArea = fixedArea ?? area
+  const schulungenRoles = areaRoles?.find(row => row.area === 'schulungen')?.roles ?? []
+  const canManage = activeArea === 'schulungen'
+    ? isStrictAdmin || schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')
+    : canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
   const [tabs, setTabs] = useState<EinsatzMaterialTab[]>([])
   const [materials, setMaterials] = useState<EinsatzMaterial[]>([])
   const [activeTabId, setActiveTabId] = useState('')
@@ -84,8 +89,8 @@ export default function EinsatzMaterials() {
   }, [])
 
   useEffect(() => {
-    void load(area)
-  }, [area, load])
+    void load(activeArea)
+  }, [activeArea, load])
 
   const activeTab = tabs.find(tab => tab.id === activeTabId) ?? null
   const visibleMaterials = useMemo(
@@ -93,7 +98,7 @@ export default function EinsatzMaterials() {
     [materials, activeTabId],
   )
 
-  if (!hasAreaAccess('einsatz_mt')) return <Navigate to="/" replace />
+  if (!hasAreaAccess(activeArea === 'schulungen' ? 'schulungen' : 'einsatz_mt')) return <Navigate to="/" replace />
 
   function startAddTab() {
     setEditingTab(null)
@@ -125,7 +130,7 @@ export default function EinsatzMaterials() {
         description: tabDescription.trim() || null,
       }).eq('id', editingTab.id)
       : await supabase.from('einsatz_material_tabs').insert({
-        area,
+        area: activeArea,
         name,
         description: tabDescription.trim() || null,
         sort_order: tabs.length,
@@ -136,27 +141,27 @@ export default function EinsatzMaterials() {
       setError(response.error.message.includes('duplicate') ? 'Ein Tab mit diesem Namen existiert bereits.' : 'Tab konnte nicht gespeichert werden.')
       return
     }
-    logAudit(editingTab ? 'Unterlagen-Tab bearbeitet' : 'Unterlagen-Tab angelegt', `${AREA_LABELS[area]} · ${name}`)
+    logAudit(editingTab ? 'Unterlagen-Tab bearbeitet' : 'Unterlagen-Tab angelegt', `${AREA_LABELS[activeArea]} · ${name}`)
     setShowTabForm(false)
     setNotice('Tab wurde gespeichert.')
-    await load(area)
+    await load(activeArea)
   }
 
-  async function archiveTab() {
+  async function deleteTab() {
     if (!editingTab) return
-    if (!window.confirm(`Tab „${editingTab.name}“ löschen? Die enthaltenen Unterlagen bleiben sicher archiviert.`)) return
-    const { error: archiveError } = await supabase
+    if (!window.confirm(`Tab „${editingTab.name}“ endgültig löschen? Nur leere Tabs können gelöscht werden.`)) return
+    const { error: deleteError } = await supabase
       .from('einsatz_material_tabs')
-      .update({ active: false })
+      .delete()
       .eq('id', editingTab.id)
-    if (archiveError) {
-      setError('Tab konnte nicht archiviert werden.')
+    if (deleteError) {
+      setError('Der Tab enthält noch Unterlagen. Bitte diese zuerst verschieben oder löschen.')
       return
     }
-    logAudit('Unterlagen-Tab gelöscht', `${AREA_LABELS[area]} · ${editingTab.name}`)
+    logAudit('Unterlagen-Tab gelöscht', `${AREA_LABELS[activeArea]} · ${editingTab.name}`)
     setShowTabForm(false)
     setNotice('Tab wurde entfernt.')
-    await load(area)
+    await load(activeArea)
   }
 
   function startAddMaterial() {
@@ -180,6 +185,7 @@ export default function EinsatzMaterials() {
         'Content-Type': selectedFile.type || 'application/octet-stream',
         'X-File-Size': String(selectedFile.size),
         'X-File-Name': encodeURIComponent(selectedFile.name),
+        'X-Material-Area': activeArea,
       },
       body: selectedFile,
     })
@@ -226,10 +232,10 @@ export default function EinsatzMaterials() {
         created_by: profile?.id ?? null,
       })
       if (insertError) throw insertError
-      logAudit('Einsatz-Unterlage hochgeladen', `${AREA_LABELS[area]} · ${activeTab.name} · ${title.trim()}`)
+      logAudit('Unterlage hochgeladen', `${AREA_LABELS[activeArea]} · ${activeTab.name} · ${title.trim()}`)
       setShowMaterialForm(false)
       setNotice('Unterlage wurde gespeichert.')
-      await load(area)
+      await load(activeArea)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unterlage konnte nicht gespeichert werden.')
     } finally {
@@ -280,7 +286,7 @@ export default function EinsatzMaterials() {
     setEditingMaterial(null)
     setNotice('Unterlage wurde verschoben.')
     setActiveTabId(targetTabId)
-    await load(area)
+    await load(activeArea)
   }
 
   async function deleteMaterial() {
@@ -301,18 +307,18 @@ export default function EinsatzMaterials() {
       setError(data?.error || 'Unterlage konnte nicht gelöscht werden.')
       return
     }
-    logAudit('Einsatz-Unterlage gelöscht', editingMaterial.title)
+    logAudit('Unterlage gelöscht', `${AREA_LABELS[activeArea]} · ${editingMaterial.title}`)
     setEditingMaterial(null)
     setNotice('Unterlage wurde endgültig gelöscht.')
-    await load(area)
+    await load(activeArea)
   }
 
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Unterlagen</h1>
-          <p className="text-gray-500 text-sm mt-1">Dienstanweisungen und Schulungsmaterial</p>
+          <h1 className="text-2xl font-bold text-gray-900">{fixedArea === 'schulungen' ? 'Schulungen' : 'Unterlagen'}</h1>
+          <p className="text-gray-500 text-sm mt-1">{fixedArea === 'schulungen' ? 'Schulungsunterlagen, Rechtsinformationen und Arbeitshilfen' : 'Dienstanweisungen und Schulungsmaterial'}</p>
         </div>
         {canManage && activeTab ? (
           <button type="button" onClick={startAddMaterial} className="flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl">
@@ -321,13 +327,13 @@ export default function EinsatzMaterials() {
         ) : null}
       </div>
 
-      <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
-        {(Object.keys(AREA_LABELS) as EinsatzMaterialArea[]).map(id => (
+      {!fixedArea ? <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
+        {(['einsatzmittel', 'einsatztraining'] as EinsatzMaterialArea[]).map(id => (
           <button key={id} type="button" onClick={() => { setArea(id); setActiveTabId('') }} className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${area === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {AREA_LABELS[id]}
           </button>
         ))}
-      </div>
+      </div> : null}
 
       {error && !showTabForm && !showMaterialForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
       {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
@@ -406,7 +412,7 @@ export default function EinsatzMaterials() {
               {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
             </div>
             <div className="flex flex-wrap gap-3 px-6 py-4 border-t">
-              {editingTab ? <button type="button" onClick={() => { void archiveTab() }} className="mr-auto text-red-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-red-50">Tab löschen</button> : null}
+              {editingTab ? <button type="button" onClick={() => { void deleteTab() }} className="mr-auto text-red-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-red-50">Tab löschen</button> : null}
               <button type="button" onClick={() => setShowTabForm(false)} className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg">Abbrechen</button>
               <button type="button" disabled={saving} onClick={() => { void saveTab() }} className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Speichern'}</button>
             </div>

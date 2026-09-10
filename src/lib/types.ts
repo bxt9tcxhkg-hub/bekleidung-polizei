@@ -220,7 +220,7 @@ export interface Grundausstattung {
   products?: Product
 }
 
-export type PortalArea = 'bekleidung' | 'einsatz_mt'
+export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen'
 
 export interface PortalAreaRole {
   user_id: string
@@ -377,7 +377,7 @@ export interface EinsatzTrainingAttendance {
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 }
 
-export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining'
+export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining' | 'schulungen'
 
 export interface EinsatzMaterialTab {
   id: string
@@ -625,6 +625,8 @@ export type Database = {
     Functions: {
       create_support_request: { Args: { p_subject: string; p_kind: string; p_topic: string; p_body: string }; Returns: string }
       move_einsatz_material: { Args: { p_material_id: string; p_target_tab_id: string }; Returns: undefined }
+      save_portal_profile_v2: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null }; Returns: undefined }
+      can_manage_schulungen: { Args: Record<string, never>; Returns: boolean }
       remove_training_attendance: { Args: { p_attendance_id: string }; Returns: undefined }
       save_training_munition: { Args: { p_session_id: string; p_previous_pool_id: string | null; p_previous_quantity: number | null; p_pool_id: string | null; p_quantity: number | null; p_marke: string | null; p_kaliber: string | null; p_art: string | null }; Returns: undefined }
       save_portal_profile: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null }; Returns: undefined }

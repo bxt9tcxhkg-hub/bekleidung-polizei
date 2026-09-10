@@ -42,7 +42,7 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
 }
 
 type PlannedPortalArea = {
-  id: 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
+  id: 'zentrale' | 'innendienst' | 'aussendienst' | 'fuhrpark' | 'ueberstunden'
   title: string
   description: string
   path: string
@@ -56,7 +56,6 @@ const OPERATIONAL_AREAS: PlannedPortalArea[] = [
 ]
 
 const ORGANISATIONAL_AREAS: PlannedPortalArea[] = [
-  { id: 'schulungen', title: 'Schulungen', description: 'PAD, weitere Schulungen und Rechtsinformationen', path: '/planung/schulungen', icon: GraduationCap },
   { id: 'fuhrpark', title: 'Fuhrpark & Fahrzeuge', description: 'Kontrollen, Mängel, Pflege und Werkstatttermine', path: '/planung/fuhrpark', icon: Car },
 ]
 
@@ -197,7 +196,7 @@ const headerActionClass =
   'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors'
 
 export default function Portal() {
-  const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles, hasAreaAccess } = useAuth()
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, rows: areaRoles })
   const adminLinks = visiblePortalAdminLinks(isAdmin)
 
@@ -244,6 +243,9 @@ export default function Portal() {
 
       <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">
         {apps.map(app => <AppTile key={app.id} app={app} />)}
+        {hasAreaAccess('schulungen') ? (
+          <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} />
+        ) : null}
         {ORGANISATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
       </PortalSection>
 

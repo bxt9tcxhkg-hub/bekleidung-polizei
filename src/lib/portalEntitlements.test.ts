@@ -5,11 +5,13 @@ import {
   bekleidungRolesFromProfiles,
   canonicalizeRoleName,
   defaultEinsatzMtRoleForNewUser,
+  defaultSchulungenRoleForNewUser,
   hasAreaEntitlement,
   highestAreaRole,
   isAllowedAreaRole,
   parseEinsatzMtRole,
   parseEinsatzMtRoles,
+  parseSchulungenRoles,
   profilesRolesFromBekleidung,
   rolesForArea,
   sortAreaRoles,
@@ -25,6 +27,12 @@ describe('Bereichsrollen', () => {
     expect([...AREA_ROLES.einsatz_mt]).toEqual(['user', 'sachbearbeiter', 'admin'])
     expect(isAllowedAreaRole('einsatz_mt', 'genehmiger')).toBe(false)
     expect(isAllowedAreaRole('einsatz_mt', 'admin')).toBe(true)
+  })
+
+  it('führt Schulungen als eigenständigen Bereich mit mehreren Rollen', () => {
+    expect([...AREA_ROLES.schulungen]).toEqual(['user', 'sachbearbeiter', 'admin'])
+    expect(parseSchulungenRoles(['sachbearbeiter', 'user', 'genehmiger'])).toEqual(['user', 'sachbearbeiter'])
+    expect(defaultSchulungenRoleForNewUser()).toBe('user')
   })
 
   it('sortiert Rollen user < sachbearbeiter < genehmiger < admin', () => {
@@ -108,6 +116,7 @@ describe('hasAreaEntitlement / visiblePortalApps', () => {
       'bekleidung',
       'einsatz_mt',
     ])
+    expect(hasAreaEntitlement({ area: 'schulungen', isStrictAdmin: true, rows: [] })).toBe(true)
   })
 
   it('blendet Einsatz ohne Zeile aus, Bekleidung nur mit Zeile', () => {
@@ -126,6 +135,12 @@ describe('hasAreaEntitlement / visiblePortalApps', () => {
       'bekleidung',
       'einsatz_mt',
     ])
+  })
+
+  it('erteilt Schulungszugriff nur mit eigener Schulungszeile', () => {
+    const rows = [{ area: 'schulungen', roles: ['user'] }]
+    expect(hasAreaEntitlement({ area: 'schulungen', isStrictAdmin: false, rows })).toBe(true)
+    expect(hasAreaEntitlement({ area: 'einsatz_mt', isStrictAdmin: false, rows })).toBe(false)
   })
 
   it('fällt ohne Tabelle auf Bekleidung sichtbar / Einsatz unsichtbar zurück', () => {

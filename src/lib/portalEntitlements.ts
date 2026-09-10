@@ -4,37 +4,41 @@
  * Modell: eine Zeile pro (user_id, area) mit `roles text[]`.
  * - bekleidung: mehrere Rollen gleichzeitig (wie profiles.roles: Benutzer,
  *   Sachbearbeiter, Genehmiger, Admin). approver wird als genehmiger gelesen.
- * - einsatz_mt: genau eine Rolle aus Benutzer | Sachbearbeiter | Admin
- *   (kein Genehmiger). Benutzer = Leserecht für Einsatzmittel und Training.
+ * - einsatz_mt und schulungen: mehrere Rollen aus Benutzer | Sachbearbeiter | Admin
+ *   (kein Genehmiger). Benutzer = Leserecht, Sachbearbeiter = Verwaltung.
  *
  * Dual-Write: area=bekleidung.roles ↔ profiles.roles. profiles.roles bleibt
  * Quelle für bestehende Bekleidungs-RLS / has_role.
  *
  * Keine Zeile = kein Entitlement für den Bereich (Kachel ausgeblendet).
  * Ausnahme ohne Tabelle (Migration noch nicht angewandt): Bekleidung sichtbar,
- * Einsatzmittel & Training nicht — Admin sieht immer alles.
+ * Einsatzmittel & Training sowie Schulungen nicht — Admin sieht immer alles.
  */
 
 import type { PortalApp } from './portalApps'
 
-export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt'] as const
+export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen'] as const
 export type PortalArea = (typeof PORTAL_AREAS)[number]
 
 export const BEKLEIDUNG_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
 export const EINSATZ_MT_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
+export const SCHULUNGEN_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 
 export type BekleidungRole = (typeof BEKLEIDUNG_ROLES)[number]
 export type EinsatzMtRole = (typeof EINSATZ_MT_ROLES)[number]
-export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole
+export type SchulungenRole = (typeof SCHULUNGEN_ROLES)[number]
+export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole
 
 export const AREA_ROLES = {
   bekleidung: BEKLEIDUNG_ROLES,
   einsatz_mt: EINSATZ_MT_ROLES,
+  schulungen: SCHULUNGEN_ROLES,
 } as const
 
 export const AREA_LABELS: Record<PortalArea, string> = {
   bekleidung: 'Bekleidung',
   einsatz_mt: 'Einsatzmittel & Training',
+  schulungen: 'Schulungen',
 }
 
 export const AREA_ROLE_LABELS: Record<PortalAreaRoleName, string> = {
@@ -121,6 +125,17 @@ export function parseEinsatzMtRoles(roles: readonly string[] | null | undefined)
   return sortAreaRoles(
     roles.map(canonicalizeRoleName).filter(role => isAllowedAreaRole('einsatz_mt', role)),
   ) as EinsatzMtRole[]
+}
+
+export function parseSchulungenRoles(roles: readonly string[] | null | undefined): SchulungenRole[] {
+  if (!roles || roles.length === 0) return []
+  return sortAreaRoles(
+    roles.map(canonicalizeRoleName).filter(role => isAllowedAreaRole('schulungen', role)),
+  ) as SchulungenRole[]
+}
+
+export function defaultSchulungenRoleForNewUser(): SchulungenRole {
+  return 'user'
 }
 
 export function rolesForArea(

@@ -1,4 +1,4 @@
-import { bearerHeaders, canManageEinsatz, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { bearerHeaders, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 
 interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
@@ -9,7 +9,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(request, env))) return unauthorized()
-  if (!(await canManageEinsatz(request, env))) return new Response(JSON.stringify({ error: 'Keine Berechtigung.' }), { status: 403 })
 
   const id = request.headers.get('X-Material-Id') ?? ''
   const headers = bearerHeaders(request, env)
@@ -24,7 +23,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   if (rows.length !== 1) return new Response(JSON.stringify({ error: 'Unterlage wurde nicht gefunden oder ist bereits gelöscht.' }), { status: 404 })
 
   const key = rows[0].file_key
-  if (key?.startsWith('einsatz-unterlagen/')) {
+  if (key?.startsWith('einsatz-unterlagen/') || key?.startsWith('schulungs-unterlagen/')) {
     try { await env.BEKLEIDUNG.delete(key) } catch { /* Orphaned object is inaccessible and can be cleaned up later. */ }
   }
   return new Response(JSON.stringify({ deleted: true }), { headers: { 'Content-Type': 'application/json' } })

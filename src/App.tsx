@@ -82,7 +82,17 @@ export default function App() {
           <Route path="/planung/zentrale" element={<ProtectedRoute adminOnly><PlannedArea area="zentrale" /></ProtectedRoute>} />
           <Route path="/planung/innendienst" element={<ProtectedRoute adminOnly><PlannedArea area="innendienst" /></ProtectedRoute>} />
           <Route path="/planung/aussendienst" element={<ProtectedRoute adminOnly><PlannedArea area="aussendienst" /></ProtectedRoute>} />
-          <Route path="/planung/schulungen" element={<ProtectedRoute adminOnly><PlannedArea area="schulungen" /></ProtectedRoute>} />
+          <Route
+            path="/schulungen"
+            element={
+              <ProtectedRoute>
+                <PortalChrome wide>
+                  <EinsatzMaterials fixedArea="schulungen" />
+                </PortalChrome>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/planung/schulungen" element={<Navigate to="/schulungen" replace />} />
           <Route path="/planung/fuhrpark" element={<ProtectedRoute adminOnly><Fleet /></ProtectedRoute>} />
           <Route path="/planung/fuhrpark/:vehicleId" element={<ProtectedRoute adminOnly><FleetVehicle /></ProtectedRoute>} />
           <Route path="/planung/ueberstunden" element={<ProtectedRoute adminOnly><PlannedArea area="ueberstunden" /></ProtectedRoute>} />

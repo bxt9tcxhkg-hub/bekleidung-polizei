@@ -38,6 +38,12 @@ describe('file authorization', () => {
     expect(await canReadFile(request, env, 'einsatz-unterlagen/secret.pdf')).toBe(false)
     expect(fetcher.mock.calls[0][0]).toContain('archived_at=is.null')
   })
+  it('authorizes Schulungsdateien through the concrete material record', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json([{ id: 'material' }]))
+    vi.stubGlobal('fetch', fetcher)
+    expect(await canReadFile(request, env, 'schulungs-unterlagen/info.pdf')).toBe(true)
+    expect(fetcher.mock.calls[0][0]).toContain(encodeURIComponent('schulungs-unterlagen/info.pdf'))
+  })
   it('rejects invoice uploads for ordinary users and failed authorization requests', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(Response.json(false))))
     expect(await canManageBekleidung(request, env)).toBe(false)

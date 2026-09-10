@@ -1,4 +1,4 @@
-import { canManageEinsatz, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { canManageEinsatz, canManageSchulungen, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 import { countUploadBytes, uploadSize } from './_upload'
 
 interface Env extends AuthEnv {
@@ -18,7 +18,14 @@ const ALLOWED_TYPES = new Set([
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
-  if (!(await canManageEinsatz(context.request, context.env))) {
+  const area = context.request.headers.get('X-Material-Area') ?? ''
+  if (!['einsatzmittel', 'einsatztraining', 'schulungen'].includes(area)) {
+    return new Response(JSON.stringify({ error: 'Ungültiger Unterlagenbereich.' }), { status: 400 })
+  }
+  const canManage = area === 'schulungen'
+    ? await canManageSchulungen(context.request, context.env)
+    : await canManageEinsatz(context.request, context.env)
+  if (!canManage) {
     return new Response(JSON.stringify({ error: 'Nur Sachbearbeiter oder Admins dürfen Unterlagen hochladen.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
@@ -45,7 +52,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 
   const extension = (fileName.split('.').pop() ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
-  const key = `einsatz-unterlagen/${crypto.randomUUID()}.${extension}`
+  const folder = area === 'schulungen' ? 'schulungs-unterlagen' : 'einsatz-unterlagen'
+  const key = `${folder}/${crypto.randomUUID()}.${extension}`
   // R2 requires a stream with known length. FixedLengthStream also rejects truncation.
   const fixed = new FixedLengthStream(contentLength)
   try {

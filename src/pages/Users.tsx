@@ -20,8 +20,11 @@ import {
 import {
   AREA_ROLE_LABELS,
   defaultEinsatzMtRoleForNewUser,
+  defaultSchulungenRoleForNewUser,
   parseEinsatzMtRoles,
+  parseSchulungenRoles,
   type EinsatzMtRole,
+  type SchulungenRole,
 } from '../lib/portalEntitlements'
 
 const CSV_TEMPLATE = `name;benutzername;dienstnummer;organisation;rollen
@@ -33,6 +36,10 @@ type Organisation = (typeof ORGS)[number]
 type OrgFilter = 'all' | Organisation
 type RoleFilter = 'all' | 'sachbearbeiter' | 'genehmiger' | 'admin'
 const EINSATZ_MT_OPTIONS: { value: EinsatzMtRole; label: string }[] = [
+  { value: 'user', label: AREA_ROLE_LABELS.user },
+  { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
+]
+const SCHULUNGEN_OPTIONS: { value: SchulungenRole; label: string }[] = [
   { value: 'user', label: AREA_ROLE_LABELS.user },
   { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
 ]
@@ -54,7 +61,7 @@ const BEKLEIDUNG_ROLE_COLOR: Record<string, string> = {
   approver: 'bg-green-100 text-green-700',
 }
 
-type AreaRolesByUser = Record<string, { bekleidung?: string[]; einsatz_mt?: string[] }>
+type AreaRolesByUser = Record<string, { bekleidung?: string[]; einsatz_mt?: string[]; schulungen?: string[] }>
 
 const emptyForm = () => ({
   name: '',
@@ -63,6 +70,7 @@ const emptyForm = () => ({
   dienstnummer: '',
   roles: ['user'] as string[],
   einsatzMtRoles: [defaultEinsatzMtRoleForNewUser()] as EinsatzMtRole[],
+  schulungenRoles: [defaultSchulungenRoleForNewUser()] as SchulungenRole[],
   gender: 'male' as 'male' | 'female',
   organisation: 'Stadtpolizei' as string,
   active: true,
@@ -116,6 +124,7 @@ export default function Users() {
       const current = map[row.user_id] ?? {}
       if (row.area === 'bekleidung') current.bekleidung = row.roles
       if (row.area === 'einsatz_mt') current.einsatz_mt = row.roles
+      if (row.area === 'schulungen') current.schulungen = row.roles
       map[row.user_id] = current
     }
     setAreaByUser(map)
@@ -148,6 +157,7 @@ export default function Users() {
       dienstnummer: u.dienstnummer ?? '',
       roles: u.roles,
       einsatzMtRoles: parseEinsatzMtRoles(areaByUser[u.id]?.einsatz_mt).filter(role => role !== 'admin'),
+      schulungenRoles: parseSchulungenRoles(areaByUser[u.id]?.schulungen).filter(role => role !== 'admin'),
       gender: u.gender ?? 'male',
       organisation: u.organisation ?? 'Stadtpolizei',
       active: u.active,
@@ -192,10 +202,11 @@ export default function Users() {
     }
 
     if (editId) {
-      const { error } = await supabase.rpc('save_portal_profile', {
+      const { error } = await supabase.rpc('save_portal_profile_v2', {
         p_user_id: editId,
         p_patch: dbPayload,
         p_einsatz_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : null,
+        p_schulungen_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.schulungenRoles) : null,
       })
       if (error) { setError(error.message); setSaving(false); return }
       if (startPassword) {
@@ -211,7 +222,12 @@ export default function Users() {
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ ...dbPayload, initial_password: startPassword, einsatz_mt_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : undefined }),
+          body: JSON.stringify({
+            ...dbPayload,
+            initial_password: startPassword,
+            einsatz_mt_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : undefined,
+            schulungen_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.schulungenRoles) : undefined,
+          }),
         })
         const json = await res.json() as { error?: string; id?: string }
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
@@ -435,7 +451,12 @@ export default function Users() {
     setForm(f => {
       if (role === 'admin') {
         const enablingAdmin = !f.roles.includes('admin')
-        return { ...f, roles: enablingAdmin ? ['admin'] : ['user'], einsatzMtRoles: enablingAdmin ? [] : [defaultEinsatzMtRoleForNewUser()] }
+        return {
+          ...f,
+          roles: enablingAdmin ? ['admin'] : ['user'],
+          einsatzMtRoles: enablingAdmin ? [] : [defaultEinsatzMtRoleForNewUser()],
+          schulungenRoles: enablingAdmin ? [] : [defaultSchulungenRoleForNewUser()],
+        }
       }
       return { ...f, roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role] }
     })
@@ -451,12 +472,23 @@ export default function Users() {
     }))
   }
 
+  function toggleSchulungenRole(role: SchulungenRole) {
+    if (isSelfEdit) return
+    setForm(current => ({
+      ...current,
+      schulungenRoles: current.schulungenRoles.includes(role)
+        ? current.schulungenRoles.filter(existing => existing !== role)
+        : parseSchulungenRoles([...current.schulungenRoles, role]),
+    }))
+  }
+
   const normalizedSearch = search.trim().toLocaleLowerCase('de-AT')
   const filteredUsers = users.filter(user => {
     if (orgFilter !== 'all' && (isPortalAdmin(user) || user.organisation !== orgFilter)) return false
     if (roleFilter !== 'all') {
       const einsatzRoles = parseEinsatzMtRoles(areaByUser[user.id]?.einsatz_mt)
-      if (!user.roles.includes(roleFilter) && !einsatzRoles.includes(roleFilter as EinsatzMtRole)) return false
+      const schulungenRoles = parseSchulungenRoles(areaByUser[user.id]?.schulungen)
+      if (!user.roles.includes(roleFilter) && !einsatzRoles.includes(roleFilter as EinsatzMtRole) && !schulungenRoles.includes(roleFilter as SchulungenRole)) return false
     }
     if (!normalizedSearch) return true
     return [user.name, user.dienstnummer, user.username]
@@ -987,6 +1019,20 @@ export default function Users() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-400 mt-2">Mehrere Funktionen können gleichzeitig vergeben werden. Ohne Auswahl besteht kein Zugriff.</p>
+                </fieldset>
+              )}
+              {isStrictAdmin && !form.roles.includes('admin') && (
+                <fieldset className="border border-gray-200 rounded-xl p-3.5">
+                  <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Schulungen</legend>
+                  <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
+                    {SCHULUNGEN_OPTIONS.map(option => (
+                      <label key={option.label} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${form.schulungenRoles.includes(option.value) ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'} ${isSelfEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                        <input type="checkbox" value={option.value} checked={form.schulungenRoles.includes(option.value)} disabled={isSelfEdit} onChange={() => toggleSchulungenRole(option.value)} className="rounded" />
+                        <span className="text-sm font-medium text-gray-700">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Benutzer sehen veröffentlichte Inhalte. Sachbearbeiter können Tabs und Unterlagen verwalten.</p>
                 </fieldset>
               )}
               {(!editId || canDeactivate) && (

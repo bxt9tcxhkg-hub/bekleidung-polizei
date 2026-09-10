@@ -217,6 +217,7 @@ Deno.serve(async (req) => {
     initial_password?: string
     einsatz_mt_role?: string
     einsatz_mt_roles?: string[]
+    schulungen_roles?: string[]
   }
   try {
     body = await req.json()
@@ -431,6 +432,13 @@ Deno.serve(async (req) => {
       : ['user']
     if (einsatzMtRoles.length > 0) {
       areaRows.push({ user_id: created.user.id, area: 'einsatz_mt', roles: einsatzMtRoles })
+    }
+    const requestedSchulungenRoles = Array.isArray(body.schulungen_roles) ? body.schulungen_roles : ['user']
+    const schulungenRoles = callerRoles.includes('admin')
+      ? [...new Set(requestedSchulungenRoles.filter((role) => allowedEinsatzRoles.has(role)))]
+      : ['user']
+    if (schulungenRoles.length > 0) {
+      areaRows.push({ user_id: created.user.id, area: 'schulungen', roles: schulungenRoles })
     }
   }
   if (areaRows.length > 0) {
