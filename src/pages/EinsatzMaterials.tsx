@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Archive, BookOpen, Download, Ellipsis, FileText, Link as LinkIcon, Plus, Upload, X } from 'lucide-react'
+import { BookOpen, Download, Ellipsis, FileText, FolderInput, Link as LinkIcon, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
@@ -7,7 +7,7 @@ import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
 import { supabase } from '../lib/supabase'
 import type { EinsatzMaterial, EinsatzMaterialArea, EinsatzMaterialTab } from '../lib/types'
 
-const MAX_MATERIAL_FILE_SIZE = 100 * 1024 * 1024
+const MAX_MATERIAL_FILE_SIZE = 100_000_000
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
@@ -30,6 +30,8 @@ export default function EinsatzMaterials() {
   const [tabName, setTabName] = useState('')
   const [tabDescription, setTabDescription] = useState('')
   const [showMaterialForm, setShowMaterialForm] = useState(false)
+  const [editingMaterial, setEditingMaterial] = useState<EinsatzMaterial | null>(null)
+  const [targetTabId, setTargetTabId] = useState('')
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [important, setImportant] = useState(false)
@@ -176,7 +178,7 @@ export default function EinsatzMaterials() {
       headers: {
         Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
         'Content-Type': selectedFile.type || 'application/octet-stream',
-        'Content-Length': String(selectedFile.size),
+        'X-File-Size': String(selectedFile.size),
         'X-File-Name': encodeURIComponent(selectedFile.name),
       },
       body: selectedFile,
@@ -209,7 +211,7 @@ export default function EinsatzMaterials() {
 
     setSaving(true)
     try {
-      const uploaded = file ? await uploadFile(file) : null
+      const uploaded = sourceType === 'file' && file ? await uploadFile(file) : null
       const { error: insertError } = await supabase.from('einsatz_materials').insert({
         tab_id: activeTab.id,
         title: title.trim(),
@@ -255,17 +257,53 @@ export default function EinsatzMaterials() {
     }
   }
 
-  async function archiveMaterial(item: EinsatzMaterial) {
-    if (!window.confirm(`Unterlage „${item.title}“ archivieren?`)) return
-    const { error: archiveError } = await supabase
-      .from('einsatz_materials')
-      .update({ archived_at: new Date().toISOString() })
-      .eq('id', item.id)
-    if (archiveError) {
-      setError('Unterlage konnte nicht archiviert werden.')
+  function startManageMaterial(item: EinsatzMaterial) {
+    setEditingMaterial(item)
+    setTargetTabId(item.tab_id)
+    setError('')
+  }
+
+  async function moveMaterial() {
+    if (!editingMaterial || targetTabId === editingMaterial.tab_id) return
+    setSaving(true)
+    const { error: moveError } = await supabase.rpc('move_einsatz_material', {
+      p_material_id: editingMaterial.id,
+      p_target_tab_id: targetTabId,
+    })
+    setSaving(false)
+    if (moveError) {
+      setError(moveError.message || 'Unterlage konnte nicht verschoben werden.')
       return
     }
-    logAudit('Einsatz-Unterlage archiviert', item.title)
+    const target = tabs.find(tab => tab.id === targetTabId)
+    logAudit('Einsatz-Unterlage verschoben', `${editingMaterial.title} → ${target?.name ?? 'anderer Tab'}`)
+    setEditingMaterial(null)
+    setNotice('Unterlage wurde verschoben.')
+    setActiveTabId(targetTabId)
+    await load(area)
+  }
+
+  async function deleteMaterial() {
+    if (!editingMaterial) return
+    if (!window.confirm(`Unterlage „${editingMaterial.title}“ endgültig löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.`)) return
+    setSaving(true)
+    const { data: sessionData } = await supabase.auth.getSession()
+    const response = await fetch('/einsatz-material-delete', {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+        'X-Material-Id': editingMaterial.id,
+      },
+    })
+    setSaving(false)
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: string } | null
+      setError(data?.error || 'Unterlage konnte nicht gelöscht werden.')
+      return
+    }
+    logAudit('Einsatz-Unterlage gelöscht', editingMaterial.title)
+    setEditingMaterial(null)
+    setNotice('Unterlage wurde endgültig gelöscht.')
     await load(area)
   }
 
@@ -346,7 +384,7 @@ export default function EinsatzMaterials() {
                     <button type="button" onClick={() => { void openMaterial(item) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50">
                       <Download className="w-4 h-4" /> Öffnen
                     </button>
-                    {canManage ? <button type="button" onClick={() => { void archiveMaterial(item) }} className="p-2.5 text-red-700 hover:bg-red-50 rounded-lg" aria-label="Unterlage archivieren"><Archive className="w-4 h-4" /></button> : null}
+                    {canManage ? <button type="button" onClick={() => startManageMaterial(item)} className="p-2.5 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Unterlage verschieben oder löschen"><Ellipsis className="w-4 h-4" /></button> : null}
                   </div>
                 </article>
               ))}
@@ -402,6 +440,33 @@ export default function EinsatzMaterials() {
             <div className="flex gap-3 px-6 py-4 border-t">
               <button type="button" onClick={() => setShowMaterialForm(false)} className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-lg">Abbrechen</button>
               <button type="button" disabled={saving} onClick={() => { void saveMaterial() }} className="flex-1 bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Speichern'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingMaterial ? (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="font-bold text-gray-900">Unterlage verwalten</h2>
+                <p className="text-xs text-gray-500 mt-0.5 truncate max-w-sm">{editingMaterial.title}</p>
+              </div>
+              <button type="button" onClick={() => setEditingMaterial(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <label className="block text-xs font-medium text-gray-600">In einen anderen Tab verschieben
+                <select className={`${inputClass} mt-1`} value={targetTabId} onChange={event => setTargetTabId(event.target.value)}>
+                  {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.name}</option>)}
+                </select>
+              </label>
+              {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
+            </div>
+            <div className="flex flex-wrap gap-3 px-6 py-4 border-t">
+              <button type="button" disabled={saving} onClick={() => { void deleteMaterial() }} className="mr-auto flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50 disabled:opacity-60"><Trash2 className="w-4 h-4" /> Endgültig löschen</button>
+              <button type="button" onClick={() => setEditingMaterial(null)} className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg">Abbrechen</button>
+              <button type="button" disabled={saving || targetTabId === editingMaterial.tab_id} onClick={() => { void moveMaterial() }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg"><FolderInput className="w-4 h-4" /> Verschieben</button>
             </div>
           </div>
         </div>

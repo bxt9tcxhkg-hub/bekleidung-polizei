@@ -21,7 +21,6 @@ import {
   AREA_ROLE_LABELS,
   defaultEinsatzMtRoleForNewUser,
   parseEinsatzMtRoles,
-  profilesRolesFromBekleidung,
   type EinsatzMtRole,
 } from '../lib/portalEntitlements'
 
@@ -68,32 +67,6 @@ const emptyForm = () => ({
   organisation: 'Stadtpolizei' as string,
   active: true,
 })
-
-async function persistAreaRoles(
-  userId: string,
-  bekleidungRoles: string[],
-  einsatzMt: EinsatzMtRole[],
-): Promise<string | null> {
-  const areaBekleidungRoles = clothingRoles(bekleidungRoles)
-  const { error: bekErr } = areaBekleidungRoles.length > 0
-    ? await supabase.from('portal_area_roles').upsert({
-        user_id: userId,
-        area: 'bekleidung',
-        roles: profilesRolesFromBekleidung(areaBekleidungRoles),
-      })
-    : await supabase.from('portal_area_roles').delete().eq('user_id', userId).eq('area', 'bekleidung')
-  if (bekErr) return bekErr.message
-  if (einsatzMt.length > 0) {
-    const { error } = await supabase.from('portal_area_roles').upsert({
-      user_id: userId,
-      area: 'einsatz_mt',
-      roles: einsatzMt,
-    })
-    return error?.message ?? null
-  }
-  const { error } = await supabase.from('portal_area_roles').delete().eq('user_id', userId).eq('area', 'einsatz_mt')
-  return error?.message ?? null
-}
 
 export default function Users() {
   const { isStrictAdmin, isGenehmiger, isSachbearbeiter, profile: authProfile } = _useAuth()
@@ -219,12 +192,12 @@ export default function Users() {
     }
 
     if (editId) {
-      const { error } = await supabase.from('profiles').update(dbPayload).eq('id', editId)
+      const { error } = await supabase.rpc('save_portal_profile', {
+        p_user_id: editId,
+        p_patch: dbPayload,
+        p_einsatz_roles: isStrictAdmin && !isSelfEdit ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : null,
+      })
       if (error) { setError(error.message); setSaving(false); return }
-      if (isStrictAdmin && !isSelfEdit) {
-        const areaErr = await persistAreaRoles(editId, safeRoles, safeRoles.includes('admin') ? [] : form.einsatzMtRoles)
-        if (areaErr) { setError(areaErr); setSaving(false); return }
-      }
       if (startPassword) {
         const resetErr = await callResetPassword(editId, startPassword)
         if (resetErr) { setError(resetErr); setSaving(false); return }
@@ -238,14 +211,10 @@ export default function Users() {
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-          body: JSON.stringify({ ...dbPayload, initial_password: startPassword }),
+          body: JSON.stringify({ ...dbPayload, initial_password: startPassword, einsatz_mt_roles: isStrictAdmin ? (safeRoles.includes('admin') ? [] : form.einsatzMtRoles) : undefined }),
         })
         const json = await res.json() as { error?: string; id?: string }
         if (!res.ok) { setError(json.error ?? 'Fehler beim Anlegen'); setSaving(false); return }
-        if (isStrictAdmin && json.id) {
-          const areaErr = await persistAreaRoles(json.id, safeRoles, safeRoles.includes('admin') ? [] : form.einsatzMtRoles)
-          if (areaErr) { setError(areaErr); setSaving(false); return }
-        }
         logAudit('Benutzer angelegt', username || form.name)
       } catch {
         setError('Netzwerkfehler – bitte nochmals versuchen.'); setSaving(false); return

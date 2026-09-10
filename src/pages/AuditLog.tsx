@@ -38,7 +38,7 @@ export default function AuditLog() {
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Audit-Log</h1>
-        <p className="text-gray-500 text-sm mt-1">Protokoll aller Systemaktionen</p>
+        <p className="text-gray-500 text-sm mt-1">Datenbankänderungen und ergänzende Anwendungsmeldungen</p>
       </div>
 
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
@@ -69,7 +69,7 @@ export default function AuditLog() {
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                         {log.created_at ? new Date(log.created_at).toLocaleString('de-AT') : '–'}
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{log.action}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{log.action}<span className="block text-xs font-normal text-gray-500">{log.source === 'database' ? 'Datenbankprotokoll' : 'Anwendungsmeldung'}</span></td>
                       <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell max-w-sm truncate">{log.details ?? '–'}</td>
                       <td className="px-4 py-3 text-gray-600 hidden lg:table-cell">
                         {log.profiles?.name || log.profiles?.username || '–'}

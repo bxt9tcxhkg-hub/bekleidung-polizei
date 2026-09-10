@@ -334,20 +334,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     if (!window.confirm(`${label} wirklich aus diesem Protokoll entfernen? Der zugehörige Modulabschluss wird ebenfalls entfernt.`)) return
     setDeletingId(row.id)
     setError('')
-    const { error: participationError } = await supabase
-      .from('einsatz_training_participations')
-      .delete()
-      .eq('session_id', selectedId)
-      .eq('officer_id', row.officer_id)
-    if (participationError) {
-      setError(participationError.message || 'Modulabschluss konnte nicht entfernt werden.')
-      setDeletingId(null)
-      return
-    }
-    const { error: attendanceError } = await supabase
-      .from('einsatz_training_attendance')
-      .delete()
-      .eq('id', row.id)
+    const { error: attendanceError } = await supabase.rpc('remove_training_attendance', { p_attendance_id: row.id })
     if (attendanceError) {
       setError(attendanceError.message || 'Person konnte nicht aus dem Protokoll entfernt werden.')
       setDeletingId(null)
@@ -361,7 +348,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
   async function removeSession(session: EinsatzTrainingSession) {
     if (!canManage) return
     const label = `${formatCompletedOn(session.session_date)} · ${session.module?.name ?? 'Trainingstag'}`
-    if (!window.confirm(`Trainingstag „${label}“ wirklich löschen? Anmeldungen, Anwesenheiten und Abschlüsse dieses Trainingstags werden ebenfalls entfernt.`)) return
+    if (!window.confirm(`Trainingstag „${label}“ wirklich löschen? Verknüpfte Anmeldungen, Anwesenheiten und Abschlüsse müssen vorher einzeln entfernt werden. Ein erfasster Munitionsverbrauch verhindert das Löschen.`)) return
     setDeletingId(session.id)
     setError('')
     const { error: deleteError } = await supabase

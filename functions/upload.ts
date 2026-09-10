@@ -1,4 +1,4 @@
-import { isAuthenticated, unauthorized, serviceUnavailable, type AuthEnv } from './_auth'
+import { canManageBekleidung, isAuthenticated, unauthorized, serviceUnavailable, type AuthEnv } from './_auth'
 
 interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
@@ -18,13 +18,15 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
+  if (!(await canManageBekleidung(context.request, context.env))) return new Response('Forbidden', { status: 403 })
 
   const formData = await context.request.formData()
   const file = formData.get('file') as File | null
   const rawFolder = (formData.get('folder') as string | null) ?? 'uploads'
-  const folder = /^[a-z0-9_-]{1,40}$/.test(rawFolder) ? rawFolder : 'uploads'
+  if (rawFolder !== 'vorrechnungen') return new Response('Ungültiger Dateiordner', { status: 400 })
+  const folder = rawFolder
 
-  if (!file) {
+  if (!file || typeof file === 'string' || !['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
     return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400 })
   }
   if (file.size > 20 * 1024 * 1024) {
