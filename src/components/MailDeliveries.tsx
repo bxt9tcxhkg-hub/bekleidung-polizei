@@ -27,7 +27,7 @@ const QUICK_ACTIONS_BY_KIND: Record<MailDeliveryKind, MailDeliveryStatus[]> = {
   rsb: ['zugestellt', 'schriftlich_in_kenntnis', 'nicht_angetroffen', 'spaeter_erneut'],
   vernehmung: ['durchgefuehrt', 'nicht_angetroffen', 'spaeter_erneut'],
 }
-const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500'
+const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 function formatDateTime(value: string | null) {
   if (!value) return null
@@ -118,15 +118,15 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
     await load()
   }
 
-  if (loading) return <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-700" /></div>
+  if (loading) return <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-800" /></div>
 
   if (showClosed) return <div className="space-y-4">
-    <div className="flex items-center justify-between gap-3"><p className="text-sm text-gray-500">Vom Akteneigentümer geschlossene Akten (Archiv, letzte 100).</p><button type="button" onClick={() => setShowClosed(false)} className="text-sm font-semibold text-red-700">Zurück zur Übersicht</button></div>
+    <div className="flex items-center justify-between gap-3"><p className="text-sm text-gray-500">Vom Akteneigentümer geschlossene Akten (Archiv, letzte 100).</p><button type="button" onClick={() => setShowClosed(false)} className="text-sm font-semibold text-blue-700">Zurück zur Übersicht</button></div>
     {closedItems.length === 0 ? <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><Archive className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">Noch keine geschlossenen Akten.</p></div> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{closedItems.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-900 text-white">{KIND_LABEL[item.kind]}</span><span className="font-semibold text-gray-900">{item.person_name}</span><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div><p className="text-xs text-gray-500 mt-1">Geschlossen {formatDateTime(item.closed_at)}</p></article>)}</div>}
   </div>
 
   return <div className="space-y-4">
-    <div className="flex items-center justify-between gap-3"><p className="text-sm text-gray-500">Nach Person gruppiert · unabhängig vom heutigen Dienst nutzbar.</p><div className="flex gap-2">{canManage ? <button type="button" onClick={() => setShowClosed(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><Archive className="w-3.5 h-3.5" /> Erledigte</button> : null}<button type="button" onClick={openForm} className="inline-flex items-center gap-2 bg-red-700 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Eintrag</button></div></div>
+    <div className="flex items-center justify-between gap-3"><p className="text-sm text-gray-500">Nach Person gruppiert · unabhängig vom heutigen Dienst nutzbar.</p><div className="flex gap-2">{canManage ? <button type="button" onClick={() => setShowClosed(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><Archive className="w-3.5 h-3.5" /> Erledigte</button> : null}<button type="button" onClick={openForm} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Eintrag</button></div></div>
     {error && !showForm ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
     {groups.length === 0 ? <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{onlyOpen ? 'Keine offenen Fälle.' : 'Noch keine Einträge erfasst.'}</p></div> : <div className="space-y-3">
       {groups.map(group => <section key={group.personName} className="rounded-2xl border border-gray-200 bg-white overflow-hidden"><div className="px-4 sm:px-5 py-3 border-b bg-gray-50"><h3 className="font-bold text-gray-900">{group.personName}</h3></div><div className="divide-y divide-gray-100">
@@ -151,7 +151,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
       <p className="text-xs text-gray-500 -mt-2">Du wirst automatisch als Akteneigentümer:in eingetragen.</p>
       <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>
       {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
-      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving} onClick={() => void save()} className="bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
+      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving} onClick={() => void save()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
     </div></div></div> : null}
   </div>
 }
