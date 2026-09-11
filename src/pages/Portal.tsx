@@ -7,6 +7,7 @@ import {
   Clock3,
   GraduationCap,
   LifeBuoy,
+  Mail,
   Radio,
   Shield,
   Shirt,
@@ -381,6 +382,9 @@ export default function Portal() {
         ) : null}
         {hasAreaAccess('zentrale') ? (
           <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße, RSa/RSb und Übergabe" icon={Building2} />
+        ) : null}
+        {hasAreaAccess('zentrale') ? (
+          <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – jederzeit erfassbar, unabhängig vom heutigen Dienst" icon={Mail} />
         ) : null}
       </PortalSection>
 

@@ -242,6 +242,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260911110000_innendienst_cockpit.sql` | `innendienst_shift_tasks` (Kassen-Bestätigung je Person/Tag/Schicht) und `innendienst_records` (schlankes Protokoll für Bescheide Straßenmusik/-kunst und Verstöße – ohne Bescheidinhalte/Gebühren) |
 | `20260911120000_innendienst_verstoss_bescheid_bezug.sql` | `innendienst_records.related_bescheid_id`: Verstöße gegen Auflagen müssen sich auf einen konkreten Bescheid (Straßenmusik/-kunst) beziehen, per Trigger geprüft |
 | `20260911180000_innendienst_kassensturz.sql` | `innendienst_shift_tasks`: Kassensturz-Felder `float_amount`, `expected_revenue`, `cash_denominations`, `counted_total` |
+| `20260911190000_mail_deliveries_owner_vernehmung_close.sql` | `mail_deliveries`: Typ `vernehmung`, Status `durchgefuehrt`, Akteneigentümer automatisch = Ersteller (Trigger), `closed_at`/`closed_by` + RPC `close_mail_delivery` (endgültiges Schließen durch den Akteneigentümer) |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

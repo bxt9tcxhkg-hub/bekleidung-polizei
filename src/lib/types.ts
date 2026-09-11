@@ -565,8 +565,8 @@ export interface VehicleCheck {
   checker?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
 }
 
-export type MailDeliveryKind = 'rsa' | 'rsb'
-export type MailDeliveryStatus = 'offen' | 'zugestellt' | 'schriftlich_in_kenntnis' | 'nicht_angetroffen' | 'spaeter_erneut'
+export type MailDeliveryKind = 'rsa' | 'rsb' | 'vernehmung'
+export type MailDeliveryStatus = 'offen' | 'zugestellt' | 'schriftlich_in_kenntnis' | 'nicht_angetroffen' | 'spaeter_erneut' | 'durchgefuehrt'
 
 export interface MailDelivery {
   id: string
@@ -577,10 +577,14 @@ export interface MailDelivery {
   eigene_geschaeftszahl: string | null
   status: MailDeliveryStatus
   note: string | null
+  /** Automatisch = created_by; keine manuelle Auswahl. */
   akteneigentuemer_id: string | null
   last_action_by: string | null
   last_action_at: string | null
   owner_notified: boolean
+  /** Gesetzt, sobald der Akteneigentümer den Akt endgültig geschlossen hat (verschwindet dann aus der Übersicht). */
+  closed_at: string | null
+  closed_by: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -876,6 +880,7 @@ export type Database = {
       can_self_register_einsatztraining: { Args: { p_session_id: string }; Returns: boolean }
       lookup_login_email: { Args: { p_username: string }; Returns: string | null }
       record_mail_delivery_action: { Args: { p_id: string; p_status: string }; Returns: undefined }
+      close_mail_delivery: { Args: { p_id: string }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
