@@ -3,6 +3,8 @@ import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import EinsatzLayout from './components/EinsatzLayout'
+import OperativerDienstLayout from './components/OperativerDienstLayout'
+import FuhrparkLayout from './components/FuhrparkLayout'
 import PortalChrome from './components/PortalChrome'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -83,13 +85,21 @@ export default function App() {
             <Route path="unterlagen" element={<EinsatzMaterials />} />
           </Route>
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
-          <Route path="/zentrale" element={<ProtectedRoute><Zentrale /></ProtectedRoute>} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <OperativerDienstLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/zentrale" element={<Zentrale />} />
+            <Route path="/aussendienst" element={<Aussendienst />} />
+            <Route path="/innendienst" element={<Innendienst />} />
+            <Route path="/rsa-rsb" element={<RsaRsb />} />
+          </Route>
           <Route path="/planung/zentrale" element={<Navigate to="/zentrale" replace />} />
-          <Route path="/innendienst" element={<ProtectedRoute><Innendienst /></ProtectedRoute>} />
           <Route path="/planung/innendienst" element={<Navigate to="/innendienst" replace />} />
-          <Route path="/aussendienst" element={<ProtectedRoute><Aussendienst /></ProtectedRoute>} />
           <Route path="/planung/aussendienst" element={<Navigate to="/aussendienst" replace />} />
-          <Route path="/rsa-rsb" element={<ProtectedRoute><RsaRsb /></ProtectedRoute>} />
           <Route
             path="/schulungen"
             element={
@@ -101,8 +111,16 @@ export default function App() {
             }
           />
           <Route path="/planung/schulungen" element={<Navigate to="/schulungen" replace />} />
-          <Route path="/fuhrpark" element={<ProtectedRoute><Fleet /></ProtectedRoute>} />
-          <Route path="/fuhrpark/:vehicleId" element={<ProtectedRoute><FleetVehicle /></ProtectedRoute>} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <FuhrparkLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/fuhrpark" element={<Fleet />} />
+            <Route path="/fuhrpark/:vehicleId" element={<FleetVehicle />} />
+          </Route>
           <Route path="/planung/fuhrpark" element={<Navigate to="/fuhrpark" replace />} />
           <Route path="/planung/fuhrpark/:vehicleId" element={<Navigate to="/fuhrpark" replace />} />
           <Route path="/planung/ueberstunden" element={<ProtectedRoute adminOnly><PlannedArea area="ueberstunden" /></ProtectedRoute>} />
