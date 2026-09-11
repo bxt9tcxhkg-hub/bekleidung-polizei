@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Bike, CalendarDays, Car, CheckCircle2, ClipboardCheck, PackageCheck, Pencil, Plus, Sparkles, Trash2, Wrench, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, ArrowLeft, Bike, CalendarDays, Car, CheckCircle2, ClipboardCheck, Download, FileText, PackageCheck, Pencil, Plus, Sparkles, Trash2, Upload, Wrench, X } from 'lucide-react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import type { FleetAppointment, FleetAppointmentCategory, FleetCareTask, FleetCareTaskKind, FleetEquipmentItem, FleetEquipmentStatus, FleetEquipmentStatusValue, FleetVehicle as FleetVehicleType, FleetVehicleKind, Profile, VehicleCheck, VehicleCheckStatus } from '../lib/types'
+import type { FleetAppointment, FleetAppointmentCategory, FleetCareTask, FleetCareTaskKind, FleetDocument, FleetEquipmentItem, FleetEquipmentStatus, FleetEquipmentStatusValue, FleetVehicle as FleetVehicleType, FleetVehicleKind, Profile, VehicleCheck, VehicleCheckStatus } from '../lib/types'
 
-type TabId = 'kontrolle' | 'fuellliste' | 'maengel' | 'pflege' | 'werkstatt' | 'fristen'
+const MAX_DOCUMENT_FILE_SIZE = 100_000_000
+
+type TabId = 'kontrolle' | 'fuellliste' | 'maengel' | 'pflege' | 'werkstatt' | 'fristen' | 'dokumente'
 const TABS: { id: TabId; label: string; description: string; icon: typeof ClipboardCheck; tone: 'blue' | 'amber' | 'emerald' | 'slate' }[] = [
   { id: 'kontrolle', label: 'Fahrzeugkontrolle', description: 'Checkliste vor Dienstbeginn und letzte Kontrollen.', icon: ClipboardCheck, tone: 'blue' },
   { id: 'fuellliste', label: 'Bestand & Füllliste', description: 'Sollbestand prüfen und Fehlmengen erfassen.', icon: PackageCheck, tone: 'blue' },
@@ -15,6 +17,7 @@ const TABS: { id: TabId; label: string; description: string; icon: typeof Clipbo
   { id: 'pflege', label: 'Reinigung & Pflege', description: 'Reinigung und offene Pflegeaufgaben.', icon: Sparkles, tone: 'emerald' },
   { id: 'werkstatt', label: 'Werkstatt & Termine', description: 'Wartungen und Reparaturen.', icon: Wrench, tone: 'slate' },
   { id: 'fristen', label: 'Fristen', description: 'Prüfungen und fahrzeugbezogene Termine.', icon: CalendarDays, tone: 'slate' },
+  { id: 'dokumente', label: 'Dokumente', description: 'Zulassung, Serviceheft und weitere fahrzeugbezogene Unterlagen.', icon: FileText, tone: 'slate' },
 ]
 const TONE = { blue: 'bg-blue-50 text-blue-700 border-blue-100', amber: 'bg-amber-50 text-amber-700 border-amber-100', emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100', slate: 'bg-slate-50 text-slate-700 border-slate-200' }
 const STATUS_LABEL: Record<FleetEquipmentStatusValue, string> = { vollstaendig: 'Vollständig', fehlend: 'Fehlend', beschaedigt: 'Beschädigt', abgelaufen: 'Abgelaufen' }
@@ -24,6 +27,12 @@ const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 te
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleDateString('de-AT') : null }
+function formatBytes(size: number | null) {
+  if (size == null) return null
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(0)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
 
 export default function FleetVehicle() {
   const { vehicleId } = useParams()
@@ -45,6 +54,7 @@ export default function FleetVehicle() {
   const [statuses, setStatuses] = useState<FleetEquipmentStatus[]>([])
   const [careTasks, setCareTasks] = useState<FleetCareTask[]>([])
   const [appointments, setAppointments] = useState<FleetAppointment[]>([])
+  const [documents, setDocuments] = useState<FleetDocument[]>([])
 
   const [name, setName] = useState('')
   const [kind, setKind] = useState<FleetVehicleKind>('Dienstfahrzeug')
@@ -60,7 +70,7 @@ export default function FleetVehicle() {
   const load = useCallback(async () => {
     if (!vehicleId) return
     setLoading(true)
-    const [{ data, error: loadError }, employeeResult, checkResult, itemResult, statusResult, careResult, appointmentResult] = await Promise.all([
+    const [{ data, error: loadError }, employeeResult, checkResult, itemResult, statusResult, careResult, appointmentResult, documentResult] = await Promise.all([
       supabase.from('fleet_vehicles').select('*, responsible_profile:profiles!fleet_vehicles_responsible_user_id_fkey(id,name,dienstnummer)').eq('id', vehicleId).eq('active', true).maybeSingle(),
       canManage ? supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name') : Promise.resolve({ data: [], error: null }),
       supabase.from('vehicle_checks').select('*, checker:profiles!vehicle_checks_checked_by_fkey(id,name,dienstnummer)').eq('vehicle_id', vehicleId).order('duty_date', { ascending: false }).limit(20),
@@ -68,6 +78,7 @@ export default function FleetVehicle() {
       supabase.from('fleet_equipment_status').select('*, checker:profiles!fleet_equipment_status_checked_by_fkey(id,name,dienstnummer)').eq('vehicle_id', vehicleId),
       supabase.from('fleet_care_tasks').select('*').eq('vehicle_id', vehicleId).order('status').order('created_at', { ascending: false }),
       supabase.from('fleet_appointments').select('*').eq('vehicle_id', vehicleId).order('due_date', { ascending: true, nullsFirst: false }),
+      supabase.from('fleet_documents').select('*, uploader:profiles!fleet_documents_uploaded_by_fkey(id,name,dienstnummer)').eq('vehicle_id', vehicleId).order('created_at', { ascending: false }),
     ])
     setVehicle(loadError ? null : data as FleetVehicleType | null)
     setError(loadError ? 'Fahrzeug konnte nicht geladen werden.' : '')
@@ -77,6 +88,7 @@ export default function FleetVehicle() {
     setStatuses((statusResult.data ?? []) as unknown as FleetEquipmentStatus[])
     setCareTasks((careResult.data ?? []) as FleetCareTask[])
     setAppointments((appointmentResult.data ?? []) as FleetAppointment[])
+    setDocuments((documentResult.data ?? []) as unknown as FleetDocument[])
     setLoading(false)
   }, [vehicleId, canManage])
   useEffect(() => { void load() }, [load])
@@ -135,6 +147,7 @@ export default function FleetVehicle() {
     {activeTab === 'pflege' ? <PflegeTab vehicleId={vehicle.id} tasks={careTasks} canDelete={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
     {activeTab === 'werkstatt' ? <TerminTab vehicleId={vehicle.id} category="werkstatt" title="Werkstatt & Termine" appointments={workshopAppointments} canEdit={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
     {activeTab === 'fristen' ? <TerminTab vehicleId={vehicle.id} category="frist" title="Fristen" appointments={deadlines} canEdit={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
+    {activeTab === 'dokumente' ? <DokumenteTab vehicleId={vehicle.id} documents={documents} canEdit={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
 
     {showEdit ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Fahrzeug bearbeiten</h2><button type="button" onClick={() => setShowEdit(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4"><label className="block text-xs font-medium text-gray-600">Bezeichnung *<input className={inputClass} maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Fahrzeugart<select className={inputClass} value={kind} onChange={event => setKind(event.target.value as FleetVehicleKind)}><option>Dienstfahrzeug</option><option>Motorrad</option></select></label><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><label className="block text-xs font-medium text-gray-600">Hersteller<input className={inputClass} maxLength={60} value={make} onChange={event => setMake(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Modell<input className={inputClass} maxLength={60} value={model} onChange={event => setModel(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Rufname<input className={inputClass} maxLength={80} value={callSign} onChange={event => setCallSign(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Kennzeichen<input className={inputClass} maxLength={20} value={licensePlate} onChange={event => setLicensePlate(event.target.value)} /></label></div><label className="block text-xs font-medium text-gray-600">Fahrzeugverantwortlicher Mitarbeiter<select className={inputClass} value={responsibleUserId} onChange={event => setResponsibleUserId(event.target.value)}><option value="">Noch nicht zugewiesen</option>{employees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}{employee.dienstnummer ? ` · DN ${employee.dienstnummer}` : ''}</option>)}</select></label><label className="block text-xs font-medium text-gray-600">Bemerkungen<textarea className={`${inputClass} min-h-24 resize-y`} maxLength={1000} value={notes} onChange={event => setNotes(event.target.value)} /></label>{error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}</div><div className="flex flex-wrap gap-3 px-5 sm:px-6 py-4 border-t"><button type="button" disabled={saving} onClick={() => { void deleteVehicle() }} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50 disabled:opacity-60"><Trash2 className="w-4 h-4" /> Endgültig löschen</button><button type="button" onClick={() => setShowEdit(false)} className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving} onClick={() => { void saveVehicle() }} className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Speichern'}</button></div></div></div> : null}
   </PortalChrome>
@@ -342,6 +355,117 @@ function TerminTab({ vehicleId, category, title, appointments, canEdit, onSaved,
       <label className="block text-xs font-medium text-gray-600">Termin / Frist<input type="date" className={inputClass} value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
       <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-20 resize-y`} value={note} onChange={event => setNote(event.target.value)} /></label>
       <Actions saving={saving} close={() => setShowForm(false)} save={save} />
+    </Modal> : null}
+  </TabShell>
+}
+
+// --- Dokumente -------------------------------------------------
+function DokumenteTab({ vehicleId, documents, canEdit, onSaved, onError }: { vehicleId: string; documents: FleetDocument[]; canEdit: boolean; onSaved: (message: string) => void; onError: (message: string) => void }) {
+  const { profile } = useAuth()
+  const [showForm, setShowForm] = useState(false)
+  const [title, setTitle] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [saving, setSaving] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function openForm() { setTitle(''); setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; setShowForm(true) }
+
+  async function save() {
+    if (!profile?.id || !title.trim()) { onError('Bitte einen Titel angeben.'); return }
+    if (!file) { onError('Bitte eine Datei auswählen.'); return }
+    if (file.size > MAX_DOCUMENT_FILE_SIZE) { onError('Datei zu groß (max. 100 MB).'); return }
+    setSaving(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const response = await fetch('/fleet-document-upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+          'Content-Type': file.type || 'application/octet-stream',
+          'X-File-Size': String(file.size),
+          'X-File-Name': encodeURIComponent(file.name),
+          'X-Vehicle-Id': vehicleId,
+        },
+        body: file,
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(data?.error || 'Datei konnte nicht hochgeladen werden.')
+      }
+      const uploaded = await response.json() as { key: string; name: string; size: number; type: string }
+      const { error } = await supabase.from('fleet_documents').insert({
+        vehicle_id: vehicleId,
+        title: title.trim(),
+        file_key: uploaded.key,
+        file_name: uploaded.name,
+        mime_type: uploaded.type || null,
+        file_size: uploaded.size,
+        uploaded_by: profile.id,
+      })
+      if (error) throw error
+      logAudit('Fahrzeugdokument hochgeladen', title.trim())
+      setShowForm(false)
+      onSaved('Dokument wurde gespeichert.')
+    } catch (saveError) {
+      onError(saveError instanceof Error ? saveError.message : 'Dokument konnte nicht gespeichert werden.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function openDocument(doc: FleetDocument) {
+    const { data: sessionData } = await supabase.auth.getSession()
+    try {
+      const response = await fetch(`/files/${doc.file_key}`, {
+        headers: { Authorization: `Bearer ${sessionData.session?.access_token ?? ''}` },
+      })
+      if (!response.ok) throw new Error()
+      const blobUrl = URL.createObjectURL(await response.blob())
+      window.open(blobUrl, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    } catch {
+      onError('Dokument konnte nicht geöffnet werden.')
+    }
+  }
+
+  async function remove(doc: FleetDocument) {
+    if (!window.confirm(`Dokument „${doc.title}“ endgültig löschen?`)) return
+    const { data: sessionData } = await supabase.auth.getSession()
+    const response = await fetch('/fleet-document-delete', {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+        'X-Document-Id': doc.id,
+      },
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null) as { error?: string } | null
+      onError(data?.error || 'Dokument konnte nicht gelöscht werden.')
+      return
+    }
+    logAudit('Fahrzeugdokument gelöscht', doc.title)
+    onSaved('Dokument wurde gelöscht.')
+  }
+
+  return <TabShell tone="slate" title="Dokumente" description="Zulassung, Serviceheft und weitere fahrzeugbezogene Unterlagen." action={canEdit ? <button type="button" onClick={openForm} className="inline-flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium px-3 py-2 rounded-lg"><Upload className="w-4 h-4" /> Dokument</button> : undefined}>
+    {documents.length === 0 ? <Empty text="Noch keine Dokumente hinterlegt." /> : <div className="divide-y divide-gray-100">{documents.map(doc => {
+      const size = formatBytes(doc.file_size)
+      const meta = [doc.uploader?.name, formatDate(doc.created_at), size].filter(Boolean).join(' · ')
+      return <div key={doc.id} className="py-3 flex items-center justify-between gap-3">
+        <button type="button" onClick={() => void openDocument(doc)} className="flex items-center gap-3 min-w-0 text-left group">
+          <span className="bg-gray-100 text-gray-600 p-2 rounded-lg flex-shrink-0"><FileText className="w-4 h-4" /></span>
+          <span className="min-w-0"><span className="block text-sm font-medium text-gray-900 group-hover:text-blue-700 truncate">{doc.title}</span>{meta ? <span className="block text-xs text-gray-500 mt-0.5 truncate">{meta}</span> : null}</span>
+        </button>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button type="button" onClick={() => void openDocument(doc)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg" aria-label="Dokument öffnen"><Download className="w-4 h-4" /></button>
+          {canEdit ? <button type="button" onClick={() => void remove(doc)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Dokument löschen"><Trash2 className="w-4 h-4" /></button> : null}
+        </div>
+      </div>
+    })}</div>}
+    {showForm ? <Modal title="Dokument hochladen" close={() => setShowForm(false)}>
+      <label className="block text-xs font-medium text-gray-600">Titel *<input className={inputClass} maxLength={160} value={title} onChange={event => setTitle(event.target.value)} placeholder="z. B. Zulassungsschein" /></label>
+      <label className="block text-xs font-medium text-gray-600">Datei * (PDF, Word, JPG oder PNG, max. 100 MB)<input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" className={inputClass} onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
+      <Actions saving={saving} close={() => setShowForm(false)} save={save} label="Hochladen" />
     </Modal> : null}
   </TabShell>
 }
