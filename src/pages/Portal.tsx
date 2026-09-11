@@ -68,7 +68,7 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
 }
 
 type PlannedPortalArea = {
-  id: 'innendienst' | 'aussendienst' | 'ueberstunden'
+  id: 'innendienst' | 'ueberstunden'
   title: string
   description: string
   path: string
@@ -77,7 +77,6 @@ type PlannedPortalArea = {
 
 const OPERATIONAL_AREAS: PlannedPortalArea[] = [
   { id: 'innendienst', title: 'Innendienst', description: 'Kasse, Bescheide, Gebühren und Verfahrenshilfen', path: '/planung/innendienst', icon: Building2 },
-  { id: 'aussendienst', title: 'Außendienststreifen', description: 'Kontrollaufträge, aktuelle Hinweise und Kontrollbehelfe', path: '/planung/aussendienst', icon: Shield },
 ]
 
 const PERSONAL_AREAS: PlannedPortalArea[] = [
@@ -375,6 +374,9 @@ export default function Portal() {
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (
           <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} />
+        ) : null}
+        {hasAreaAccess('zentrale') ? (
+          <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck, Kontrollaufträge und RSa/RSb" icon={Shield} />
         ) : null}
         {OPERATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
       </PortalSection>

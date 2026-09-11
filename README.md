@@ -238,6 +238,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260919_einsatztraining_fachlogik.sql` | Pflicht/Zusatz, schiesst, Halbjahr, Ausschreibung/Anmeldung |
 | `20260920_einsatztraining_geltung.sql` | Geltung `applies_to` (Polizei/Parkaufsicht/Alle), Selbstanmeldung prüft Organisation |
 | `20260921_lookup_login_email.sql` | RPC `lookup_login_email`: anon, Username → Auth-E-Mail |
+| `20260911100000_vehicle_checks_and_mail_deliveries.sql` | `vehicle_checks` (Fahrzeug-/Materialcheck je Fahrzeug/Tag/Schicht) und `mail_deliveries` (RSa/RSb je Person, Status, Akteneigentümer) samt RPC `record_mail_delivery_action` für die Schnellaktionen |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

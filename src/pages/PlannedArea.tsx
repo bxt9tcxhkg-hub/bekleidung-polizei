@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Construction, PackageCheck, Wre
 import { Link } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
 
-export type PlannedAreaId = 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
+export type PlannedAreaId = 'zentrale' | 'innendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
 
 const AREA_CONTENT: Record<PlannedAreaId, { title: string; group: string; description: string; items: string[] }> = {
   zentrale: {
@@ -16,12 +16,6 @@ const AREA_CONTENT: Record<PlannedAreaId, { title: string; group: string; descri
     group: 'Operativer Bereich',
     description: 'Unterstützung bei der täglichen Dienstabwicklung im Innendienst.',
     items: ['Übersicht', 'Kassenabrechnung bei Schichtbeginn', 'Bescheide für Straßenmusik & Straßenkunst', 'Verstöße & Anspruchsprüfung', 'Gebühren & Kosten', 'Arbeitsanweisungen', 'Unterlagen'],
-  },
-  aussendienst: {
-    title: 'Außendienststreifen',
-    group: 'Operativer Bereich',
-    description: 'Tagesaktuelle Aufträge und intern bereitgestellte Hilfsmittel für die Außendienststreifen – als Ergänzung zum bestehenden Aktenprogramm.',
-    items: ['Tägliche Kontrollaufträge des Kdt', 'Offene Fahndungen', 'Laufende AV/BV oder EV', 'RSa- & RSb-Briefe', 'Kontrollbehelfe zu Gesetzesmaterien'],
   },
   schulungen: {
     title: 'Schulungen',
@@ -83,27 +77,6 @@ export default function PlannedArea({ area }: { area: PlannedAreaId }) {
           ))}
         </div>
       </section>
-
-      {area === 'aussendienst' ? (
-        <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden mt-6">
-          <div className="px-5 py-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-900">Getrennte Funktionen</h2>
-            <p className="text-sm text-gray-500 mt-1">Tagesaufträge und fachliche Hilfsmittel werden nicht miteinander vermischt.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
-            <article className="rounded-xl border border-red-200 bg-red-50 px-4 py-4">
-              <h3 className="font-semibold text-gray-900">Kontrollaufträge</h3>
-              <p className="text-sm text-gray-600 mt-1">Vom Kdt erteilte Aufträge, die am jeweiligen Tag durchgeführt werden müssen.</p>
-              <p className="text-xs text-gray-500 mt-3">Geplant: Priorität, Zeitraum, Zuweisung, Status und kurze Erledigungsrückmeldung.</p>
-            </article>
-            <article className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-4">
-              <h3 className="font-semibold text-gray-900">Kontrollbehelfe</h3>
-              <p className="text-sm text-gray-600 mt-1">Unterlagen und kompakte Hilfestellungen mit den wichtigsten Punkten zu bestimmten Gesetzesmaterien.</p>
-              <p className="text-xs text-gray-500 mt-3">Geplant: Themenbereiche, Dokumente, Suchfunktion und Aktualisierungsdatum.</p>
-            </article>
-          </div>
-        </section>
-      ) : null}
 
       {area === 'fuhrpark' ? (
         <>

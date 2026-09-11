@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNod
 import { AlertTriangle, ArrowLeft, BellRing, BookOpen, BriefcaseBusiness, CheckCircle2, ClipboardList, Contact, FileClock, KeyRound, LayoutDashboard, MapPin, Pencil, Plus, Radio, Search, ShieldAlert, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
+import MailDeliveries from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
@@ -172,7 +173,9 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'strassenzustand' ? <section className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-6"><div className="flex items-start gap-3"><AlertTriangle className="w-6 h-6 text-amber-700" /><div><h2 className="font-bold text-gray-900">Straßenzustandsbericht in Planung</h2><p className="text-sm text-gray-600 mt-1">Sobald das Formular und der genaue Ablauf vorliegen, wird hier die Erfassung und PDF-Erstellung umgesetzt.</p></div></div></section> : null}
 
-    {!loading && !['uebersicht', 'einsaetze', 'personenhinweise', 'strassenzustand'].includes(activeTab) ? <EntryList currentTab={currentTab} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
+    {!loading && activeTab === 'brief' ? <MailDeliveries /> : null}
+
+    {!loading && !['uebersicht', 'einsaetze', 'personenhinweise', 'strassenzustand', 'brief'].includes(activeTab) ? <EntryList currentTab={currentTab} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} saving={saving} error={error} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showPersonForm ? <PersonModal person={person} setPerson={setPerson} saving={saving} error={error} close={() => setShowPersonForm(false)} save={savePersonNote} /> : null}
