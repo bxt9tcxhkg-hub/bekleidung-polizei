@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNod
 import { AlertTriangle, ArrowLeft, BellRing, BookOpen, BriefcaseBusiness, CheckCircle2, ClipboardList, Contact, FileClock, KeyRound, LayoutDashboard, MapPin, Pencil, Plus, Radio, Search, ShieldAlert, Trash2, UserRoundCheck, UsersRound, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
+import MailDeliveries from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
@@ -86,6 +87,7 @@ export default function Zentrale() {
 
   const currentTab = TABS.find(tab => tab.id === activeTab) ?? TABS[0]
   const visibleEntries = useMemo(() => activeTab === 'uebersicht' ? entries.filter(item => item.status !== 'erledigt') : entries.filter(item => item.category === activeTab), [activeTab, entries])
+  const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
   const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
   const visibleIncidents = useMemo(() => {
@@ -154,10 +156,15 @@ export default function Zentrale() {
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-700" /></div> : null}
 
-    {!loading && activeTab === 'uebersicht' ? <div className="space-y-5">
-      <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><Stat label="Kritische Hinweise" value={entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch').length} color="red" /><Stat label="Offene Kontrollaufträge" value={entries.filter(item => item.category === 'kontrollauftrag' && item.status !== 'erledigt').length} color="blue" /><Stat label="Offene Übergaben" value={entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt').length} color="amber" /></div>
-      <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-red-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
+    {!loading && activeTab === 'uebersicht' ? <div className="space-y-6">
+      <SofortWichtig entries={criticalEntries} onOpen={item => { setActiveTab(item.category); openEdit(item) }} />
+      <div className="space-y-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Heute relevant</h2>
+        <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Stat label="Offene Kontrollaufträge" value={entries.filter(item => item.category === 'kontrollauftrag' && item.status !== 'erledigt').length} color="blue" /><Stat label="Offene Übergaben" value={entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt').length} color="amber" /></div>
+        <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-red-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
+      </div>
+      <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (AV/BV, Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen …) über die Reiter oben.</p></div>
     </div> : null}
 
     {!loading && activeTab === 'einsaetze' ? <section><div className="flex items-center justify-between gap-3 mb-3"><div><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-sm text-gray-500">Kurze interne Koordination, keine Aktenbearbeitung.</p></div>{canOperateZentrale ? <button type="button" onClick={openIncident} className="inline-flex items-center gap-2 bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button> : null}</div>{incidentCards}</section> : null}
@@ -166,7 +173,9 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'strassenzustand' ? <section className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-6"><div className="flex items-start gap-3"><AlertTriangle className="w-6 h-6 text-amber-700" /><div><h2 className="font-bold text-gray-900">Straßenzustandsbericht in Planung</h2><p className="text-sm text-gray-600 mt-1">Sobald das Formular und der genaue Ablauf vorliegen, wird hier die Erfassung und PDF-Erstellung umgesetzt.</p></div></div></section> : null}
 
-    {!loading && !['uebersicht', 'einsaetze', 'personenhinweise', 'strassenzustand'].includes(activeTab) ? <EntryList currentTab={currentTab} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
+    {!loading && activeTab === 'brief' ? <MailDeliveries /> : null}
+
+    {!loading && !['uebersicht', 'einsaetze', 'personenhinweise', 'strassenzustand', 'brief'].includes(activeTab) ? <EntryList currentTab={currentTab} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} saving={saving} error={error} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showPersonForm ? <PersonModal person={person} setPerson={setPerson} saving={saving} error={error} close={() => setShowPersonForm(false)} save={savePersonNote} /> : null}
@@ -179,6 +188,12 @@ function DutyPanel({ assignments, functions, dutyShift, setDutyShift }: { assign
 }
 
 function Stat({ label, value, color }: { label: string; value: number; color: 'red' | 'blue' | 'amber' }) { const classes = { red: 'border-red-200 bg-red-50 text-red-900', blue: 'border-blue-200 bg-blue-50 text-blue-900', amber: 'border-amber-200 bg-amber-50 text-amber-900' }[color]; return <div className={`rounded-xl border p-4 ${classes}`}><p className="text-xs font-medium">{label}</p><p className="text-2xl font-bold mt-1">{value}</p></div> }
+
+// Ebene 1 der Übersicht: erfordert jetzt Aufmerksamkeit – direkt hervorgehoben, unabhängig von der Funktion.
+function SofortWichtig({ entries, onOpen }: { entries: ZentraleEntry[]; onOpen: (item: ZentraleEntry) => void }) {
+  if (entries.length === 0) return <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-2 text-sm text-green-800"><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Keine dringenden Punkte offen.</div>
+  return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2><div className="space-y-2">{entries.map(item => <button key={item.id} type="button" onClick={() => onOpen(item)} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
+}
 function Empty({ text }: { text: string }) { return <div className="px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
 
 function EntryList({ currentTab, entries, canManage, openNew, openEdit }: { currentTab: (typeof TABS)[number]; entries: ZentraleEntry[]; canManage: boolean; openNew: () => void; openEdit: (item: ZentraleEntry) => void }) {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Building2,
   Car,
@@ -14,10 +14,12 @@ import {
   UserRoundCheck,
   UserCircle,
   Users,
+  X,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import PortalChrome from '../components/PortalChrome'
+import { OwnerNotifications } from '../components/MailDeliveries'
 import {
   PORTAL_ACCOUNT_LINKS,
   type PortalAccountId,
@@ -43,6 +45,15 @@ function todayLocal() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+// „Heute nicht operativ“ wird nur lokal je Gerät gemerkt (kein Zwangssystem, kein Datenbankeintrag nötig).
+const DUTY_PROMPT_DISMISS_PREFIX = 'dornbirn-portal-duty-prompt-dismissed'
+function dutyPromptDismissedToday(userId: string): boolean {
+  try { return localStorage.getItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`) === todayLocal() } catch { return false }
+}
+function dismissDutyPromptToday(userId: string): void {
+  try { localStorage.setItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`, todayLocal()) } catch { /* Storage evtl. gesperrt – kein Blocker */ }
+}
+
 const APP_ICONS: Record<PortalAppId, LucideIcon> = {
   bekleidung: Shirt,
   einsatz_mt: Target,
@@ -58,17 +69,12 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
 }
 
 type PlannedPortalArea = {
-  id: 'innendienst' | 'aussendienst' | 'ueberstunden'
+  id: 'ueberstunden'
   title: string
   description: string
   path: string
   icon: LucideIcon
 }
-
-const OPERATIONAL_AREAS: PlannedPortalArea[] = [
-  { id: 'innendienst', title: 'Innendienst', description: 'Kasse, Bescheide, Gebühren und Verfahrenshilfen', path: '/planung/innendienst', icon: Building2 },
-  { id: 'aussendienst', title: 'Außendienststreifen', description: 'Kontrollaufträge, aktuelle Hinweise und Kontrollbehelfe', path: '/planung/aussendienst', icon: Shield },
-]
 
 const PERSONAL_AREAS: PlannedPortalArea[] = [
   { id: 'ueberstunden', title: 'Überstundenmeldung', description: 'Überstunden erfassen und zur Prüfung abgeben', path: '/planung/ueberstunden', icon: Clock3 },
@@ -207,43 +213,75 @@ const headerActionClass =
   'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors'
 
 function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: boolean }) {
-  const [assignments, setAssignments] = useState<DutyAssignment[]>([])
+  const navigate = useNavigate()
+  const [allAssignments, setAllAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
   const [shift, setShift] = useState<DutyShift>('tag')
-  const [dutyFunction, setDutyFunction] = useState<DutyFunction | ''>('')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [vehicleId, setVehicleId] = useState('')
   const [managing, setManaging] = useState(false)
   const [newLabel, setNewLabel] = useState('')
   const [newPatrol, setNewPatrol] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [promptChecked, setPromptChecked] = useState(false)
+
   const load = useCallback(async () => {
     const [dutyResult, functionResult, vehicleResult] = await Promise.all([
-      supabase.from('duty_assignments').select('*').eq('user_id', userId).eq('duty_date', todayLocal()),
+      supabase.from('duty_assignments').select('*').eq('duty_date', todayLocal()),
       supabase.from('duty_functions').select('*').order('sort_order').order('label'),
       supabase.from('fleet_vehicles').select('*').eq('active', true).order('name'),
     ])
-    setAssignments((dutyResult.data ?? []) as DutyAssignment[]); setFunctions((functionResult.data ?? []) as DutyFunctionConfig[]); setVehicles((vehicleResult.data ?? []) as FleetVehicle[])
-  }, [userId])
+    setAllAssignments((dutyResult.data ?? []) as DutyAssignment[]); setFunctions((functionResult.data ?? []) as DutyFunctionConfig[]); setVehicles((vehicleResult.data ?? []) as FleetVehicle[])
+  }, [])
   useEffect(() => { void load() }, [load])
-  const selected = assignments.find(item => item.shift === shift)
-  useEffect(() => { setDutyFunction(selected?.function ?? ''); setVehicleId(selected?.vehicle_id ?? '') }, [selected?.function, selected?.vehicle_id, shift])
-  const selectedConfig = functions.find(item => item.code === dutyFunction)
 
-  async function save() {
-    if (!dutyFunction) return
+  const ownAssignments = useMemo(() => allAssignments.filter(item => item.user_id === userId), [allAssignments, userId])
+  const selected = ownAssignments.find(item => item.shift === shift)
+  const selectedConfig = functions.find(item => item.code === selected?.function)
+  useEffect(() => { setVehicleId(selected?.vehicle_id ?? '') }, [selected?.vehicle_id])
+
+  // Beim ersten Öffnen an diesem Tag: Funktion abfragen, sofern noch keine Auswahl getroffen
+  // und „Heute nicht operativ“ noch nicht gewählt wurde. Nicht blockierend – jederzeit schließbar.
+  useEffect(() => {
+    if (promptChecked || functions.length === 0) return
+    setPromptChecked(true)
+    if (ownAssignments.length === 0 && !dutyPromptDismissedToday(userId)) setPickerOpen(true)
+  }, [functions.length, ownAssignments.length, promptChecked, userId])
+
+  function occupancy(code: string) {
+    const config = functions.find(item => item.code === code)
+    return { count: allAssignments.filter(item => item.function === code && item.shift === shift).length, capacity: config?.standard_staffing ?? null }
+  }
+
+  async function choose(code: DutyFunction) {
     setSaving(true)
-    const { error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: todayLocal(), shift, function: dutyFunction, vehicle_id: selectedConfig?.is_patrol ? vehicleId || null : null }, { onConflict: 'user_id,duty_date,shift' })
+    const config = functions.find(item => item.code === code)
+    const { error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: todayLocal(), shift, function: code, vehicle_id: config?.is_patrol ? (vehicleId || null) : null }, { onConflict: 'user_id,duty_date,shift' })
     setSaving(false)
     if (error) { setMessage('Die Funktion konnte nicht gespeichert werden.'); return }
-    setMessage(`${selectedConfig?.label ?? DEFAULT_DUTY_LABEL[dutyFunction] ?? dutyFunction} wurde für heute eingetragen.`); await load()
+    setMessage(`${config?.label ?? DEFAULT_DUTY_LABEL[code] ?? code} wurde für heute eingetragen.`)
+    setPickerOpen(false)
+    await load()
+    // Nach der Auswahl direkt ins passende Dienstcockpit.
+    if (code === 'zentrale') navigate('/zentrale')
+    else if (code === 'innendienst') navigate('/innendienst')
+    else if (config?.is_patrol || code === 'jd' || code === 'vd') navigate('/aussendienst')
   }
+  function notOperational() { dismissDutyPromptToday(userId); setPickerOpen(false) }
   async function remove() {
     if (!selected) return
     setSaving(true); const { error } = await supabase.from('duty_assignments').delete().eq('id', selected.id); setSaving(false)
     if (error) { setMessage('Die Auswahl konnte nicht entfernt werden.'); return }
-    setDutyFunction(''); setMessage('Die Auswahl wurde entfernt. Das Portal bleibt normal nutzbar.'); await load()
+    setMessage('Die Auswahl wurde entfernt. Das Portal bleibt normal nutzbar.'); await load()
+  }
+  async function setVehicle(id: string) {
+    setVehicleId(id)
+    if (!selected) return
+    setSaving(true); const { error } = await supabase.from('duty_assignments').update({ vehicle_id: id || null }).eq('id', selected.id); setSaving(false)
+    if (error) { setMessage('Das Fahrzeug konnte nicht gespeichert werden.'); return }
+    await load()
   }
 
   async function addFunction() {
@@ -258,10 +296,34 @@ function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: b
     if (!window.confirm(`Dienst „${item.label}“ endgültig löschen? Historische Einteilungen bleiben erhalten.`)) return
     const { error } = await supabase.from('duty_functions').delete().eq('code', item.code)
     if (error) { setMessage('Der Dienst konnte nicht gelöscht werden.'); return }
-    if (dutyFunction === item.code) setDutyFunction(''); await load()
+    await load()
   }
 
-  return <section className="rounded-2xl border border-red-200 bg-white p-4 sm:p-5 mb-6 shadow-sm"><div className="flex items-start gap-3"><div className="bg-red-50 p-2.5 rounded-xl"><UserRoundCheck className="w-5 h-5 text-red-700" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold text-gray-900">Heutige Funktion</h2><p className="text-sm text-gray-500 mt-0.5">Freiwillige Auswahl für passende Informationen und Aufträge.</p></div><div className="flex items-center gap-2">{selected ? <span className="text-sm font-semibold text-red-800 bg-red-50 px-3 py-1.5 rounded-full">{functions.find(item => item.code === selected.function)?.label ?? selected.function}</span> : <span className="text-sm text-gray-500">Nicht ausgewählt</span>}{canManage ? <button type="button" onClick={() => setManaging(value => !value)} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienste verwalten</button> : null}</div></div><div className="grid grid-cols-1 sm:grid-cols-[150px_1fr_auto] gap-2 mt-4"><select className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={shift} onChange={event => setShift(event.target.value as DutyShift)} aria-label="Schicht"><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select><select className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={dutyFunction} onChange={event => setDutyFunction(event.target.value)} aria-label="Heutige Funktion"><option value="">Funktion auswählen</option>{functions.filter(item => item.active).map(item => <option key={item.code} value={item.code}>{item.label}</option>)}</select><div className="flex gap-2"><button type="button" disabled={!dutyFunction || saving} onClick={() => void save()} className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg">Speichern</button>{selected ? <button type="button" disabled={saving} onClick={() => void remove()} className="border border-gray-300 text-gray-700 text-sm px-3 py-2.5 rounded-lg">Entfernen</button> : null}</div></div>{selectedConfig?.is_patrol ? <select className="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={vehicleId} onChange={event => setVehicleId(event.target.value)} aria-label="Streifenfahrzeug"><option value="">Kein Fahrzeug zugewiesen</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.call_sign || vehicle.name}{vehicle.license_plate ? ` · ${vehicle.license_plate}` : ''}</option>)}</select> : null}{managing ? <div className="mt-4 border-t border-gray-200 pt-4"><div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2"><input className="border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Neuer Dienst" value={newLabel} onChange={event => setNewLabel(event.target.value)} /><label className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2"><input type="checkbox" checked={newPatrol} onChange={event => setNewPatrol(event.target.checked)} /> Streife</label><button type="button" onClick={() => void addFunction()} className="bg-gray-900 text-white text-sm font-medium px-3 py-2 rounded-lg">Anlegen</button></div><div className="flex flex-wrap gap-2 mt-3">{functions.map(item => <span key={item.code} className="inline-flex items-center gap-2 bg-gray-100 text-sm px-3 py-1.5 rounded-full">{item.label}{item.is_patrol ? ' · Streife' : ''}{item.code === 'zentrale' ? <span className="text-xs text-gray-500">Grunddienst</span> : <button type="button" onClick={() => void deleteFunction(item)} className="text-red-600" aria-label={`${item.label} löschen`}>×</button>}</span>)}</div></div> : null}{message ? <p className={`text-sm mt-3 ${message.includes('konnte nicht') ? 'text-red-700' : 'text-green-700'}`}>{message}</p> : null}</div></div></section>
+  return <>
+    <section className="rounded-2xl border border-red-200 bg-white p-4 sm:p-5 mb-6 shadow-sm"><div className="flex items-start gap-3"><div className="bg-red-50 p-2.5 rounded-xl"><UserRoundCheck className="w-5 h-5 text-red-700" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold text-gray-900">Heutige Funktion</h2><p className="text-sm text-gray-500 mt-0.5">{selected ? `${selectedConfig?.label ?? selected.function} · ${shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}` : 'Noch nicht ausgewählt – freiwillig für passende Informationen und Aufträge.'}</p></div><div className="flex flex-wrap items-center gap-2"><select className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs" value={shift} onChange={event => setShift(event.target.value as DutyShift)} aria-label="Schicht"><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select><button type="button" onClick={() => setPickerOpen(true)} className="text-sm font-semibold text-red-800 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full">{selected ? 'Wechseln' : 'Funktion wählen'}</button>{selected ? <button type="button" disabled={saving} onClick={() => void remove()} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienst beenden</button> : null}{canManage ? <button type="button" onClick={() => setManaging(value => !value)} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienste verwalten</button> : null}</div></div>{selectedConfig?.is_patrol ? <select className="mt-3 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={vehicleId} onChange={event => void setVehicle(event.target.value)} aria-label="Streifenfahrzeug"><option value="">Kein Fahrzeug zugewiesen</option>{vehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.call_sign || vehicle.name}{vehicle.license_plate ? ` · ${vehicle.license_plate}` : ''}</option>)}</select> : null}{managing ? <div className="mt-4 border-t border-gray-200 pt-4"><div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2"><input className="border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Neuer Dienst" value={newLabel} onChange={event => setNewLabel(event.target.value)} /><label className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2"><input type="checkbox" checked={newPatrol} onChange={event => setNewPatrol(event.target.checked)} /> Streife</label><button type="button" onClick={() => void addFunction()} className="bg-gray-900 text-white text-sm font-medium px-3 py-2 rounded-lg">Anlegen</button></div><div className="flex flex-wrap gap-2 mt-3">{functions.map(item => <span key={item.code} className="inline-flex items-center gap-2 bg-gray-100 text-sm px-3 py-1.5 rounded-full">{item.label}{item.is_patrol ? ' · Streife' : ''}{item.code === 'zentrale' ? <span className="text-xs text-gray-500">Grunddienst</span> : <button type="button" onClick={() => void deleteFunction(item)} className="text-red-600" aria-label={`${item.label} löschen`}>×</button>}</span>)}</div></div> : null}{message ? <p className={`text-sm mt-3 ${message.includes('konnte nicht') ? 'text-red-700' : 'text-green-700'}`}>{message}</p> : null}</div></div></section>
+    {pickerOpen ? <DutyPickerModal functions={functions.filter(item => item.active)} occupancy={occupancy} saving={saving} onChoose={code => void choose(code)} onNotOperational={notOperational} onClose={() => setPickerOpen(false)} /> : null}
+  </>
+}
+
+function DutyPickerModal({ functions, occupancy, saving, onChoose, onNotOperational, onClose }: { functions: DutyFunctionConfig[]; occupancy: (code: string) => { count: number; capacity: number | null }; saving: boolean; onChoose: (code: DutyFunction) => void; onNotOperational: () => void; onClose: () => void }) {
+  return <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4">
+    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 py-4 border-b">
+        <div><h2 className="font-bold text-gray-900">Welche Funktion hast du heute?</h2><p className="text-xs text-gray-500 mt-0.5">Freiwillige Auswahl – bereits besetzte Funktionen werden angezeigt, aber nicht blockiert.</p></div>
+        <button type="button" onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="px-5 py-4 space-y-2">
+        {functions.map(fn => {
+          const { count, capacity } = occupancy(fn.code)
+          return <button key={fn.code} type="button" disabled={saving} onClick={() => onChoose(fn.code)} className="w-full flex items-center justify-between gap-3 rounded-xl border border-gray-200 hover:border-red-300 hover:bg-red-50 px-4 py-3 text-left disabled:opacity-60">
+            <span className="font-medium text-gray-900">{fn.label}</span>
+            <span className="text-xs text-gray-500 whitespace-nowrap">{capacity !== null ? `${count} von ${capacity} Plätzen besetzt` : `${count} eingetragen`}</span>
+          </button>
+        })}
+        <button type="button" onClick={onNotOperational} className="w-full rounded-xl border border-dashed border-gray-300 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 mt-2">Heute nicht operativ</button>
+      </div>
+    </div>
+  </div>
 }
 
 export default function Portal() {
@@ -308,12 +370,18 @@ export default function Portal() {
       </div>
 
       {profile?.id && hasAreaAccess('zentrale') ? <TodayFunctionCard userId={profile.id} canManage={canManageDuties} /> : null}
+      {profile?.id && hasAreaAccess('zentrale') ? <div className="mb-6"><OwnerNotifications userId={profile.id} /></div> : null}
 
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (
           <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} />
         ) : null}
-        {OPERATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+        {hasAreaAccess('zentrale') ? (
+          <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck, Kontrollaufträge und RSa/RSb" icon={Shield} />
+        ) : null}
+        {hasAreaAccess('zentrale') ? (
+          <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße, RSa/RSb und Übergabe" icon={Building2} />
+        ) : null}
       </PortalSection>
 
       <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">

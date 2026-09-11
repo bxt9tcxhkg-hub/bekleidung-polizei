@@ -549,6 +549,74 @@ export interface EinsatzTrainingRegistration {
   session?: Pick<EinsatzTrainingSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
 }
 
+export type VehicleCheckStatus = 'ok' | 'mangel'
+
+export interface VehicleCheck {
+  id: string
+  vehicle_id: string
+  duty_date: string
+  shift: DutyShift
+  status: VehicleCheckStatus
+  note: string | null
+  checked_by: string
+  created_at: string | null
+  updated_at: string | null
+  fleet_vehicles?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign' | 'license_plate'>
+  checker?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+}
+
+export type MailDeliveryKind = 'rsa' | 'rsb'
+export type MailDeliveryStatus = 'offen' | 'zugestellt' | 'schriftlich_in_kenntnis' | 'nicht_angetroffen' | 'spaeter_erneut'
+
+export interface MailDelivery {
+  id: string
+  person_name: string
+  person_birth_date: string | null
+  kind: MailDeliveryKind
+  behoerden_aktenzahl: string | null
+  eigene_geschaeftszahl: string | null
+  status: MailDeliveryStatus
+  note: string | null
+  akteneigentuemer_id: string | null
+  last_action_by: string | null
+  last_action_at: string | null
+  owner_notified: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+  akteneigentuemer?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+}
+
+export interface InnendienstShiftTask {
+  id: string
+  user_id: string
+  duty_date: string
+  shift: DutyShift
+  kasse_confirmed_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type InnendienstRecordKind = 'bescheid_strassenmusik' | 'bescheid_strassenkunst' | 'verstoss'
+export type InnendienstRecordStatus = 'offen' | 'erledigt'
+
+export interface InnendienstRecord {
+  id: string
+  kind: InnendienstRecordKind
+  reference: string | null
+  subject: string
+  note: string | null
+  status: InnendienstRecordStatus
+  issued_date: string
+  /** Nur bei kind='verstoss': der Bescheid (Straßenmusik/-kunst), gegen dessen Auflagen verstoßen wurde. Pflichtfeld für Verstöße. */
+  related_bescheid_id: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 export type SupportTicketKind = 'help' | 'improvement' | 'idea'
 export type SupportTicketTopic = 'general' | 'bekleidung' | 'einsatz_mt' | 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
@@ -609,6 +677,10 @@ type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, never>
 type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
+type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
+type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer'>
+type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -748,6 +820,21 @@ export type Database = {
       operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_name' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_name' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'operational_person_notes_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      vehicle_checks: { Row: VehicleCheckRow; Insert: Pick<VehicleCheckRow, 'vehicle_id' | 'checked_by'> & Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'vehicle_id'>>; Relationships: [
+        { foreignKeyName: 'vehicle_checks_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'vehicle_checks_checked_by_fkey'; columns: ['checked_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      mail_deliveries: { Row: MailDeliveryRow; Insert: Pick<MailDeliveryRow, 'person_name' | 'kind' | 'created_by'> & Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'updated_at' | 'person_name' | 'kind' | 'created_by'>>; Update: Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'mail_deliveries_akteneigentuemer_id_fkey'; columns: ['akteneigentuemer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'mail_deliveries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      innendienst_shift_tasks: { Row: InnendienstShiftTaskRow; Insert: Pick<InnendienstShiftTaskRow, 'user_id'> & Partial<Omit<InnendienstShiftTaskRow, 'id' | 'created_at' | 'updated_at' | 'user_id'>>; Update: Partial<Omit<InnendienstShiftTaskRow, 'id' | 'created_at' | 'user_id'>>; Relationships: [
+        { foreignKeyName: 'innendienst_shift_tasks_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      innendienst_records: { Row: InnendienstRecordRow; Insert: Pick<InnendienstRecordRow, 'kind' | 'subject' | 'created_by'> & Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'updated_at' | 'kind' | 'subject' | 'created_by'>>; Update: Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'innendienst_records_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'innendienst_records_related_bescheid_id_fkey'; columns: ['related_bescheid_id']; isOneToOne: false; referencedRelation: 'innendienst_records'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -778,6 +865,7 @@ export type Database = {
       review_personal_einsatzmittel_request: { Args: { p_request_id: string; p_approved: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_einsatztraining: { Args: { p_session_id: string }; Returns: boolean }
       lookup_login_email: { Args: { p_username: string }; Returns: string | null }
+      record_mail_delivery_action: { Args: { p_id: string; p_status: string }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
