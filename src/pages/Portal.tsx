@@ -263,7 +263,10 @@ function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: b
     setMessage(`${config?.label ?? DEFAULT_DUTY_LABEL[code] ?? code} wurde für heute eingetragen.`)
     setPickerOpen(false)
     await load()
+    // Nach der Auswahl direkt ins passende Dienstcockpit.
     if (code === 'zentrale') navigate('/zentrale')
+    else if (code === 'innendienst') navigate('/innendienst')
+    else if (config?.is_patrol || code === 'jd' || code === 'vd') navigate('/aussendienst')
   }
   function notOperational() { dismissDutyPromptToday(userId); setPickerOpen(false) }
   async function remove() {
