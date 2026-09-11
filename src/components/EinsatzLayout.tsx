@@ -27,6 +27,7 @@ export default function EinsatzLayout() {
   const {
     profile,
     isStrictAdmin,
+    isGenehmiger,
     areaRoles,
     mustChangePassword,
     mustSetUsername,
@@ -34,7 +35,7 @@ export default function EinsatzLayout() {
   } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
 
   return (
     <div className="flex h-screen bg-gray-50">

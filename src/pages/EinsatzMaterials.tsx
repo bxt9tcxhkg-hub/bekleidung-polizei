@@ -17,13 +17,13 @@ const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
 }
 
 export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMaterialArea }) {
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const [area, setArea] = useState<EinsatzMaterialArea>(fixedArea ?? 'einsatzmittel')
   const activeArea = fixedArea ?? area
   const schulungenRoles = areaRoles?.find(row => row.area === 'schulungen')?.roles ?? []
   const canManage = activeArea === 'schulungen'
-    ? isStrictAdmin || schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')
-    : canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+    ? isStrictAdmin || isGenehmiger || schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')
+    : canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const [tabs, setTabs] = useState<EinsatzMaterialTab[]>([])
   const [materials, setMaterials] = useState<EinsatzMaterial[]>([])
   const [activeTabId, setActiveTabId] = useState('')

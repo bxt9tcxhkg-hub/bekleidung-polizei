@@ -173,13 +173,16 @@ export function rolesForArea(
 
 /**
  * @param rows `null` = Tabelle nicht lesbar (Migration fehlt). Sonst geladene Zeilen.
+ * @param isGenehmiger Genehmiger ist bereichsübergreifende Aufsicht: wie Admin
+ *   sieht/betritt er jeden Bereich, auch ohne eigene portal_area_roles-Zeile.
  */
 export function hasAreaEntitlement(input: {
   area: PortalArea
   isStrictAdmin: boolean
+  isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
 }): boolean {
-  if (input.isStrictAdmin) return true
+  if (input.isStrictAdmin || input.isGenehmiger) return true
   if (input.rows === null) return input.area === 'bekleidung'
   const roles = rolesForArea(input.rows, input.area)
   return roles.length > 0
@@ -189,6 +192,7 @@ export function visiblePortalApps(
   apps: readonly PortalApp[],
   entitlement: {
     isStrictAdmin: boolean
+    isGenehmiger?: boolean
     rows: readonly { area: string; roles: string[] }[] | null
   },
 ): PortalApp[] {

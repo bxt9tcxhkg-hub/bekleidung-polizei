@@ -37,9 +37,9 @@ function normalizePhone(value: string | null | undefined) { return (value ?? '')
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
 
 export default function Zentrale() {
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht')
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])

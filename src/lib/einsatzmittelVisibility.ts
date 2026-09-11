@@ -17,6 +17,7 @@ export const EM_SUB_TABS: { id: EmSubTab; label: string }[] = [
 
 export function canViewLagerbestand(input: {
   isStrictAdmin: boolean
+  isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
 }): boolean {
   return canManagePersonalEinsatzmittel(input)

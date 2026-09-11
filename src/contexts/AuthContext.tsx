@@ -182,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const hasAreaAccess = (area: PortalArea) =>
-    hasAreaEntitlement({ area, isStrictAdmin, rows: areaRoles })
+    hasAreaEntitlement({ area, isStrictAdmin, isGenehmiger, rows: areaRoles })
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, mustChangePassword, mustSetUsername, availableRoles, authError, areaRoles, hasAreaAccess, refreshProfile, signOut }}>

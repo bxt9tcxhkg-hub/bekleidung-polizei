@@ -9,9 +9,9 @@ import type { FleetVehicle, FleetVehicleKind, Profile } from '../lib/types'
 const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 export default function Fleet() {
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []
-  const canManage = isStrictAdmin || roles.includes('sachbearbeiter') || roles.includes('admin')
+  const canManage = isStrictAdmin || isGenehmiger || roles.includes('sachbearbeiter') || roles.includes('admin')
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
   const [employees, setEmployees] = useState<Pick<Profile, 'id' | 'name' | 'dienstnummer'>[]>([])
   const [defectVehicleIds, setDefectVehicleIds] = useState<string[]>([])

@@ -135,6 +135,16 @@ describe('hasAreaEntitlement / visiblePortalApps', () => {
     expect(hasAreaEntitlement({ area: 'schulungen', isStrictAdmin: true, rows: [] })).toBe(true)
   })
 
+  it('gibt Genehmiger bereichsübergreifend Zugriff, auch ohne eigene Bereichszeile', () => {
+    expect(hasAreaEntitlement({ area: 'einsatz_mt', isStrictAdmin: false, isGenehmiger: true, rows: [] })).toBe(true)
+    expect(hasAreaEntitlement({ area: 'fuhrpark', isStrictAdmin: false, isGenehmiger: true, rows: null })).toBe(true)
+    expect(visiblePortalApps(apps, { isStrictAdmin: false, isGenehmiger: true, rows: [] }).map(a => a.id)).toEqual([
+      'bekleidung',
+      'einsatz_mt',
+    ])
+    expect(hasAreaEntitlement({ area: 'zentrale', isStrictAdmin: false, isGenehmiger: false, rows: [] })).toBe(false)
+  })
+
   it('blendet Einsatz ohne Zeile aus, Bekleidung nur mit Zeile', () => {
     const rows = [{ area: 'bekleidung', roles: ['user'] }]
     expect(hasAreaEntitlement({ area: 'bekleidung', isStrictAdmin: false, rows })).toBe(true)
