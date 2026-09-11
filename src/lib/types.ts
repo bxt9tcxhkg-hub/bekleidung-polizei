@@ -377,7 +377,7 @@ export interface EinsatzTrainingAttendance {
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 }
 
-export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining' | 'schulungen'
+export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining' | 'schulungen' | 'fuhrpark'
 
 export interface EinsatzMaterialTab {
   id: string
@@ -426,6 +426,69 @@ export interface FleetVehicle {
   created_at: string
   updated_at: string
   responsible_profile?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+}
+
+export interface FleetEquipmentItem {
+  id: string
+  vehicle_id: string
+  name: string
+  soll_menge: number
+  unit: string
+  sort_order: number
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type FleetEquipmentStatusValue = 'vollstaendig' | 'fehlend' | 'beschaedigt' | 'abgelaufen'
+
+/** Aktueller Ist-Zustand je Position; fehlt die Zeile, gilt die Position als ungeprüft. */
+export interface FleetEquipmentStatus {
+  item_id: string
+  vehicle_id: string
+  ist_menge: number | null
+  status: FleetEquipmentStatusValue
+  note: string | null
+  checked_by: string
+  checked_at: string
+  updated_at: string
+  checker?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+}
+
+export type FleetCareTaskKind = 'innenreinigung' | 'aussenreinigung' | 'pflege' | 'sonstiges'
+export type FleetTaskStatus = 'offen' | 'erledigt'
+
+export interface FleetCareTask {
+  id: string
+  vehicle_id: string
+  kind: FleetCareTaskKind
+  subject: string
+  note: string | null
+  status: FleetTaskStatus
+  created_by: string
+  created_at: string
+  resolved_by: string | null
+  resolved_at: string | null
+  updated_at: string
+}
+
+export type FleetAppointmentCategory = 'werkstatt' | 'frist'
+export type FleetAppointmentStatus = 'offen' | 'erledigt' | 'storniert'
+
+export interface FleetAppointment {
+  id: string
+  vehicle_id: string
+  category: FleetAppointmentCategory
+  subject: string
+  due_date: string | null
+  note: string | null
+  status: FleetAppointmentStatus
+  created_by: string
+  created_at: string
+  resolved_by: string | null
+  resolved_at: string | null
+  updated_at: string
 }
 
 export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'verbot' | 'fahndung' | 'brief' | 'schluessel' | 'kontakt' | 'alarmierung' | 'uebergabe' | 'unterlage'
@@ -686,6 +749,10 @@ type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer
 type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, 'responsible_profile'>
+type FleetEquipmentItemRow = Omit<FleetEquipmentItem, never>
+type FleetEquipmentStatusRow = Omit<FleetEquipmentStatus, 'checker'>
+type FleetCareTaskRow = Omit<FleetCareTask, never>
+type FleetAppointmentRow = Omit<FleetAppointment, never>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
@@ -820,6 +887,19 @@ export type Database = {
         { foreignKeyName: 'fleet_vehicles_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'fleet_vehicles_responsible_user_id_fkey'; columns: ['responsible_user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      fleet_equipment_items: { Row: FleetEquipmentItemRow; Insert: Pick<FleetEquipmentItemRow, 'vehicle_id' | 'name'> & Partial<Omit<FleetEquipmentItemRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'name'>>; Update: Partial<Omit<FleetEquipmentItemRow, 'id' | 'created_at' | 'vehicle_id'>>; Relationships: [
+        { foreignKeyName: 'fleet_equipment_items_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
+      fleet_equipment_status: { Row: FleetEquipmentStatusRow; Insert: Pick<FleetEquipmentStatusRow, 'item_id' | 'vehicle_id' | 'checked_by'> & Partial<Omit<FleetEquipmentStatusRow, 'item_id' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<FleetEquipmentStatusRow, 'item_id' | 'vehicle_id'>>; Relationships: [
+        { foreignKeyName: 'fleet_equipment_status_item_id_fkey'; columns: ['item_id']; isOneToOne: true; referencedRelation: 'fleet_equipment_items'; referencedColumns: ['id'] },
+        { foreignKeyName: 'fleet_equipment_status_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
+      fleet_care_tasks: { Row: FleetCareTaskRow; Insert: Pick<FleetCareTaskRow, 'vehicle_id' | 'subject' | 'created_by'> & Partial<Omit<FleetCareTaskRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'subject' | 'created_by'>>; Update: Partial<Omit<FleetCareTaskRow, 'id' | 'created_at' | 'vehicle_id' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'fleet_care_tasks_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
+      fleet_appointments: { Row: FleetAppointmentRow; Insert: Pick<FleetAppointmentRow, 'vehicle_id' | 'category' | 'subject' | 'created_by'> & Partial<Omit<FleetAppointmentRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'category' | 'subject' | 'created_by'>>; Update: Partial<Omit<FleetAppointmentRow, 'id' | 'created_at' | 'vehicle_id' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'fleet_appointments_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
       zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
@@ -862,6 +942,7 @@ export type Database = {
       save_portal_profile_v4: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null; p_zentrale_roles: string[] | null }; Returns: undefined }
       can_manage_schulungen: { Args: Record<string, never>; Returns: boolean }
       can_manage_fuhrpark: { Args: Record<string, never>; Returns: boolean }
+      is_vehicle_responsible: { Args: { p_vehicle_id: string }; Returns: boolean }
       can_manage_zentrale: { Args: Record<string, never>; Returns: boolean }
       is_zentralist_on_duty: { Args: Record<string, never>; Returns: boolean }
       remove_training_attendance: { Args: { p_attendance_id: string }; Returns: undefined }

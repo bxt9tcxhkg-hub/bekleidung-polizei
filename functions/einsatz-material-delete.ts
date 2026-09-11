@@ -23,7 +23,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   if (rows.length !== 1) return new Response(JSON.stringify({ error: 'Unterlage wurde nicht gefunden oder ist bereits gelöscht.' }), { status: 404 })
 
   const key = rows[0].file_key
-  if (key?.startsWith('einsatz-unterlagen/') || key?.startsWith('schulungs-unterlagen/')) {
+  if (key?.startsWith('einsatz-unterlagen/') || key?.startsWith('schulungs-unterlagen/') || key?.startsWith('fuhrpark-unterlagen/')) {
     try { await env.BEKLEIDUNG.delete(key) } catch { /* Orphaned object is inaccessible and can be cleaned up later. */ }
   }
   return new Response(JSON.stringify({ deleted: true }), { headers: { 'Content-Type': 'application/json' } })

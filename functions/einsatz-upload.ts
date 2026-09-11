@@ -1,4 +1,4 @@
-import { canManageEinsatz, canManageSchulungen, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { canManageEinsatz, canManageFuhrpark, canManageSchulungen, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 import { countUploadBytes, uploadSize } from './_upload'
 
 interface Env extends AuthEnv {
@@ -19,12 +19,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
   const area = context.request.headers.get('X-Material-Area') ?? ''
-  if (!['einsatzmittel', 'einsatztraining', 'schulungen'].includes(area)) {
+  if (!['einsatzmittel', 'einsatztraining', 'schulungen', 'fuhrpark'].includes(area)) {
     return new Response(JSON.stringify({ error: 'Ungültiger Unterlagenbereich.' }), { status: 400 })
   }
   const canManage = area === 'schulungen'
     ? await canManageSchulungen(context.request, context.env)
-    : await canManageEinsatz(context.request, context.env)
+    : area === 'fuhrpark'
+      ? await canManageFuhrpark(context.request, context.env)
+      : await canManageEinsatz(context.request, context.env)
   if (!canManage) {
     return new Response(JSON.stringify({ error: 'Nur Sachbearbeiter oder Admins dürfen Unterlagen hochladen.' }), {
       status: 403,
@@ -52,7 +54,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 
   const extension = (fileName.split('.').pop() ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
-  const folder = area === 'schulungen' ? 'schulungs-unterlagen' : 'einsatz-unterlagen'
+  const folder = area === 'schulungen' ? 'schulungs-unterlagen' : area === 'fuhrpark' ? 'fuhrpark-unterlagen' : 'einsatz-unterlagen'
   const key = `${folder}/${crypto.randomUUID()}.${extension}`
   // R2 requires a stream with known length. FixedLengthStream also rejects truncation.
   const fixed = new FixedLengthStream(contentLength)
