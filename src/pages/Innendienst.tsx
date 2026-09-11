@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
-import { Link, Navigate } from 'react-router-dom'
-import PortalChrome from '../components/PortalChrome'
+import { BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
 import MailDeliveries, { OwnerNotifications } from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -152,8 +151,7 @@ export default function Innendienst() {
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
-  return <PortalChrome wide>
-    <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-5"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
+  return <div>
     <div className="flex flex-wrap items-start justify-between gap-3 mb-5"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Innendienst</h1><p className="text-sm text-gray-500 mt-1">Unterstützung bei der täglichen Dienstabwicklung – als Ergänzung zum Aktenprogramm.</p></div><select className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={shift} onChange={event => setShift(event.target.value as 'tag' | 'nacht')} aria-label="Schicht"><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select></div>
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : null}
@@ -213,7 +211,7 @@ export default function Innendienst() {
         <div className="flex justify-between gap-3 pt-2"><button type="button" onClick={() => setKasseStep('revenue')} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Zurück</button><button type="button" disabled={saving} onClick={() => void saveKasse()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Abrechnung bestätigen'}</button></div>
       </>}
     </div></div></div> : null}
-  </PortalChrome>
+  </div>
 }
 
 function Stat({ icon: Icon, label, value }: { icon: typeof Music; label: string; value: number }) { return <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5"><Icon className="w-4 h-4 text-gray-400 mb-1" /><p className="text-xs text-gray-500">{label}</p><p className="text-lg font-bold text-gray-900">{value}</p></div> }

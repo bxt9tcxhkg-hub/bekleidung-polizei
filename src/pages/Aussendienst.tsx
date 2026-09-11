@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, BookOpen, Car, CheckCircle2, ClipboardList, Mail, Radio, ShieldAlert, UsersRound } from 'lucide-react'
+import { AlertTriangle, BookOpen, Car, CheckCircle2, ClipboardList, Mail, Radio, ShieldAlert, UsersRound } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
-import PortalChrome from '../components/PortalChrome'
 import MailDeliveries from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -88,8 +87,7 @@ export default function Aussendienst() {
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
-  return <PortalChrome wide>
-    <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-5"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
+  return <div>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Außendienst / Streife</h1><p className="text-sm text-gray-500 mt-1">Tagesaktuelle Aufträge und Hilfsmittel – als Ergänzung zum Aktenprogramm.</p></div>
     {error ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : null}
@@ -119,7 +117,7 @@ export default function Aussendienst() {
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
     {!loading && activeTab === 'kontrollbehelfe' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'unterlage')} /> : null}
     {!loading && activeTab === 'fahrzeug' ? (ownVehicle ? <div className="rounded-2xl border border-gray-200 bg-white p-5"><h2 className="font-bold text-gray-900">{ownVehicle.name}</h2><dl className="text-sm mt-3 space-y-1.5"><div className="flex justify-between"><dt className="text-gray-500">Rufname</dt><dd className="font-medium">{ownVehicle.call_sign || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium">{ownVehicle.license_plate || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Marke/Modell</dt><dd className="font-medium">{[ownVehicle.make, ownVehicle.model].filter(Boolean).join(' ') || '–'}</dd></div></dl><Link to={`/fuhrpark/${ownVehicle.id}`} className="inline-block mt-4 text-sm font-semibold text-blue-700">Fahrzeugdetails im Fuhrpark →</Link></div> : <Empty text="Kein Fahrzeug zugewiesen." />) : null}
-  </PortalChrome>
+  </div>
 }
 
 function EntryOrIncidentList({ kind, entries, incidents }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: { id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[] }) {

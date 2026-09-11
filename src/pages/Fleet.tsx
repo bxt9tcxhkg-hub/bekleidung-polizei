@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Bike, Car, ChevronRight, Plus, X } from 'lucide-react'
+import { Bike, Car, ChevronRight, Plus, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
-import PortalChrome from '../components/PortalChrome'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
@@ -75,8 +74,7 @@ export default function Fleet() {
   }
 
   return (
-    <PortalChrome wide>
-      <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-6"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
+    <div>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div><h1 className="text-2xl font-bold text-gray-900">Fuhrpark &amp; Fahrzeuge</h1><p className="text-gray-500 text-sm mt-1">Dienstfahrzeuge auswählen und fahrzeugbezogen verwalten.</p></div>
         {canManage ? <button type="button" onClick={openForm} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Fahrzeug anlegen</button> : null}
@@ -96,6 +94,6 @@ export default function Fleet() {
         <label className="block text-xs font-medium text-gray-600">Fahrzeugverantwortlicher Mitarbeiter<select className={inputClass} value={responsibleUserId} onChange={event => setResponsibleUserId(event.target.value)}><option value="">Noch nicht zugewiesen</option>{employees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}{employee.dienstnummer ? ` · DN ${employee.dienstnummer}` : ''}</option>)}</select></label>
         {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
       </div><div className="flex gap-3 px-5 sm:px-6 py-4 border-t"><button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-gray-300 text-gray-700 text-sm font-medium py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving} onClick={() => { void saveVehicle() }} className="flex-1 bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Anlegen'}</button></div></div></div> : null}
-    </PortalChrome>
+    </div>
   )
 }
