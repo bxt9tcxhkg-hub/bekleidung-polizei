@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Bike, BookOpen, Car, ChevronRight, Plus, X } from 'lucide-react'
+import { ArrowLeft, Bike, Car, ChevronRight, Plus, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
 import { useAuth } from '../contexts/AuthContext'
@@ -79,7 +79,7 @@ export default function Fleet() {
       <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-6"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div><h1 className="text-2xl font-bold text-gray-900">Fuhrpark &amp; Fahrzeuge</h1><p className="text-gray-500 text-sm mt-1">Dienstfahrzeuge auswählen und fahrzeugbezogen verwalten.</p></div>
-        <div className="flex gap-2"><Link to="/fuhrpark/unterlagen" className="inline-flex items-center justify-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-50"><BookOpen className="w-4 h-4" /> Unterlagen</Link>{canManage ? <button type="button" onClick={openForm} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Fahrzeug anlegen</button> : null}</div>
+        {canManage ? <button type="button" onClick={openForm} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Fahrzeug anlegen</button> : null}
       </div>
       {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
       {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : vehicles.length === 0 ? (

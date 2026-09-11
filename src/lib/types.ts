@@ -377,7 +377,7 @@ export interface EinsatzTrainingAttendance {
   officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 }
 
-export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining' | 'schulungen' | 'fuhrpark'
+export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining' | 'schulungen'
 
 export interface EinsatzMaterialTab {
   id: string
@@ -489,6 +489,20 @@ export interface FleetAppointment {
   resolved_by: string | null
   resolved_at: string | null
   updated_at: string
+}
+
+/** Fahrzeuggebundene Dokumente (Zulassung, Serviceheft, ...). */
+export interface FleetDocument {
+  id: string
+  vehicle_id: string
+  title: string
+  file_key: string
+  file_name: string | null
+  mime_type: string | null
+  file_size: number | null
+  uploaded_by: string | null
+  created_at: string
+  uploader?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
 }
 
 export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'verbot' | 'fahndung' | 'brief' | 'schluessel' | 'kontakt' | 'alarmierung' | 'uebergabe' | 'unterlage'
@@ -753,6 +767,7 @@ type FleetEquipmentItemRow = Omit<FleetEquipmentItem, never>
 type FleetEquipmentStatusRow = Omit<FleetEquipmentStatus, 'checker'>
 type FleetCareTaskRow = Omit<FleetCareTask, never>
 type FleetAppointmentRow = Omit<FleetAppointment, never>
+type FleetDocumentRow = Omit<FleetDocument, 'uploader'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
@@ -899,6 +914,10 @@ export type Database = {
       ] }
       fleet_appointments: { Row: FleetAppointmentRow; Insert: Pick<FleetAppointmentRow, 'vehicle_id' | 'category' | 'subject' | 'created_by'> & Partial<Omit<FleetAppointmentRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'category' | 'subject' | 'created_by'>>; Update: Partial<Omit<FleetAppointmentRow, 'id' | 'created_at' | 'vehicle_id' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'fleet_appointments_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
+      fleet_documents: { Row: FleetDocumentRow; Insert: Pick<FleetDocumentRow, 'vehicle_id' | 'title' | 'file_key'> & Partial<Omit<FleetDocumentRow, 'id' | 'created_at' | 'vehicle_id' | 'title' | 'file_key'>>; Update: Partial<Pick<FleetDocumentRow, 'title'>>; Relationships: [
+        { foreignKeyName: 'fleet_documents_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'fleet_documents_uploaded_by_fkey'; columns: ['uploaded_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

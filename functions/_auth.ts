@@ -83,6 +83,42 @@ export async function canReadEinsatzMaterial(request: Request, env: AuthEnv, key
   }
 }
 
+/** Fahrzeuggebundene Dokumente: Leserecht folgt RLS auf fleet_documents (has_portal_area_access('fuhrpark')). */
+export async function canReadFleetDocument(request: Request, env: AuthEnv, key: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  const encodedKey = encodeURIComponent(key)
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/fleet_documents?select=id&file_key=eq.${encodedKey}&limit=1`, { headers })
+    if (!response.ok) return false
+    const rows = await response.json() as { id: string }[]
+    return rows.length > 0
+  } catch {
+    return false
+  }
+}
+
+/** Anlegen/Löschen von Fahrzeugdokumenten: Fuhrpark-Verwaltung oder Fahrzeugverantwortliche/r. */
+export async function canManageFleetVehicle(request: Request, env: AuthEnv, vehicleId: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const [managerResponse, responsibleResponse] = await Promise.all([
+      fetch(`${env.SUPABASE_URL}/rest/v1/rpc/can_manage_fuhrpark`, { method: 'POST', headers, body: '{}' }),
+      fetch(`${env.SUPABASE_URL}/rest/v1/rpc/is_vehicle_responsible`, { method: 'POST', headers, body: JSON.stringify({ p_vehicle_id: vehicleId }) }),
+    ])
+    const [isManager, isResponsible] = await Promise.all([
+      managerResponse.ok ? managerResponse.json() : false,
+      responsibleResponse.ok ? responsibleResponse.json() : false,
+    ])
+    return isManager === true || isResponsible === true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Liest den Access-Token aus dem Authorization-Header (Bearer)
  * und prüft ihn gegen Supabase Auth. Query-Parameter werden nicht akzeptiert.
@@ -116,8 +152,11 @@ export async function isAuthenticated(request: Request, env: AuthEnv): Promise<b
 
 /** Concrete object authorization uses the caller's database RLS. Unknown folders fail closed. */
 export async function canReadFile(request: Request, env: AuthEnv, key: string): Promise<boolean> {
-  if (key.startsWith('einsatz-unterlagen/') || key.startsWith('schulungs-unterlagen/') || key.startsWith('fuhrpark-unterlagen/')) {
+  if (key.startsWith('einsatz-unterlagen/') || key.startsWith('schulungs-unterlagen/')) {
     return canReadEinsatzMaterial(request, env, key)
+  }
+  if (key.startsWith('fuhrpark-dokumente/')) {
+    return canReadFleetDocument(request, env, key)
   }
   const headers = bearerHeaders(request, env)
   if (!headers || !env.SUPABASE_URL || !key.startsWith('vorrechnungen/')) return false

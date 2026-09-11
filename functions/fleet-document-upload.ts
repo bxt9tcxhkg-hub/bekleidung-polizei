@@ -1,4 +1,4 @@
-import { canManageEinsatz, canManageSchulungen, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { canManageFleetVehicle, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 import { countUploadBytes, uploadSize } from './_upload'
 
 interface Env extends AuthEnv {
@@ -9,24 +9,22 @@ const ALLOWED_TYPES = new Set([
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'image/jpeg',
   'image/png',
 ])
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
-  const area = context.request.headers.get('X-Material-Area') ?? ''
-  if (!['einsatzmittel', 'einsatztraining', 'schulungen'].includes(area)) {
-    return new Response(JSON.stringify({ error: 'Ungültiger Unterlagenbereich.' }), { status: 400 })
+
+  const vehicleId = context.request.headers.get('X-Vehicle-Id') ?? ''
+  if (!UUID.test(vehicleId)) {
+    return new Response(JSON.stringify({ error: 'Ungültiges Fahrzeug.' }), { status: 400 })
   }
-  const canManage = area === 'schulungen'
-    ? await canManageSchulungen(context.request, context.env)
-    : await canManageEinsatz(context.request, context.env)
-  if (!canManage) {
-    return new Response(JSON.stringify({ error: 'Nur Sachbearbeiter oder Admins dürfen Unterlagen hochladen.' }), {
+  if (!(await canManageFleetVehicle(context.request, context.env, vehicleId))) {
+    return new Response(JSON.stringify({ error: 'Nur die Fuhrpark-Verwaltung oder der/die Fahrzeugverantwortliche dürfen Dokumente hochladen.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
     })
@@ -52,8 +50,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 
   const extension = (fileName.split('.').pop() ?? '').replace(/[^A-Za-z0-9]/g, '').slice(0, 10)
-  const folder = area === 'schulungen' ? 'schulungs-unterlagen' : 'einsatz-unterlagen'
-  const key = `${folder}/${crypto.randomUUID()}.${extension}`
+  const key = `fuhrpark-dokumente/${crypto.randomUUID()}.${extension}`
   // R2 requires a stream with known length. FixedLengthStream also rejects truncation.
   const fixed = new FixedLengthStream(contentLength)
   try {
@@ -65,7 +62,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ error: 'Upload fehlgeschlagen oder Datei unvollständig.' }), { status: 400 })
   }
 
-  return new Response(JSON.stringify({ key, name: fileName }), {
+  return new Response(JSON.stringify({ key, name: fileName, size: contentLength, type: contentType }), {
     headers: { 'Content-Type': 'application/json' },
   })
 }
