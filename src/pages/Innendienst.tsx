@@ -5,7 +5,21 @@ import PortalChrome from '../components/PortalChrome'
 import MailDeliveries, { OwnerNotifications } from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import type { InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../lib/types'
+import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../lib/types'
+
+// Euro-Stückelungen in Cent (Ganzzahlen statt Fließkomma, um Rundungsfehler zu vermeiden).
+const DENOMINATIONS: { cents: number; label: string }[] = [
+  { cents: 50000, label: '500 €' }, { cents: 20000, label: '200 €' }, { cents: 10000, label: '100 €' },
+  { cents: 5000, label: '50 €' }, { cents: 2000, label: '20 €' }, { cents: 1000, label: '10 €' }, { cents: 500, label: '5 €' },
+  { cents: 200, label: '2 €' }, { cents: 100, label: '1 €' },
+  { cents: 50, label: '50 Cent' }, { cents: 20, label: '20 Cent' }, { cents: 10, label: '10 Cent' },
+  { cents: 5, label: '5 Cent' }, { cents: 2, label: '2 Cent' }, { cents: 1, label: '1 Cent' },
+]
+const EURO_FORMAT = new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' })
+function formatEuro(value: number) { return EURO_FORMAT.format(value) }
+function countedTotalCents(denominations: CashDenominations) {
+  return DENOMINATIONS.reduce((sum, item) => sum + item.cents * (denominations[String(item.cents)] ?? 0), 0)
+}
 
 type TabId = 'bescheide' | 'rsa_rsb' | 'unterlagen' | 'uebergabe'
 const TABS: { id: TabId; label: string; icon: typeof BookOpen }[] = [
@@ -33,6 +47,9 @@ export default function Innendienst() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ kind: 'bescheid_strassenmusik' as InnendienstRecordKind, subject: '', reference: '', note: '', relatedBescheidId: '' })
   const [openRsaRsbCount, setOpenRsaRsbCount] = useState(0)
+  const [kasseStep, setKasseStep] = useState<'revenue' | 'count' | null>(null)
+  const [expectedRevenueInput, setExpectedRevenueInput] = useState('')
+  const [denomInputs, setDenomInputs] = useState<Record<string, string>>({})
 
   const userId = profile?.id
   const load = useCallback(async () => {
@@ -70,15 +87,39 @@ export default function Innendienst() {
   const openViolations = useMemo(() => records.filter(item => item.kind === 'verstoss' && item.status === 'offen'), [records])
   const handovers = useMemo(() => entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt'), [entries])
 
-  async function confirmKasse() {
+  function openKasseWizard() {
+    setExpectedRevenueInput(ownTask?.expected_revenue != null ? String(ownTask.expected_revenue) : '')
+    const denoms = ownTask?.cash_denominations ?? {}
+    setDenomInputs(Object.fromEntries(DENOMINATIONS.map(item => [String(item.cents), denoms[String(item.cents)] ? String(denoms[String(item.cents)]) : ''])))
+    setKasseStep('revenue')
+    setError('')
+  }
+  function closeKasseWizard() { setKasseStep(null) }
+  function continueToCount() {
+    const parsed = Number(expectedRevenueInput.replace(',', '.'))
+    if (expectedRevenueInput.trim() === '' || Number.isNaN(parsed) || parsed < 0) { setError('Bitte den erwarteten Erlös laut Kasse als Zahl eingeben.'); return }
+    setError('')
+    setKasseStep('count')
+  }
+  const denomCountsParsed: CashDenominations = useMemo(() => Object.fromEntries(Object.entries(denomInputs).map(([cents, value]) => [cents, Number(value) || 0])), [denomInputs])
+  const countedCents = useMemo(() => countedTotalCents(denomCountsParsed), [denomCountsParsed])
+  const expectedRevenueParsed = Number(expectedRevenueInput.replace(',', '.')) || 0
+  const expectedTotalCents = Math.round((ownTask?.float_amount ?? 500) * 100) + Math.round(expectedRevenueParsed * 100)
+  const differenceCents = countedCents - expectedTotalCents
+
+  async function saveKasse() {
     if (!profile?.id) return
     setSaving(true)
     const { error: upsertError } = await supabase.from('innendienst_shift_tasks').upsert(
-      { user_id: profile.id, duty_date: today, shift, kasse_confirmed_at: new Date().toISOString() },
+      {
+        user_id: profile.id, duty_date: today, shift, kasse_confirmed_at: new Date().toISOString(),
+        expected_revenue: expectedRevenueParsed, cash_denominations: denomCountsParsed, counted_total: countedCents / 100,
+      },
       { onConflict: 'user_id,duty_date,shift' },
     )
     setSaving(false)
     if (upsertError) { setError('Die Bestätigung konnte nicht gespeichert werden.'); return }
+    setKasseStep(null)
     await load()
   }
 
@@ -118,7 +159,12 @@ export default function Innendienst() {
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-700" /></div> : null}
 
     {!loading ? <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Coins className="w-4 h-4 text-red-700" /> Kasse bei Schichtbeginn</h2>{ownTask?.kasse_confirmed_at ? <div className="mt-2 rounded-xl bg-green-50 border border-green-200 text-green-800 px-4 py-3 flex items-center gap-2 text-sm"><CheckCircle2 className="w-4 h-4" /> Abgerechnet um {new Date(ownTask.kasse_confirmed_at).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div> : <div className="mt-2"><p className="text-sm text-gray-500 mb-2">Noch nicht bestätigt.</p><button type="button" disabled={saving} onClick={() => void confirmKasse()} className="bg-red-700 hover:bg-red-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Kasse abgerechnet – bestätigen</button></div>}</section>
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Coins className="w-4 h-4 text-red-700" /> Kassenabrechnung</h2><p className="text-xs text-gray-500 mt-0.5">Grundbestand {formatEuro(ownTask?.float_amount ?? 500)} · erst Erlös laut Kasse, dann Stückelungen zählen.</p>
+        {ownTask?.kasse_confirmed_at ? <div className="mt-2 space-y-1.5"><div className="rounded-xl bg-green-50 border border-green-200 text-green-800 px-4 py-3 flex items-center gap-2 text-sm"><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Abgerechnet um {new Date(ownTask.kasse_confirmed_at).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
+          <dl className="text-sm grid grid-cols-2 gap-x-3 gap-y-1 px-1"><dt className="text-gray-500">Erlös lt. Kasse</dt><dd className="text-right font-medium">{formatEuro(ownTask.expected_revenue ?? 0)}</dd><dt className="text-gray-500">Gezählt</dt><dd className="text-right font-medium">{formatEuro(ownTask.counted_total ?? 0)}</dd><dt className="text-gray-500">Differenz</dt><dd className={`text-right font-bold ${Math.round(((ownTask.counted_total ?? 0) - (ownTask.float_amount ?? 500) - (ownTask.expected_revenue ?? 0)) * 100) === 0 ? 'text-green-700' : 'text-red-700'}`}>{formatEuro((ownTask.counted_total ?? 0) - (ownTask.float_amount ?? 500) - (ownTask.expected_revenue ?? 0))}</dd></dl>
+          <button type="button" onClick={openKasseWizard} className="text-xs font-semibold text-red-700 mt-1">Erneut abrechnen</button>
+        </div> : <div className="mt-2"><p className="text-sm text-gray-500 mb-2">Noch nicht bestätigt.</p><button type="button" onClick={openKasseWizard} className="bg-red-700 hover:bg-red-800 text-white text-sm font-medium px-4 py-2 rounded-lg">Kasse abrechnen</button></div>}
+      </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Mail className="w-4 h-4 text-red-700" /> RSa/RSb</h2><p className="text-sm text-gray-700 mt-2">{openRsaRsbCount} offene Sendung{openRsaRsbCount === 1 ? '' : 'en'}.</p><button type="button" onClick={() => setActiveTab('rsa_rsb')} className="text-sm font-semibold text-red-700 mt-2">Übersicht öffnen →</button>{profile?.id ? <div className="mt-3"><OwnerNotifications userId={profile.id} /></div> : null}</section>
 
@@ -151,6 +197,21 @@ export default function Innendienst() {
       <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-24 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>
       {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
       <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving || (form.kind === 'verstoss' && bescheide.length === 0)} onClick={() => void saveRecord()} className="bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
+    </div></div></div> : null}
+
+    {kasseStep ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Kassenabrechnung – {kasseStep === 'revenue' ? '1/2 Erlös' : '2/2 Stückelungen zählen'}</h2><button type="button" onClick={closeKasseWizard} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
+      {kasseStep === 'revenue' ? <>
+        <p className="text-sm text-gray-600">Grundbestand (Wechselgeld) der Kasse: <strong>{formatEuro(ownTask?.float_amount ?? 500)}</strong>. Zuerst den von der Kasse angezeigten erwarteten Erlös der Schicht eingeben.</p>
+        <label className="block text-xs font-medium text-gray-600">Erwarteter Erlös laut Kasse (€) *<input inputMode="decimal" className={inputClass} value={expectedRevenueInput} onChange={event => setExpectedRevenueInput(event.target.value)} placeholder="z. B. 128,50" /></label>
+        {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
+        <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={closeKasseWizard} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" onClick={continueToCount} className="bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg">Weiter zur Zählung</button></div>
+      </> : <>
+        <p className="text-sm text-gray-600">Bargeld nach Stückelung zählen. Grundbestand {formatEuro(ownTask?.float_amount ?? 500)} + Erlös {formatEuro(expectedRevenueParsed)} = erwartet <strong>{formatEuro(expectedTotalCents / 100)}</strong>.</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">{DENOMINATIONS.map(item => <label key={item.cents} className="block text-xs font-medium text-gray-600">{item.label}<input type="number" inputMode="numeric" min={0} className={inputClass} value={denomInputs[String(item.cents)] ?? ''} onChange={event => setDenomInputs(current => ({ ...current, [String(item.cents)]: event.target.value }))} placeholder="0" /></label>)}</div>
+        <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 space-y-1"><div className="flex justify-between text-sm"><span className="text-gray-600">Gezählt</span><span className="font-semibold">{formatEuro(countedCents / 100)}</span></div><div className="flex justify-between text-sm"><span className="text-gray-600">Erwartet</span><span className="font-semibold">{formatEuro(expectedTotalCents / 100)}</span></div><div className={`flex justify-between text-sm font-bold ${differenceCents === 0 ? 'text-green-700' : 'text-red-700'}`}><span>Differenz</span><span>{differenceCents > 0 ? '+' : ''}{formatEuro(differenceCents / 100)}</span></div></div>
+        {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
+        <div className="flex justify-between gap-3 pt-2"><button type="button" onClick={() => setKasseStep('revenue')} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Zurück</button><button type="button" disabled={saving} onClick={() => void saveKasse()} className="bg-red-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Abrechnung bestätigen'}</button></div>
+      </>}
     </div></div></div> : null}
   </PortalChrome>
 }
