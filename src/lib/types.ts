@@ -448,8 +448,19 @@ export interface ZentraleEntry {
   updated_at: string
 }
 
-export type DutyFunction = 'zentrale' | 'innendienst' | 'jd' | 'vd'
+export type DutyFunction = string
 export type DutyShift = 'tag' | 'nacht'
+
+export interface DutyFunctionConfig {
+  code: string
+  label: string
+  is_patrol: boolean
+  standard_staffing: number | null
+  active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
 
 export interface DutyAssignment {
   id: string
@@ -458,6 +469,7 @@ export interface DutyAssignment {
   shift: DutyShift
   function: DutyFunction
   vehicle: string | null
+  vehicle_id: string | null
   created_at: string
   updated_at: string
   profiles?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
@@ -591,6 +603,7 @@ type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, never>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles'>
+type DutyFunctionConfigRow = DutyFunctionConfig
 type IncidentReportRow = Omit<IncidentReport, never>
 type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
 
@@ -723,6 +736,7 @@ export type Database = {
       duty_assignments: { Row: DutyAssignmentRow; Insert: Pick<DutyAssignmentRow, 'user_id' | 'function'> & Partial<Omit<DutyAssignmentRow, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'function'>>; Update: Partial<Omit<DutyAssignmentRow, 'id' | 'created_at' | 'user_id'>>; Relationships: [
         { foreignKeyName: 'duty_assignments_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      duty_functions: { Row: DutyFunctionConfigRow; Insert: Pick<DutyFunctionConfigRow, 'code' | 'label'> & Partial<Omit<DutyFunctionConfigRow, 'created_at' | 'updated_at' | 'code' | 'label'>>; Update: Partial<Omit<DutyFunctionConfigRow, 'code' | 'created_at'>>; Relationships: [] }
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
