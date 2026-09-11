@@ -626,6 +626,26 @@ export interface EinsatzTrainingRegistration {
   session?: Pick<EinsatzTrainingSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
 }
 
+/** Trainingsvorschlag: Sachbearbeiter/Beamter schlägt vor, der Genehmiger teilt ein (oder lehnt ab). */
+export type EinsatzTrainingAssignmentStatus = 'vorschlag' | 'eingeteilt' | 'abgelehnt'
+export interface EinsatzTrainingAssignment {
+  id: string
+  officer_id: string
+  module_id: string
+  session_id: string | null
+  status: EinsatzTrainingAssignmentStatus
+  proposed_by: string
+  proposed_at: string
+  decided_by: string | null
+  decided_at: string | null
+  note: string | null
+  created_at: string
+  updated_at: string
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
+  module?: Pick<EinsatzTrainingModule, 'id' | 'name' | 'kind' | 'module_type' | 'schiesst' | 'applies_to' | 'period_year' | 'period_half' | 'active'>
+  session?: Pick<EinsatzTrainingSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
+}
+
 export type VehicleCheckStatus = 'ok' | 'mangel'
 
 export interface VehicleCheck {
@@ -760,6 +780,7 @@ type EinsatzTrainingAttendanceRow = Omit<EinsatzTrainingAttendance, 'officer'>
 type EinsatzTrainingParticipationRow = Omit<EinsatzTrainingParticipation, 'module' | 'officer'>
 type EinsatzTrainingCompletionRow = Omit<EinsatzTrainingCompletion, 'module' | 'officer'>
 type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer' | 'session'>
+type EinsatzTrainingAssignmentRow = Omit<EinsatzTrainingAssignment, 'officer' | 'module' | 'session'>
 type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, 'responsible_profile'>
@@ -894,6 +915,13 @@ export type Database = {
         { foreignKeyName: 'einsatz_training_registrations_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_training_registrations_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      einsatz_training_assignments: { Row: EinsatzTrainingAssignmentRow; Insert: Pick<EinsatzTrainingAssignmentRow, 'officer_id' | 'module_id' | 'proposed_by'> & Partial<Omit<EinsatzTrainingAssignmentRow, 'id' | 'created_at' | 'updated_at' | 'officer_id' | 'module_id' | 'proposed_by'>>; Update: Partial<Omit<EinsatzTrainingAssignmentRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'einsatz_training_assignments_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_assignments_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'einsatz_training_modules'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_assignments_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'einsatz_training_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_assignments_proposed_by_fkey'; columns: ['proposed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_training_assignments_decided_by_fkey'; columns: ['decided_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
       einsatz_material_tabs: { Row: EinsatzMaterialTabRow; Insert: Pick<EinsatzMaterialTabRow, 'area' | 'name'> & Partial<Omit<EinsatzMaterialTabRow, 'id' | 'created_at' | 'updated_at' | 'area' | 'name'>>; Update: Partial<Omit<EinsatzMaterialTabRow, 'id' | 'created_at'>>; Relationships: [] }
       einsatz_materials: { Row: EinsatzMaterialRow; Insert: Pick<EinsatzMaterialRow, 'tab_id' | 'title'> & Partial<Omit<EinsatzMaterialRow, 'id' | 'created_at' | 'updated_at' | 'tab_id' | 'title'>>; Update: Partial<Omit<EinsatzMaterialRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_materials_tab_id_fkey'; columns: ['tab_id']; isOneToOne: false; referencedRelation: 'einsatz_material_tabs'; referencedColumns: ['id'] },
@@ -981,6 +1009,7 @@ export type Database = {
       lookup_login_email: { Args: { p_username: string }; Returns: string | null }
       record_mail_delivery_action: { Args: { p_id: string; p_status: string }; Returns: undefined }
       close_mail_delivery: { Args: { p_id: string }; Returns: undefined }
+      decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
