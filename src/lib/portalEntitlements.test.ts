@@ -46,8 +46,8 @@ describe('Bereichsrollen', () => {
   })
 
   it('kennt in der Zentrale zusätzlich die Rolle Zentralist', () => {
-    expect([...AREA_ROLES.zentrale]).toEqual(['user', 'zentralist', 'sachbearbeiter', 'admin'])
-    expect(parseZentraleRoles(['zentralist', 'user', 'genehmiger'])).toEqual(['user', 'zentralist'])
+    expect([...AREA_ROLES.zentrale]).toEqual(['user', 'sachbearbeiter', 'admin'])
+    expect(parseZentraleRoles(['zentralist', 'user', 'genehmiger'])).toEqual(['user'])
     expect(defaultZentraleRoleForNewUser()).toBe('user')
   })
 

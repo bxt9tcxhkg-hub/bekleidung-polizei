@@ -55,7 +55,6 @@ const FUHRPARK_OPTIONS: { value: FuhrparkRole; label: string }[] = [
 ]
 const ZENTRALE_OPTIONS: { value: ZentraleRole; label: string }[] = [
   { value: 'user', label: AREA_ROLE_LABELS.user },
-  { value: 'zentralist', label: AREA_ROLE_LABELS.zentralist },
   { value: 'sachbearbeiter', label: AREA_ROLE_LABELS.sachbearbeiter },
 ]
 
@@ -1100,7 +1099,7 @@ export default function Users() {
               {isStrictAdmin && !form.roles.includes('admin') && (
                 <fieldset className="border border-red-200 bg-red-50/30 rounded-xl p-3.5">
                   <legend className="px-1 text-sm font-semibold text-red-900">Rechte · Zentrale</legend>
-                  <div className="grid grid-cols-1 min-[390px]:grid-cols-3 gap-2 mt-1">
+                  <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
                     {ZENTRALE_OPTIONS.map(option => (
                       <label key={option.label} className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${form.zentraleRoles.includes(option.value) ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-white hover:bg-gray-50'} ${isSelfEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                         <input type="checkbox" value={option.value} checked={form.zentraleRoles.includes(option.value)} disabled={isSelfEdit} onChange={() => toggleZentraleRole(option.value)} className="rounded" />
@@ -1108,7 +1107,7 @@ export default function Users() {
                       </label>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">Zentralisten und Sachbearbeiter können operative Einträge verwalten. Sensible Einträge sind nur für diese Rollen und Admins sichtbar.</p>
+                  <p className="text-xs text-gray-500 mt-2">Jeder Benutzer kann im Portal für den aktuellen Dienst die Funktion „Zentrale“ wählen. Sachbearbeiter verwalten dauerhafte Inhalte und Einstellungen.</p>
                 </fieldset>
               )}
               {(!editId || canDeactivate) && (

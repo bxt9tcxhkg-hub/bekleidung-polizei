@@ -5,7 +5,7 @@ import PortalChrome from '../components/PortalChrome'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import type { DutyAssignment, DutyFunction, DutyFunctionConfig, DutyShift, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleEntry, ZentraleEntryCategory, ZentraleEntryPriority, ZentraleEntryStatus } from '../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleEntry, ZentraleEntryCategory, ZentraleEntryPriority, ZentraleEntryStatus } from '../lib/types'
 
 type TabId = 'uebersicht' | 'einsaetze' | 'personenhinweise' | ZentraleEntryCategory | 'strassenzustand'
 const TABS: { id: TabId; label: string; icon: typeof Radio; description: string }[] = [
@@ -39,7 +39,7 @@ function formatTime(value: string) { return new Date(value).toLocaleTimeString('
 export default function Zentrale() {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || roles.some(role => ['zentralist', 'sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht')
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])

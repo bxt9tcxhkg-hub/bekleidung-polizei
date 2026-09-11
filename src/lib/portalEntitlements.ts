@@ -6,7 +6,7 @@
  *   Sachbearbeiter, Genehmiger, Admin). approver wird als genehmiger gelesen.
  * - einsatz_mt, schulungen und fuhrpark: mehrere Rollen aus Benutzer | Sachbearbeiter | Admin
  *   (kein Genehmiger). Benutzer = Leserecht, Sachbearbeiter = Verwaltung.
- * - zentrale: Benutzer | Zentralist | Sachbearbeiter | Admin.
+ * - zentrale: Benutzer | Sachbearbeiter | Admin. „Zentralist“ ist eine tägliche Funktion, keine Rolle.
  *
  * Dual-Write: area=bekleidung.roles ↔ profiles.roles. profiles.roles bleibt
  * Quelle für bestehende Bekleidungs-RLS / has_role.
@@ -25,7 +25,7 @@ export const BEKLEIDUNG_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'
 export const EINSATZ_MT_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const SCHULUNGEN_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const FUHRPARK_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
-export const ZENTRALE_ROLES = ['user', 'zentralist', 'sachbearbeiter', 'admin'] as const
+export const ZENTRALE_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 
 export type BekleidungRole = (typeof BEKLEIDUNG_ROLES)[number]
 export type EinsatzMtRole = (typeof EINSATZ_MT_ROLES)[number]
@@ -53,14 +53,12 @@ export const AREA_LABELS: Record<PortalArea, string> = {
 export const AREA_ROLE_LABELS: Record<PortalAreaRoleName, string> = {
   user: 'Benutzer',
   sachbearbeiter: 'Sachbearbeiter',
-  zentralist: 'Zentralist',
   genehmiger: 'Genehmiger',
   admin: 'Admin',
 }
 
 const ROLE_RANK: Record<string, number> = {
   user: 0,
-  zentralist: 1,
   sachbearbeiter: 2,
   genehmiger: 3,
   admin: 4,

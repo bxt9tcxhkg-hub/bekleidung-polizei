@@ -420,10 +420,12 @@ export interface FleetVehicle {
   call_sign: string | null
   license_plate: string | null
   notes: string | null
+  responsible_user_id: string | null
   active: boolean
   created_by: string | null
   created_at: string
   updated_at: string
+  responsible_profile?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
 }
 
 export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'verbot' | 'fahndung' | 'brief' | 'schluessel' | 'kontakt' | 'alarmierung' | 'uebergabe' | 'unterlage'
@@ -601,7 +603,7 @@ type EinsatzTrainingCompletionRow = Omit<EinsatzTrainingCompletion, 'module' | '
 type EinsatzTrainingRegistrationRow = Omit<EinsatzTrainingRegistration, 'officer' | 'session'>
 type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
-type FleetVehicleRow = Omit<FleetVehicle, never>
+type FleetVehicleRow = Omit<FleetVehicle, 'responsible_profile'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = DutyFunctionConfig
@@ -730,6 +732,7 @@ export type Database = {
       ] }
       fleet_vehicles: { Row: FleetVehicleRow; Insert: Pick<FleetVehicleRow, 'name' | 'kind'> & Partial<Omit<FleetVehicleRow, 'id' | 'created_at' | 'updated_at' | 'name' | 'kind'>>; Update: Partial<Omit<FleetVehicleRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'fleet_vehicles_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'fleet_vehicles_responsible_user_id_fkey'; columns: ['responsible_user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
