@@ -32,6 +32,7 @@ import {
   type PortalAdminLink,
   visiblePortalAdminLinks,
 } from '../lib/portalAccount'
+import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
 import { PORTAL_APPS, type PortalApp, type PortalAppId } from '../lib/portalApps'
 import { visiblePortalApps } from '../lib/portalEntitlements'
 import { supabase } from '../lib/supabase'
@@ -84,7 +85,7 @@ const PERSONAL_AREAS: PlannedPortalArea[] = [
   { id: 'ueberstunden', title: 'Überstundenmeldung', description: 'Überstunden erfassen und zur Prüfung abgeben', path: '/planung/ueberstunden', icon: Clock3 },
 ]
 
-function AppTile({ app }: { app: PortalApp }) {
+function AppTile({ app, badge }: { app: PortalApp; badge?: number }) {
   const Icon = APP_ICONS[app.id]
 
   if (app.status === 'coming_soon') {
@@ -118,6 +119,7 @@ function AppTile({ app }: { app: PortalApp }) {
         <div className="bg-blue-50 p-2.5 rounded-lg">
           <Icon className="w-5 h-5 text-blue-700" />
         </div>
+        {badge ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{badge} offen</span> : null}
       </div>
       <h2 className="text-lg font-semibold text-gray-900">{app.title}</h2>
       {app.description ? (
@@ -181,11 +183,13 @@ function NavTile({
   label,
   description,
   icon: Icon,
+  badge,
 }: {
   to: string
   label: string
   description: string
   icon: LucideIcon
+  badge?: number
 }) {
   return (
     <Link
@@ -196,6 +200,7 @@ function NavTile({
         <div className="bg-blue-50 p-2.5 rounded-lg">
           <Icon className="w-5 h-5 text-blue-700" />
         </div>
+        {badge ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{badge} offen</span> : null}
       </div>
       <h2 className="text-lg font-semibold text-gray-900">{label}</h2>
       {description ? (
@@ -385,6 +390,26 @@ export default function Portal() {
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger, rows: areaRoles })
   const adminLinks = visiblePortalAdminLinks(isAdmin)
   const canManageDuties = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManageZentrale = canManageDuties
+  const canManageFuhrpark = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+
+  // Kleine "offen"-Kennzahl je Bereich, nur für dessen Verwaltung – Details gibt's erst im Bereich selbst.
+  const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number }>({})
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number } = {}
+      await Promise.all([
+        canManageZentrale ? supabase.from('zentrale_entries').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').neq('status', 'erledigt').then(({ count }) => { next.zentrale = count ?? 0 }) : Promise.resolve(),
+        canManageFuhrpark ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
+        canManageEinsatzmittel ? supabase.from('personal_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => { next.einsatz_mt = count ?? 0 }) : Promise.resolve(),
+      ])
+      if (!cancelled) setOpenCounts(next)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [canManageZentrale, canManageFuhrpark, canManageEinsatzmittel])
 
   return (
     <PortalChrome
@@ -429,7 +454,7 @@ export default function Portal() {
 
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (
-          <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} />
+          <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} badge={openCounts.zentrale} />
         ) : null}
         {hasAreaAccess('zentrale') ? (
           <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck, Kontrollaufträge und RSa/RSb" icon={Shield} />
@@ -443,12 +468,12 @@ export default function Portal() {
       </PortalSection>
 
       <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">
-        {apps.map(app => <AppTile key={app.id} app={app} />)}
+        {apps.map(app => <AppTile key={app.id} app={app} badge={app.id === 'einsatz_mt' ? openCounts.einsatz_mt : undefined} />)}
         {hasAreaAccess('schulungen') ? (
           <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} />
         ) : null}
         {hasAreaAccess('fuhrpark') ? (
-          <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} />
+          <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} badge={openCounts.fuhrpark} />
         ) : null}
       </PortalSection>
 
