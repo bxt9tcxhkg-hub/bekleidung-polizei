@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Building2,
@@ -10,6 +11,7 @@ import {
   Shield,
   Shirt,
   Target,
+  UserRoundCheck,
   UserCircle,
   Users,
   type LucideIcon,
@@ -26,6 +28,20 @@ import {
 } from '../lib/portalAccount'
 import { PORTAL_APPS, type PortalApp, type PortalAppId } from '../lib/portalApps'
 import { visiblePortalApps } from '../lib/portalEntitlements'
+import { supabase } from '../lib/supabase'
+import type { DutyAssignment, DutyFunction, DutyShift } from '../lib/types'
+
+const DUTY_LABEL: Record<DutyFunction, string> = {
+  zentrale: 'Zentrale',
+  innendienst: 'Innendienst',
+  jd: 'Journaldienst (JD)',
+  vd: 'Verkehrsdienst (VD)',
+}
+
+function todayLocal() {
+  const date = new Date()
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 const APP_ICONS: Record<PortalAppId, LucideIcon> = {
   bekleidung: Shirt,
@@ -190,6 +206,35 @@ function AdminTile({ link }: { link: PortalAdminLink }) {
 const headerActionClass =
   'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors'
 
+function TodayFunctionCard({ userId }: { userId: string }) {
+  const [assignments, setAssignments] = useState<DutyAssignment[]>([])
+  const [shift, setShift] = useState<DutyShift>('tag')
+  const [dutyFunction, setDutyFunction] = useState<DutyFunction | ''>('')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const load = useCallback(async () => { const { data } = await supabase.from('duty_assignments').select('*').eq('user_id', userId).eq('duty_date', todayLocal()); setAssignments((data ?? []) as DutyAssignment[]) }, [userId])
+  useEffect(() => { void load() }, [load])
+  const selected = assignments.find(item => item.shift === shift)
+  useEffect(() => { setDutyFunction(selected?.function ?? '') }, [selected?.function, shift])
+
+  async function save() {
+    if (!dutyFunction) return
+    setSaving(true)
+    const { error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: todayLocal(), shift, function: dutyFunction }, { onConflict: 'user_id,duty_date,shift' })
+    setSaving(false)
+    if (error) { setMessage('Die Funktion konnte nicht gespeichert werden.'); return }
+    setMessage(`${DUTY_LABEL[dutyFunction]} wurde für heute eingetragen.`); await load()
+  }
+  async function remove() {
+    if (!selected) return
+    setSaving(true); const { error } = await supabase.from('duty_assignments').delete().eq('id', selected.id); setSaving(false)
+    if (error) { setMessage('Die Auswahl konnte nicht entfernt werden.'); return }
+    setDutyFunction(''); setMessage('Die Auswahl wurde entfernt. Das Portal bleibt normal nutzbar.'); await load()
+  }
+
+  return <section className="rounded-2xl border border-red-200 bg-white p-4 sm:p-5 mb-6 shadow-sm"><div className="flex items-start gap-3"><div className="bg-red-50 p-2.5 rounded-xl"><UserRoundCheck className="w-5 h-5 text-red-700" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold text-gray-900">Heutige Funktion</h2><p className="text-sm text-gray-500 mt-0.5">Freiwillige Auswahl für passende Informationen und Aufträge.</p></div>{selected ? <span className="text-sm font-semibold text-red-800 bg-red-50 px-3 py-1.5 rounded-full">{DUTY_LABEL[selected.function]}</span> : <span className="text-sm text-gray-500">Nicht ausgewählt</span>}</div><div className="grid grid-cols-1 sm:grid-cols-[150px_1fr_auto] gap-2 mt-4"><select className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={shift} onChange={event => setShift(event.target.value as DutyShift)} aria-label="Schicht"><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select><select className="border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={dutyFunction} onChange={event => setDutyFunction(event.target.value as DutyFunction | '')} aria-label="Heutige Funktion"><option value="">Funktion auswählen</option>{Object.entries(DUTY_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><div className="flex gap-2"><button type="button" disabled={!dutyFunction || saving} onClick={() => void save()} className="flex-1 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white text-sm font-medium px-4 py-2.5 rounded-lg">Speichern</button>{selected ? <button type="button" disabled={saving} onClick={() => void remove()} className="border border-gray-300 text-gray-700 text-sm px-3 py-2.5 rounded-lg">Entfernen</button> : null}</div></div>{message ? <p className={`text-sm mt-3 ${message.includes('konnte nicht') ? 'text-red-700' : 'text-green-700'}`}>{message}</p> : null}</div></div></section>
+}
+
 export default function Portal() {
   const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles, hasAreaAccess } = useAuth()
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, rows: areaRoles })
@@ -231,6 +276,8 @@ export default function Portal() {
           <p className="text-gray-400 text-xs mt-1 sm:hidden">{profile.name}</p>
         ) : null}
       </div>
+
+      {profile?.id && hasAreaAccess('zentrale') ? <TodayFunctionCard userId={profile.id} /> : null}
 
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (

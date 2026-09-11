@@ -55,7 +55,6 @@ export default function Zentrale() {
   const [editing, setEditing] = useState<ZentraleEntry | null>(null)
   const [entry, setEntry] = useState({ title: '', description: '', priority: 'normal' as ZentraleEntryPriority, status: 'offen' as ZentraleEntryStatus, validFrom: '', validUntil: '', location: '', responsible: '', reference: '', restricted: false })
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
-  const [dutyFunction, setDutyFunction] = useState<DutyFunction | ''>('')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
   const [incident, setIncident] = useState({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '' })
   const [showPersonForm, setShowPersonForm] = useState(false)
@@ -82,7 +81,7 @@ export default function Zentrale() {
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
-  useEffect(() => { if (ownAssignment) { setDutyFunction(ownAssignment.function); setDutyShift(ownAssignment.shift) } }, [ownAssignment])
+  useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
 
   const currentTab = TABS.find(tab => tab.id === activeTab) ?? TABS[0]
   const visibleEntries = useMemo(() => activeTab === 'uebersicht' ? entries.filter(item => item.status !== 'erledigt') : entries.filter(item => item.category === activeTab), [activeTab, entries])
@@ -124,14 +123,6 @@ export default function Zentrale() {
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
-  async function saveDuty() {
-    if (!profile?.id || !dutyFunction) return
-    setSaving(true); const result = await supabase.from('duty_assignments').upsert({ user_id: profile.id, duty_date: todayLocal(), shift: dutyShift, function: dutyFunction }, { onConflict: 'user_id,duty_date,shift' }); setSaving(false)
-    if (result.error) { setError('Die heutige Funktion konnte nicht gespeichert werden.'); return }
-    setNotice(`Heutige Funktion: ${FUNCTION_LABEL[dutyFunction]}.`); await load()
-  }
-  async function clearDuty() { if (!ownAssignment) return; const result = await supabase.from('duty_assignments').delete().eq('id', ownAssignment.id); if (result.error) { setError('Die heutige Funktion konnte nicht entfernt werden.'); return } setDutyFunction(''); setNotice('Die Auswahl wurde entfernt. Das Portal bleibt vollständig nutzbar.'); await load() }
-
   function openIncident() { setIncident({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '' }); setShowIncidentForm(true); setError('') }
   async function saveIncident() {
     if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
@@ -163,7 +154,7 @@ export default function Zentrale() {
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-700" /></div> : null}
 
     {!loading && activeTab === 'uebersicht' ? <div className="space-y-5">
-      <DutyPanel assignments={shiftAssignments} dutyFunction={dutyFunction} dutyShift={dutyShift} ownAssignment={ownAssignment} saving={saving} setDutyFunction={setDutyFunction} setDutyShift={setDutyShift} saveDuty={saveDuty} clearDuty={clearDuty} />
+      <DutyPanel assignments={shiftAssignments} dutyShift={dutyShift} setDutyShift={setDutyShift} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><Stat label="Kritische Hinweise" value={entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch').length} color="red" /><Stat label="Offene Kontrollaufträge" value={entries.filter(item => item.category === 'kontrollauftrag' && item.status !== 'erledigt').length} color="blue" /><Stat label="Offene Übergaben" value={entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt').length} color="amber" /></div>
       <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-red-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
     </div> : null}
@@ -182,8 +173,8 @@ export default function Zentrale() {
   </PortalChrome>
 }
 
-function DutyPanel({ assignments, dutyFunction, dutyShift, ownAssignment, saving, setDutyFunction, setDutyShift, saveDuty, clearDuty }: { assignments: DutyAssignment[]; dutyFunction: DutyFunction | ''; dutyShift: DutyShift; ownAssignment?: DutyAssignment; saving: boolean; setDutyFunction: (value: DutyFunction | '') => void; setDutyShift: (value: DutyShift) => void; saveDuty: () => Promise<void>; clearDuty: () => Promise<void> }) {
-  return <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex items-center gap-2"><UsersRound className="w-5 h-5 text-red-700" /><h2 className="font-bold text-gray-900">Heutige Besetzung</h2></div><p className="text-sm text-gray-500 mt-1">Die Auswahl ist freiwillig und kann jederzeit geändert oder entfernt werden.</p><div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 mt-4"><div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{(['zentrale', 'innendienst', 'jd', 'vd'] as DutyFunction[]).map(fn => { const assigned = assignments.filter(item => item.function === fn), target = FUNCTION_TARGET[fn]; return <div key={fn} className="rounded-xl bg-gray-50 border border-gray-200 p-3"><p className="text-xs font-semibold text-gray-500">{FUNCTION_LABEL[fn]}</p><p className="font-bold text-gray-900 mt-1">{assigned.length}{target !== null ? ` / ${target}` : ''}</p><p className="text-xs text-gray-500 mt-1 truncate">{assigned.map(item => item.profiles?.name).filter(Boolean).join(', ') || 'nicht eingetragen'}</p></div> })}</div><div className="flex flex-col sm:flex-row lg:flex-col gap-2 min-w-48"><select className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={dutyShift} onChange={event => setDutyShift(event.target.value as DutyShift)}><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select><select className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={dutyFunction} onChange={event => setDutyFunction(event.target.value as DutyFunction | '')}><option value="">Funktion wählen</option>{Object.entries(FUNCTION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><div className="flex gap-2"><button type="button" disabled={!dutyFunction || saving} onClick={() => void saveDuty()} className="flex-1 bg-gray-900 text-white text-sm font-medium px-3 py-2 rounded-lg disabled:opacity-50">Speichern</button>{ownAssignment ? <button type="button" onClick={() => void clearDuty()} className="border border-gray-300 text-sm px-3 py-2 rounded-lg">Entfernen</button> : null}</div></div></div></section>
+function DutyPanel({ assignments, dutyShift, setDutyShift }: { assignments: DutyAssignment[]; dutyShift: DutyShift; setDutyShift: (value: DutyShift) => void }) {
+  return <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="flex items-center gap-2"><UsersRound className="w-5 h-5 text-red-700" /><h2 className="font-bold text-gray-900">Heutige Besetzung</h2></div><p className="text-sm text-gray-500 mt-1">Die eigene Funktion wird direkt im Portal ausgewählt.</p></div><select className="border border-gray-300 rounded-lg px-3 py-2 text-sm" value={dutyShift} onChange={event => setDutyShift(event.target.value as DutyShift)}><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">{(['zentrale', 'innendienst', 'jd', 'vd'] as DutyFunction[]).map(fn => { const assigned = assignments.filter(item => item.function === fn), target = FUNCTION_TARGET[fn]; return <div key={fn} className="rounded-xl bg-gray-50 border border-gray-200 p-3"><p className="text-xs font-semibold text-gray-500">{FUNCTION_LABEL[fn]}</p><p className="font-bold text-gray-900 mt-1">{assigned.length}{target !== null ? ` / ${target}` : ''}</p><p className="text-xs text-gray-500 mt-1 truncate">{assigned.map(item => item.profiles?.name).filter(Boolean).join(', ') || 'nicht eingetragen'}</p></div> })}</div></section>
 }
 
 function Stat({ label, value, color }: { label: string; value: number; color: 'red' | 'blue' | 'amber' }) { const classes = { red: 'border-red-200 bg-red-50 text-red-900', blue: 'border-blue-200 bg-blue-50 text-blue-900', amber: 'border-amber-200 bg-amber-50 text-amber-900' }[color]; return <div className={`rounded-xl border p-4 ${classes}`}><p className="text-xs font-medium">{label}</p><p className="text-2xl font-bold mt-1">{value}</p></div> }
