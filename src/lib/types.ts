@@ -587,12 +587,22 @@ export interface MailDelivery {
   akteneigentuemer?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
 }
 
+/** Stückelungen als {"<Cent-Wert>": Anzahl}, z. B. {"5000":2,"500":3} für 2× 50 € und 3× 5 €. */
+export type CashDenominations = Record<string, number>
+
 export interface InnendienstShiftTask {
   id: string
   user_id: string
   duty_date: string
   shift: DutyShift
   kasse_confirmed_at: string | null
+  /** Fixer Kassen-Grundbestand (Wechselgeld) zu Schichtbeginn, Standard 500 €. */
+  float_amount: number
+  /** Vom Bediensteten abgelesener erwarteter Erlös laut Kasse. */
+  expected_revenue: number | null
+  cash_denominations: CashDenominations | null
+  /** Aus cash_denominations berechnete Summe zum Zeitpunkt der Bestätigung. */
+  counted_total: number | null
   created_at: string | null
   updated_at: string | null
 }
