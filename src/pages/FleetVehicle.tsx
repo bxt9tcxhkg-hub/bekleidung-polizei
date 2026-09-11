@@ -36,9 +36,9 @@ function formatBytes(size: number | null) {
 export default function FleetVehicle() {
   const { vehicleId } = useParams()
   const navigate = useNavigate()
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []
-  const canManage = isStrictAdmin || roles.includes('sachbearbeiter') || roles.includes('admin')
+  const canManage = isStrictAdmin || isGenehmiger || roles.includes('sachbearbeiter') || roles.includes('admin')
   const [vehicle, setVehicle] = useState<FleetVehicleType | null>(null)
   const [employees, setEmployees] = useState<Pick<Profile, 'id' | 'name' | 'dienstnummer'>[]>([])
   const [loading, setLoading] = useState(true)

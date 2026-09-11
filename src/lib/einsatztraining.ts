@@ -169,9 +169,10 @@ export function isParkaufsichtMember(officer: { organisation?: string | null }):
 
 export function canManageEinsatztraining(input: {
   isStrictAdmin: boolean
+  isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
 }): boolean {
-  if (input.isStrictAdmin) return true
+  if (input.isStrictAdmin || input.isGenehmiger) return true
   if (input.rows === null) return false
   const role = parseEinsatzMtRole(rolesForArea(input.rows, 'einsatz_mt'))
   return role === 'sachbearbeiter' || role === 'admin'

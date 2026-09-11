@@ -245,6 +245,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260911190000_mail_deliveries_owner_vernehmung_close.sql` | `mail_deliveries`: Typ `vernehmung`, Status `durchgefuehrt`, Akteneigentümer automatisch = Ersteller (Trigger), `closed_at`/`closed_by` + RPC `close_mail_delivery` (endgültiges Schließen durch den Akteneigentümer) |
 | `20260911200000_fuhrpark_vollstaendig.sql` | Fuhrpark komplett: `fleet_equipment_items`/`fleet_equipment_status` (Füllliste/Mängel), `fleet_care_tasks` (Reinigung & Pflege), `fleet_appointments` (Werkstatt & Termine, Fristen), `is_vehicle_responsible()`, Fahrzeugkontrolle auch für Fuhrpark-Mitglieder, Unterlagenbereich `fuhrpark` |
 | `20260911210000_fuhrpark_dokumente_pro_fahrzeug.sql` | Fuhrparkweiter Unterlagenbereich `fuhrpark` wieder entfernt (Rückbau von `einsatz_material_tabs`/`einsatz_materials` auf `einsatzmittel`/`einsatztraining`/`schulungen`), stattdessen `fleet_documents` (Zulassung, Serviceheft etc. direkt je Fahrzeug) |
+| `20261001_genehmiger_bereichsuebergreifend.sql` | Genehmiger (globale Rolle) bekommt in `has_portal_area_access()`, `can_manage_zentrale()`, `can_manage_fuhrpark()`, `can_manage_einsatzmittel()`, `can_manage_schulungen()` dieselben Rechte wie ein Bereichs-Sachbearbeiter, unabhängig von einer eigenen `portal_area_roles`-Zeile — bereichsübergreifende Aufsicht |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine

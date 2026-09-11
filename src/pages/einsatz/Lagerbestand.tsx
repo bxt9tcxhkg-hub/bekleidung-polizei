@@ -19,8 +19,8 @@ import { generateLagerbestandPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
 
 export default function LagerbestandPanel() {
-  const { isStrictAdmin, areaRoles } = useAuth()
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+  const { isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const [poolItems, setPoolItems] = useState<PoolEinsatzmittel[]>([])
   const [personalItems, setPersonalItems] = useState<PersonalEinsatzmittel[]>([])
   const [loading, setLoading] = useState(true)

@@ -450,6 +450,12 @@ describe('canManagePersonalEinsatzmittel', () => {
     })).toBe(true)
   })
 
+  it('erlaubt Genehmiger bereichsübergreifend, auch ohne eigene einsatz_mt-Zeile', () => {
+    expect(canManagePersonalEinsatzmittel({ isStrictAdmin: false, isGenehmiger: true, rows: [] })).toBe(true)
+    expect(canManagePersonalEinsatzmittel({ isStrictAdmin: false, isGenehmiger: true, rows: null })).toBe(true)
+    expect(canManagePersonalEinsatzmittel({ isStrictAdmin: false, isGenehmiger: false, rows: [] })).toBe(false)
+  })
+
   it('verbietet reines Leserecht und fehlende Tabelle', () => {
     expect(canManagePersonalEinsatzmittel({
       isStrictAdmin: false,

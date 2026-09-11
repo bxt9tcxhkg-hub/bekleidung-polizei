@@ -4,10 +4,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
 
 export default function EinsatzDashboard() {
-  const { hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
+  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   if (!hasAreaAccess('einsatz_mt')) return <Navigate to="/" replace />
 
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const cards = [
     {
       to: '/einsatz/einsatzmittel',

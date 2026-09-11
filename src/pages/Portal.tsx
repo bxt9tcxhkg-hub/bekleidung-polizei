@@ -329,9 +329,9 @@ function DutyPickerModal({ functions, occupancy, saving, onChoose, onNotOperatio
 
 export default function Portal() {
   const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles, hasAreaAccess } = useAuth()
-  const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, rows: areaRoles })
+  const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger, rows: areaRoles })
   const adminLinks = visiblePortalAdminLinks(isAdmin)
-  const canManageDuties = isStrictAdmin || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManageDuties = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
 
   return (
     <PortalChrome

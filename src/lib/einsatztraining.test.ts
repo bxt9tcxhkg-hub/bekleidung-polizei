@@ -682,6 +682,12 @@ describe('canManageEinsatztraining', () => {
     })).toBe(true)
   })
 
+  it('erlaubt Genehmiger bereichsübergreifend, auch ohne eigene einsatz_mt-Zeile', () => {
+    expect(canManageEinsatztraining({ isStrictAdmin: false, isGenehmiger: true, rows: [] })).toBe(true)
+    expect(canManageEinsatztraining({ isStrictAdmin: false, isGenehmiger: true, rows: null })).toBe(true)
+    expect(canManageEinsatztraining({ isStrictAdmin: false, isGenehmiger: false, rows: [] })).toBe(false)
+  })
+
   it('verbietet reines Leserecht und fehlende Tabelle', () => {
     expect(canManageEinsatztraining({
       isStrictAdmin: false,

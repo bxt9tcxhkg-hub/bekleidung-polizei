@@ -22,8 +22,8 @@ const USER_TABS: { id: TrainingSubTab; label: string }[] = [
 ]
 
 export default function EinsatztrainingPanel() {
-  const { isStrictAdmin, areaRoles } = useAuth()
-  const canManage = canManageEinsatztraining({ isStrictAdmin, rows: areaRoles })
+  const { isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManageEinsatztraining({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const tabs = canManage ? MANAGE_TABS : USER_TABS
   const [subTab, setSubTab] = useState<TrainingSubTab>('module')
   const visibleTab = tabs.some(tab => tab.id === subTab) ? subTab : 'module'
