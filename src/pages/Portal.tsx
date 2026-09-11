@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
+  AlertTriangle,
   Building2,
   Car,
   ClipboardList,
@@ -11,10 +12,12 @@ import {
   Radio,
   Shield,
   Shirt,
+  Sparkles,
   Target,
   UserRoundCheck,
   UserCircle,
   Users,
+  Wrench,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -327,6 +330,56 @@ function DutyPickerModal({ functions, occupancy, saving, onChoose, onNotOperatio
   </div>
 }
 
+type VehicleOpenCounts = { maengel: number; pflege: number; werkstatt: number; fristen: number }
+
+function MyVehicleCard({ userId }: { userId: string }) {
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
+  const [counts, setCounts] = useState<Record<string, VehicleOpenCounts>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const { data: vehicleData } = await supabase.from('fleet_vehicles').select('*').eq('responsible_user_id', userId).eq('active', true).order('name')
+      const ownVehicles = (vehicleData ?? []) as FleetVehicle[]
+      if (cancelled) return
+      setVehicles(ownVehicles)
+      const ids = ownVehicles.map(vehicle => vehicle.id)
+      if (ids.length === 0) { setCounts({}); setLoading(false); return }
+      const [statusResult, careResult, appointmentResult] = await Promise.all([
+        supabase.from('fleet_equipment_status').select('vehicle_id').in('vehicle_id', ids).neq('status', 'vollstaendig'),
+        supabase.from('fleet_care_tasks').select('vehicle_id').in('vehicle_id', ids).eq('status', 'offen'),
+        supabase.from('fleet_appointments').select('vehicle_id, category').in('vehicle_id', ids).eq('status', 'offen'),
+      ])
+      if (cancelled) return
+      const next: Record<string, VehicleOpenCounts> = Object.fromEntries(ids.map(id => [id, { maengel: 0, pflege: 0, werkstatt: 0, fristen: 0 }]))
+      for (const row of statusResult.data ?? []) next[row.vehicle_id].maengel += 1
+      for (const row of careResult.data ?? []) next[row.vehicle_id].pflege += 1
+      for (const row of appointmentResult.data ?? []) { if (row.category === 'werkstatt') next[row.vehicle_id].werkstatt += 1; else next[row.vehicle_id].fristen += 1 }
+      setCounts(next)
+      setLoading(false)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [userId])
+
+  if (loading || vehicles.length === 0) return null
+
+  return <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 mb-6"><div className="flex items-center gap-2 mb-3"><Car className="w-5 h-5 text-blue-700" /><h2 className="font-bold text-gray-900">{vehicles.length === 1 ? 'Mein Fahrzeug' : 'Meine Fahrzeuge'}</h2></div><div className="space-y-3">{vehicles.map(vehicle => {
+    const count = counts[vehicle.id] ?? { maengel: 0, pflege: 0, werkstatt: 0, fristen: 0 }
+    const total = count.maengel + count.pflege + count.werkstatt + count.fristen
+    return <Link key={vehicle.id} to={`/fuhrpark/${vehicle.id}`} className="block rounded-xl border border-gray-200 p-3 hover:border-blue-300 hover:bg-blue-50/50 transition-colors">
+      <div className="flex items-center justify-between gap-3"><p className="font-semibold text-gray-900">{vehicle.call_sign || vehicle.name}</p>{total === 0 ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-800">Alles erledigt</span> : <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{total} offen</span>}</div>
+      {total > 0 ? <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-600">
+        {count.maengel > 0 ? <span className="inline-flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5 text-red-600" /> {count.maengel} Mangel{count.maengel === 1 ? '' : 'e'}</span> : null}
+        {count.pflege > 0 ? <span className="inline-flex items-center gap-1"><Sparkles className="w-3.5 h-3.5 text-emerald-600" /> {count.pflege} Pflegeaufgabe{count.pflege === 1 ? '' : 'n'}</span> : null}
+        {count.werkstatt > 0 ? <span className="inline-flex items-center gap-1"><Wrench className="w-3.5 h-3.5 text-gray-500" /> {count.werkstatt} Werkstatt-Termin{count.werkstatt === 1 ? '' : 'e'}</span> : null}
+        {count.fristen > 0 ? <span className="inline-flex items-center gap-1"><Clock3 className="w-3.5 h-3.5 text-gray-500" /> {count.fristen} Frist{count.fristen === 1 ? '' : 'en'}</span> : null}
+      </div> : null}
+    </Link>
+  })}</div></section>
+}
+
 export default function Portal() {
   const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles, hasAreaAccess } = useAuth()
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger, rows: areaRoles })
@@ -372,6 +425,7 @@ export default function Portal() {
 
       {profile?.id && hasAreaAccess('zentrale') ? <TodayFunctionCard userId={profile.id} canManage={canManageDuties} /> : null}
       {profile?.id && hasAreaAccess('zentrale') ? <div className="mb-6"><OwnerNotifications userId={profile.id} /></div> : null}
+      {profile?.id ? <MyVehicleCard userId={profile.id} /> : null}
 
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (
