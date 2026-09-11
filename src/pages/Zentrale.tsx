@@ -17,7 +17,7 @@ const TABS: { id: TabId; label: string; icon: typeof Radio; description: string 
   { id: 'verbot', label: 'AV/BV & EV', icon: ShieldAlert, description: 'Laufende Annäherungs-, Betretungs- und einstweilige Verbote' },
   { id: 'personenhinweise', label: 'Personenhinweise', icon: UserRoundCheck, description: 'Sicherheitsrelevante Hinweise mit Gültigkeit und Handlungsinformation' },
   { id: 'fahndung', label: 'Fahndungen', icon: Search, description: 'Aktuell offene interne Fahndungshinweise' },
-  { id: 'brief', label: 'RSa/RSb', icon: FileClock, description: 'Offene Zustellungen und Fristen' },
+  { id: 'brief', label: 'RSa/RSb', icon: FileClock, description: 'Zustellungen und Vernehmungen schwer erreichbarer Personen' },
   { id: 'schluessel', label: 'Schlüssel', icon: KeyRound, description: 'Hinterlegte Schlüssel und Zutrittshinweise' },
   { id: 'kontakt', label: 'Kontakte', icon: Contact, description: 'Dienstlich notwendige Kontakte und Rufbereitschaften' },
   { id: 'alarmierung', label: 'Alarmierung', icon: BellRing, description: 'Verständigungsreihenfolgen und Eskalationswege' },

@@ -9,7 +9,7 @@ import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, Innen
 
 // Euro-Stückelungen in Cent (Ganzzahlen statt Fließkomma, um Rundungsfehler zu vermeiden).
 const DENOMINATIONS: { cents: number; label: string }[] = [
-  { cents: 50000, label: '500 €' }, { cents: 20000, label: '200 €' }, { cents: 10000, label: '100 €' },
+  { cents: 20000, label: '200 €' }, { cents: 10000, label: '100 €' },
   { cents: 5000, label: '50 €' }, { cents: 2000, label: '20 €' }, { cents: 1000, label: '10 €' }, { cents: 500, label: '5 €' },
   { cents: 200, label: '2 €' }, { cents: 100, label: '1 €' },
   { cents: 50, label: '50 Cent' }, { cents: 20, label: '20 Cent' }, { cents: 10, label: '10 Cent' },
