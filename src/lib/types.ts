@@ -587,6 +587,33 @@ export interface MailDelivery {
   akteneigentuemer?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
 }
 
+export interface InnendienstShiftTask {
+  id: string
+  user_id: string
+  duty_date: string
+  shift: DutyShift
+  kasse_confirmed_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type InnendienstRecordKind = 'bescheid_strassenmusik' | 'bescheid_strassenkunst' | 'verstoss'
+export type InnendienstRecordStatus = 'offen' | 'erledigt'
+
+export interface InnendienstRecord {
+  id: string
+  kind: InnendienstRecordKind
+  reference: string | null
+  subject: string
+  note: string | null
+  status: InnendienstRecordStatus
+  issued_date: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 export type SupportTicketKind = 'help' | 'improvement' | 'idea'
 export type SupportTicketTopic = 'general' | 'bekleidung' | 'einsatz_mt' | 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
@@ -649,6 +676,8 @@ type IncidentReportRow = Omit<IncidentReport, never>
 type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
 type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
 type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer'>
+type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -795,6 +824,12 @@ export type Database = {
       mail_deliveries: { Row: MailDeliveryRow; Insert: Pick<MailDeliveryRow, 'person_name' | 'kind' | 'created_by'> & Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'updated_at' | 'person_name' | 'kind' | 'created_by'>>; Update: Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'mail_deliveries_akteneigentuemer_id_fkey'; columns: ['akteneigentuemer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'mail_deliveries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      innendienst_shift_tasks: { Row: InnendienstShiftTaskRow; Insert: Pick<InnendienstShiftTaskRow, 'user_id'> & Partial<Omit<InnendienstShiftTaskRow, 'id' | 'created_at' | 'updated_at' | 'user_id'>>; Update: Partial<Omit<InnendienstShiftTaskRow, 'id' | 'created_at' | 'user_id'>>; Relationships: [
+        { foreignKeyName: 'innendienst_shift_tasks_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      innendienst_records: { Row: InnendienstRecordRow; Insert: Pick<InnendienstRecordRow, 'kind' | 'subject' | 'created_by'> & Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'updated_at' | 'kind' | 'subject' | 'created_by'>>; Update: Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'innendienst_records_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
     }
     Views: {

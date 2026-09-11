@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Construction, PackageCheck, Wre
 import { Link } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
 
-export type PlannedAreaId = 'zentrale' | 'innendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
+export type PlannedAreaId = 'zentrale' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
 
 const AREA_CONTENT: Record<PlannedAreaId, { title: string; group: string; description: string; items: string[] }> = {
   zentrale: {
@@ -10,12 +10,6 @@ const AREA_CONTENT: Record<PlannedAreaId, { title: string; group: string; descri
     group: 'Operativer Bereich',
     description: 'Interne Informationen und Arbeitshilfen für den Zentralisten – als Ergänzung zum bestehenden Aktenprogramm.',
     items: ['Operative Übersicht', 'Interne Informationen', 'Schichtübergabe', 'Straßenzustandsbericht mit PDF', 'Schlüsselregister', 'Kontakte', 'Alarmierung & Unterlagen'],
-  },
-  innendienst: {
-    title: 'Innendienst',
-    group: 'Operativer Bereich',
-    description: 'Unterstützung bei der täglichen Dienstabwicklung im Innendienst.',
-    items: ['Übersicht', 'Kassenabrechnung bei Schichtbeginn', 'Bescheide für Straßenmusik & Straßenkunst', 'Verstöße & Anspruchsprüfung', 'Gebühren & Kosten', 'Arbeitsanweisungen', 'Unterlagen'],
   },
   schulungen: {
     title: 'Schulungen',

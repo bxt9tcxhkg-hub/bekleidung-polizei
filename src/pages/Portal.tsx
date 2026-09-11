@@ -68,16 +68,12 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
 }
 
 type PlannedPortalArea = {
-  id: 'innendienst' | 'ueberstunden'
+  id: 'ueberstunden'
   title: string
   description: string
   path: string
   icon: LucideIcon
 }
-
-const OPERATIONAL_AREAS: PlannedPortalArea[] = [
-  { id: 'innendienst', title: 'Innendienst', description: 'Kasse, Bescheide, Gebühren und Verfahrenshilfen', path: '/planung/innendienst', icon: Building2 },
-]
 
 const PERSONAL_AREAS: PlannedPortalArea[] = [
   { id: 'ueberstunden', title: 'Überstundenmeldung', description: 'Überstunden erfassen und zur Prüfung abgeben', path: '/planung/ueberstunden', icon: Clock3 },
@@ -378,7 +374,9 @@ export default function Portal() {
         {hasAreaAccess('zentrale') ? (
           <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck, Kontrollaufträge und RSa/RSb" icon={Shield} />
         ) : null}
-        {OPERATIONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+        {hasAreaAccess('zentrale') ? (
+          <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße, RSa/RSb und Übergabe" icon={Building2} />
+        ) : null}
       </PortalSection>
 
       <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">

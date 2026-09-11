@@ -36,6 +36,7 @@ const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const Zentrale = lazy(() => import('./pages/Zentrale'))
 const Aussendienst = lazy(() => import('./pages/Aussendienst'))
+const Innendienst = lazy(() => import('./pages/Innendienst'))
 
 const PageSpinner = () => (
   <div className="flex justify-center py-16">
@@ -83,7 +84,8 @@ export default function App() {
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
           <Route path="/zentrale" element={<ProtectedRoute><Zentrale /></ProtectedRoute>} />
           <Route path="/planung/zentrale" element={<Navigate to="/zentrale" replace />} />
-          <Route path="/planung/innendienst" element={<ProtectedRoute adminOnly><PlannedArea area="innendienst" /></ProtectedRoute>} />
+          <Route path="/innendienst" element={<ProtectedRoute><Innendienst /></ProtectedRoute>} />
+          <Route path="/planung/innendienst" element={<Navigate to="/innendienst" replace />} />
           <Route path="/aussendienst" element={<ProtectedRoute><Aussendienst /></ProtectedRoute>} />
           <Route path="/planung/aussendienst" element={<Navigate to="/aussendienst" replace />} />
           <Route
