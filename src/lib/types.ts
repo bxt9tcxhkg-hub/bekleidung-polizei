@@ -448,6 +448,59 @@ export interface ZentraleEntry {
   updated_at: string
 }
 
+export type DutyFunction = 'zentrale' | 'innendienst' | 'jd' | 'vd'
+export type DutyShift = 'tag' | 'nacht'
+
+export interface DutyAssignment {
+  id: string
+  user_id: string
+  duty_date: string
+  shift: DutyShift
+  function: DutyFunction
+  vehicle: string | null
+  created_at: string
+  updated_at: string
+  profiles?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+}
+
+export type IncidentDisposition = 'jd' | 'vd' | 'bp' | 'keine_anfahrt'
+export type IncidentStatus = 'offen' | 'erledigt' | 'weitergegeben'
+
+export interface IncidentReport {
+  id: string
+  caller_phone: string | null
+  caller_name: string | null
+  reported_at: string
+  location: string | null
+  summary: string
+  involved_person: string | null
+  involved_birth_date: string | null
+  disposition: IncidentDisposition
+  note: string | null
+  status: IncidentStatus
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export type OperationalPersonNoteCategory = 'infektionsschutz' | 'aggressiv' | 'waffenverbot' | 'fluchtgefahr' | 'suizidgefahr' | 'sonstiges'
+
+export interface OperationalPersonNote {
+  id: string
+  person_name: string
+  birth_date: string | null
+  phone: string | null
+  category: OperationalPersonNoteCategory
+  note: string
+  action_guidance: string | null
+  source_reference: string | null
+  valid_until: string | null
+  active: boolean
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
 export interface EinsatzTrainingParticipation {
   id: string
   session_id: string
@@ -537,6 +590,9 @@ type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, never>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
+type DutyAssignmentRow = Omit<DutyAssignment, 'profiles'>
+type IncidentReportRow = Omit<IncidentReport, never>
+type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -664,6 +720,15 @@ export type Database = {
       zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      duty_assignments: { Row: DutyAssignmentRow; Insert: Pick<DutyAssignmentRow, 'user_id' | 'function'> & Partial<Omit<DutyAssignmentRow, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'function'>>; Update: Partial<Omit<DutyAssignmentRow, 'id' | 'created_at' | 'user_id'>>; Relationships: [
+        { foreignKeyName: 'duty_assignments_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_name' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_name' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'operational_person_notes_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -678,6 +743,7 @@ export type Database = {
       can_manage_schulungen: { Args: Record<string, never>; Returns: boolean }
       can_manage_fuhrpark: { Args: Record<string, never>; Returns: boolean }
       can_manage_zentrale: { Args: Record<string, never>; Returns: boolean }
+      is_zentralist_on_duty: { Args: Record<string, never>; Returns: boolean }
       remove_training_attendance: { Args: { p_attendance_id: string }; Returns: undefined }
       save_training_munition: { Args: { p_session_id: string; p_previous_pool_id: string | null; p_previous_quantity: number | null; p_pool_id: string | null; p_quantity: number | null; p_marke: string | null; p_kaliber: string | null; p_art: string | null }; Returns: undefined }
       save_portal_profile: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null }; Returns: undefined }

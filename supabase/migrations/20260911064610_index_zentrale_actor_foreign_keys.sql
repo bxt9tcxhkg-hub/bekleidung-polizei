@@ -1,0 +1,2 @@
+CREATE INDEX incident_reports_created_by_idx ON public.incident_reports(created_by);
+CREATE INDEX operational_person_notes_created_by_idx ON public.operational_person_notes(created_by);
