@@ -606,7 +606,7 @@ type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, 'responsible_profile'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
-type DutyFunctionConfigRow = DutyFunctionConfig
+type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, never>
 type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
 
