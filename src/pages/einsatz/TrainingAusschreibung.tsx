@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
 import type {
+  EinsatzTrainingAssignment,
   EinsatzTrainingCompletion,
   EinsatzTrainingModule,
   EinsatzTrainingRegistration,
@@ -103,12 +104,23 @@ function OfficerEnrollPicker({
   )
 }
 
-export default function TrainingAusschreibungPanel({ canManage }: { canManage: boolean }) {
+/** Vereinheitlichte Teilnahme je Termin: bestätigte Anmeldung oder noch offener Vorschlag. */
+type SessionParticipant = {
+  id: string
+  session_id: string
+  officer_id: string
+  officer?: OfficerOption
+  confirmed: boolean
+  assignmentId?: string
+}
+
+export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: { canManage: boolean; isGenehmiger: boolean }) {
   const { profile } = useAuth()
   const [sessions, setSessions] = useState<EinsatzTrainingSession[]>([])
   const [modules, setModules] = useState<EinsatzTrainingModule[]>([])
   const [completions, setCompletions] = useState<EinsatzTrainingCompletion[]>([])
   const [registrations, setRegistrations] = useState<EinsatzTrainingRegistration[]>([])
+  const [assignments, setAssignments] = useState<EinsatzTrainingAssignment[]>([])
   const [officers, setOfficers] = useState<OfficerOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -122,7 +134,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
 
   async function load() {
     setLoading(true)
-    const [sessRes, modRes, compRes, regRes, profRes] = await Promise.all([
+    const [sessRes, modRes, compRes, regRes, assignRes, profRes] = await Promise.all([
       supabase
         .from('einsatz_training_sessions')
         .select('*, module:einsatz_training_modules(id,name,kind,module_type,schiesst,applies_to,period_year,period_half,active)')
@@ -133,6 +145,9 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
       canManage
         ? supabase.from('einsatz_training_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
         : supabase.from('einsatz_training_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('officer_id', profile?.id ?? ''),
+      canManage
+        ? supabase.from('einsatz_training_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').not('session_id', 'is', null)
+        : supabase.from('einsatz_training_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').eq('officer_id', profile?.id ?? ''),
       canManage
         ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name')
         : Promise.resolve({ data: [] as OfficerOption[], error: null }),
@@ -147,6 +162,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     setModules((modRes.data ?? []) as EinsatzTrainingModule[])
     setCompletions((compRes.data ?? []) as EinsatzTrainingCompletion[])
     setRegistrations((regRes.data ?? []) as EinsatzTrainingRegistration[])
+    setAssignments((assignRes.data ?? []) as EinsatzTrainingAssignment[])
     setOfficers(excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
     setLoading(false)
   }
@@ -159,14 +175,20 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
   }, [canManage, profile?.id])
 
   const regsBySession = useMemo(() => {
-    const map = new Map<string, EinsatzTrainingRegistration[]>()
+    const map = new Map<string, SessionParticipant[]>()
     for (const row of registrations) {
       const list = map.get(row.session_id) ?? []
-      list.push(row)
+      list.push({ id: row.id, session_id: row.session_id, officer_id: row.officer_id, officer: row.officer, confirmed: true })
+      map.set(row.session_id, list)
+    }
+    for (const row of assignments) {
+      if (!row.session_id) continue
+      const list = map.get(row.session_id) ?? []
+      list.push({ id: row.id, session_id: row.session_id, officer_id: row.officer_id, officer: row.officer, confirmed: false, assignmentId: row.id })
       map.set(row.session_id, list)
     }
     return map
-  }, [registrations])
+  }, [registrations, assignments])
 
   function openForm() {
     setSessionDate('')
@@ -239,18 +261,23 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
     return enrollBlockReason(session, profile.id, profile.organisation)
   }
 
-  async function insertRegistration(session: EinsatzTrainingSession, officerId: string, auditAction: string, auditDetails: string) {
+  // Anmeldung (Selbst- oder Fremdanmeldung durch Sachbearbeiter) ist ab jetzt nur noch
+  // ein Vorschlag – erst der Genehmiger macht daraus eine echte Anmeldung.
+  async function proposeAssignment(session: EinsatzTrainingSession, officerId: string, auditAction: string, auditDetails: string) {
+    if (!profile?.id || !session.module_id) return
     setBusyId(session.id)
     setError('')
-    const { error: insertError } = await supabase.from('einsatz_training_registrations').insert({
-      session_id: session.id,
+    const { error: insertError } = await supabase.from('einsatz_training_assignments').insert({
       officer_id: officerId,
+      module_id: session.module_id,
+      session_id: session.id,
+      proposed_by: profile.id,
     })
     if (insertError) {
       setError(
         isModuleLockDbError(insertError.message)
           ? moduleLockUserMessage(session.module?.name)
-          : (insertError.message || 'Anmeldung fehlgeschlagen.'),
+          : (insertError.message || 'Vorschlag fehlgeschlagen.'),
       )
       setBusyId(null)
       return
@@ -267,10 +294,10 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
       setError(hint)
       return
     }
-    await insertRegistration(
+    await proposeAssignment(
       session,
       profile.id,
-      'Einsatztraining-Anmeldung',
+      'Einsatztraining-Anmeldung vorgeschlagen',
       `${session.module?.name ?? session.module_id} ${session.session_date}`,
     )
   }
@@ -283,34 +310,31 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
       return
     }
     const isOwn = officer.id === profile?.id
-    await insertRegistration(
+    await proposeAssignment(
       session,
       officer.id,
-      isOwn ? 'Einsatztraining-Anmeldung' : 'Einsatztraining-Anmeldung durch Sachbearbeiter',
+      isOwn ? 'Einsatztraining-Anmeldung vorgeschlagen' : 'Einsatztraining-Anmeldung durch Sachbearbeiter vorgeschlagen',
       `${officerDisplayName(officer)} · ${session.module?.name ?? session.module_id} ${session.session_date}`,
     )
   }
 
-  async function unregisterOfficer(session: EinsatzTrainingSession, officerId: string) {
-    const isOwn = officerId === profile?.id
+  async function unregisterParticipant(session: EinsatzTrainingSession, participant: SessionParticipant) {
+    const isOwn = participant.officer_id === profile?.id
     if (!isOwn && !canManage) return
     setBusyId(session.id)
     setError('')
-    const { error: deleteError } = await supabase
-      .from('einsatz_training_registrations')
-      .delete()
-      .eq('session_id', session.id)
-      .eq('officer_id', officerId)
+    const { error: deleteError } = participant.confirmed
+      ? await supabase.from('einsatz_training_registrations').delete().eq('session_id', session.id).eq('officer_id', participant.officer_id)
+      : await supabase.from('einsatz_training_assignments').delete().eq('id', participant.assignmentId ?? participant.id)
     if (deleteError) {
       setError(deleteError.message || 'Abmeldung fehlgeschlagen.')
       setBusyId(null)
       return
     }
     if (canManage && !isOwn) {
-      const officer = officers.find(row => row.id === officerId)
-        ?? (regsBySession.get(session.id) ?? []).find(row => row.officer_id === officerId)?.officer
+      const officer = officers.find(row => row.id === participant.officer_id) ?? participant.officer
       logAudit(
-        'Einsatztraining-Abmeldung durch Sachbearbeiter',
+        participant.confirmed ? 'Einsatztraining-Abmeldung durch Sachbearbeiter' : 'Trainingsvorschlag durch Sachbearbeiter zurückgezogen',
         `${officerDisplayName(officer)} · ${session.module?.name ?? session.module_id} ${session.session_date}`,
       )
     }
@@ -320,7 +344,45 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
 
   async function unregister(session: EinsatzTrainingSession) {
     if (!profile?.id) return
-    await unregisterOfficer(session, profile.id)
+    const participant = (regsBySession.get(session.id) ?? []).find(row => row.officer_id === profile.id)
+    if (!participant) return
+    await unregisterParticipant(session, participant)
+  }
+
+  // Genehmiger entscheidet über einen noch offenen, bereits terminierten Vorschlag.
+  async function decideAssignment(session: EinsatzTrainingSession, participant: SessionParticipant, approve: boolean) {
+    if (!isGenehmiger || participant.confirmed || !participant.assignmentId) return
+    if (!approve) {
+      const note = window.prompt('Ablehnungsgrund (optional):') ?? ''
+      if (note === null) return
+      await runDecision(session, participant, false, note)
+      return
+    }
+    await runDecision(session, participant, true, '')
+  }
+
+  async function runDecision(session: EinsatzTrainingSession, participant: SessionParticipant, approve: boolean, note: string) {
+    if (!participant.assignmentId) return
+    setBusyId(session.id)
+    setError('')
+    const { error: rpcError } = await supabase.rpc('decide_training_assignment', {
+      p_assignment_id: participant.assignmentId,
+      p_approve: approve,
+      p_session_id: session.id,
+      p_note: note.trim() || null,
+    })
+    if (rpcError) {
+      setError(rpcError.message || 'Entscheidung fehlgeschlagen.')
+      setBusyId(null)
+      return
+    }
+    const officer = officers.find(row => row.id === participant.officer_id) ?? participant.officer
+    logAudit(
+      approve ? 'Trainingsvorschlag genehmigt' : 'Trainingsvorschlag abgelehnt',
+      `${officerDisplayName(officer)} · ${session.module?.name ?? session.module_id} ${session.session_date}`,
+    )
+    setBusyId(null)
+    await load()
   }
 
   async function removeSession(session: EinsatzTrainingSession) {
@@ -380,7 +442,10 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
           {sessions.map(session => {
             const module = session.module ?? modules.find(m => m.id === session.module_id)
             const regs = regsBySession.get(session.id) ?? []
-            const own = Boolean(profile?.id && regs.some(r => r.officer_id === profile.id))
+            const ownParticipant = regs.find(r => r.officer_id === profile?.id)
+            const own = Boolean(profile?.id && ownParticipant)
+            const confirmedCount = regs.filter(r => r.confirmed).length
+            const pendingCount = regs.length - confirmedCount
             const hint = registerHint(session)
             const allowed = canSelfRegister({
               officerId: profile?.id ?? '',
@@ -410,18 +475,44 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
                     </p>
                     {session.note && <p className="text-sm text-gray-500 mt-1">{session.note}</p>}
                     <p className="text-sm text-gray-500 mt-1">
-                      {regs.length} Anmeldung{regs.length === 1 ? '' : 'en'}
+                      {confirmedCount} Anmeldung{confirmedCount === 1 ? '' : 'en'}
+                      {pendingCount > 0 ? ` · ${pendingCount} Vorschlag${pendingCount === 1 ? '' : 'e'}` : ''}
                       {session.capacity != null ? ` / ${session.capacity}` : ''}
                     </p>
                     {canManage && regs.length > 0 && (
                       <ul className="mt-2 space-y-1">
                         {regs.filter(row => !isPortalAdminProfile(row.officer)).map(row => (
-                          <li key={row.id} className="flex items-center gap-2 text-sm text-gray-700">
+                          <li key={row.id} className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
                             <span className="min-w-0 truncate">{officerDisplayName(row.officer)}</span>
+                            {!row.confirmed && (
+                              <span className="shrink-0 text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
+                                Wartet auf Genehmigung
+                              </span>
+                            )}
+                            {!row.confirmed && isGenehmiger && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busyId === session.id}
+                                  onClick={() => { void decideAssignment(session, row, true) }}
+                                  className="shrink-0 text-xs text-green-700 hover:underline disabled:opacity-60"
+                                >
+                                  Genehmigen
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busyId === session.id}
+                                  onClick={() => { void decideAssignment(session, row, false) }}
+                                  className="shrink-0 text-xs text-red-700 hover:underline disabled:opacity-60"
+                                >
+                                  Ablehnen
+                                </button>
+                              </>
+                            )}
                             <button
                               type="button"
                               disabled={busyId === session.id}
-                              onClick={() => { void unregisterOfficer(session, row.officer_id) }}
+                              onClick={() => { void unregisterParticipant(session, row) }}
                               className="shrink-0 text-xs text-red-700 hover:underline disabled:opacity-60"
                             >
                               Entfernen
@@ -431,7 +522,9 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
                       </ul>
                     )}
                     {!canManage && own && (
-                      <p className="text-sm text-green-800 mt-1">Du bist angemeldet.</p>
+                      <p className={`text-sm mt-1 ${ownParticipant?.confirmed ? 'text-green-800' : 'text-amber-800'}`}>
+                        {ownParticipant?.confirmed ? 'Du bist angemeldet.' : 'Dein Vorschlag wartet auf Genehmigung.'}
+                      </p>
                     )}
                     {!own && hint && (
                       <p className="text-xs text-amber-800 mt-1">{hint}</p>
@@ -468,7 +561,7 @@ export default function TrainingAusschreibungPanel({ canManage }: { canManage: b
                         onClick={() => { void unregister(session) }}
                         className="border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-60"
                       >
-                        Abmelden
+                        {ownParticipant?.confirmed ? 'Abmelden' : 'Vorschlag zurückziehen'}
                       </button>
                     ) : (
                       <button
