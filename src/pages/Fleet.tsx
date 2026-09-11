@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Bike, Car, ChevronRight, Plus, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, Bike, BookOpen, Car, ChevronRight, Plus, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
 import { useAuth } from '../contexts/AuthContext'
@@ -15,6 +15,7 @@ export default function Fleet() {
   const canManage = isStrictAdmin || roles.includes('sachbearbeiter') || roles.includes('admin')
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
   const [employees, setEmployees] = useState<Pick<Profile, 'id' | 'name' | 'dienstnummer'>[]>([])
+  const [defectVehicleIds, setDefectVehicleIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -29,9 +30,10 @@ export default function Fleet() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data, error: loadError }, employeeResult] = await Promise.all([
+    const [{ data, error: loadError }, employeeResult, defectResult] = await Promise.all([
       supabase.from('fleet_vehicles').select('*, responsible_profile:profiles!fleet_vehicles_responsible_user_id_fkey(id,name,dienstnummer)').eq('active', true).order('kind').order('name'),
       canManage ? supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name') : Promise.resolve({ data: [], error: null }),
+      supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig'),
     ])
     if (loadError) {
       setError('Fahrzeuge konnten nicht geladen werden.')
@@ -41,8 +43,10 @@ export default function Fleet() {
       setVehicles((data ?? []) as FleetVehicle[])
     }
     setEmployees((employeeResult.data ?? []) as Pick<Profile, 'id' | 'name' | 'dienstnummer'>[])
+    setDefectVehicleIds((defectResult.data ?? []).map(row => (row as { vehicle_id: string }).vehicle_id))
     setLoading(false)
   }, [canManage])
+  const defectVehicleSet = useMemo(() => new Set(defectVehicleIds), [defectVehicleIds])
 
   useEffect(() => { void load() }, [load])
   if (!hasAreaAccess('fuhrpark')) return <Navigate to="/" replace />
@@ -75,14 +79,14 @@ export default function Fleet() {
       <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-6"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div><h1 className="text-2xl font-bold text-gray-900">Fuhrpark &amp; Fahrzeuge</h1><p className="text-gray-500 text-sm mt-1">Dienstfahrzeuge auswählen und fahrzeugbezogen verwalten.</p></div>
-        {canManage ? <button type="button" onClick={openForm} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Fahrzeug anlegen</button> : null}
+        <div className="flex gap-2"><Link to="/fuhrpark/unterlagen" className="inline-flex items-center justify-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-gray-50"><BookOpen className="w-4 h-4" /> Unterlagen</Link>{canManage ? <button type="button" onClick={openForm} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Fahrzeug anlegen</button> : null}</div>
       </div>
       {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
       {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : vehicles.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white px-5 py-12 text-center"><Car className="w-10 h-10 text-gray-300 mx-auto mb-3" /><p className="font-medium text-gray-700">Noch keine Fahrzeuge vorhanden</p>{canManage ? <button type="button" onClick={openForm} className="mt-3 text-sm font-medium text-blue-800">Erstes Fahrzeug anlegen</button> : null}</div>
       ) : <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{vehicles.map(vehicle => {
         const Icon = vehicle.kind === 'Motorrad' ? Bike : Car
-        return <Link key={vehicle.id} to={`/fuhrpark/${vehicle.id}`} className="group rounded-2xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all"><div className="flex items-start gap-4"><div className="bg-blue-50 text-blue-700 p-3 rounded-xl"><Icon className="w-6 h-6" /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.kind}</p><h2 className="font-bold text-gray-900 mt-1">{vehicle.name}</h2></div><ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-700 flex-shrink-0" /></div><dl className="text-sm mt-4 space-y-2"><div className="flex justify-between gap-3"><dt className="text-gray-500">Rufname</dt><dd className="font-medium text-gray-700 text-right">{vehicle.call_sign ?? 'Noch offen'}</dd></div><div className="flex justify-between gap-3"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium text-gray-700 text-right">{vehicle.license_plate ?? 'Noch offen'}</dd></div><div className="flex justify-between gap-3"><dt className="text-gray-500">Fahrzeugverantwortlich</dt><dd className="font-medium text-gray-700 text-right">{vehicle.responsible_profile?.name ?? 'Nicht zugewiesen'}</dd></div></dl><p className="text-xs font-semibold text-blue-700 mt-4">Fahrzeug öffnen</p></div></div></Link>
+        return <Link key={vehicle.id} to={`/fuhrpark/${vehicle.id}`} className="group rounded-2xl border border-gray-200 bg-white p-5 hover:border-blue-300 hover:shadow-sm transition-all"><div className="flex items-start gap-4"><div className="bg-blue-50 text-blue-700 p-3 rounded-xl"><Icon className="w-6 h-6" /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-3"><div><div className="flex items-center gap-2"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.kind}</p>{defectVehicleSet.has(vehicle.id) ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">Mängel</span> : null}</div><h2 className="font-bold text-gray-900 mt-1">{vehicle.name}</h2></div><ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-700 flex-shrink-0" /></div><dl className="text-sm mt-4 space-y-2"><div className="flex justify-between gap-3"><dt className="text-gray-500">Rufname</dt><dd className="font-medium text-gray-700 text-right">{vehicle.call_sign ?? 'Noch offen'}</dd></div><div className="flex justify-between gap-3"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium text-gray-700 text-right">{vehicle.license_plate ?? 'Noch offen'}</dd></div><div className="flex justify-between gap-3"><dt className="text-gray-500">Fahrzeugverantwortlich</dt><dd className="font-medium text-gray-700 text-right">{vehicle.responsible_profile?.name ?? 'Nicht zugewiesen'}</dd></div></dl><p className="text-xs font-semibold text-blue-700 mt-4">Fahrzeug öffnen</p></div></div></Link>
       })}</div>}
 
       {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Fahrzeug anlegen</h2><button type="button" onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">

@@ -102,6 +102,16 @@ export default function App() {
           />
           <Route path="/planung/schulungen" element={<Navigate to="/schulungen" replace />} />
           <Route path="/fuhrpark" element={<ProtectedRoute><Fleet /></ProtectedRoute>} />
+          <Route
+            path="/fuhrpark/unterlagen"
+            element={
+              <ProtectedRoute>
+                <PortalChrome wide>
+                  <EinsatzMaterials fixedArea="fuhrpark" />
+                </PortalChrome>
+              </ProtectedRoute>
+            }
+          />
           <Route path="/fuhrpark/:vehicleId" element={<ProtectedRoute><FleetVehicle /></ProtectedRoute>} />
           <Route path="/planung/fuhrpark" element={<Navigate to="/fuhrpark" replace />} />
           <Route path="/planung/fuhrpark/:vehicleId" element={<Navigate to="/fuhrpark" replace />} />

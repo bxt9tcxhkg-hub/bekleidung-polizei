@@ -49,6 +49,22 @@ export async function canManageSchulungen(request: Request, env: AuthEnv): Promi
   }
 }
 
+export async function canManageFuhrpark(request: Request, env: AuthEnv): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/can_manage_fuhrpark`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })
+    return response.ok && await response.json() === true
+  } catch {
+    return false
+  }
+}
+
 export async function canReadEinsatzMaterial(request: Request, env: AuthEnv, key: string): Promise<boolean> {
   if (!env.SUPABASE_URL) return false
   const headers = bearerHeaders(request, env)
@@ -100,7 +116,7 @@ export async function isAuthenticated(request: Request, env: AuthEnv): Promise<b
 
 /** Concrete object authorization uses the caller's database RLS. Unknown folders fail closed. */
 export async function canReadFile(request: Request, env: AuthEnv, key: string): Promise<boolean> {
-  if (key.startsWith('einsatz-unterlagen/') || key.startsWith('schulungs-unterlagen/')) {
+  if (key.startsWith('einsatz-unterlagen/') || key.startsWith('schulungs-unterlagen/') || key.startsWith('fuhrpark-unterlagen/')) {
     return canReadEinsatzMaterial(request, env, key)
   }
   const headers = bearerHeaders(request, env)

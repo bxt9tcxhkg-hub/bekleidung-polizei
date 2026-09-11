@@ -14,6 +14,7 @@ const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
   einsatzmittel: 'Einsatzmittel',
   einsatztraining: 'Einsatztraining',
   schulungen: 'Schulungen',
+  fuhrpark: 'Fuhrpark',
 }
 
 export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMaterialArea }) {
@@ -21,9 +22,12 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
   const [area, setArea] = useState<EinsatzMaterialArea>(fixedArea ?? 'einsatzmittel')
   const activeArea = fixedArea ?? area
   const schulungenRoles = areaRoles?.find(row => row.area === 'schulungen')?.roles ?? []
+  const fuhrparkRoles = areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []
   const canManage = activeArea === 'schulungen'
     ? isStrictAdmin || schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')
-    : canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+    : activeArea === 'fuhrpark'
+      ? isStrictAdmin || fuhrparkRoles.includes('sachbearbeiter') || fuhrparkRoles.includes('admin')
+      : canManagePersonalEinsatzmittel({ isStrictAdmin, rows: areaRoles })
   const [tabs, setTabs] = useState<EinsatzMaterialTab[]>([])
   const [materials, setMaterials] = useState<EinsatzMaterial[]>([])
   const [activeTabId, setActiveTabId] = useState('')
@@ -98,7 +102,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
     [materials, activeTabId],
   )
 
-  if (!hasAreaAccess(activeArea === 'schulungen' ? 'schulungen' : 'einsatz_mt')) return <Navigate to="/" replace />
+  if (!hasAreaAccess(activeArea === 'schulungen' ? 'schulungen' : activeArea === 'fuhrpark' ? 'fuhrpark' : 'einsatz_mt')) return <Navigate to="/" replace />
 
   function startAddTab() {
     setEditingTab(null)
@@ -317,8 +321,8 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
     <div>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{fixedArea === 'schulungen' ? 'Schulungen' : 'Unterlagen'}</h1>
-          <p className="text-gray-500 text-sm mt-1">{fixedArea === 'schulungen' ? 'Schulungsunterlagen, Rechtsinformationen und Arbeitshilfen' : 'Dienstanweisungen und Schulungsmaterial'}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{fixedArea === 'schulungen' ? 'Schulungen' : fixedArea === 'fuhrpark' ? 'Fuhrpark-Unterlagen' : 'Unterlagen'}</h1>
+          <p className="text-gray-500 text-sm mt-1">{fixedArea === 'schulungen' ? 'Schulungsunterlagen, Rechtsinformationen und Arbeitshilfen' : fixedArea === 'fuhrpark' ? 'Fahrzeughandbücher, Formulare und Arbeitsanweisungen' : 'Dienstanweisungen und Schulungsmaterial'}</p>
         </div>
         {canManage && activeTab ? (
           <button type="button" onClick={startAddMaterial} className="flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl">
