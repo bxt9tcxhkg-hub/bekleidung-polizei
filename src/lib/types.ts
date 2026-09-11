@@ -608,10 +608,13 @@ export interface InnendienstRecord {
   note: string | null
   status: InnendienstRecordStatus
   issued_date: string
+  /** Nur bei kind='verstoss': der Bescheid (Straßenmusik/-kunst), gegen dessen Auflagen verstoßen wurde. Pflichtfeld für Verstöße. */
+  related_bescheid_id: string | null
   created_by: string
   created_at: string
   updated_at: string
   creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
 }
 
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
@@ -677,7 +680,7 @@ type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
 type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
 type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer'>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
-type InnendienstRecordRow = Omit<InnendienstRecord, 'creator'>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -830,6 +833,7 @@ export type Database = {
       ] }
       innendienst_records: { Row: InnendienstRecordRow; Insert: Pick<InnendienstRecordRow, 'kind' | 'subject' | 'created_by'> & Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'updated_at' | 'kind' | 'subject' | 'created_by'>>; Update: Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'innendienst_records_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'innendienst_records_related_bescheid_id_fkey'; columns: ['related_bescheid_id']; isOneToOne: false; referencedRelation: 'innendienst_records'; referencedColumns: ['id'] },
       ] }
     }
     Views: {
