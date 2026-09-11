@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import PortalChrome from '../components/PortalChrome'
+import { OwnerNotifications } from '../components/MailDeliveries'
 import {
   PORTAL_ACCOUNT_LINKS,
   type PortalAccountId,
@@ -369,6 +370,7 @@ export default function Portal() {
       </div>
 
       {profile?.id && hasAreaAccess('zentrale') ? <TodayFunctionCard userId={profile.id} canManage={canManageDuties} /> : null}
+      {profile?.id && hasAreaAccess('zentrale') ? <div className="mb-6"><OwnerNotifications userId={profile.id} /></div> : null}
 
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (
