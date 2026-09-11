@@ -16,7 +16,7 @@ export default function RsaRsb() {
 
   return <PortalChrome wide>
     <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-5"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-red-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">RSa/RSb & Vernehmungen</h1><p className="text-sm text-gray-500 mt-1">Schwer erreichbare Personen – unabhängig vom heutigen Dienst erfassbar.</p></div>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">RSa/RSb & Vernehmungen</h1><p className="text-sm text-gray-500 mt-1">Schwer erreichbare Personen – unabhängig vom heutigen Dienst erfassbar.</p></div>
     <MailDeliveries />
   </PortalChrome>
 }
