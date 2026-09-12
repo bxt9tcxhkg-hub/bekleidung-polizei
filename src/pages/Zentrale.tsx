@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { AlertTriangle, BriefcaseBusiness, CheckCircle2, LayoutDashboard, MapPin, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, LayoutDashboard, MapPin, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
@@ -17,12 +17,14 @@ import ZentraleStrassenzustand from './zentrale/ZentraleStrassenzustand'
 // Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung und Unterlagen sind
 // eigenständige Seiten in der Sidebar (siehe ZentraleLayout). Kontrollaufträge
 // betreffen nur die Streifen (JD/VD) und werden dort im Außendienst verwaltet.
-type TabId = 'uebersicht' | 'einsaetze' | 'lage' | 'uebergabe' | 'strassenzustand'
+// Schichtübergabe hat keinen eigenen Tab mehr - offene Punkte stehen direkt
+// in der Übersicht (samt "auch erledigte anzeigen"), das deckt den
+// Arbeitsablauf vollständig ab; ein eigener Tab wäre nur noch Dopplung.
+type TabId = 'uebersicht' | 'einsaetze' | 'lage' | 'strassenzustand'
 const TABS: { id: TabId; label: string; icon: typeof Radio; description: string }[] = [
   { id: 'uebersicht', label: 'Übersicht', icon: LayoutDashboard, description: 'Besetzung, offene Meldungen und relevante Informationen' },
   { id: 'einsaetze', label: 'Einsätze', icon: Radio, description: 'Meldungen schnell erfassen und disponieren' },
   { id: 'lage', label: 'Operative Lage', icon: Radio, description: 'Ereignisse, Sperren, Gefahren- und Lagehinweise' },
-  { id: 'uebergabe', label: 'Schichtübergabe', icon: BriefcaseBusiness, description: 'Offene Punkte und Informationen für die Folgeschicht' },
   { id: 'strassenzustand', label: 'Straßenzustand', icon: MapPin, description: 'Bericht erfassen, prüfen und als PDF versenden' },
 ]
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
@@ -30,6 +32,9 @@ const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infek
 // Wohin ein Klick auf einen "Sofort wichtig"-Eintrag führt, dessen Kategorie
 // jetzt eine eigene Sidebar-Seite ist statt eines Tabs auf dieser Seite.
 const CATEGORY_ROUTE: Partial<Record<ZentraleEntryCategory, string>> = { verbot: '/zentrale/av-bv-ev', fahndung: '/zentrale/fahndungen', brief: '/zentrale/rsa-rsb', schluessel: '/zentrale/schluessel', kontakt: '/zentrale/kontakte', alarmierung: '/zentrale/alarmierung', unterlage: '/zentrale/unterlagen' }
+// Für die Prüfprotokoll-Meldung beim Speichern eines Eintrags - deckt auch
+// Kategorien ab, die keinen eigenen Tab (mehr) haben.
+const CATEGORY_LABEL: Record<ZentraleEntryCategory, string> = { lage: 'Operative Lage', kontrollauftrag: 'Kontrollauftrag', verbot: 'AV/BV & EV', fahndung: 'Fahndungen', brief: 'RSa/RSb', schluessel: 'Schlüssel', kontakt: 'Kontakte', alarmierung: 'Alarmierung', uebergabe: 'Schichtübergabe', unterlage: 'Unterlagen' }
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
@@ -81,6 +86,7 @@ export default function Zentrale() {
   // funktioniert, ohne dorthin zu wechseln. Bei editing zählt item.category.
   const [entryCategory, setEntryCategory] = useState<ZentraleEntryCategory>('lage')
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
+  const [showAllUebergabe, setShowAllUebergabe] = useState(false)
   const [showIncidentForm, setShowIncidentForm] = useState(false)
   const [incident, setIncident] = useState({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null, coordsPrecise: false })
   const [locating, setLocating] = useState(false)
@@ -122,8 +128,11 @@ export default function Zentrale() {
   const currentTab = TABS.find(tab => tab.id === activeTab) ?? TABS[0]
   const visibleEntries = useMemo(() => entries.filter(item => item.category === activeTab), [activeTab, entries])
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
-  // Offene Schichtübergabe-Punkte direkt in der Übersicht, nicht erst in einem eigenen Tab - die Folgeschicht soll das sofort sehen.
-  const openUebergabeEntries = useMemo(() => entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt'), [entries])
+  // Schichtübergabe hat keinen eigenen Tab mehr - alles direkt in der
+  // Übersicht, standardmäßig nur offene Punkte, erledigte optional über den
+  // Umschalter (ersetzt die frühere Verlaufsansicht im eigenen Tab).
+  const uebergabeEntries = useMemo(() => entries.filter(item => item.category === 'uebergabe'), [entries])
+  const displayedUebergabeEntries = useMemo(() => showAllUebergabe ? uebergabeEntries : uebergabeEntries.filter(item => item.status !== 'erledigt'), [showAllUebergabe, uebergabeEntries])
   const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
   const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
   const visibleIncidents = useMemo(() => {
@@ -193,7 +202,7 @@ export default function Zentrale() {
     const response = editing ? await supabase.from('zentrale_entries').update(payload).eq('id', editing.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
     setSaving(false)
     if (response.error) { setError('Eintrag konnte nicht gespeichert werden.'); return }
-    logAudit(editing ? 'Zentraleintrag bearbeitet' : 'Zentraleintrag angelegt', `${TABS.find(tab => tab.id === category)?.label ?? category} · ${entry.title.trim()}`); setShowEntryForm(false); setNotice('Eintrag wurde gespeichert.'); await load()
+    logAudit(editing ? 'Zentraleintrag bearbeitet' : 'Zentraleintrag angelegt', `${CATEGORY_LABEL[category]} · ${entry.title.trim()}`); setShowEntryForm(false); setNotice('Eintrag wurde gespeichert.'); await load()
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
@@ -230,13 +239,19 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'uebersicht' ? <div className="space-y-6">
       <SofortWichtig entries={criticalEntries} onOpen={item => {
-        if (item.category === 'lage' || item.category === 'uebergabe') { setActiveTab(item.category); openEdit(item) }
+        // uebergabe hat keinen eigenen Tab mehr - der Eintrag steht bereits
+        // weiter unten auf dieser Seite, daher hier kein Tab-Wechsel nötig.
+        if (item.category === 'lage') { setActiveTab(item.category); openEdit(item) }
+        else if (item.category === 'uebergabe') { openEdit(item) }
         else { const route = CATEGORY_ROUTE[item.category]; if (route) navigate(route) }
       }} />
       <div className="space-y-4">
         <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Heute relevant</h2>
         <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
-        <EntryList title="Schichtübergabe" description="Offene Punkte für die Folgeschicht - direkt hier, nicht erst im eigenen Tab." entries={openUebergabeEntries} canManage={canManage} openNew={() => openNewEntry('uebergabe')} openEdit={openEdit} />
+        <div>
+          <div className="flex justify-end mb-2"><label className="inline-flex items-center gap-2 text-xs font-medium text-gray-600"><input type="checkbox" className="rounded" checked={showAllUebergabe} onChange={event => setShowAllUebergabe(event.target.checked)} /> Auch erledigte anzeigen</label></div>
+          <EntryList title="Schichtübergabe" description="Offene Punkte für die Folgeschicht - direkt hier, kein eigener Tab mehr." entries={displayedUebergabeEntries} canManage={canManage} openNew={() => openNewEntry('uebergabe')} openEdit={openEdit} />
+        </div>
         <section><h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze – Gemeindegebiet Dornbirn</h2><LeafletMap height={280} markers={openIncidentMarkers} /></section>
         <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
       </div>
@@ -247,7 +262,7 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'strassenzustand' ? <ZentraleStrassenzustand canManage={canManage} /> : null}
 
-    {!loading && (activeTab === 'lage' || activeTab === 'uebergabe') ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} /> : null}
+    {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
