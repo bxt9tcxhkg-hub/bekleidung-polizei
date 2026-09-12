@@ -47,7 +47,14 @@ export default function LeafletMap({ markers, height = 220, zoom }: { markers: r
     const layerGroup = L.layerGroup().addTo(map)
     markers.forEach(marker => {
       const placed = L.marker([marker.lat, marker.lng], { icon: markerIcon }).addTo(layerGroup)
-      if (marker.popup) placed.bindPopup(marker.popup)
+      if (marker.popup) {
+        // bindPopup rendert einen String als HTML - Ortsangaben/Sachverhalte
+        // sind Freitext von Nutzern, deshalb hier als reiner Text statt als
+        // Markup übergeben (verhindert Skript-Injektion über Marker-Popups).
+        const popupEl = document.createElement('div')
+        popupEl.textContent = marker.popup
+        placed.bindPopup(popupEl)
+      }
     })
     if (markers.length > 0) {
       const bounds = L.latLngBounds(markers.map(marker => [marker.lat, marker.lng] as [number, number]))

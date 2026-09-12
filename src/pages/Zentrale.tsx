@@ -45,6 +45,7 @@ export default function Zentrale() {
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [dutyFunctions, setDutyFunctions] = useState<DutyFunctionConfig[]>([])
   const [incidents, setIncidents] = useState<IncidentReport[]>([])
+  const [openIncidentsAllDays, setOpenIncidentsAllDays] = useState<IncidentReport[]>([])
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -67,19 +68,23 @@ export default function Zentrale() {
     const today = todayLocal()
     // Kontrollaufträge betreffen nur die Streifen (JD/VD) und werden hier
     // bewusst nicht geladen – weder für die Tabs noch für "Sofort wichtig".
-    const [entryResult, dutyResult, functionResult, incidentResult, personResult] = await Promise.all([
+    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
       supabase.from('duty_functions').select('*').eq('active', true).order('sort_order').order('label'),
       supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      // Für die Übersichtskarte unabhängig vom Tagesfilter: Einsätze bleiben
+      // teils über Mitternacht hinaus offen und müssen dort weiter auftauchen.
+      supabase.from('incident_reports').select('*').eq('status', 'offen'),
       supabase.from('operational_person_notes').select('*').eq('active', true).order('updated_at', { ascending: false }),
     ])
-    if (entryResult.error || dutyResult.error || incidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
+    if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
     else setError('')
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
     setAssignments((dutyResult.data ?? []) as unknown as DutyAssignment[])
     setDutyFunctions((functionResult.data ?? []) as DutyFunctionConfig[])
     setIncidents((incidentResult.data ?? []) as IncidentReport[])
+    setOpenIncidentsAllDays((openIncidentResult.data ?? []) as IncidentReport[])
     setPersonNotes(personResult.error ? [] : (personResult.data ?? []) as OperationalPersonNote[])
     setLoading(false)
   }, [])
@@ -97,9 +102,9 @@ export default function Zentrale() {
     if (ownAssignment?.function === 'innendienst') return incidents.filter(item => item.disposition === 'keine_anfahrt')
     return incidents
   }, [incidents, ownAssignment?.function])
-  const openIncidentMarkers = useMemo(() => incidents
-    .filter(item => item.status === 'offen' && item.location_lat !== null && item.location_lng !== null)
-    .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [incidents])
+  const openIncidentMarkers = useMemo(() => openIncidentsAllDays
+    .filter(item => item.location_lat !== null && item.location_lng !== null)
+    .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
   const contextEntries = useMemo(() => {
     const place = normalizeText(incident.location), phone = normalizePhone(incident.callerPhone), name = normalizeText(incident.callerName)
     if (!place && !phone && name.length < 3) return []
@@ -132,12 +137,14 @@ export default function Zentrale() {
 
   function openIncident() { setIncident({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null }); setLocateError(''); setShowIncidentForm(true); setError('') }
   async function locateIncident() {
-    if (!incident.location.trim()) return
+    const queried = incident.location.trim()
+    if (!queried) return
     setLocating(true); setLocateError('')
-    const result = await geocodeLocation(incident.location)
+    const result = await geocodeLocation(queried)
     setLocating(false)
     if (!result) { setLocateError('Ort konnte nicht gefunden werden.'); return }
-    setIncident(current => ({ ...current, lat: result.lat, lng: result.lng }))
+    // Falls der Ort während der Anfrage geändert wurde, gehört das Ergebnis nicht mehr dazu.
+    setIncident(current => current.location.trim() === queried ? { ...current, lat: result.lat, lng: result.lng } : current)
   }
   async function saveIncident() {
     if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
