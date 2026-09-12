@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleEntry, ZentraleEntryCategory } from '../lib/types'
 import { Actions, Area, Empty, EntryList, EntryModal, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
+import ZentraleStrassenzustand from './zentrale/ZentraleStrassenzustand'
 
 // Auf der Zentrale-Hauptseite bleiben nur die Bereiche, die den Zentralisten
 // im Tagesgeschäft unmittelbar betreffen. AV/BV & EV, Personenhinweise,
@@ -159,7 +160,7 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'einsaetze' ? <section><div className="flex items-center justify-between gap-3 mb-3"><div><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-sm text-gray-500">Kurze interne Koordination, keine Aktenbearbeitung.</p></div>{canOperateZentrale ? <button type="button" onClick={openIncident} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button> : null}</div>{incidentCards}</section> : null}
 
-    {!loading && activeTab === 'strassenzustand' ? <section className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-6"><div className="flex items-start gap-3"><AlertTriangle className="w-6 h-6 text-amber-700" /><div><h2 className="font-bold text-gray-900">Straßenzustandsbericht in Planung</h2><p className="text-sm text-gray-600 mt-1">Sobald das Formular und der genaue Ablauf vorliegen, wird hier die Erfassung und PDF-Erstellung umgesetzt.</p></div></div></section> : null}
+    {!loading && activeTab === 'strassenzustand' ? <ZentraleStrassenzustand canManage={canManage} /> : null}
 
     {!loading && (activeTab === 'lage' || activeTab === 'uebergabe') ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
 

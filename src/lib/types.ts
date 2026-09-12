@@ -547,6 +547,52 @@ export interface ZentraleEntry {
   updated_at: string
 }
 
+export type StrassenzustandZustand = 'normal' | 'schnee' | 'glatteis' | 'lawine' | 'sonstige'
+export type StrassenzustandMeldungsart = 'neuzugang' | 'aenderung' | 'widerruf'
+
+export interface StrassenzustandStammdatum {
+  id: string
+  name: string
+  active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface StrassenzustandBericht {
+  id: string
+  nummer: number
+  bearbeiter: string
+  anmerkung: string | null
+  pdf_file_key: string | null
+  pdf_file_name: string | null
+  pdf_uploaded_at: string | null
+  pdf_uploaded_by: string | null
+  created_at: string
+  updated_at: string
+  profiles?: { name: string | null; dienstnummer: string | null } | null
+}
+
+export interface StrassenzustandBerichtzeile {
+  id: string
+  bericht_id: string
+  strasse_id: string | null
+  strasse_freitext: string | null
+  zustand: StrassenzustandZustand
+  zustand_freitext: string | null
+  auftraggeber_id: string | null
+  auftraggeber_freitext: string | null
+  melder_id: string | null
+  melder_freitext: string | null
+  gueltig_von: string
+  gueltig_bis: string | null
+  meldungsart: StrassenzustandMeldungsart
+  created_at: string
+  strassenzustand_strassen?: { name: string } | null
+  strassenzustand_auftraggeber?: { name: string } | null
+  strassenzustand_melder?: { name: string } | null
+}
+
 export type DutyFunction = string
 export type DutyShift = 'tag' | 'nacht'
 
@@ -927,6 +973,9 @@ type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
 type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer'>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
 type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
+type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
+type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>
+type StrassenzustandBerichtzeileRow = Omit<StrassenzustandBerichtzeile, 'strassenzustand_strassen' | 'strassenzustand_auftraggeber' | 'strassenzustand_melder'>
 
 /** View public.orders_full: orders.* plus Produkt-, Benutzer- und Quartalsfelder. */
 export type OrdersFullRow = OrderRow & {
@@ -1082,6 +1131,18 @@ export type Database = {
       ] }
       zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      strassenzustand_strassen: { Row: StrassenzustandStammdatumRow; Insert: Pick<StrassenzustandStammdatumRow, 'name'> & Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at'>>; Relationships: [] }
+      strassenzustand_auftraggeber: { Row: StrassenzustandStammdatumRow; Insert: Pick<StrassenzustandStammdatumRow, 'name'> & Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at'>>; Relationships: [] }
+      strassenzustand_melder: { Row: StrassenzustandStammdatumRow; Insert: Pick<StrassenzustandStammdatumRow, 'name'> & Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at'>>; Relationships: [] }
+      strassenzustand_berichte: { Row: StrassenzustandBerichtRow; Insert: Pick<StrassenzustandBerichtRow, 'bearbeiter'> & Partial<Omit<StrassenzustandBerichtRow, 'id' | 'nummer' | 'created_at' | 'updated_at' | 'bearbeiter'>>; Update: Partial<Omit<StrassenzustandBerichtRow, 'id' | 'nummer' | 'created_at' | 'bearbeiter'>>; Relationships: [
+        { foreignKeyName: 'strassenzustand_berichte_bearbeiter_fkey'; columns: ['bearbeiter']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      strassenzustand_berichtzeilen: { Row: StrassenzustandBerichtzeileRow; Insert: Pick<StrassenzustandBerichtzeileRow, 'bericht_id' | 'zustand'> & Partial<Omit<StrassenzustandBerichtzeileRow, 'id' | 'created_at' | 'meldungsart' | 'bericht_id' | 'zustand'>>; Update: Partial<Omit<StrassenzustandBerichtzeileRow, 'id' | 'created_at' | 'bericht_id'>>; Relationships: [
+        { foreignKeyName: 'strassenzustand_berichtzeilen_bericht_id_fkey'; columns: ['bericht_id']; isOneToOne: false; referencedRelation: 'strassenzustand_berichte'; referencedColumns: ['id'] },
+        { foreignKeyName: 'strassenzustand_berichtzeilen_strasse_id_fkey'; columns: ['strasse_id']; isOneToOne: false; referencedRelation: 'strassenzustand_strassen'; referencedColumns: ['id'] },
+        { foreignKeyName: 'strassenzustand_berichtzeilen_auftraggeber_id_fkey'; columns: ['auftraggeber_id']; isOneToOne: false; referencedRelation: 'strassenzustand_auftraggeber'; referencedColumns: ['id'] },
+        { foreignKeyName: 'strassenzustand_berichtzeilen_melder_id_fkey'; columns: ['melder_id']; isOneToOne: false; referencedRelation: 'strassenzustand_melder'; referencedColumns: ['id'] },
       ] }
       duty_assignments: { Row: DutyAssignmentRow; Insert: Pick<DutyAssignmentRow, 'user_id' | 'function'> & Partial<Omit<DutyAssignmentRow, 'id' | 'created_at' | 'updated_at' | 'user_id' | 'function'>>; Update: Partial<Omit<DutyAssignmentRow, 'id' | 'created_at' | 'user_id'>>; Relationships: [
         { foreignKeyName: 'duty_assignments_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
