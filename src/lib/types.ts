@@ -526,6 +526,7 @@ export interface FleetDocument {
 export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'verbot' | 'fahndung' | 'brief' | 'schluessel' | 'kontakt' | 'alarmierung' | 'uebergabe' | 'unterlage'
 export type ZentraleEntryPriority = 'normal' | 'hoch' | 'kritisch'
 export type ZentraleEntryStatus = 'offen' | 'in_bearbeitung' | 'erledigt'
+export type KontrollauftragZielfunktion = 'jd' | 'vd' | 'beide'
 
 export interface ZentraleEntry {
   id: string
@@ -540,6 +541,7 @@ export interface ZentraleEntry {
   responsible: string | null
   reference: string | null
   restricted: boolean
+  target_function: KontrollauftragZielfunktion | null
   created_by: string | null
   created_at: string
   updated_at: string
