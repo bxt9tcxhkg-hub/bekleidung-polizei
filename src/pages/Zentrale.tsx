@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { AlertTriangle, BriefcaseBusiness, CheckCircle2, LayoutDashboard, MapPin, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -71,6 +71,8 @@ export default function Zentrale() {
   const [incident, setIncident] = useState({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null, coordsPrecise: false })
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState('')
+  const [priorIncidents, setPriorIncidents] = useState<IncidentReport[]>([])
+  const priorIncidentsRequestRef = useRef(0)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
@@ -125,9 +127,34 @@ export default function Zentrale() {
     return entries.filter(item => { const itemLocation = normalizeText(item.location); return item.status !== 'erledigt' && ((place.length >= 4 && itemLocation.length >= 4 && (itemLocation.includes(place) || place.includes(itemLocation))) || (phone.length >= 5 && normalizePhone(item.reference).includes(phone)) || (name.length >= 3 && normalizeText(`${item.title} ${item.responsible ?? ''}`).includes(name))) })
   }, [entries, incident.callerName, incident.callerPhone, incident.location])
   const contextPersonNotes = useMemo(() => {
-    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), phone = normalizePhone(incident.callerPhone)
-    return personNotes.filter(item => (phone.length >= 5 && normalizePhone(item.phone) === phone) || (names.includes(normalizeText(item.person_name)) && (!item.birth_date || item.birth_date === incident.involvedBirthDate)))
-  }, [incident.callerName, incident.callerPhone, incident.involvedBirthDate, incident.involvedPerson, personNotes])
+    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), phone = normalizePhone(incident.callerPhone), place = normalizeText(incident.location)
+    return personNotes.filter(item => {
+      const itemLocation = normalizeText(item.location)
+      // Adressabgleich zusätzlich zu Name/Telefon: beim Anlegen einer Meldung
+      // ist oft nur der Einsatzort bekannt, noch kein Personenname - z. B.
+      // "an dieser Adresse wohnt eine gefährliche Person".
+      return (phone.length >= 5 && normalizePhone(item.phone) === phone)
+        || (names.includes(normalizeText(item.person_name)) && (!item.birth_date || item.birth_date === incident.involvedBirthDate))
+        || (place.length >= 4 && itemLocation.length >= 4 && (itemLocation.includes(place) || place.includes(itemLocation)))
+    })
+  }, [incident.callerName, incident.callerPhone, incident.involvedBirthDate, incident.involvedPerson, incident.location, personNotes])
+  // Frühere Meldungen an derselben Adresse ("gab es dort schon mal was?") -
+  // gezielte Datenbankabfrage statt Client-Filter, weil incident_reports über
+  // die Zeit groß wird (anders als die überschaubaren zentrale_entries).
+  useEffect(() => {
+    if (!showIncidentForm) return
+    const street = incident.street.trim()
+    if (street.length < 3) { setPriorIncidents([]); return }
+    const requestId = ++priorIncidentsRequestRef.current
+    const escaped = street.replace(/[\\%_]/g, char => `\\${char}`)
+    const timer = setTimeout(() => {
+      void supabase.from('incident_reports').select('*').ilike('location', `%${escaped}%`).order('reported_at', { ascending: false }).limit(5).then(result => {
+        if (priorIncidentsRequestRef.current !== requestId) return
+        setPriorIncidents(result.error ? [] : (result.data ?? []) as IncidentReport[])
+      })
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [incident.street, showIncidentForm])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
@@ -201,7 +228,7 @@ export default function Zentrale() {
 
     {!loading && (activeTab === 'lage' || activeTab === 'uebergabe') ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} /> : null}
 
-    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }
@@ -218,7 +245,7 @@ function SofortWichtig({ entries, onOpen }: { entries: ZentraleEntry[]; onOpen: 
   return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2><div className="space-y-2">{entries.map(item => <button key={item.id} type="button" onClick={() => onOpen(item)} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
 }
 
-function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
+function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<typeof incident>) => setIncident(current => ({ ...current, ...values }))
   return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><Field label="Name des Melders" value={incident.callerName} onChange={value => patch({ callerName: value })} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
     <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
@@ -251,10 +278,15 @@ function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, con
       </div>
     </div>
     <div><button type="button" disabled={!incident.location.trim() || locating} onClick={() => void locate()} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"><MapPin className="w-3.5 h-3.5" /> {locating ? 'Suche…' : 'Auf Karte anzeigen'}</button>{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}</p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
-    <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Beteiligte Person" value={incident.involvedPerson} onChange={value => patch({ involvedPerson: value })} /><Field label="Geburtsdatum zur eindeutigen Zuordnung" type="date" value={incident.involvedBirthDate} onChange={value => patch({ involvedBirthDate: value })} /></div><ContextHints entries={contextEntries} personNotes={contextPersonNotes} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
+    <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Beteiligte Person" value={incident.involvedPerson} onChange={value => patch({ involvedPerson: value })} /><Field label="Geburtsdatum zur eindeutigen Zuordnung" type="date" value={incident.involvedBirthDate} onChange={value => patch({ involvedBirthDate: value })} /></div><ContextHints entries={contextEntries} personNotes={contextPersonNotes} priorIncidents={priorIncidents} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
 }
 
-function ContextHints({ entries, personNotes }: { entries: ZentraleEntry[]; personNotes: OperationalPersonNote[] }) {
-  if (entries.length === 0 && personNotes.length === 0) return null
-  return <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><h3 className="font-bold text-blue-900">Relevante Hinweise gefunden</h3><p className="text-xs text-blue-700 mt-0.5">Automatisch zusammengetragen – die operative Bewertung bleibt beim Zentralisten.</p><div className="space-y-2 mt-3">{personNotes.map(item => <div key={item.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2"><p className="text-sm font-bold text-red-900">{PERSON_NOTE_LABEL[item.category]} · {item.person_name}</p><p className="text-sm text-red-800">{item.note}</p>{item.action_guidance ? <p className="text-sm font-semibold text-red-900 mt-1">{item.action_guidance}</p> : null}</div>)}{entries.map(item => <div key={item.id} className={`rounded-lg border px-3 py-2 ${item.category === 'verbot' ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-white'}`}><p className="text-sm font-bold text-gray-900">{item.title}</p>{item.description ? <p className="text-sm text-gray-700">{item.description}</p> : null}{item.reference ? <p className="text-xs text-gray-500 mt-1">{item.reference}</p> : null}</div>)}</div></div>
+function ContextHints({ entries, personNotes, priorIncidents }: { entries: ZentraleEntry[]; personNotes: OperationalPersonNote[]; priorIncidents: IncidentReport[] }) {
+  if (entries.length === 0 && personNotes.length === 0 && priorIncidents.length === 0) return null
+  const today = todayLocal()
+  return <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><h3 className="font-bold text-blue-900">Relevante Hinweise gefunden</h3><p className="text-xs text-blue-700 mt-0.5">Automatisch zusammengetragen – die operative Bewertung bleibt beim Zentralisten.</p><div className="space-y-2 mt-3">
+    {personNotes.map(item => { const expired = !!item.valid_until && item.valid_until < today; return <div key={item.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2"><p className="text-sm font-bold text-red-900">{PERSON_NOTE_LABEL[item.category]} · {item.person_name}</p><p className="text-sm text-red-800">{item.note}</p>{item.action_guidance ? <p className="text-sm font-semibold text-red-900 mt-1">{item.action_guidance}</p> : null}{item.location || item.valid_until ? <p className="text-xs text-red-700 mt-1 flex flex-wrap gap-x-3">{item.location ? <span>Adresse: {item.location}</span> : null}{item.valid_until ? <span>Gültig bis {new Date(item.valid_until).toLocaleDateString('de-AT')}{expired ? <strong className="text-red-900"> · Abgelaufen</strong> : null}</span> : null}</p> : null}</div> })}
+    {entries.map(item => { const expired = !!item.valid_until && item.valid_until < today; return <div key={item.id} className={`rounded-lg border px-3 py-2 ${item.category === 'verbot' ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-white'}`}><p className="text-sm font-bold text-gray-900">{item.title}</p>{item.description ? <p className="text-sm text-gray-700">{item.description}</p> : null}{item.reference ? <p className="text-xs text-gray-500 mt-1">{item.reference}</p> : null}{item.valid_from || item.valid_until ? <p className={`text-xs mt-1 ${expired ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>{item.valid_from ? `Gültig ab ${new Date(item.valid_from).toLocaleDateString('de-AT')}` : 'Gültig'}{item.valid_until ? ` bis ${new Date(item.valid_until).toLocaleDateString('de-AT')}` : ''}{expired ? ' · Abgelaufen' : ''}</p> : null}</div> })}
+    {priorIncidents.length > 0 ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><p className="text-sm font-bold text-amber-900">Frühere Meldungen an dieser Adresse</p><div className="space-y-1.5 mt-1.5">{priorIncidents.map(item => <p key={item.id} className="text-sm text-amber-900"><span className="font-semibold">{new Date(item.reported_at).toLocaleDateString('de-AT')}</span> · {item.summary.slice(0, 100)}{item.summary.length > 100 ? '…' : ''}</p>)}</div></div> : null}
+  </div></div>
 }

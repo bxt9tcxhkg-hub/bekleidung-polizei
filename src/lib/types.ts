@@ -650,6 +650,7 @@ export interface OperationalPersonNote {
   person_name: string
   birth_date: string | null
   phone: string | null
+  location: string | null
   category: OperationalPersonNoteCategory
   note: string
   action_guidance: string | null
