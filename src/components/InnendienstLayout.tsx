@@ -1,27 +1,15 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import {
-  Building2,
-  LayoutGrid,
-  LogOut,
-  Mail,
-  Menu,
-  Radio,
-  Shield,
-  X,
-} from 'lucide-react'
+import { Building2, LayoutGrid, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import ChangePasswordModal from './ChangePasswordModal'
 
 const baseItems = [
   { to: '/', label: 'Portal', icon: LayoutGrid },
-  { to: '/zentrale', label: 'Zentrale', icon: Radio },
-  { to: '/aussendienst', label: 'Außendienst / Streife', icon: Shield },
   { to: '/innendienst', label: 'Innendienst', icon: Building2 },
-  { to: '/rsa-rsb', label: 'RSa/RSb & Vernehmungen', icon: Mail },
 ]
 
-export default function OperativerDienstLayout() {
+export default function InnendienstLayout() {
   const { profile, isAdmin, mustChangePassword, mustSetUsername, signOut } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -46,13 +34,13 @@ export default function OperativerDienstLayout() {
           </div>
           <div className="min-w-0">
             <p className="text-white font-bold text-sm leading-tight">Stadtpolizei</p>
-            <p className="text-blue-300 text-xs">Operativer Dienst</p>
+            <p className="text-blue-300 text-xs">Innendienst</p>
           </div>
         </div>
 
         <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <p className="text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 text-blue-300">
-            Operativer Bereich
+            Innendienst
           </p>
           <div className="space-y-0.5">
             {baseItems.map(({ to, label, icon: Icon }) => {
@@ -100,7 +88,7 @@ export default function OperativerDienstLayout() {
           </button>
           <div className="flex items-center gap-2 min-w-0">
             <img src="/wappen-dornbirn.svg" alt="Wappen der Stadt Dornbirn" className="h-8 w-auto" />
-            <span className="font-semibold text-gray-900 text-sm truncate">Operativer Dienst</span>
+            <span className="font-semibold text-gray-900 text-sm truncate">Innendienst</span>
           </div>
           {sidebarOpen ? (
             <button type="button" onClick={() => setSidebarOpen(false)} className="ml-auto p-2.5 rounded-md hover:bg-gray-100" aria-label="Menü schließen">
