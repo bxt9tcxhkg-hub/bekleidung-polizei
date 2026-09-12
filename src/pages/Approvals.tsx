@@ -105,10 +105,10 @@ export default function Approvals() {
       supabase.from('einsatz_training_modules').select('*'),
       supabase.from('einsatz_training_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
       // Nur Anmeldungen zu aktuell angekündigten Terminen zählen (statt der gesamten
-      // Historie) - das bleibt dauerhaft klein und vermeidet, dass ein Response-Limit
-      // von PostgREST bei wachsender Historie die Belegungszahlen stillschweigend
-      // unterzählt (ein voller Termin würde dann fälschlich als frei gezeigt).
-      supabase.from('einsatz_training_registrations').select('session_id, einsatz_training_sessions!inner(announced)').eq('einsatz_training_sessions.announced', true),
+      // Historie) - das bleibt praktisch klein. count:'exact' zusätzlich, um eine vom
+      // PostgREST-Antwortlimit abgeschnittene Antwort zu erkennen (count > Anzahl der
+      // zurückgegebenen Zeilen) statt sie stillschweigend als vollständig zu behandeln.
+      supabase.from('einsatz_training_registrations').select('session_id, einsatz_training_sessions!inner(announced)', { count: 'exact' }).eq('einsatz_training_sessions.announced', true),
       supabase
         .from('einsatz_training_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
@@ -116,7 +116,7 @@ export default function Approvals() {
         .order('proposed_at', { ascending: true }),
       supabase.from('schulungen_module').select('*'),
       supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
-      supabase.from('schulungen_registrations').select('session_id, schulungen_sessions!inner(announced)').eq('schulungen_sessions.announced', true),
+      supabase.from('schulungen_registrations').select('session_id, schulungen_sessions!inner(announced)', { count: 'exact' }).eq('schulungen_sessions.announced', true),
       supabase
         .from('schulungen_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
@@ -157,7 +157,12 @@ export default function Approvals() {
     // Belegung dient nur der Anzeige/Auswahlhilfe im Prüfen-Dialog (voll = Option
     // gesperrt) - die Kapazität wird serverseitig ohnehin beim Einteilen per Trigger
     // durchgesetzt. Bei einem Fehler lieber gar keine Zahl zeigen als eine falsche.
-    if (tRegRes.error) { failed.push('Trainings-Anmeldungen'); setTrainingRegistrationCounts(null) }
+    // count:'exact' liefert die tatsächliche Gesamtzahl serverseitig, unabhängig vom
+    // von PostgREST zurückgegebenen (ggf. durch ein Antwortlimit gekappten) data-Array -
+    // weicht count von data.length ab, wurde abgeschnitten und die Zahlen dürfen nicht
+    // als vollständig gelten.
+    const tRegTruncated = !tRegRes.error && tRegRes.count != null && tRegRes.count > (tRegRes.data?.length ?? 0)
+    if (tRegRes.error || tRegTruncated) { failed.push('Trainings-Anmeldungen'); setTrainingRegistrationCounts(null) }
     else setTrainingRegistrationCounts(
       (tRegRes.data ?? []).reduce<Record<string, number>>((acc, r) => { acc[r.session_id] = (acc[r.session_id] ?? 0) + 1; return acc }, {}),
     )
@@ -167,7 +172,8 @@ export default function Approvals() {
     else setSchulungModules((sModRes.data ?? []) as SchulungModule[])
     if (sSessRes.error) { failed.push('Schulungs-Termine'); setSchulungSessions([]) }
     else setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
-    if (sRegRes.error) { failed.push('Schulungs-Anmeldungen'); setSchulungRegistrationCounts(null) }
+    const sRegTruncated = !sRegRes.error && sRegRes.count != null && sRegRes.count > (sRegRes.data?.length ?? 0)
+    if (sRegRes.error || sRegTruncated) { failed.push('Schulungs-Anmeldungen'); setSchulungRegistrationCounts(null) }
     else setSchulungRegistrationCounts(
       (sRegRes.data ?? []).reduce<Record<string, number>>((acc, r) => { acc[r.session_id] = (acc[r.session_id] ?? 0) + 1; return acc }, {}),
     )
@@ -757,7 +763,7 @@ export default function Approvals() {
                 {assignmentSessions.length === 0 ? <span className="text-xs text-amber-700 mt-1 block">Für dieses Modul ist aktuell kein angekündigter Termin vorhanden.</span> : null}
               </label>
               <label className="block text-xs font-medium text-gray-600">Bemerkung (optional)
-                <textarea rows={2} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={reviewNote} onChange={e => setReviewNote(e.target.value)} />
+                <textarea rows={2} maxLength={500} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={reviewNote} onChange={e => setReviewNote(e.target.value)} />
               </label>
               {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
