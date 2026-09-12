@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { aktiveSperren, formatZeitraum, latestPerStrasse, strassenKey, strassenName, toTimestamp } from './strassenzustand'
+import { aktiveSperren, formatZeitraum, fromTimestamp, latestPerStrasse, strassenKey, strassenName, toTimestamp } from './strassenzustand'
 import type { StrassenzustandBerichtzeile } from './types'
 
 function zeile(overrides: Partial<StrassenzustandBerichtzeile>): StrassenzustandBerichtzeile {
@@ -95,6 +95,18 @@ describe('toTimestamp', () => {
     const date = new Date(iso)
     expect(date.getHours()).toBe(14)
     expect(date.getMinutes()).toBe(30)
+  })
+})
+
+describe('fromTimestamp', () => {
+  it('gibt leere Werte bei null zurück', () => {
+    expect(fromTimestamp(null)).toEqual({ datum: '', zeit: '' })
+  })
+  it('gibt eine leere Uhrzeit bei Mitternacht zurück (kehrt toTimestamp um)', () => {
+    expect(fromTimestamp(toTimestamp('2026-03-15', ''))).toEqual({ datum: '2026-03-15', zeit: '' })
+  })
+  it('rekonstruiert Datum und Uhrzeit bei einer gesetzten Uhrzeit', () => {
+    expect(fromTimestamp(toTimestamp('2026-03-15', '14:30'))).toEqual({ datum: '2026-03-15', zeit: '14:30' })
   })
 })
 
