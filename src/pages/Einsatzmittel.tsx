@@ -2,22 +2,28 @@ import { useEffect, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
+import { canPurchasePoolEinsatzmittel } from '../lib/poolEinsatzmittel'
 import { supabase } from '../lib/supabase'
 import LagerbestandPanel from './einsatz/Lagerbestand'
 import PersonalEinsatzmittelPanel from './einsatz/PersonalEinsatzmittel'
 import PersonalEinsatzmittelRequestsPanel from './einsatz/PersonalEinsatzmittelRequests'
 import PoolEinsatzmittelPanel from './einsatz/PoolEinsatzmittel'
+import PoolEinsatzmittelRequestsPanel from './einsatz/PoolEinsatzmittelRequests'
 
-type TabId = 'persoenlich' | 'pool' | 'lager' | 'meldungen'
+type TabId = 'persoenlich' | 'pool' | 'lager' | 'meldungen' | 'beschaffung'
 
 export default function Einsatzmittel() {
   const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const [params, setParams] = useSearchParams()
   const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const canPurchase = canPurchasePoolEinsatzmittel({ isStrictAdmin, isGenehmiger })
   const requested = params.get('tab') as TabId | null
-  const allowed: TabId[] = canManage ? ['persoenlich', 'pool', 'lager', 'meldungen'] : ['persoenlich', 'pool', 'meldungen']
+  const allowed: TabId[] = canManage
+    ? ['persoenlich', 'pool', 'lager', 'beschaffung', 'meldungen']
+    : ['persoenlich', 'pool', 'meldungen']
   const active = requested && allowed.includes(requested) ? requested : 'persoenlich'
   const [pendingCount, setPendingCount] = useState(0)
+  const [pendingPoolCount, setPendingPoolCount] = useState(0)
   const [pendingRefresh, setPendingRefresh] = useState(0)
 
   useEffect(() => {
@@ -27,7 +33,14 @@ export default function Einsatzmittel() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'pending')
       .then(({ count }) => setPendingCount(count ?? 0))
-  }, [canManage, active, pendingRefresh])
+    if (canPurchase) {
+      supabase
+        .from('pool_einsatzmittel_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .then(({ count }) => setPendingPoolCount(count ?? 0))
+    }
+  }, [canManage, canPurchase, active, pendingRefresh])
 
   if (!hasAreaAccess('einsatz_mt')) return <Navigate to="/" replace />
 
@@ -35,6 +48,7 @@ export default function Einsatzmittel() {
     { id: 'persoenlich', label: 'Persönlich' },
     { id: 'pool', label: 'Pool' },
     ...(canManage ? [{ id: 'lager' as const, label: 'Lagerbestand' }] : []),
+    ...(canManage ? [{ id: 'beschaffung' as const, label: 'Beschaffung' }] : []),
     { id: 'meldungen', label: canManage ? 'Zur Bestätigung' : 'Meine Meldungen' },
   ]
 
@@ -60,13 +74,17 @@ export default function Einsatzmittel() {
             {tab.id === 'meldungen' && canManage && pendingCount > 0 ? (
               <span className="ml-2 bg-amber-100 text-amber-800 text-xs px-1.5 py-0.5 rounded-full">{pendingCount}</span>
             ) : null}
+            {tab.id === 'beschaffung' && canPurchase && pendingPoolCount > 0 ? (
+              <span className="ml-2 bg-amber-100 text-amber-800 text-xs px-1.5 py-0.5 rounded-full">{pendingPoolCount}</span>
+            ) : null}
           </button>
         ))}
       </div>
       {active === 'persoenlich' ? <PersonalEinsatzmittelPanel />
         : active === 'pool' ? <PoolEinsatzmittelPanel />
           : active === 'lager' && canManage ? <LagerbestandPanel />
-            : <PersonalEinsatzmittelRequestsPanel canManage={canManage} onChanged={() => setPendingRefresh(value => value + 1)} />}
+            : active === 'beschaffung' && canManage ? <PoolEinsatzmittelRequestsPanel canManage={canManage} />
+              : <PersonalEinsatzmittelRequestsPanel canManage={canManage} onChanged={() => setPendingRefresh(value => value + 1)} />}
     </div>
   )
 }

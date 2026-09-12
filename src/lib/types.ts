@@ -324,6 +324,24 @@ export interface PoolEinsatzmittel {
   created_by: string | null
 }
 
+/** Beschaffungsantrag für Pool-Einsatzmittel: Sachbearbeiter meldet Bedarf, Genehmiger entscheidet. */
+export type PoolEinsatzmittelRequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn'
+export interface PoolEinsatzmittelRequest {
+  id: string
+  requested_by: string
+  category: PoolEmCategory
+  verwahrungsort: Verwahrungsort
+  anzahl: number
+  begruendung: string
+  status: PoolEinsatzmittelRequestStatus
+  review_note: string | null
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+  requester?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username'> | null
+}
+
 export type TrainingKind = 'intern' | 'extern'
 export type TrainingModuleType = 'pflicht_halbjahr' | 'zusatz'
 export type TrainingAppliesTo = 'polizei' | 'parkaufsicht' | 'alle'
@@ -774,6 +792,7 @@ type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
 type PersonalEinsatzmittelRequestRow = Omit<PersonalEinsatzmittelRequest, 'requester'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
+type PoolEinsatzmittelRequestRow = Omit<PoolEinsatzmittelRequest, 'requester'>
 type EinsatzTrainingModuleRow = Omit<EinsatzTrainingModule, never>
 type EinsatzTrainingSessionRow = Omit<EinsatzTrainingSession, 'module'>
 type EinsatzTrainingAttendanceRow = Omit<EinsatzTrainingAttendance, 'officer'>
@@ -885,6 +904,10 @@ export type Database = {
       pool_einsatzmittel: { Row: PoolEinsatzmittelRow; Insert: Pick<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'> & Partial<Omit<PoolEinsatzmittelRow, 'category' | 'verwahrungsort'>>; Update: Partial<Omit<PoolEinsatzmittelRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'pool_einsatzmittel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'pool_einsatzmittel_removed_by_fkey'; columns: ['removed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      pool_einsatzmittel_requests: { Row: PoolEinsatzmittelRequestRow; Insert: Pick<PoolEinsatzmittelRequestRow, 'requested_by' | 'category' | 'verwahrungsort' | 'anzahl' | 'begruendung'> & Partial<Omit<PoolEinsatzmittelRequestRow, 'id' | 'created_at' | 'updated_at' | 'requested_by' | 'category' | 'verwahrungsort' | 'anzahl' | 'begruendung'>>; Update: Partial<Omit<PoolEinsatzmittelRequestRow, 'id' | 'created_at' | 'requested_by'>>; Relationships: [
+        { foreignKeyName: 'pool_einsatzmittel_requests_requested_by_fkey'; columns: ['requested_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'pool_einsatzmittel_requests_reviewed_by_fkey'; columns: ['reviewed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_training_modules: { Row: EinsatzTrainingModuleRow; Insert: Pick<EinsatzTrainingModuleRow, 'name' | 'kind' | 'module_type'> & Partial<Omit<EinsatzTrainingModuleRow, 'name' | 'kind' | 'module_type'>>; Update: Partial<Omit<EinsatzTrainingModuleRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'einsatz_training_modules_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
@@ -1010,6 +1033,7 @@ export type Database = {
       record_mail_delivery_action: { Args: { p_id: string; p_status: string }; Returns: undefined }
       close_mail_delivery: { Args: { p_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
+      decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

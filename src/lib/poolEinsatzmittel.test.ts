@@ -7,6 +7,7 @@ import {
   VERWAHRUNGSORT_LABELS,
   aggregateLagerbestand,
   canManagePoolEinsatzmittel,
+  canPurchasePoolEinsatzmittel,
   filterPoolItemsForViewer,
   emptyOrtCounts,
   emptyPoolEmFormValues,
@@ -309,6 +310,20 @@ describe('canManagePoolEinsatzmittel', () => {
       isStrictAdmin: false,
       rows: [{ area: 'bekleidung', roles: ['sachbearbeiter'] }],
     })).toBe(false)
+  })
+
+  it('erlaubt Genehmiger bereichsübergreifend ohne eigene Bereichsrolle', () => {
+    expect(canManagePoolEinsatzmittel({ isStrictAdmin: false, isGenehmiger: true, rows: null })).toBe(true)
+    expect(canManagePoolEinsatzmittel({ isStrictAdmin: false, isGenehmiger: false, rows: null })).toBe(false)
+  })
+})
+
+describe('canPurchasePoolEinsatzmittel', () => {
+  it('erlaubt nur Admin und Genehmiger', () => {
+    expect(canPurchasePoolEinsatzmittel({ isStrictAdmin: true })).toBe(true)
+    expect(canPurchasePoolEinsatzmittel({ isStrictAdmin: false, isGenehmiger: true })).toBe(true)
+    expect(canPurchasePoolEinsatzmittel({ isStrictAdmin: false, isGenehmiger: false })).toBe(false)
+    expect(canPurchasePoolEinsatzmittel({ isStrictAdmin: false })).toBe(false)
   })
 })
 

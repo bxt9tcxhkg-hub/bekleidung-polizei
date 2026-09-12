@@ -403,7 +403,12 @@ export default function Portal() {
       await Promise.all([
         canManageZentrale ? supabase.from('zentrale_entries').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').neq('status', 'erledigt').then(({ count }) => { next.zentrale = count ?? 0 }) : Promise.resolve(),
         canManageFuhrpark ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
-        canManageEinsatzmittel ? supabase.from('personal_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending').then(({ count }) => { next.einsatz_mt = count ?? 0 }) : Promise.resolve(),
+        canManageEinsatzmittel
+          ? Promise.all([
+              supabase.from('personal_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+              supabase.from('pool_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+            ]).then(([personal, pool]) => { next.einsatz_mt = (personal.count ?? 0) + (pool.count ?? 0) })
+          : Promise.resolve(),
       ])
       if (!cancelled) setOpenCounts(next)
     }

@@ -11,6 +11,7 @@ import {
   VERWAHRUNGSORTE,
   VERWAHRUNGSORT_LABELS,
   canManagePoolEinsatzmittel,
+  canPurchasePoolEinsatzmittel,
   emptyPoolEmFormValues,
   filterPoolItemsForViewer,
   formValuesFromPoolRecord,
@@ -45,8 +46,9 @@ type CategoryFilter = 'all' | 'ausgebucht' | PoolEmCategory
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
 export default function PoolEinsatzmittelPanel() {
-  const { profile, isStrictAdmin, areaRoles } = useAuth()
-  const canManage = canManagePoolEinsatzmittel({ isStrictAdmin, rows: areaRoles })
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManagePoolEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const canPurchase = canPurchasePoolEinsatzmittel({ isStrictAdmin, isGenehmiger })
 
   const [items, setItems] = useState<PoolEinsatzmittel[]>([])
   const [filter, setFilter] = useState<CategoryFilter>('all')
@@ -135,7 +137,7 @@ export default function PoolEinsatzmittelPanel() {
   }
 
   async function save() {
-    if (!canManage) return
+    if (editId ? !canManage : !canPurchase) return
     const result = validatePoolEm({ category, verwahrungsort, values, lagerNotiz })
     if (!result.ok) {
       setError(result.error)
@@ -234,7 +236,11 @@ export default function PoolEinsatzmittelPanel() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Pool-Einsatzmittel</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {canManage ? 'Gemeinsame Ausrüstung mit Verwahrungsort' : 'Nur Leserecht'}
+            {canPurchase
+              ? 'Gemeinsame Ausrüstung mit Verwahrungsort'
+              : canManage
+                ? 'Neue Einsatzmittel bitte über „Beschaffung“ beantragen.'
+                : 'Nur Leserecht'}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end">
@@ -250,7 +256,7 @@ export default function PoolEinsatzmittelPanel() {
             ))}
           </select>
           <PdfExportButton onClick={() => generatePoolEmPdf(scopedItems, { verwahrungsort: pdfOrt || null })} />
-          {canManage && (
+          {canPurchase && (
             <button
               type="button"
               onClick={openNew}

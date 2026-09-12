@@ -322,12 +322,23 @@ export function aggregateLagerbestand(
 
 export function canManagePoolEinsatzmittel(input: {
   isStrictAdmin: boolean
+  isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
 }): boolean {
-  if (input.isStrictAdmin) return true
+  if (input.isStrictAdmin || input.isGenehmiger) return true
   if (input.rows === null) return false
   const role = parseEinsatzMtRole(rolesForArea(input.rows, 'einsatz_mt'))
   return role === 'sachbearbeiter' || role === 'admin'
+}
+
+/**
+ * Die eigentliche Beschaffung (neuer Pool-Eintrag = Kauf) ist dem Genehmiger
+ * vorbehalten; der Sachbearbeiter trackt weiterhin, was vorhanden ist
+ * (Bearbeiten/Ausbuchen über canManagePoolEinsatzmittel), meldet Bedarf aber
+ * nur noch als Beschaffungsantrag.
+ */
+export function canPurchasePoolEinsatzmittel(input: { isStrictAdmin: boolean; isGenehmiger?: boolean }): boolean {
+  return input.isStrictAdmin || Boolean(input.isGenehmiger)
 }
 
 export const POOL_EM_RESTRICTED_CATEGORY: PoolEmCategory = 'munition'
