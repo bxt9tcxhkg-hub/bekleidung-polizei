@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Plus, ShieldAlert, Trash2, X } from 'lucide-react'
+import { BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Plus, Receipt, ShieldAlert, Trash2, X } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import MailDeliveries, { OwnerNotifications } from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../lib/types'
+import InnendienstGebuehrenPanel from './innendienst/InnendienstGebuehren'
 
 // Euro-Stückelungen in Cent (Ganzzahlen statt Fließkomma, um Rundungsfehler zu vermeiden).
 const DENOMINATIONS: { cents: number; label: string }[] = [
@@ -20,12 +21,13 @@ function countedTotalCents(denominations: CashDenominations) {
   return DENOMINATIONS.reduce((sum, item) => sum + item.cents * (denominations[String(item.cents)] ?? 0), 0)
 }
 
-type TabId = 'bescheide' | 'rsa_rsb' | 'unterlagen' | 'uebergabe'
+type TabId = 'bescheide' | 'rsa_rsb' | 'unterlagen' | 'uebergabe' | 'gebuehren'
 const TABS: { id: TabId; label: string; icon: typeof BookOpen }[] = [
   { id: 'bescheide', label: 'Bescheide & Verstöße', icon: ClipboardList },
   { id: 'rsa_rsb', label: 'RSa/RSb', icon: Mail },
   { id: 'unterlagen', label: 'Formulare & Unterlagen', icon: BookOpen },
   { id: 'uebergabe', label: 'Schichtübergabe', icon: FileClock },
+  { id: 'gebuehren', label: 'Gebührenordnung', icon: Receipt },
 ]
 const KIND_LABEL: Record<InnendienstRecordKind, string> = { bescheid_strassenmusik: 'Bescheid Straßenmusik', bescheid_strassenkunst: 'Bescheid Straßenkunst', verstoss: 'Verstoß gegen Auflagen' }
 const BESCHEID_KINDS: InnendienstRecordKind[] = ['bescheid_strassenmusik', 'bescheid_strassenkunst']
@@ -34,7 +36,7 @@ const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 te
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
 export default function Innendienst() {
-  const { profile, hasAreaAccess } = useAuth()
+  const { profile, hasAreaAccess, isGenehmiger } = useAuth()
   const [activeTab, setActiveTab] = useState<TabId>('bescheide')
   const [shift, setShift] = useState<'tag' | 'nacht'>('tag')
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
@@ -186,6 +188,7 @@ export default function Innendienst() {
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
     {!loading && activeTab === 'unterlagen' ? (entries.filter(item => item.category === 'unterlage').length === 0 ? <Empty text="Keine Unterlagen vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{entries.filter(item => item.category === 'unterlage').map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</article>)}</div>) : null}
     {!loading && activeTab === 'uebergabe' ? (handovers.length === 0 ? <Empty text="Keine offenen Übergabepunkte." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{handovers.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</article>)}</div>) : null}
+    {!loading && activeTab === 'gebuehren' ? <InnendienstGebuehrenPanel isGenehmiger={isGenehmiger} /> : null}
 
     {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">{form.kind === 'verstoss' ? 'Verstoß gegen Auflagen melden' : 'Neuer Bescheid'}</h2><button type="button" onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
       <label className="block text-xs font-medium text-gray-600">Art<select className={inputClass} value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value as InnendienstRecordKind, relatedBescheidId: event.target.value === 'verstoss' ? current.relatedBescheidId : '' }))}>{Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
