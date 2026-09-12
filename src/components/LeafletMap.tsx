@@ -65,5 +65,10 @@ export default function LeafletMap({ markers, height = 220, zoom }: { markers: r
     return () => { layerGroup.remove() }
   }, [markers, zoom])
 
-  return <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
+  // isolate: Leaflets interne Ebenen (Zoom-Controls, Marker, Popups) haben
+  // von Haus aus hohe z-index-Werte (bis 1000). Ohne eigenen Stacking-
+  // Context "durchdringen" sie Overlays mit niedrigerem z-index, z. B. das
+  // Meldungs-Modal - eine Hintergrundkarte konnte so über dem Modal
+  // erscheinen. isolate kapselt die Karte in ihrem eigenen Kontext.
+  return <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200 isolate" />
 }
