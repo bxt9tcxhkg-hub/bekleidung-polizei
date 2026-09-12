@@ -89,7 +89,6 @@ export default function Approvals() {
         .from('einsatz_training_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
         .eq('status', 'vorschlag')
-        .is('session_id', null)
         .order('proposed_at', { ascending: true }),
       supabase.from('schulungen_module').select('*'),
       supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
@@ -97,7 +96,6 @@ export default function Approvals() {
         .from('schulungen_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
         .eq('status', 'vorschlag')
-        .is('session_id', null)
         .order('proposed_at', { ascending: true }),
     ])
     const pending = (ordersRes.data ?? []) as PendingOrder[]
@@ -222,7 +220,11 @@ export default function Approvals() {
 
   function openAssignmentReview(kind: AssignmentKind, item: TrainingAssignmentWithOfficer | SchulungAssignmentWithOfficer) {
     setReviewingAssignment({ kind, item })
-    setReviewSessionId('')
+    // Bei einer Selbstanmeldung über die Ausschreibung ist der Termin schon
+    // festgelegt (session_id ist gesetzt) - der Genehmiger bestätigt/lehnt dann
+    // nur noch ab, statt selbst einen Termin wählen zu müssen. Vorauswählen,
+    // bleibt aber änderbar.
+    setReviewSessionId(item.session_id ?? '')
     setReviewNote('')
     setError('')
   }
