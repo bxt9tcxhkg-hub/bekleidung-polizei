@@ -98,17 +98,33 @@ export default function Approvals() {
         .eq('status', 'vorschlag')
         .order('proposed_at', { ascending: true }),
     ])
-    const pending = (ordersRes.data ?? []) as PendingOrder[]
-    setOrders(pending)
-    setStockOrders((stockRes.data ?? []) as StockOrder[])
-    setPersonalEm((personalRes.data ?? []) as PersonalEmWithRequester[])
-    setPoolEm((poolRes.data ?? []) as PoolEmWithRequester[])
-    setTrainingModules((tModRes.data ?? []) as EinsatzTrainingModule[])
-    setTrainingSessions((tSessRes.data ?? []) as EinsatzTrainingSession[])
-    setTrainingAssignments((tAssignRes.data ?? []) as TrainingAssignmentWithOfficer[])
-    setSchulungModules((sModRes.data ?? []) as SchulungModule[])
-    setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
-    setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
+    // Ein fehlgeschlagener Query darf nicht als "keine offenen Fälle" durchgehen -
+    // das würde dem Genehmiger echte, noch unentschiedene Fälle verstecken. Bei
+    // einem Fehler bleibt die jeweilige Liste unverändert (statt auf [] geleert)
+    // und der Bereich wird im Fehlerbanner benannt.
+    const failed: string[] = []
+    const pending = ordersRes.error ? [] : (ordersRes.data ?? []) as PendingOrder[]
+    if (ordersRes.error) failed.push('Budgetüberschreitungen')
+    else setOrders(pending)
+    if (stockRes.error) failed.push('Lagerbestellungen')
+    else setStockOrders((stockRes.data ?? []) as StockOrder[])
+    if (personalRes.error) failed.push('Einsatzmittel-Meldungen (persönlich)')
+    else setPersonalEm((personalRes.data ?? []) as PersonalEmWithRequester[])
+    if (poolRes.error) failed.push('Beschaffungsanträge (Pool-Einsatzmittel)')
+    else setPoolEm((poolRes.data ?? []) as PoolEmWithRequester[])
+    if (tModRes.error) failed.push('Trainingsmodule')
+    else setTrainingModules((tModRes.data ?? []) as EinsatzTrainingModule[])
+    if (tSessRes.error) failed.push('Trainings-Termine')
+    else setTrainingSessions((tSessRes.data ?? []) as EinsatzTrainingSession[])
+    if (tAssignRes.error) failed.push('Trainings-Zuteilungsvorschläge')
+    else setTrainingAssignments((tAssignRes.data ?? []) as TrainingAssignmentWithOfficer[])
+    if (sModRes.error) failed.push('Schulungsmodule')
+    else setSchulungModules((sModRes.data ?? []) as SchulungModule[])
+    if (sSessRes.error) failed.push('Schulungs-Termine')
+    else setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
+    if (sAssignRes.error) failed.push('Schulungs-Zuteilungsvorschläge')
+    else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
+    setError(failed.length > 0 ? `Nicht alle Freigaben konnten geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
     // Budget-Kontext pro Benutzer laden (Jahresbudget + bereits verbraucht)
     const userIds = Array.from(new Set(pending.map(o => o.user_id)))
     const budgetEntries = await Promise.all(userIds.map(async uid => {
@@ -216,6 +232,11 @@ export default function Approvals() {
     logAudit(approve ? 'Beschaffungsantrag genehmigt' : 'Beschaffungsantrag abgelehnt', `${POOL_EM_CATEGORY_LABELS[item.category]} · ${item.anzahl} · ${officerDisplayName(item.requester)}`)
     setCancelReason(null)
     load()
+  }
+
+  function openCancelReason(id: string, type: 'order' | 'stock' | 'personal' | 'pool') {
+    setError('')
+    setCancelReason({ id, reason: '', type })
   }
 
   function openAssignmentReview(kind: AssignmentKind, item: TrainingAssignmentWithOfficer | SchulungAssignmentWithOfficer) {
@@ -327,7 +348,7 @@ export default function Approvals() {
                                 className="flex items-center gap-1.5 text-xs font-medium bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                                 <CheckCircle className="w-3.5 h-3.5" /> Freigeben
                               </button>
-                              <button onClick={() => setCancelReason({ id: o.id, reason: '', type: 'order' })} disabled={processing === o.id}
+                              <button onClick={() => openCancelReason(o.id, 'order')} disabled={processing === o.id}
                                 className="flex items-center gap-1.5 text-xs font-medium bg-red-50 hover:bg-red-100 text-red-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-60">
                                 <XCircle className="w-3.5 h-3.5" /> Ablehnen
                               </button>
@@ -356,7 +377,7 @@ export default function Approvals() {
                   o.requester?.name ?? '–',
                   o.note ?? '–',
                   <span key="st" className={`text-xs font-medium px-2.5 py-1 rounded-full ${STOCK_ORDER_STATUS_COLORS[o.status]}`}>{STOCK_ORDER_STATUS_LABELS[o.status]}</span>,
-                  <Actions key="ac" disabled={processing === o.id} onApprove={() => approveStockOrder(o.id)} onReject={() => setCancelReason({ id: o.id, reason: '', type: 'stock' })} />,
+                  <Actions key="ac" disabled={processing === o.id} onApprove={() => approveStockOrder(o.id)} onReject={() => openCancelReason(o.id, 'stock')} />,
                 ])}
               />
             )}
@@ -377,7 +398,7 @@ export default function Approvals() {
                   officerDisplayName(item.requester),
                   <Actions key="ac" disabled={processing === item.id}
                     onApprove={() => void reviewPersonalEm(item, true, '')}
-                    onReject={() => setCancelReason({ id: item.id, reason: '', type: 'personal' })} />,
+                    onReject={() => openCancelReason(item.id, 'personal')} />,
                 ])}
               />
             )}
@@ -399,7 +420,7 @@ export default function Approvals() {
                   officerDisplayName(item.requester),
                   <Actions key="ac" disabled={processing === item.id}
                     onApprove={() => void reviewPoolEm(item, true, '')}
-                    onReject={() => setCancelReason({ id: item.id, reason: '', type: 'pool' })} />,
+                    onReject={() => openCancelReason(item.id, 'pool')} />,
                 ])}
               />
             )}
@@ -459,6 +480,7 @@ export default function Approvals() {
               <textarea rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 value={cancelReason.reason} onChange={e => setCancelReason(r => r ? { ...r, reason: e.target.value } : r)}
                 placeholder="Grund für die Ablehnung..." autoFocus />
+              {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg mt-3">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => setCancelReason(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
@@ -497,6 +519,7 @@ export default function Approvals() {
               <label className="block text-xs font-medium text-gray-600">Bemerkung (optional)
                 <textarea rows={2} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={reviewNote} onChange={e => setReviewNote(e.target.value)} />
               </label>
+              {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => setReviewingAssignment(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
