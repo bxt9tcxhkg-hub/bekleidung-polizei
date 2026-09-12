@@ -209,12 +209,19 @@ export default function Approvals() {
     if (processing) return
     setProcessing(order.id)
     setError('')
-    const { error: err } = await supabase.from('orders').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', order.id)
+    // Bleibt eine bereits entschiedene Bestellung nach einem fehlgeschlagenen Reload
+    // als vermeintlich offen stehen (siehe load()), darf ein zweiter Klick die
+    // bestehende Entscheidung nicht stillschweigend überschreiben - deshalb bedingt
+    // auf den erwarteten Ausgangsstatus und geprüft, ob wirklich eine Zeile betroffen war.
+    const { data: updated, error: err } = await supabase.from('orders')
+      .update({ status: 'approved', updated_at: new Date().toISOString() })
+      .eq('id', order.id).eq('status', 'pending_approval').select('id').maybeSingle()
     setProcessing(null)
     if (err) {
       setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    if (!updated) { setError('Diese Bestellung wurde bereits entschieden.'); load(); return }
     logAudit('Bestellung genehmigt', order.profiles?.name ?? '?')
     load()
   }
@@ -223,12 +230,15 @@ export default function Approvals() {
     if (!reason.trim() || processing) return
     setProcessing(id)
     setError('')
-    const { error: err } = await supabase.from('orders').update({ status: 'cancelled', cancel_reason: reason, updated_at: new Date().toISOString() }).eq('id', id)
+    const { data: updated, error: err } = await supabase.from('orders')
+      .update({ status: 'cancelled', cancel_reason: reason, updated_at: new Date().toISOString() })
+      .eq('id', id).eq('status', 'pending_approval').select('id').maybeSingle()
     setProcessing(null)
     if (err) {
       setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    if (!updated) { setError('Diese Bestellung wurde bereits entschieden.'); load(); return }
     logAudit('Bestellung abgelehnt', orders.find(o => o.id === id)?.profiles?.name ?? '?')
     setCancelReason(null)
     load()
@@ -239,17 +249,18 @@ export default function Approvals() {
     setProcessing(id)
     setError('')
     const { data: { user } } = await supabase.auth.getUser()
-    const { error: err } = await supabase.from('stock_orders').update({
+    const { data: updated, error: err } = await supabase.from('stock_orders').update({
       status: 'approved',
       approved_by: user?.id ?? null,
       approved_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }).eq('id', id)
+    }).eq('id', id).eq('status', 'pending_approval').select('id').maybeSingle()
     setProcessing(null)
     if (err) {
       setError('Freigabe konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    if (!updated) { setError('Diese Lagerbestellung wurde bereits entschieden.'); load(); return }
     logAudit('Lagerbestellung genehmigt', stockOrders.find(o => o.id === id)?.products?.name ?? '?')
     load()
   }
@@ -258,16 +269,17 @@ export default function Approvals() {
     if (!reason.trim() || processing) return
     setProcessing(id)
     setError('')
-    const { error: err } = await supabase.from('stock_orders').update({
+    const { data: updated, error: err } = await supabase.from('stock_orders').update({
       status: 'rejected',
       note: reason,
       updated_at: new Date().toISOString(),
-    }).eq('id', id)
+    }).eq('id', id).eq('status', 'pending_approval').select('id').maybeSingle()
     setProcessing(null)
     if (err) {
       setError('Ablehnung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
+    if (!updated) { setError('Diese Lagerbestellung wurde bereits entschieden.'); load(); return }
     logAudit('Lagerbestellung abgelehnt', stockOrders.find(o => o.id === id)?.products?.name ?? '?')
     setCancelReason(null)
     load()
@@ -329,13 +341,14 @@ export default function Approvals() {
       reviewed_at: new Date().toISOString(),
     }
     if (status === 'approved') {
-      // Genehmigten Betrag zum Zeitpunkt der Genehmigung anhand des aktuellen Caps berechnen
-      // (wie ShoeRefunds.tsx). Anders als dort wird ein fehlgeschlagener Cap-Lookup NICHT
-      // stillschweigend als DEFAULT_SHOE_CAP behandelt - das würde bei einem transienten
-      // Fehler einen dauerhaft falschen approved_amount festschreiben.
-      const { cap, error: capErr } = await getCurrentShoeRefundCapResult()
-      if (capErr) { setProcessing(null); setError('Maximalbetrag konnte nicht ermittelt werden. Bitte erneut versuchen.'); return }
-      payload.approved_amount = Math.min(Number(refund.amount), cap)
+      // Bewusst derselbe shoeRefundCap-State, der auch in der Tabelle als
+      // "erstattungsfähig" angezeigt wird - nicht ein zweiter, unabhängiger Lookup
+      // (wie ihn ShoeRefunds.tsx zum Zeitpunkt der Genehmigung macht). Ein
+      // unabhängiger Re-Fetch könnte einen anderen Betrag festschreiben, als der
+      // Genehmiger gerade angezeigt bekommen und seiner Entscheidung zugrunde
+      // gelegt hat.
+      if (shoeRefundCap == null) { setProcessing(null); setError('Maximalbetrag ist nicht bekannt. Bitte Seite neu laden.'); return }
+      payload.approved_amount = Math.min(Number(refund.amount), shoeRefundCap)
     }
     // Die shoe_refunds-UPDATE-Policy prüft (anders als die RPC-gestützten Warteschlangen)
     // den Status nicht selbst - ohne .eq('status', 'pending') könnte eine zweite,
