@@ -1141,7 +1141,7 @@ export type Database = {
       strassenzustand_berichte: { Row: StrassenzustandBerichtRow; Insert: Pick<StrassenzustandBerichtRow, 'bearbeiter'> & Partial<Omit<StrassenzustandBerichtRow, 'id' | 'nummer' | 'created_at' | 'updated_at' | 'bearbeiter'>>; Update: Partial<Omit<StrassenzustandBerichtRow, 'id' | 'nummer' | 'created_at' | 'bearbeiter'>>; Relationships: [
         { foreignKeyName: 'strassenzustand_berichte_bearbeiter_fkey'; columns: ['bearbeiter']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      strassenzustand_berichtzeilen: { Row: StrassenzustandBerichtzeileRow; Insert: Pick<StrassenzustandBerichtzeileRow, 'bericht_id' | 'zustand'> & Partial<Omit<StrassenzustandBerichtzeileRow, 'id' | 'created_at' | 'meldungsart' | 'bericht_id' | 'zustand'>>; Update: Partial<Omit<StrassenzustandBerichtzeileRow, 'id' | 'created_at' | 'bericht_id'>>; Relationships: [
+      strassenzustand_berichtzeilen: { Row: StrassenzustandBerichtzeileRow; Insert: Pick<StrassenzustandBerichtzeileRow, 'bericht_id' | 'zustand'> & Partial<Omit<StrassenzustandBerichtzeileRow, 'id' | 'meldungsart' | 'bericht_id' | 'zustand'>>; Update: Partial<Omit<StrassenzustandBerichtzeileRow, 'id' | 'created_at' | 'bericht_id'>>; Relationships: [
         { foreignKeyName: 'strassenzustand_berichtzeilen_bericht_id_fkey'; columns: ['bericht_id']; isOneToOne: false; referencedRelation: 'strassenzustand_berichte'; referencedColumns: ['id'] },
         { foreignKeyName: 'strassenzustand_berichtzeilen_strasse_id_fkey'; columns: ['strasse_id']; isOneToOne: false; referencedRelation: 'strassenzustand_strassen'; referencedColumns: ['id'] },
         { foreignKeyName: 'strassenzustand_berichtzeilen_auftraggeber_id_fkey'; columns: ['auftraggeber_id']; isOneToOne: false; referencedRelation: 'strassenzustand_auftraggeber'; referencedColumns: ['id'] },
@@ -1243,6 +1243,7 @@ export type Database = {
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }
       decide_schulung_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
+      strassenzustand_bericht_ersetzen: { Args: { p_bericht_id: string; p_anmerkung: string | null; p_zeilen: Record<string, unknown>[] }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

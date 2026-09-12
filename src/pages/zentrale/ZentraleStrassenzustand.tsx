@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, FileArchive, Plus, Trash2, Upload } from 'lucide-react'
+import { CheckCircle2, FileArchive, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
-import { MELDUNGSART_LABEL, ZUSTAND_LABEL, aktiveSperren, formatZeitraum, strassenName, toTimestamp } from '../../lib/strassenzustand'
+import { MELDUNGSART_LABEL, ZUSTAND_LABEL, aktiveSperren, formatZeitraum, fromTimestamp, strassenName, toTimestamp } from '../../lib/strassenzustand'
 import { generateStrassenzustandPdf } from '../../lib/strassenzustandPdf'
 import { Actions, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import type {
@@ -30,11 +30,34 @@ type RowDraft = {
   gueltigVonZeit: string
   gueltigBisDatum: string
   gueltigBisZeit: string
+  // Nur bei bestehenden, zu bearbeitenden Zeilen gesetzt - damit ihre
+  // chronologische Position (und damit die automatische Meldungsart-Historie
+  // anderer Berichte) beim Speichern erhalten bleibt, statt "jetzt" zu werden.
+  createdAt?: string
 }
 
 function todayIso() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 function emptyRow(): RowDraft {
   return { strasseId: '', strasseFreitext: '', zustand: 'frei_befahrbar', zustandFreitext: '', auftraggeberId: '', auftraggeberFreitext: '', melderId: '', melderFreitext: '', gueltigVonDatum: todayIso(), gueltigVonZeit: '', gueltigBisDatum: '', gueltigBisZeit: '' }
+}
+function rowFromZeile(zeile: StrassenzustandBerichtzeile): RowDraft {
+  const von = fromTimestamp(zeile.gueltig_von)
+  const bis = fromTimestamp(zeile.gueltig_bis)
+  return {
+    strasseId: zeile.strasse_id ?? '',
+    strasseFreitext: zeile.strasse_freitext ?? '',
+    zustand: zeile.zustand,
+    zustandFreitext: zeile.zustand_freitext ?? '',
+    auftraggeberId: zeile.auftraggeber_id ?? '',
+    auftraggeberFreitext: zeile.auftraggeber_freitext ?? '',
+    melderId: zeile.melder_id ?? '',
+    melderFreitext: zeile.melder_freitext ?? '',
+    gueltigVonDatum: von.datum,
+    gueltigVonZeit: von.zeit,
+    gueltigBisDatum: bis.datum,
+    gueltigBisZeit: bis.zeit,
+    createdAt: zeile.created_at,
+  }
 }
 
 const MELDUNGSART_BADGE: Record<StrassenzustandMeldungsart, string> = {
@@ -56,6 +79,7 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
   const [saving, setSaving] = useState(false)
 
   const [showForm, setShowForm] = useState(false)
+  const [editingBericht, setEditingBericht] = useState<StrassenzustandBericht | null>(null)
   const [rows, setRows] = useState<RowDraft[]>([emptyRow()])
   const [anmerkung, setAnmerkung] = useState('')
 
@@ -96,28 +120,24 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
   const activeAuftraggeber = useMemo(() => auftraggeber.filter(a => a.active), [auftraggeber])
   const activeMelder = useMemo(() => melder.filter(m => m.active), [melder])
 
-  function openNewForm() { setRows([emptyRow()]); setAnmerkung(''); setShowForm(true); setError('') }
+  function openNewForm() { setEditingBericht(null); setRows([emptyRow()]); setAnmerkung(''); setShowForm(true); setError('') }
+  function openEditForm(bericht: StrassenzustandBericht) {
+    const berichtZeilen = zeilenByBericht.get(bericht.id) ?? []
+    setEditingBericht(bericht)
+    setRows(berichtZeilen.length > 0 ? berichtZeilen.map(rowFromZeile) : [emptyRow()])
+    setAnmerkung(bericht.anmerkung ?? '')
+    setShowForm(true)
+    setError('')
+  }
   function patchRow(index: number, patch: Partial<RowDraft>) {
     setRows(current => current.map((row, i) => i === index ? { ...row, ...patch } : row))
   }
   function addRow() { setRows(current => [...current, emptyRow()]) }
   function removeRow(index: number) { setRows(current => current.length > 1 ? current.filter((_, i) => i !== index) : current) }
+  function closeForm() { setShowForm(false); setEditingBericht(null) }
 
-  async function saveBericht() {
-    if (!profile?.id) return
-    for (const row of rows) {
-      if (!row.strasseId && !row.strasseFreitext.trim()) { setError('Bitte für jede Zeile eine Straße auswählen oder eingeben.'); return }
-      if (row.zustand !== 'frei_befahrbar' && !row.zustandFreitext.trim()) { setError('Bitte bei "Gesperrt" oder "Sonstige" den Grund beschreiben.'); return }
-      if (row.gueltigBisZeit && !row.gueltigBisDatum) { setError('Bitte für die Uhrzeit bei "Gültig bis" auch ein Datum angeben.'); return }
-    }
-    setSaving(true)
-    const { data: bericht, error: berichtError } = await supabase.from('strassenzustand_berichte')
-      .insert({ bearbeiter: profile.id, anmerkung: anmerkung.trim() || null })
-      .select('id').single()
-    if (berichtError || !bericht) { setSaving(false); setError('Bericht konnte nicht angelegt werden.'); return }
-
-    const payload = rows.map(row => ({
-      bericht_id: bericht.id,
+  function rowToFields(row: RowDraft) {
+    return {
       strasse_id: row.strasseId || null,
       strasse_freitext: row.strasseId ? null : row.strasseFreitext.trim(),
       zustand: row.zustand,
@@ -128,13 +148,67 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
       melder_freitext: row.melderId ? null : (row.melderFreitext.trim() || null),
       gueltig_von: toTimestamp(row.gueltigVonDatum || todayIso(), row.gueltigVonZeit) as string,
       gueltig_bis: toTimestamp(row.gueltigBisDatum, row.gueltigBisZeit),
-    }))
-    const { error: zeilenError } = await supabase.from('strassenzustand_berichtzeilen').insert(payload)
-    setSaving(false)
-    if (zeilenError) { setError('Straßen konnten nicht gespeichert werden.'); return }
-    logAudit('Straßenzustandsbericht angelegt', `${rows.length} Straße(n)`)
+      // Bestehende Zeilen behalten ihren ursprünglichen Zeitstempel, damit die
+      // automatische Meldungsart-Ableitung (vergleicht mit der zeitlich
+      // letzten Zeile derselben Straße) beim Bearbeiten nicht durcheinander
+      // gerät - eine bearbeitete alte Meldung soll nicht plötzlich als "jetzt"
+      // gelten. Neue Zeilen (beim Bearbeiten hinzugefügt) bekommen wie beim
+      // Neuanlegen den aktuellen Zeitpunkt vom Datenbank-Default.
+      ...(row.createdAt ? { created_at: row.createdAt } : {}),
+    }
+  }
+
+  async function saveBericht() {
+    if (!profile?.id) return
+    for (const row of rows) {
+      if (!row.strasseId && !row.strasseFreitext.trim()) { setError('Bitte für jede Zeile eine Straße auswählen oder eingeben.'); return }
+      if (row.zustand !== 'frei_befahrbar' && !row.zustandFreitext.trim()) { setError('Bitte bei "Gesperrt" oder "Sonstige" den Grund beschreiben.'); return }
+      if (row.gueltigBisZeit && !row.gueltigBisDatum) { setError('Bitte für die Uhrzeit bei "Gültig bis" auch ein Datum angeben.'); return }
+    }
+    setSaving(true)
+
+    if (editingBericht) {
+      const warArchiviert = !!editingBericht.pdf_file_key
+      // Update, Ersetzen der Zeilen und Zurücksetzen einer evtl. Archivierung
+      // laufen serverseitig in EINER Transaktion (RPC) - ein Zwischenfehler
+      // (z. B. eine vom Client nicht abgefangene Constraint-Verletzung) darf
+      // die bestehenden Zeilen nicht unwiederbringlich löschen, bevor die
+      // neuen sicher gespeichert sind.
+      const { error: rpcError } = await supabase.rpc('strassenzustand_bericht_ersetzen', {
+        p_bericht_id: editingBericht.id,
+        p_anmerkung: anmerkung.trim() || null,
+        p_zeilen: rows.map(rowToFields),
+      })
+      setSaving(false)
+      if (rpcError) { setError('Bericht konnte nicht aktualisiert werden.'); return }
+      logAudit('Straßenzustandsbericht bearbeitet', `Bericht Nr. ${editingBericht.nummer} · ${rows.length} Straße(n)`)
+      setNotice(warArchiviert ? 'Bericht wurde aktualisiert. Die bisherige Archivierung ist ungültig geworden - bitte erneut als PDF exportieren und archivieren.' : 'Bericht wurde aktualisiert. Bitte ggf. als PDF exportieren und archivieren.')
+    } else {
+      const { data: bericht, error: berichtError } = await supabase.from('strassenzustand_berichte')
+        .insert({ bearbeiter: profile.id, anmerkung: anmerkung.trim() || null })
+        .select('id').single()
+      if (berichtError || !bericht) { setSaving(false); setError('Bericht konnte nicht angelegt werden.'); return }
+      const payload = rows.map(row => ({ bericht_id: bericht.id, ...rowToFields(row) }))
+      const { error: zeilenError } = await supabase.from('strassenzustand_berichtzeilen').insert(payload)
+      setSaving(false)
+      if (zeilenError) { setError('Straßen konnten nicht gespeichert werden.'); return }
+      logAudit('Straßenzustandsbericht angelegt', `${rows.length} Straße(n)`)
+      setNotice('Bericht wurde gespeichert. Bitte als PDF exportieren und archivieren.')
+    }
     setShowForm(false)
-    setNotice('Bericht wurde gespeichert. Bitte als PDF exportieren und archivieren.')
+    setEditingBericht(null)
+    await load()
+  }
+
+  async function deleteBericht(bericht: StrassenzustandBericht) {
+    const warning = bericht.pdf_file_key
+      ? `Bericht Nr. ${bericht.nummer} ist bereits archiviert. Trotzdem endgültig löschen? Das archivierte PDF bleibt gespeichert, ist danach aber keinem Bericht mehr zugeordnet.`
+      : `Straßenzustandsbericht Nr. ${bericht.nummer} endgültig löschen?`
+    if (!window.confirm(warning)) return
+    const { error: deleteError } = await supabase.from('strassenzustand_berichte').delete().eq('id', bericht.id)
+    if (deleteError) { setError('Der Bericht konnte nicht gelöscht werden.'); return }
+    logAudit('Straßenzustandsbericht endgültig gelöscht', `Bericht Nr. ${bericht.nummer}`)
+    setNotice('Bericht wurde endgültig gelöscht.')
     await load()
   }
 
@@ -246,6 +320,8 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
                     <Upload className="w-3.5 h-3.5" /> PDF archivieren
                     <input type="file" accept="application/pdf" className="hidden" disabled={saving} onChange={event => { const file = event.target.files?.[0]; if (file) void archivePdf(bericht, file); event.target.value = '' }} />
                   </label>}
+              <button type="button" onClick={() => openEditForm(bericht)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 border border-gray-300 px-3 py-1.5 rounded-lg"><Pencil className="w-3.5 h-3.5" /> Bearbeiten</button>
+              <button type="button" onClick={() => void deleteBericht(bericht)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-200 px-3 py-1.5 rounded-lg"><Trash2 className="w-3.5 h-3.5" /> Löschen</button>
             </div> : null}
           </article>
         })}</div>}
@@ -261,7 +337,7 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
       </section> : null}
     </div>}
 
-    {showForm ? <Modal title="Straßenzustandsbericht erfassen" close={() => setShowForm(false)}>
+    {showForm ? <Modal title={editingBericht ? `Bericht Nr. ${editingBericht.nummer} bearbeiten` : 'Straßenzustandsbericht erfassen'} close={closeForm}>
       <div className="space-y-4">
         {rows.map((row, index) => <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3">
           <div className="flex items-center justify-between"><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Straße {index + 1}</p>{rows.length > 1 ? <button type="button" onClick={() => removeRow(index)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Zeile entfernen"><Trash2 className="w-4 h-4" /></button> : null}</div>
@@ -287,7 +363,7 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
         <button type="button" onClick={addRow} className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700"><Plus className="w-4 h-4" /> Weitere Straße hinzufügen</button>
         <label className="block text-xs font-medium text-gray-600">Anmerkungen<textarea className={`${inputClass} min-h-20 resize-y`} value={anmerkung} onChange={event => setAnmerkung(event.target.value)} /></label>
         {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
-        <Actions saving={saving} close={() => setShowForm(false)} save={saveBericht} />
+        <Actions saving={saving} close={closeForm} save={saveBericht} />
       </div>
     </Modal> : null}
 

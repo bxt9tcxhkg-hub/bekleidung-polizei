@@ -66,6 +66,19 @@ export function toTimestamp(datum: string, zeit: string): string | null {
   return new Date(year, month - 1, day, hours, minutes).toISOString()
 }
 
+/**
+ * Kehrt toTimestamp() um - für das Vorbefüllen des Formulars beim Bearbeiten
+ * eines bestehenden Berichts. Mitternacht gilt als "keine Uhrzeit gesetzt"
+ * (siehe toTimestamp), daher kommt bei 00:00 eine leere Uhrzeit zurück.
+ */
+export function fromTimestamp(iso: string | null): { datum: string; zeit: string } {
+  if (!iso) return { datum: '', zeit: '' }
+  const date = new Date(iso)
+  const datum = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const zeit = date.getHours() === 0 && date.getMinutes() === 0 ? '' : `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return { datum, zeit }
+}
+
 export function formatZeitraum(zeile: Pick<StrassenzustandBerichtzeile, 'gueltig_von' | 'gueltig_bis'>): string {
   const von = formatZeitpunkt(zeile.gueltig_von)
   if (!zeile.gueltig_bis) return `Ab ${von} (bis auf Weiteres)`
