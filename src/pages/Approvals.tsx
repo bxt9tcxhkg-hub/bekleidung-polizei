@@ -153,7 +153,7 @@ export default function Approvals() {
     // Belegung dient nur der Anzeige/Auswahlhilfe im Prüfen-Dialog (voll = Option
     // gesperrt) - die Kapazität wird serverseitig ohnehin beim Einteilen per Trigger
     // durchgesetzt. Bei einem Fehler lieber gar keine Zahl zeigen als eine falsche.
-    if (tRegRes.error) failed.push('Trainings-Anmeldungen')
+    if (tRegRes.error) { failed.push('Trainings-Anmeldungen'); setTrainingRegistrationCounts(null) }
     else setTrainingRegistrationCounts(
       (tRegRes.data ?? []).reduce<Record<string, number>>((acc, r) => { acc[r.session_id] = (acc[r.session_id] ?? 0) + 1; return acc }, {}),
     )
@@ -163,7 +163,7 @@ export default function Approvals() {
     else setSchulungModules((sModRes.data ?? []) as SchulungModule[])
     if (sSessRes.error) { failed.push('Schulungs-Termine'); setSchulungSessions([]) }
     else setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
-    if (sRegRes.error) failed.push('Schulungs-Anmeldungen')
+    if (sRegRes.error) { failed.push('Schulungs-Anmeldungen'); setSchulungRegistrationCounts(null) }
     else setSchulungRegistrationCounts(
       (sRegRes.data ?? []).reduce<Record<string, number>>((acc, r) => { acc[r.session_id] = (acc[r.session_id] ?? 0) + 1; return acc }, {}),
     )
@@ -428,6 +428,31 @@ export default function Approvals() {
       ? PERSONAL_EM_CATEGORY_LABELS[(reviewingEm.item as PersonalEmWithRequester).category]
       : POOL_EM_CATEGORY_LABELS[(reviewingEm.item as PoolEmWithRequester).category]
     : ''
+  // Hat derselbe Beamte mehrere offene Meldungen/Anträge in derselben Kategorie,
+  // reicht "Offizier · Kategorie" allein nicht, um sie auseinanderzuhalten - vor
+  // allem am Handy, wo die Tabelle dahinter vom Dialog verdeckt ist. Genehmigen/
+  // Ablehnen wirken auf eine konkrete ID, der Genehmiger muss also sehen können,
+  // welche der (ggf. identisch aussehenden) Zeilen er gerade entscheidet.
+  const emReviewDetailLines: string[] = reviewingEm
+    ? reviewingEm.kind === 'personal'
+      ? (() => {
+          const item = reviewingEm.item as PersonalEmWithRequester
+          const lines: string[] = []
+          const detail = personalEmDetailText(item)
+          if (detail) lines.push(detail)
+          if (item.verwahrungsort) lines.push(`Verwahrungsort: ${VERWAHRUNGSORT_LABELS[item.verwahrungsort as keyof typeof VERWAHRUNGSORT_LABELS] ?? item.verwahrungsort}`)
+          return lines
+        })()
+      : (() => {
+          const item = reviewingEm.item as PoolEmWithRequester
+          const lines = [
+            `Anzahl: ${item.anzahl}`,
+            `Verwahrungsort: ${VERWAHRUNGSORT_LABELS[item.verwahrungsort as keyof typeof VERWAHRUNGSORT_LABELS] ?? item.verwahrungsort}`,
+          ]
+          if (item.begruendung) lines.push(`Begründung: ${item.begruendung}`)
+          return lines
+        })()
+    : []
 
   return (
     <div className="space-y-8">
@@ -676,6 +701,11 @@ export default function Approvals() {
               <p className="text-sm text-gray-500 mt-0.5">{officerDisplayName(reviewingEm.item.requester)} · {emReviewCategoryLabel}</p>
             </div>
             <div className="px-6 py-4 space-y-3">
+              {emReviewDetailLines.length > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 space-y-0.5">
+                  {emReviewDetailLines.map((line, i) => <p key={i}>{line}</p>)}
+                </div>
+              )}
               <label className="block text-xs font-medium text-gray-600">Bemerkung (bei Ablehnung erforderlich)
                 <textarea rows={3} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={emReviewNote} onChange={e => setEmReviewNote(e.target.value)} autoFocus />
               </label>
