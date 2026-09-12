@@ -227,11 +227,11 @@ function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, con
           label="Hausnummer"
           value={incident.houseNumber}
           disabled={incident.houseNumberUnknown}
-          onChange={value => patch({ houseNumber: value, lat: null, lng: null, location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown) })}
+          onChange={value => patch({ houseNumber: value, location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown) })}
         />
         <button
           type="button"
-          onClick={() => { const nextUnknown = !incident.houseNumberUnknown; patch({ houseNumberUnknown: nextUnknown, houseNumber: '', lat: null, lng: null, location: composeIncidentLocation(incident.street, '', nextUnknown) }) }}
+          onClick={() => { const nextUnknown = !incident.houseNumberUnknown; patch({ houseNumberUnknown: nextUnknown, houseNumber: '', location: composeIncidentLocation(incident.street, '', nextUnknown) }) }}
           className={`mt-2 text-xs font-semibold ${incident.houseNumberUnknown ? 'text-blue-700' : 'text-gray-500'}`}
         >
           {incident.houseNumberUnknown ? '✓ HNr unbekannt' : 'HNr unbekannt'}
