@@ -26,7 +26,7 @@ export default function StreetAutocomplete({ label, value, onChange, onSelect }:
     // geänderten Text nachträglich wieder aufpoppen lassen.
     const requestId = ++requestRef.current
     const query = value.trim()
-    if (query.length < MIN_LENGTH) { setSuggestions([]); setOpen(false); return }
+    if (query.length < MIN_LENGTH) { setSearching(false); setSuggestions([]); setOpen(false); return }
     setSearching(true)
     const result = await suggestStreets(query)
     if (requestRef.current !== requestId) return // veraltete Antwort verwerfen
@@ -43,7 +43,7 @@ export default function StreetAutocomplete({ label, value, onChange, onSelect }:
           className={fieldClass}
           value={value}
           autoComplete="off"
-          onChange={event => { onChange(event.target.value); setOpen(false) }}
+          onChange={event => { onChange(event.target.value); requestRef.current++; setSearching(false); setOpen(false) }}
           onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void search() } }}
         />
         <button
