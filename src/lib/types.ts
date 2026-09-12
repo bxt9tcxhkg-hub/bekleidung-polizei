@@ -630,6 +630,8 @@ export interface IncidentReport {
   caller_name: string | null
   reported_at: string
   location: string | null
+  location_lat: number | null
+  location_lng: number | null
   summary: string
   involved_person: string | null
   involved_birth_date: string | null
