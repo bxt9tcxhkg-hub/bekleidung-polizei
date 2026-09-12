@@ -4,7 +4,7 @@ import { Link, Navigate } from 'react-router-dom'
 import MailDeliveries from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleEntry } from '../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleEntry } from '../lib/types'
 
 type TabId = 'einsaetze' | 'kontrollauftraege' | 'hinweise' | 'rsa_rsb' | 'kontrollbehelfe' | 'fahrzeug'
 const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
@@ -16,6 +16,7 @@ const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
   { id: 'fahrzeug', label: 'Fahrzeug', icon: Car },
 ]
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
+const ZIELFUNKTION_LABEL: Record<KontrollauftragZielfunktion, string> = { jd: 'Nur JD', vd: 'Nur VD', beide: 'JD und VD' }
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
@@ -71,7 +72,9 @@ export default function Aussendienst() {
       : incidents
     return relevant.filter(item => item.status === 'offen')
   }, [incidents, ownAssignment?.function])
-  const openOrders = useMemo(() => entries.filter(item => item.category === 'kontrollauftrag' && item.status !== 'erledigt'), [entries])
+  const ownFunctionOrders = useCallback((item: ZentraleEntry) => item.category === 'kontrollauftrag' && (!ownAssignment || item.target_function == null || item.target_function === 'beide' || item.target_function === ownAssignment.function), [ownAssignment])
+  const openOrders = useMemo(() => entries.filter(item => ownFunctionOrders(item) && item.status !== 'erledigt'), [entries, ownFunctionOrders])
+  const kontrollauftraege = useMemo(() => entries.filter(ownFunctionOrders), [entries, ownFunctionOrders])
 
   async function saveVehicleCheck(status: VehicleCheckStatus, note: string) {
     if (!profile?.id || !ownAssignment?.vehicle_id) return
@@ -112,7 +115,7 @@ export default function Aussendienst() {
     <nav className="flex gap-1.5 overflow-x-auto pb-2 mb-5" aria-label="Bereiche des Außendienstes">{TABS.map(tab => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}</button> })}</nav>
 
     {!loading && activeTab === 'einsaetze' ? <EntryOrIncidentList kind="incidents" incidents={incidents} /> : null}
-    {!loading && activeTab === 'kontrollauftraege' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'kontrollauftrag')} /> : null}
+    {!loading && activeTab === 'kontrollauftraege' ? <EntryOrIncidentList kind="entries" entries={kontrollauftraege} /> : null}
     {!loading && activeTab === 'hinweise' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'lage' || item.category === 'verbot' || item.category === 'fahndung')} /> : null}
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
     {!loading && activeTab === 'kontrollbehelfe' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'unterlage')} /> : null}
@@ -127,7 +130,7 @@ function EntryOrIncidentList({ kind, entries, incidents }: { kind: 'entries' | '
   }
   const list = entries ?? []
   if (list.length === 0) return <Empty text="Keine Einträge vorhanden." />
-  return <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{list.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.title}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div>{item.description ? <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.description}</p> : null}</article>)}</div>
+  return <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{list.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.title}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span>{item.target_function ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ZIELFUNKTION_LABEL[item.target_function]}</span> : null}</div>{item.description ? <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.description}</p> : null}<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">{item.location ? <span>Ort: {item.location}</span> : null}{item.valid_from ? <span>Ab: {new Date(item.valid_from).toLocaleDateString('de-AT')}</span> : null}{item.valid_until ? <span>Bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}</div></article>)}</div>
 }
 
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
