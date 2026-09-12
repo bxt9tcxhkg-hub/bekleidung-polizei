@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap } from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap, Footprints } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type {
   EinsatzTrainingAssignment,
@@ -11,10 +11,11 @@ import type {
   SchulungAssignment,
   SchulungModule,
   SchulungSession,
+  ShoeRefund,
   StockOrder,
 } from '../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../lib/types'
-import { getCurrentBudget, getUsedBudget } from '../lib/budget'
+import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCap } from '../lib/budget'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import { PERSONAL_EM_CATEGORY_LABELS, officerDisplayName, personalEmDetailText } from '../lib/personalEinsatzmittel'
@@ -52,6 +53,7 @@ export default function Approvals() {
   const [schulungModules, setSchulungModules] = useState<SchulungModule[]>([])
   const [schulungSessions, setSchulungSessions] = useState<SchulungSession[]>([])
   const [schulungAssignments, setSchulungAssignments] = useState<SchulungAssignmentWithOfficer[]>([])
+  const [shoeRefunds, setShoeRefunds] = useState<ShoeRefund[]>([])
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' | 'personal' | 'pool' } | null>(null)
@@ -62,7 +64,7 @@ export default function Approvals() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tAssignRes, sModRes, sSessRes, sAssignRes] = await Promise.all([
+    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tAssignRes, sModRes, sSessRes, sAssignRes, refundRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, products(name,category,price), quarters(name), profiles(name,dienstnummer,username)')
@@ -97,6 +99,11 @@ export default function Approvals() {
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
         .eq('status', 'vorschlag')
         .order('proposed_at', { ascending: true }),
+      supabase
+        .from('shoe_refunds')
+        .select('*, profiles!shoe_refunds_user_id_fkey(id,name,username,dienstnummer)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true }),
     ])
     // Ein fehlgeschlagener Query darf nicht als "keine offenen Fälle" durchgehen -
     // das würde dem Genehmiger echte, noch unentschiedene Fälle verstecken. Bei
@@ -124,6 +131,8 @@ export default function Approvals() {
     else setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
     if (sAssignRes.error) failed.push('Schulungs-Zuteilungsvorschläge')
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
+    if (refundRes.error) failed.push('Schuherstattungen')
+    else setShoeRefunds((refundRes.data ?? []) as ShoeRefund[])
     setError(failed.length > 0 ? `Nicht alle Freigaben konnten geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
     // Budget-Kontext pro Benutzer laden (Jahresbudget + bereits verbraucht)
     const userIds = Array.from(new Set(pending.map(o => o.user_id)))
@@ -231,6 +240,28 @@ export default function Approvals() {
     if (err) { setError(err.message || 'Entscheidung fehlgeschlagen.'); return }
     logAudit(approve ? 'Beschaffungsantrag genehmigt' : 'Beschaffungsantrag abgelehnt', `${POOL_EM_CATEGORY_LABELS[item.category]} · ${item.anzahl} · ${officerDisplayName(item.requester)}`)
     setCancelReason(null)
+    load()
+  }
+
+  async function reviewShoeRefund(refund: ShoeRefund, status: 'approved' | 'rejected') {
+    if (processing) return
+    setProcessing(refund.id)
+    setError('')
+    const { data: { user } } = await supabase.auth.getUser()
+    const payload: { status: 'approved' | 'rejected'; reviewed_by: string | null; reviewed_at: string; approved_amount?: number } = {
+      status,
+      reviewed_by: user?.id ?? null,
+      reviewed_at: new Date().toISOString(),
+    }
+    if (status === 'approved') {
+      // Genehmigten Betrag zum Zeitpunkt der Genehmigung anhand des aktuellen Caps berechnen (wie ShoeRefunds.tsx)
+      const cap = await getCurrentShoeRefundCap()
+      payload.approved_amount = Math.min(Number(refund.amount), cap)
+    }
+    const { error: err } = await supabase.from('shoe_refunds').update(payload).eq('id', refund.id)
+    setProcessing(null)
+    if (err) { setError(err.message || 'Aktion fehlgeschlagen.'); return }
+    logAudit(status === 'approved' ? 'Schuherstattung genehmigt' : 'Schuherstattung abgelehnt', refund.profiles?.name ?? '?')
     load()
   }
 
@@ -383,6 +414,27 @@ export default function Approvals() {
             )}
           </div>
 
+          {/* ── Schuherstattungen ── */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Footprints className="w-4 h-4" /> Schuherstattungen</h2>
+            {shoeRefunds.length === 0 ? (
+              <Empty icon={Footprints} title="Keine offenen Schuherstattungen" />
+            ) : (
+              <Table
+                head={['Datum', 'Betrag', 'Beantragt von', 'Notiz', '']}
+                rows={shoeRefunds.map(r => [
+                  new Date(r.refund_date).toLocaleDateString('de-AT'),
+                  fmtEUR(Number(r.amount)),
+                  r.profiles?.name ?? '–',
+                  r.note ?? '–',
+                  <Actions key="ac" disabled={processing === r.id}
+                    onApprove={() => void reviewShoeRefund(r, 'approved')}
+                    onReject={() => void reviewShoeRefund(r, 'rejected')} />,
+                ])}
+              />
+            )}
+          </div>
+
           {/* ── Personal-Einsatzmittel-Meldungen ── */}
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Einsatzmittel-Meldungen (persönlich)</h2>
@@ -512,7 +564,7 @@ export default function Approvals() {
               <label className="block text-xs font-medium text-gray-600">Termin für die Einteilung (bei Genehmigung erforderlich)
                 <select className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={reviewSessionId} onChange={e => setReviewSessionId(e.target.value)}>
                   <option value="">– Termin wählen –</option>
-                  {assignmentSessions.map(s => <option key={s.id} value={s.id}>{new Date(s.session_date).toLocaleDateString('de-AT')}</option>)}
+                  {assignmentSessions.map(s => <option key={s.id} value={s.id}>{new Date(s.session_date).toLocaleDateString('de-AT')}{s.note ? ` · ${s.note}` : ''}</option>)}
                 </select>
                 {assignmentSessions.length === 0 ? <span className="text-xs text-amber-700 mt-1 block">Für dieses Modul ist aktuell kein angekündigter Termin vorhanden.</span> : null}
               </label>
