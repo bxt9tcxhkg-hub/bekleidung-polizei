@@ -547,7 +547,7 @@ export interface ZentraleEntry {
   updated_at: string
 }
 
-export type StrassenzustandZustand = 'normal' | 'schnee' | 'glatteis' | 'lawine' | 'sonstige'
+export type StrassenzustandZustand = 'frei_befahrbar' | 'gesperrt' | 'sonstige'
 export type StrassenzustandMeldungsart = 'neuzugang' | 'aenderung' | 'widerruf'
 
 export interface StrassenzustandStammdatum {

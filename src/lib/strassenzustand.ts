@@ -1,10 +1,8 @@
 import type { StrassenzustandBerichtzeile, StrassenzustandMeldungsart, StrassenzustandZustand } from './types'
 
 export const ZUSTAND_LABEL: Record<StrassenzustandZustand, string> = {
-  normal: 'Normal / frei befahrbar',
-  schnee: 'Schnee',
-  glatteis: 'Glatteis',
-  lawine: 'Lawine',
+  frei_befahrbar: 'Frei befahrbar',
+  gesperrt: 'Gesperrt',
   sonstige: 'Sonstige',
 }
 export const MELDUNGSART_LABEL: Record<StrassenzustandMeldungsart, string> = {
@@ -39,16 +37,37 @@ export function latestPerStrasse(zeilen: readonly StrassenzustandBerichtzeile[])
   return [...latest.values()]
 }
 
-/** Straßen mit aktuell aktiver Maßnahme (alles außer "normal / frei befahrbar"). */
+/** Straßen mit aktuell aktiver Maßnahme (alles außer "frei befahrbar"). */
 export function aktiveSperren(zeilen: readonly StrassenzustandBerichtzeile[]): StrassenzustandBerichtzeile[] {
   return latestPerStrasse(zeilen)
-    .filter(zeile => zeile.zustand !== 'normal')
+    .filter(zeile => zeile.zustand !== 'frei_befahrbar')
     .sort((a, b) => strassenName(a).localeCompare(strassenName(b), 'de'))
 }
 
+/** Datum, oder Datum + Uhrzeit falls eine Uhrzeit ungleich Mitternacht gesetzt wurde. */
+function formatZeitpunkt(value: string): string {
+  const date = new Date(value)
+  const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0
+  return hasTime
+    ? `${date.toLocaleDateString('de-AT')} ${date.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}`
+    : date.toLocaleDateString('de-AT')
+}
+
+/**
+ * Baut aus einem Datum (YYYY-MM-DD, Pflicht) und einer optionalen Uhrzeit
+ * (HH:MM) einen UTC-Zeitstempel (ISO-String) in der lokalen Zeitzone des
+ * Browsers - fehlt die Uhrzeit, wird Mitternacht angenommen. Leeres Datum
+ * ergibt null (für das optionale "Gültig bis").
+ */
+export function toTimestamp(datum: string, zeit: string): string | null {
+  if (!datum) return null
+  const [year, month, day] = datum.split('-').map(Number)
+  const [hours, minutes] = zeit ? zeit.split(':').map(Number) : [0, 0]
+  return new Date(year, month - 1, day, hours, minutes).toISOString()
+}
+
 export function formatZeitraum(zeile: Pick<StrassenzustandBerichtzeile, 'gueltig_von' | 'gueltig_bis'>): string {
-  const von = new Date(zeile.gueltig_von).toLocaleDateString('de-AT')
+  const von = formatZeitpunkt(zeile.gueltig_von)
   if (!zeile.gueltig_bis) return `Ab ${von} (bis auf Weiteres)`
-  const bis = new Date(zeile.gueltig_bis).toLocaleDateString('de-AT')
-  return `${von} – ${bis}`
+  return `${von} – ${formatZeitpunkt(zeile.gueltig_bis)}`
 }
