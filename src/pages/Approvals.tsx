@@ -15,7 +15,7 @@ import type {
   StockOrder,
 } from '../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../lib/types'
-import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCap } from '../lib/budget'
+import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCap, getCurrentShoeRefundCapResult } from '../lib/budget'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import { PERSONAL_EM_CATEGORY_LABELS, officerDisplayName, personalEmDetailText } from '../lib/personalEinsatzmittel'
@@ -266,8 +266,12 @@ export default function Approvals() {
       reviewed_at: new Date().toISOString(),
     }
     if (status === 'approved') {
-      // Genehmigten Betrag zum Zeitpunkt der Genehmigung anhand des aktuellen Caps berechnen (wie ShoeRefunds.tsx)
-      const cap = await getCurrentShoeRefundCap()
+      // Genehmigten Betrag zum Zeitpunkt der Genehmigung anhand des aktuellen Caps berechnen
+      // (wie ShoeRefunds.tsx). Anders als dort wird ein fehlgeschlagener Cap-Lookup NICHT
+      // stillschweigend als DEFAULT_SHOE_CAP behandelt - das würde bei einem transienten
+      // Fehler einen dauerhaft falschen approved_amount festschreiben.
+      const { cap, error: capErr } = await getCurrentShoeRefundCapResult()
+      if (capErr) { setProcessing(null); setError('Maximalbetrag konnte nicht ermittelt werden. Bitte erneut versuchen.'); return }
       payload.approved_amount = Math.min(Number(refund.amount), cap)
     }
     // Die shoe_refunds-UPDATE-Policy prüft (anders als die RPC-gestützten Warteschlangen)
@@ -307,7 +311,7 @@ export default function Approvals() {
 
   async function reviewAssignment(approve: boolean) {
     if (!reviewingAssignment) return
-    if (approve && !reviewSessionId) { setError('Bitte einen Termin für die Einteilung wählen.'); return }
+    if (approve && !reviewSessionValid) { setError('Bitte einen Termin für die Einteilung wählen.'); return }
     const { kind, item } = reviewingAssignment
     setProcessing(item.id)
     setError('')
@@ -335,6 +339,12 @@ export default function Approvals() {
   const assignmentSessions = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingSessions : schulungSessions).filter(s => s.module_id === reviewingAssignment.item.module_id)
     : []
+  // Ein vorbelegter session_id (Selbstanmeldung) kann fehlen, wenn die Termin-Abfrage
+  // fehlgeschlagen ist oder der Termin inzwischen nicht mehr angekündigt ist. Dann taucht
+  // er in assignmentSessions nicht auf, obwohl reviewSessionId noch einen (unsichtbaren)
+  // Wert trägt - "Genehmigen" darf dann nicht aktiv sein, sonst würde ein Termin bestätigt,
+  // den der Genehmiger gar nicht einsehen kann.
+  const reviewSessionValid = assignmentSessions.some(s => s.id === reviewSessionId)
   const assignmentModuleName = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingModules : schulungModules).find(m => m.id === reviewingAssignment.item.module_id)?.name ?? reviewingAssignment.item.module_id
     : ''
@@ -610,7 +620,7 @@ export default function Approvals() {
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => setReviewingAssignment(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={() => void reviewAssignment(false)} disabled={processing === reviewingAssignment.item.id} className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Ablehnen</button>
-              <button onClick={() => void reviewAssignment(true)} disabled={processing === reviewingAssignment.item.id || !reviewSessionId} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Genehmigen</button>
+              <button onClick={() => void reviewAssignment(true)} disabled={processing === reviewingAssignment.item.id || !reviewSessionValid} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Genehmigen</button>
             </div>
           </div>
         </div>

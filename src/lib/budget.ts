@@ -137,8 +137,15 @@ export async function getUsedBudget(userId: string, year: number): Promise<numbe
   return effectiveUsed(orderUsed, Number(budget?.used_adjustment ?? 0))
 }
 
-export async function getCurrentShoeRefundCap(): Promise<number> {
-  const { data } = await supabase
+/**
+ * Wie getCurrentShoeRefundCap(), gibt aber zusätzlich einen eventuellen
+ * Abfragefehler zurück - für Stellen, die einen fehlgeschlagenen Lookup NICHT
+ * stillschweigend als "kein Cap konfiguriert" (= DEFAULT_SHOE_CAP) behandeln
+ * dürfen, weil sie den zurückgegebenen Betrag dauerhaft speichern (z. B. beim
+ * Genehmigen einer Schuherstattung).
+ */
+export async function getCurrentShoeRefundCapResult() {
+  const { data, error } = await supabase
     .from('shoe_refund_caps')
     .select('cap_amount')
     .lte('valid_from', today())
@@ -146,7 +153,12 @@ export async function getCurrentShoeRefundCap(): Promise<number> {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  return data?.cap_amount ?? DEFAULT_SHOE_CAP
+  return { cap: (data?.cap_amount ?? DEFAULT_SHOE_CAP) as number, error }
+}
+
+export async function getCurrentShoeRefundCap(): Promise<number> {
+  const { cap } = await getCurrentShoeRefundCapResult()
+  return cap
 }
 
 /** Gleiches Gültig-ab-Datum → bestehenden Cap-Eintrag überschreiben, sonst neu anlegen. */
