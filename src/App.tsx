@@ -3,7 +3,10 @@ import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import EinsatzLayout from './components/EinsatzLayout'
-import OperativerDienstLayout from './components/OperativerDienstLayout'
+import ZentraleLayout from './components/ZentraleLayout'
+import AussendienstLayout from './components/AussendienstLayout'
+import InnendienstLayout from './components/InnendienstLayout'
+import RsaRsbLayout from './components/RsaRsbLayout'
 import FuhrparkLayout from './components/FuhrparkLayout'
 import PortalChrome from './components/PortalChrome'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -89,13 +92,37 @@ export default function App() {
           <Route
             element={
               <ProtectedRoute>
-                <OperativerDienstLayout />
+                <ZentraleLayout />
               </ProtectedRoute>
             }
           >
             <Route path="/zentrale" element={<Zentrale />} />
+          </Route>
+          <Route
+            element={
+              <ProtectedRoute>
+                <AussendienstLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/aussendienst" element={<Aussendienst />} />
+          </Route>
+          <Route
+            element={
+              <ProtectedRoute>
+                <InnendienstLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/innendienst" element={<Innendienst />} />
+          </Route>
+          <Route
+            element={
+              <ProtectedRoute>
+                <RsaRsbLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route path="/rsa-rsb" element={<RsaRsb />} />
           </Route>
           <Route path="/planung/zentrale" element={<Navigate to="/zentrale" replace />} />
