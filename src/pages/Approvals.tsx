@@ -54,6 +54,7 @@ export default function Approvals() {
   const [schulungSessions, setSchulungSessions] = useState<SchulungSession[]>([])
   const [schulungAssignments, setSchulungAssignments] = useState<SchulungAssignmentWithOfficer[]>([])
   const [shoeRefunds, setShoeRefunds] = useState<ShoeRefund[]>([])
+  const [shoeRefundCap, setShoeRefundCap] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' | 'personal' | 'pool' } | null>(null)
@@ -61,9 +62,20 @@ export default function Approvals() {
   const [reviewSessionId, setReviewSessionId] = useState('')
   const [reviewNote, setReviewNote] = useState('')
   const [error, setError] = useState('')
+  // Getrennt von error: eine fehlgeschlagene Teil-Ladung darf nicht verschwinden,
+  // nur weil währenddessen ein Dialog geöffnet/geschlossen wird (der error für
+  // seine eigenen Aktionsmeldungen zurücksetzt) - sonst zeigt der betroffene
+  // Bereich fälschlich "keine offenen ..." ohne jeden Hinweis darauf, dass er
+  // nie geladen wurde.
+  const [loadError, setLoadError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
+    // Nicht blockierend: der aktuelle Erstattungs-Cap wird für die Anzeige des
+    // tatsächlich erstattungsfähigen Betrags in der Schuherstattungen-Tabelle
+    // gebraucht (reviewShoeRefund() rechnet damit ohnehin zum Zeitpunkt der
+    // Genehmigung neu).
+    getCurrentShoeRefundCap().then(setShoeRefundCap).catch(() => {})
     const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tAssignRes, sModRes, sSessRes, sAssignRes, refundRes] = await Promise.all([
       supabase
         .from('orders')
@@ -133,7 +145,7 @@ export default function Approvals() {
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
     if (refundRes.error) failed.push('Schuherstattungen')
     else setShoeRefunds((refundRes.data ?? []) as ShoeRefund[])
-    setError(failed.length > 0 ? `Nicht alle Freigaben konnten geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
+    setLoadError(failed.length > 0 ? `Nicht alle Freigaben konnten geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
     // Budget-Kontext pro Benutzer laden (Jahresbudget + bereits verbraucht)
     const userIds = Array.from(new Set(pending.map(o => o.user_id)))
     const budgetEntries = await Promise.all(userIds.map(async uid => {
@@ -147,7 +159,7 @@ export default function Approvals() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { load().catch(() => setError('Freigaben konnten nicht geladen werden.')) }, [load])
+  useEffect(() => { load().catch(() => setLoadError('Freigaben konnten nicht geladen werden.')) }, [load])
 
   async function approve(order: PendingOrder) {
     if (processing) return
@@ -258,9 +270,21 @@ export default function Approvals() {
       const cap = await getCurrentShoeRefundCap()
       payload.approved_amount = Math.min(Number(refund.amount), cap)
     }
-    const { error: err } = await supabase.from('shoe_refunds').update(payload).eq('id', refund.id)
+    // Die shoe_refunds-UPDATE-Policy prüft (anders als die RPC-gestützten Warteschlangen)
+    // den Status nicht selbst - ohne .eq('status', 'pending') könnte eine zweite,
+    // zeitgleiche Entscheidung eine bereits final abgeschlossene stillschweigend
+    // überschreiben. select() + maybeSingle() macht sichtbar, ob wirklich eine Zeile
+    // betroffen war.
+    const { data: updated, error: err } = await supabase
+      .from('shoe_refunds')
+      .update(payload)
+      .eq('id', refund.id)
+      .eq('status', 'pending')
+      .select('id')
+      .maybeSingle()
     setProcessing(null)
     if (err) { setError(err.message || 'Aktion fehlgeschlagen.'); return }
+    if (!updated) { setError('Diese Erstattung wurde bereits entschieden.'); load(); return }
     logAudit(status === 'approved' ? 'Schuherstattung genehmigt' : 'Schuherstattung abgelehnt', refund.profiles?.name ?? '?')
     load()
   }
@@ -322,6 +346,7 @@ export default function Approvals() {
         <p className="text-gray-500 text-sm mt-1">Alles, was auf eine Entscheidung wartet – an einem Ort.</p>
       </div>
 
+      {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
 
       {loading ? (
@@ -416,21 +441,30 @@ export default function Approvals() {
 
           {/* ── Schuherstattungen ── */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Footprints className="w-4 h-4" /> Schuherstattungen</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <Footprints className="w-4 h-4" /> Schuherstattungen
+              {shoeRefundCap != null && <span className="normal-case font-normal text-gray-400">· Maximalbetrag {fmtEUR(shoeRefundCap)}</span>}
+            </h2>
             {shoeRefunds.length === 0 ? (
               <Empty icon={Footprints} title="Keine offenen Schuherstattungen" />
             ) : (
               <Table
-                head={['Datum', 'Betrag', 'Beantragt von', 'Notiz', '']}
-                rows={shoeRefunds.map(r => [
-                  new Date(r.refund_date).toLocaleDateString('de-AT'),
-                  fmtEUR(Number(r.amount)),
-                  r.profiles?.name ?? '–',
-                  r.note ?? '–',
-                  <Actions key="ac" disabled={processing === r.id}
-                    onApprove={() => void reviewShoeRefund(r, 'approved')}
-                    onReject={() => void reviewShoeRefund(r, 'rejected')} />,
-                ])}
+                head={['Datum', 'Betrag', 'Erstattungsfähig', 'Beantragt von', 'Notiz', '']}
+                rows={shoeRefunds.map(r => {
+                  const capped = shoeRefundCap != null ? Math.min(Number(r.amount), shoeRefundCap) : null
+                  return [
+                    new Date(r.refund_date).toLocaleDateString('de-AT'),
+                    fmtEUR(Number(r.amount)),
+                    capped != null
+                      ? <span key="cap" className={capped < Number(r.amount) ? 'text-amber-700 font-medium' : ''}>{fmtEUR(capped)}{capped < Number(r.amount) ? ' (gedeckelt)' : ''}</span>
+                      : '–',
+                    r.profiles?.name ?? '–',
+                    r.note ?? '–',
+                    <Actions key="ac" disabled={processing === r.id}
+                      onApprove={() => void reviewShoeRefund(r, 'approved')}
+                      onReject={() => void reviewShoeRefund(r, 'rejected')} />,
+                  ]
+                })}
               />
             )}
           </div>
