@@ -104,7 +104,11 @@ export default function Approvals() {
         .order('created_at', { ascending: true }),
       supabase.from('einsatz_training_modules').select('*'),
       supabase.from('einsatz_training_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
-      supabase.from('einsatz_training_registrations').select('session_id'),
+      // Nur Anmeldungen zu aktuell angekündigten Terminen zählen (statt der gesamten
+      // Historie) - das bleibt dauerhaft klein und vermeidet, dass ein Response-Limit
+      // von PostgREST bei wachsender Historie die Belegungszahlen stillschweigend
+      // unterzählt (ein voller Termin würde dann fälschlich als frei gezeigt).
+      supabase.from('einsatz_training_registrations').select('session_id, einsatz_training_sessions!inner(announced)').eq('einsatz_training_sessions.announced', true),
       supabase
         .from('einsatz_training_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
@@ -112,7 +116,7 @@ export default function Approvals() {
         .order('proposed_at', { ascending: true }),
       supabase.from('schulungen_module').select('*'),
       supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
-      supabase.from('schulungen_registrations').select('session_id'),
+      supabase.from('schulungen_registrations').select('session_id, schulungen_sessions!inner(announced)').eq('schulungen_sessions.announced', true),
       supabase
         .from('schulungen_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
@@ -720,7 +724,7 @@ export default function Approvals() {
                 </div>
               )}
               <label className="block text-xs font-medium text-gray-600">Bemerkung (bei Ablehnung erforderlich)
-                <textarea rows={3} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={emReviewNote} onChange={e => setEmReviewNote(e.target.value)} autoFocus />
+                <textarea rows={3} maxLength={reviewingEm.kind === 'personal' ? 1000 : 500} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={emReviewNote} onChange={e => setEmReviewNote(e.target.value)} autoFocus />
               </label>
               {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
             </div>
