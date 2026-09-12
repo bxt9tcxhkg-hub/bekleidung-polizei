@@ -34,6 +34,20 @@ const CATEGORY_ROUTE: Partial<Record<ZentraleEntryCategory, string>> = { verbot:
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
 function normalizePhone(value: string | null | undefined) { return (value ?? '').replace(/\D/g, '') }
+// Adressabgleich für Kontexthinweise: reiner Teilstringvergleich hätte einen
+// Präfix-Konflikt ("Rohrbach 1" würde fälschlich auch zu "Rohrbach 10"
+// passen) - sicherheitsrelevant, weil so ein AV/BV oder Personenhinweis der
+// falschen Adresse zugeordnet werden könnte. Stattdessen Wortvergleich: jedes
+// Wort der kürzeren Adresse muss als exaktes Wort in der längeren vorkommen -
+// eine Adresse ohne Hausnummer (nur Straße) matcht weiterhin jede Hausnummer
+// auf dieser Straße (bewusster Straßen-Fallback).
+function addressesMatch(a: string, b: string): boolean {
+  const wordsA = normalizeText(a).split(' ').filter(Boolean)
+  const wordsB = normalizeText(b).split(' ').filter(Boolean)
+  if (wordsA.length === 0 || wordsB.length === 0) return false
+  const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA]
+  return shorter.every(word => longer.includes(word))
+}
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
 // Fügt Straße und Hausnummer zum gespeicherten Einsatzort zusammen - ohne HNr (oder als "unbekannt" markiert) bleibt es bei der Straße.
 function composeIncidentLocation(street: string, houseNumber: string, houseNumberUnknown: boolean) {
@@ -122,39 +136,47 @@ export default function Zentrale() {
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
   const contextEntries = useMemo(() => {
-    const place = normalizeText(incident.location), phone = normalizePhone(incident.callerPhone), name = normalizeText(incident.callerName)
+    const place = incident.location.trim(), phone = normalizePhone(incident.callerPhone), name = normalizeText(incident.callerName)
     if (!place && !phone && name.length < 3) return []
-    return entries.filter(item => { const itemLocation = normalizeText(item.location); return item.status !== 'erledigt' && ((place.length >= 4 && itemLocation.length >= 4 && (itemLocation.includes(place) || place.includes(itemLocation))) || (phone.length >= 5 && normalizePhone(item.reference).includes(phone)) || (name.length >= 3 && normalizeText(`${item.title} ${item.responsible ?? ''}`).includes(name))) })
+    return entries.filter(item => item.status !== 'erledigt' && ((place.length >= 4 && addressesMatch(place, item.location ?? '')) || (phone.length >= 5 && normalizePhone(item.reference).includes(phone)) || (name.length >= 3 && normalizeText(`${item.title} ${item.responsible ?? ''}`).includes(name))))
   }, [entries, incident.callerName, incident.callerPhone, incident.location])
   const contextPersonNotes = useMemo(() => {
-    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), phone = normalizePhone(incident.callerPhone), place = normalizeText(incident.location)
+    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), phone = normalizePhone(incident.callerPhone), place = incident.location.trim()
     return personNotes.filter(item => {
-      const itemLocation = normalizeText(item.location)
       // Adressabgleich zusätzlich zu Name/Telefon: beim Anlegen einer Meldung
       // ist oft nur der Einsatzort bekannt, noch kein Personenname - z. B.
       // "an dieser Adresse wohnt eine gefährliche Person".
       return (phone.length >= 5 && normalizePhone(item.phone) === phone)
         || (names.includes(normalizeText(item.person_name)) && (!item.birth_date || item.birth_date === incident.involvedBirthDate))
-        || (place.length >= 4 && itemLocation.length >= 4 && (itemLocation.includes(place) || place.includes(itemLocation)))
+        || (place.length >= 4 && addressesMatch(place, item.location ?? ''))
     })
   }, [incident.callerName, incident.callerPhone, incident.involvedBirthDate, incident.involvedPerson, incident.location, personNotes])
   // Frühere Meldungen an derselben Adresse ("gab es dort schon mal was?") -
   // gezielte Datenbankabfrage statt Client-Filter, weil incident_reports über
   // die Zeit groß wird (anders als die überschaubaren zentrale_entries).
   useEffect(() => {
-    if (!showIncidentForm) return
+    // Generation IMMER erhöhen, auch bei frühem Abbruch - sonst könnte eine
+    // noch laufende ältere Anfrage die Liste für die inzwischen geänderte
+    // Straße/Adresse nachträglich wieder überschreiben.
+    const requestId = ++priorIncidentsRequestRef.current
+    if (!showIncidentForm) { setPriorIncidents([]); return }
     const street = incident.street.trim()
     if (street.length < 3) { setPriorIncidents([]); return }
-    const requestId = ++priorIncidentsRequestRef.current
     const escaped = street.replace(/[\\%_]/g, char => `\\${char}`)
+    const targetAddress = incident.location.trim()
     const timer = setTimeout(() => {
-      void supabase.from('incident_reports').select('*').ilike('location', `%${escaped}%`).order('reported_at', { ascending: false }).limit(5).then(result => {
+      // Serverseitig nur grob auf die Straße vorgefiltert (ILIKE kann den
+      // Präfix-Konflikt "Rohrbach 1" vs. "Rohrbach 10" nicht sauber
+      // ausschließen) - hier per addressesMatch exakt auf die eingegebene
+      // Adresse (inkl. Hausnummer, falls bekannt) verfeinert.
+      void supabase.from('incident_reports').select('*').ilike('location', `%${escaped}%`).order('reported_at', { ascending: false }).limit(20).then(result => {
         if (priorIncidentsRequestRef.current !== requestId) return
-        setPriorIncidents(result.error ? [] : (result.data ?? []) as IncidentReport[])
+        const candidates = result.error ? [] : (result.data ?? []) as IncidentReport[]
+        setPriorIncidents(candidates.filter(item => addressesMatch(targetAddress, item.location ?? '')).slice(0, 5))
       })
     }, 400)
     return () => clearTimeout(timer)
-  }, [incident.street, showIncidentForm])
+  }, [incident.street, incident.location, showIncidentForm])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
