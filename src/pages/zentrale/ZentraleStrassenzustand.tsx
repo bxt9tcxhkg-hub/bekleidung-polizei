@@ -274,11 +274,11 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
             {!row.auftraggeberId ? <Field label="Sonstige/r Auftraggeber/in" value={row.auftraggeberFreitext} onChange={value => patchRow(index, { auftraggeberFreitext: value })} /> : <div />}
             <label className="text-xs font-medium text-gray-600">Meldung durch<select className={inputClass} value={row.melderId || SONSTIGE} onChange={event => patchRow(index, { melderId: event.target.value === SONSTIGE ? '' : event.target.value })}>{activeMelder.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}<option value={SONSTIGE}>Sonstige …</option></select></label>
             {!row.melderId ? <Field label="Sonstige/r Melder/in" value={row.melderFreitext} onChange={value => patchRow(index, { melderFreitext: value })} /> : <div />}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Field label="Gültig ab" type="date" value={row.gueltigVonDatum} onChange={value => patchRow(index, { gueltigVonDatum: value })} />
               <Field label="Uhrzeit (optional)" type="time" value={row.gueltigVonZeit} onChange={value => patchRow(index, { gueltigVonZeit: value })} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Field label="Gültig bis (optional)" type="date" value={row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisDatum: value, ...(value ? {} : { gueltigBisZeit: '' }) })} />
               <Field label="Uhrzeit (optional)" type="time" value={row.gueltigBisZeit} disabled={!row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisZeit: value })} />
             </div>
