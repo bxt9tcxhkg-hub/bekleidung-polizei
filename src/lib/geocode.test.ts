@@ -1,7 +1,48 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { geocodeLocation } from './geocode'
+import { geocodeLocation, suggestStreets } from './geocode'
 
 afterEach(() => { vi.unstubAllGlobals() })
+
+describe('suggestStreets', () => {
+  it('gibt bei zu kurzer Eingabe leeres Array zurück, ohne einen Request zu senden', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await suggestStreets('E')).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('grenzt die Suche strukturiert auf Dornbirn ein und dedupliziert nach Straßenname', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        { lat: '47.41', lon: '9.75', address: { road: 'Eisengasse' } },
+        { lat: '47.42', lon: '9.76', address: { road: 'Eisengasse' } },
+        { lat: '47.43', lon: '9.77', address: { road: 'Eisenbahnstraße' } },
+        { lat: '47.44', lon: '9.78', address: {} },
+      ],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await suggestStreets('Eisen')
+    const requestedUrl = String(fetchMock.mock.calls[0][0])
+    expect(requestedUrl).toContain('street=Eisen')
+    expect(requestedUrl).toContain('city=Dornbirn')
+    expect(requestedUrl).toContain('country=Austria')
+    expect(result).toEqual([
+      { street: 'Eisengasse', lat: 47.41, lng: 9.75 },
+      { street: 'Eisenbahnstraße', lat: 47.43, lng: 9.77 },
+    ])
+  })
+
+  it('gibt leeres Array zurück, wenn nichts gefunden wurde oder die Anfrage fehlschlägt', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+    expect(await suggestStreets('Unbekannt')).toEqual([])
+  })
+
+  it('gibt leeres Array zurück, wenn fetch selbst fehlschlägt', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    expect(await suggestStreets('Irgendwas')).toEqual([])
+  })
+})
 
 describe('geocodeLocation', () => {
   it('gibt null bei leerer Eingabe zurück, ohne einen Request zu senden', async () => {

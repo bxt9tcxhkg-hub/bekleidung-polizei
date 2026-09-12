@@ -4,8 +4,9 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import { geocodeLocation } from '../lib/geocode'
+import { geocodeLocation, type StreetSuggestion } from '../lib/geocode'
 import LeafletMap from '../components/LeafletMap'
+import StreetAutocomplete from '../components/StreetAutocomplete'
 import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleEntry, ZentraleEntryCategory } from '../lib/types'
 import { Actions, Area, Empty, EntryList, EntryModal, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
@@ -34,6 +35,13 @@ function todayLocal() { const date = new Date(); return `${date.getFullYear()}-$
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
 function normalizePhone(value: string | null | undefined) { return (value ?? '').replace(/\D/g, '') }
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
+// Fügt Straße und Hausnummer zum gespeicherten Einsatzort zusammen - ohne HNr (oder als "unbekannt" markiert) bleibt es bei der Straße.
+function composeIncidentLocation(street: string, houseNumber: string, houseNumberUnknown: boolean) {
+  const trimmedStreet = street.trim()
+  if (!trimmedStreet) return ''
+  if (houseNumberUnknown || !houseNumber.trim()) return trimmedStreet
+  return `${trimmedStreet} ${houseNumber.trim()}`
+}
 
 export default function Zentrale() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
@@ -56,7 +64,7 @@ export default function Zentrale() {
   const [entry, setEntry] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
-  const [incident, setIncident] = useState({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null })
+  const [incident, setIncident] = useState({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null })
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState('')
 
@@ -135,7 +143,7 @@ export default function Zentrale() {
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
-  function openIncident() { setIncident({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null }); setLocateError(''); setShowIncidentForm(true); setError('') }
+  function openIncident() { setIncident({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null }); setLocateError(''); setShowIncidentForm(true); setError('') }
   async function locateIncident() {
     const queried = incident.location.trim()
     if (!queried) return
@@ -204,10 +212,33 @@ function SofortWichtig({ entries, onOpen }: { entries: ZentraleEntry[]; onOpen: 
   return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2><div className="space-y-2">{entries.map(item => <button key={item.id} type="button" onClick={() => onOpen(item)} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
 }
 
-function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
+function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<typeof incident>) => setIncident(current => ({ ...current, ...values }))
   return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><Field label="Name des Melders" value={incident.callerName} onChange={value => patch({ callerName: value })} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
-    <div><Field label="Einsatzort" value={incident.location} onChange={value => patch({ location: value, lat: null, lng: null })} /><button type="button" disabled={!incident.location.trim() || locating} onClick={() => void locate()} className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"><MapPin className="w-3.5 h-3.5" /> {locating ? 'Suche…' : 'Auf Karte anzeigen'}</button>{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}</p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
+    <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
+      <StreetAutocomplete
+        label="Straße"
+        value={incident.street}
+        onChange={value => patch({ street: value, lat: null, lng: null, location: composeIncidentLocation(value, incident.houseNumber, incident.houseNumberUnknown) })}
+        onSelect={(suggestion: StreetSuggestion) => patch({ street: suggestion.street, lat: suggestion.lat, lng: suggestion.lng, location: composeIncidentLocation(suggestion.street, incident.houseNumber, incident.houseNumberUnknown) })}
+      />
+      <div>
+        <Field
+          label="Hausnummer"
+          value={incident.houseNumber}
+          disabled={incident.houseNumberUnknown}
+          onChange={value => patch({ houseNumber: value, lat: null, lng: null, location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown) })}
+        />
+        <button
+          type="button"
+          onClick={() => { const nextUnknown = !incident.houseNumberUnknown; patch({ houseNumberUnknown: nextUnknown, houseNumber: '', lat: null, lng: null, location: composeIncidentLocation(incident.street, '', nextUnknown) }) }}
+          className={`mt-2 text-xs font-semibold ${incident.houseNumberUnknown ? 'text-blue-700' : 'text-gray-500'}`}
+        >
+          {incident.houseNumberUnknown ? '✓ HNr unbekannt' : 'HNr unbekannt'}
+        </button>
+      </div>
+    </div>
+    <div><button type="button" disabled={!incident.location.trim() || locating} onClick={() => void locate()} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"><MapPin className="w-3.5 h-3.5" /> {locating ? 'Suche…' : 'Auf Karte anzeigen'}</button>{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}</p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
     <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Beteiligte Person" value={incident.involvedPerson} onChange={value => patch({ involvedPerson: value })} /><Field label="Geburtsdatum zur eindeutigen Zuordnung" type="date" value={incident.involvedBirthDate} onChange={value => patch({ involvedBirthDate: value })} /></div><ContextHints entries={contextEntries} personNotes={contextPersonNotes} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
 }
 
