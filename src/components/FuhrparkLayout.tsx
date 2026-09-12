@@ -1,18 +1,47 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Car, LayoutGrid, LogOut, Menu, X } from 'lucide-react'
+import { AlertTriangle, Car, LayoutGrid, LogOut, Menu, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { canManageFuhrpark } from '../lib/fuhrpark'
 import ChangePasswordModal from './ChangePasswordModal'
 
-const baseItems = [
-  { to: '/', label: 'Portal', icon: LayoutGrid },
-  { to: '/fuhrpark', label: 'Fuhrpark & Fahrzeuge', icon: Car },
-]
+interface NavItem {
+  to: string
+  label: string
+  icon: React.ElementType
+}
+interface NavSection {
+  id: string
+  label: string
+  color: string
+  items: NavItem[]
+}
 
 export default function FuhrparkLayout() {
-  const { profile, isAdmin, mustChangePassword, mustSetUsername, signOut } = useAuth()
+  const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles, mustChangePassword, mustSetUsername, signOut } = useAuth()
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const sections: NavSection[] = [
+    {
+      id: 'mein-bereich',
+      label: 'Mein Bereich',
+      color: 'text-blue-300',
+      items: [
+        { to: '/', label: 'Portal', icon: LayoutGrid },
+        { to: '/fuhrpark', label: 'Fahrzeuge', icon: Car },
+      ],
+    },
+    ...(canManage ? [{
+      id: 'sachbearbeiter',
+      label: 'Sachbearbeiter',
+      color: 'text-orange-300',
+      items: [
+        { to: '/fuhrpark/offen', label: 'Offene Punkte', icon: AlertTriangle },
+      ],
+    }] : []),
+  ]
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -38,30 +67,34 @@ export default function FuhrparkLayout() {
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <p className="text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 text-blue-300">
-            Fuhrpark
-          </p>
-          <div className="space-y-0.5">
-            {baseItems.map(({ to, label, icon: Icon }) => {
-              const active = to === '/fuhrpark'
-                ? location.pathname.startsWith('/fuhrpark')
-                : location.pathname === to
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    active ? 'bg-blue-600 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1">{label}</span>
-                </Link>
-              )
-            })}
-          </div>
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+          {sections.map(section => (
+            <div key={section.id}>
+              <p className={`text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 ${section.color}`}>
+                {section.label}
+              </p>
+              <div className="space-y-0.5">
+                {section.items.map(({ to, label, icon: Icon }) => {
+                  const active = to === '/fuhrpark'
+                    ? location.pathname === '/fuhrpark' || (location.pathname.startsWith('/fuhrpark/') && location.pathname !== '/fuhrpark/offen')
+                    : location.pathname === to
+                  return (
+                    <Link
+                      key={to}
+                      to={to}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                        active ? 'bg-blue-600 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1">{label}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="px-3 py-4 border-t border-blue-900">

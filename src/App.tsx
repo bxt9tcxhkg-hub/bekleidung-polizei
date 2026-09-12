@@ -40,6 +40,7 @@ const PortalUsers = lazy(() => import('./pages/PortalUsers'))
 const PlannedArea = lazy(() => import('./pages/PlannedArea'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
+const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
 const Zentrale = lazy(() => import('./pages/Zentrale'))
 const Aussendienst = lazy(() => import('./pages/Aussendienst'))
 const Innendienst = lazy(() => import('./pages/Innendienst'))
@@ -147,6 +148,7 @@ export default function App() {
             }
           >
             <Route path="/fuhrpark" element={<Fleet />} />
+            <Route path="/fuhrpark/offen" element={<FleetOpenItems />} />
             <Route path="/fuhrpark/:vehicleId" element={<FleetVehicle />} />
           </Route>
           <Route path="/planung/fuhrpark" element={<Navigate to="/fuhrpark" replace />} />
