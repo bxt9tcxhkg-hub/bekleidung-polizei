@@ -1243,6 +1243,7 @@ export type Database = {
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }
       decide_schulung_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
+      strassenzustand_bericht_ersetzen: { Args: { p_bericht_id: string; p_anmerkung: string | null; p_zeilen: Record<string, unknown>[] }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

@@ -136,9 +136,8 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
   function removeRow(index: number) { setRows(current => current.length > 1 ? current.filter((_, i) => i !== index) : current) }
   function closeForm() { setShowForm(false); setEditingBericht(null) }
 
-  function rowToPayload(row: RowDraft, berichtId: string) {
+  function rowToFields(row: RowDraft) {
     return {
-      bericht_id: berichtId,
       strasse_id: row.strasseId || null,
       strasse_freitext: row.strasseId ? null : row.strasseFreitext.trim(),
       zustand: row.zustand,
@@ -168,32 +167,36 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
     }
     setSaving(true)
 
-    let berichtId: string
     if (editingBericht) {
-      const { error: updateError } = await supabase.from('strassenzustand_berichte').update({ anmerkung: anmerkung.trim() || null }).eq('id', editingBericht.id)
-      if (updateError) { setSaving(false); setError('Bericht konnte nicht aktualisiert werden.'); return }
-      // Bestehende Zeilen ersetzen statt einzeln zu aktualisieren - so greift
-      // beim Neueinfügen exakt derselbe Trigger zur automatischen
-      // Meldungsart-Ableitung wie beim Neuanlegen (der nur bei INSERT feuert).
-      const { error: deleteError } = await supabase.from('strassenzustand_berichtzeilen').delete().eq('bericht_id', editingBericht.id)
-      if (deleteError) { setSaving(false); setError('Bestehende Straßen konnten nicht ersetzt werden.'); return }
-      berichtId = editingBericht.id
+      const warArchiviert = !!editingBericht.pdf_file_key
+      // Update, Ersetzen der Zeilen und Zurücksetzen einer evtl. Archivierung
+      // laufen serverseitig in EINER Transaktion (RPC) - ein Zwischenfehler
+      // (z. B. eine vom Client nicht abgefangene Constraint-Verletzung) darf
+      // die bestehenden Zeilen nicht unwiederbringlich löschen, bevor die
+      // neuen sicher gespeichert sind.
+      const { error: rpcError } = await supabase.rpc('strassenzustand_bericht_ersetzen', {
+        p_bericht_id: editingBericht.id,
+        p_anmerkung: anmerkung.trim() || null,
+        p_zeilen: rows.map(rowToFields),
+      })
+      setSaving(false)
+      if (rpcError) { setError('Bericht konnte nicht aktualisiert werden.'); return }
+      logAudit('Straßenzustandsbericht bearbeitet', `Bericht Nr. ${editingBericht.nummer} · ${rows.length} Straße(n)`)
+      setNotice(warArchiviert ? 'Bericht wurde aktualisiert. Die bisherige Archivierung ist ungültig geworden - bitte erneut als PDF exportieren und archivieren.' : 'Bericht wurde aktualisiert. Bitte ggf. als PDF exportieren und archivieren.')
     } else {
       const { data: bericht, error: berichtError } = await supabase.from('strassenzustand_berichte')
         .insert({ bearbeiter: profile.id, anmerkung: anmerkung.trim() || null })
         .select('id').single()
       if (berichtError || !bericht) { setSaving(false); setError('Bericht konnte nicht angelegt werden.'); return }
-      berichtId = bericht.id
+      const payload = rows.map(row => ({ bericht_id: bericht.id, ...rowToFields(row) }))
+      const { error: zeilenError } = await supabase.from('strassenzustand_berichtzeilen').insert(payload)
+      setSaving(false)
+      if (zeilenError) { setError('Straßen konnten nicht gespeichert werden.'); return }
+      logAudit('Straßenzustandsbericht angelegt', `${rows.length} Straße(n)`)
+      setNotice('Bericht wurde gespeichert. Bitte als PDF exportieren und archivieren.')
     }
-
-    const payload = rows.map(row => rowToPayload(row, berichtId))
-    const { error: zeilenError } = await supabase.from('strassenzustand_berichtzeilen').insert(payload)
-    setSaving(false)
-    if (zeilenError) { setError('Straßen konnten nicht gespeichert werden.'); return }
-    logAudit(editingBericht ? 'Straßenzustandsbericht bearbeitet' : 'Straßenzustandsbericht angelegt', editingBericht ? `Bericht Nr. ${editingBericht.nummer} · ${rows.length} Straße(n)` : `${rows.length} Straße(n)`)
     setShowForm(false)
     setEditingBericht(null)
-    setNotice(editingBericht ? 'Bericht wurde aktualisiert. Bitte ggf. erneut als PDF exportieren.' : 'Bericht wurde gespeichert. Bitte als PDF exportieren und archivieren.')
     await load()
   }
 
