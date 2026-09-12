@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap, Footprints } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type {
@@ -129,13 +129,20 @@ export default function Approvals() {
     else setPoolEm((poolRes.data ?? []) as PoolEmWithRequester[])
     if (tModRes.error) failed.push('Trainingsmodule')
     else setTrainingModules((tModRes.data ?? []) as EinsatzTrainingModule[])
-    if (tSessRes.error) failed.push('Trainings-Termine')
+    // Anders als bei den übrigen Listen: eine veraltete Terminliste ist hier gefährlicher
+    // als eine leere. Sie entscheidet mit (reviewSessionValid), ob "Genehmigen" einen
+    // Termin akzeptiert - ein seit dem letzten erfolgreichen Laden nicht mehr angekündigter
+    // oder einem anderen Modul zugeordneter Termin würde sonst als gültige Option
+    // stehen bleiben. Eine leere Liste blockiert stattdessen sicher jede Genehmigung,
+    // ohne (anders als bei den Vorschlags-/Antragslisten) irgendein offenes Element zu
+    // verstecken - die Zuteilungsvorschläge selbst bleiben ja unverändert sichtbar.
+    if (tSessRes.error) { failed.push('Trainings-Termine'); setTrainingSessions([]) }
     else setTrainingSessions((tSessRes.data ?? []) as EinsatzTrainingSession[])
     if (tAssignRes.error) failed.push('Trainings-Zuteilungsvorschläge')
     else setTrainingAssignments((tAssignRes.data ?? []) as TrainingAssignmentWithOfficer[])
     if (sModRes.error) failed.push('Schulungsmodule')
     else setSchulungModules((sModRes.data ?? []) as SchulungModule[])
-    if (sSessRes.error) failed.push('Schulungs-Termine')
+    if (sSessRes.error) { failed.push('Schulungs-Termine'); setSchulungSessions([]) }
     else setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
     if (sAssignRes.error) failed.push('Schulungs-Zuteilungsvorschläge')
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
@@ -162,6 +169,18 @@ export default function Approvals() {
   }, [])
 
   useEffect(() => { load().catch(() => setLoadError('Freigaben konnten nicht geladen werden.')) }, [load])
+
+  // Ein direkter Ein-Klick-Fehler (Freigeben/Bestätigen ohne Dialog, z. B. bei
+  // Schuherstattungen oder Einsatzmittel-Meldungen) landet nur im Banner ganz oben -
+  // bei einer langen Seite und einem weit unten liegenden Abschnitt sieht der
+  // Genehmiger sonst nur, dass die Buttons wieder aktiv werden, ohne zu wissen warum.
+  // Ist dagegen gerade ein Dialog offen, zeigt der die Fehlermeldung bereits selbst an.
+  const topErrorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (error && !cancelReason && !reviewingAssignment) {
+      topErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [error, cancelReason, reviewingAssignment])
 
   async function approve(order: PendingOrder) {
     if (processing) return
@@ -364,7 +383,7 @@ export default function Approvals() {
       </div>
 
       {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
-      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
+      {error && <div ref={topErrorRef} className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
