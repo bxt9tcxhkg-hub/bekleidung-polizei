@@ -3,7 +3,7 @@ import { CheckCircle2, FileArchive, Plus, Trash2, Upload } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
-import { MELDUNGSART_LABEL, ZUSTAND_LABEL, aktiveSperren, formatZeitraum, strassenName } from '../../lib/strassenzustand'
+import { MELDUNGSART_LABEL, ZUSTAND_LABEL, aktiveSperren, formatZeitraum, strassenName, toTimestamp } from '../../lib/strassenzustand'
 import { generateStrassenzustandPdf } from '../../lib/strassenzustandPdf'
 import { Actions, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import type {
@@ -26,13 +26,15 @@ type RowDraft = {
   auftraggeberFreitext: string
   melderId: string
   melderFreitext: string
-  gueltigVon: string
-  gueltigBis: string
+  gueltigVonDatum: string
+  gueltigVonZeit: string
+  gueltigBisDatum: string
+  gueltigBisZeit: string
 }
 
 function todayIso() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 function emptyRow(): RowDraft {
-  return { strasseId: '', strasseFreitext: '', zustand: 'normal', zustandFreitext: '', auftraggeberId: '', auftraggeberFreitext: '', melderId: '', melderFreitext: '', gueltigVon: todayIso(), gueltigBis: '' }
+  return { strasseId: '', strasseFreitext: '', zustand: 'frei_befahrbar', zustandFreitext: '', auftraggeberId: '', auftraggeberFreitext: '', melderId: '', melderFreitext: '', gueltigVonDatum: todayIso(), gueltigVonZeit: '', gueltigBisDatum: '', gueltigBisZeit: '' }
 }
 
 const MELDUNGSART_BADGE: Record<StrassenzustandMeldungsart, string> = {
@@ -66,7 +68,7 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
       supabase.from('strassenzustand_strassen').select('*').order('sort_order').order('name'),
       supabase.from('strassenzustand_auftraggeber').select('*').order('sort_order').order('name'),
       supabase.from('strassenzustand_melder').select('*').order('sort_order').order('name'),
-      supabase.from('strassenzustand_berichte').select('*, profiles(name,dienstnummer)').order('created_at', { ascending: false }),
+      supabase.from('strassenzustand_berichte').select('*, profiles!strassenzustand_berichte_bearbeiter_fkey(name,dienstnummer)').order('created_at', { ascending: false }),
       supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name), strassenzustand_auftraggeber(name), strassenzustand_melder(name)').order('created_at', { ascending: false }),
     ])
     if (strassenRes.error || berichteRes.error || zeilenRes.error) setError('Die Straßenzustandsdaten konnten nicht vollständig geladen werden.')
@@ -105,7 +107,8 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
     if (!profile?.id) return
     for (const row of rows) {
       if (!row.strasseId && !row.strasseFreitext.trim()) { setError('Bitte für jede Zeile eine Straße auswählen oder eingeben.'); return }
-      if (row.zustand === 'sonstige' && !row.zustandFreitext.trim()) { setError('Bitte bei "Sonstige" den Zustand/Grund beschreiben.'); return }
+      if (row.zustand !== 'frei_befahrbar' && !row.zustandFreitext.trim()) { setError('Bitte bei "Gesperrt" oder "Sonstige" den Grund beschreiben.'); return }
+      if (row.gueltigBisZeit && !row.gueltigBisDatum) { setError('Bitte für die Uhrzeit bei "Gültig bis" auch ein Datum angeben.'); return }
     }
     setSaving(true)
     const { data: bericht, error: berichtError } = await supabase.from('strassenzustand_berichte')
@@ -123,8 +126,8 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
       auftraggeber_freitext: row.auftraggeberId ? null : (row.auftraggeberFreitext.trim() || null),
       melder_id: row.melderId || null,
       melder_freitext: row.melderId ? null : (row.melderFreitext.trim() || null),
-      gueltig_von: row.gueltigVon || todayIso(),
-      gueltig_bis: row.gueltigBis || null,
+      gueltig_von: toTimestamp(row.gueltigVonDatum || todayIso(), row.gueltigVonZeit) as string,
+      gueltig_bis: toTimestamp(row.gueltigBisDatum, row.gueltigBisZeit),
     }))
     const { error: zeilenError } = await supabase.from('strassenzustand_berichtzeilen').insert(payload)
     setSaving(false)
@@ -265,14 +268,20 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-xs font-medium text-gray-600">Straße<select className={inputClass} value={row.strasseId || SONSTIGE} onChange={event => patchRow(index, { strasseId: event.target.value === SONSTIGE ? '' : event.target.value })}>{activeStrassen.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}<option value={SONSTIGE}>Sonstige …</option></select></label>
             {!row.strasseId ? <Field label="Sonstige Straße *" value={row.strasseFreitext} onChange={value => patchRow(index, { strasseFreitext: value })} /> : <div />}
-            <label className="text-xs font-medium text-gray-600">Zustand/Grund<select className={inputClass} value={row.zustand} onChange={event => patchRow(index, { zustand: event.target.value as StrassenzustandZustand })}>{ZUSTAND_OPTIONS.map(z => <option key={z} value={z}>{ZUSTAND_LABEL[z]}</option>)}</select></label>
-            <Field label={row.zustand === 'sonstige' ? 'Grund/Detail *' : 'Grund/Detail (optional)'} value={row.zustandFreitext} onChange={value => patchRow(index, { zustandFreitext: value })} />
+            <label className="text-xs font-medium text-gray-600">Zustand<select className={inputClass} value={row.zustand} onChange={event => patchRow(index, { zustand: event.target.value as StrassenzustandZustand })}>{ZUSTAND_OPTIONS.map(z => <option key={z} value={z}>{ZUSTAND_LABEL[z]}</option>)}</select></label>
+            <Field label={row.zustand === 'frei_befahrbar' ? 'Grund/Detail (optional)' : 'Grund/Detail *'} value={row.zustandFreitext} onChange={value => patchRow(index, { zustandFreitext: value })} />
             <label className="text-xs font-medium text-gray-600">Auftrag von<select className={inputClass} value={row.auftraggeberId || SONSTIGE} onChange={event => patchRow(index, { auftraggeberId: event.target.value === SONSTIGE ? '' : event.target.value })}>{activeAuftraggeber.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}<option value={SONSTIGE}>Sonstige …</option></select></label>
             {!row.auftraggeberId ? <Field label="Sonstige/r Auftraggeber/in" value={row.auftraggeberFreitext} onChange={value => patchRow(index, { auftraggeberFreitext: value })} /> : <div />}
             <label className="text-xs font-medium text-gray-600">Meldung durch<select className={inputClass} value={row.melderId || SONSTIGE} onChange={event => patchRow(index, { melderId: event.target.value === SONSTIGE ? '' : event.target.value })}>{activeMelder.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}<option value={SONSTIGE}>Sonstige …</option></select></label>
             {!row.melderId ? <Field label="Sonstige/r Melder/in" value={row.melderFreitext} onChange={value => patchRow(index, { melderFreitext: value })} /> : <div />}
-            <Field label="Gültig ab" type="date" value={row.gueltigVon} onChange={value => patchRow(index, { gueltigVon: value })} />
-            <Field label="Gültig bis (optional)" type="date" value={row.gueltigBis} onChange={value => patchRow(index, { gueltigBis: value })} />
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Gültig ab" type="date" value={row.gueltigVonDatum} onChange={value => patchRow(index, { gueltigVonDatum: value })} />
+              <Field label="Uhrzeit (optional)" type="time" value={row.gueltigVonZeit} onChange={value => patchRow(index, { gueltigVonZeit: value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Gültig bis (optional)" type="date" value={row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisDatum: value, ...(value ? {} : { gueltigBisZeit: '' }) })} />
+              <Field label="Uhrzeit (optional)" type="time" value={row.gueltigBisZeit} disabled={!row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisZeit: value })} />
+            </div>
           </div>
         </div>)}
         <button type="button" onClick={addRow} className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700"><Plus className="w-4 h-4" /> Weitere Straße hinzufügen</button>
