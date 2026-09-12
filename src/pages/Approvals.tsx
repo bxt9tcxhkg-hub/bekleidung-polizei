@@ -49,9 +49,13 @@ export default function Approvals() {
   const [poolEm, setPoolEm] = useState<PoolEmWithRequester[]>([])
   const [trainingModules, setTrainingModules] = useState<EinsatzTrainingModule[]>([])
   const [trainingSessions, setTrainingSessions] = useState<EinsatzTrainingSession[]>([])
+  // null = (noch) nicht geladen bzw. Abfrage fehlgeschlagen - dann keine Belegung
+  // anzeigen, statt fälschlich "0 Anmeldungen" zu behaupten.
+  const [trainingRegistrationCounts, setTrainingRegistrationCounts] = useState<Record<string, number> | null>(null)
   const [trainingAssignments, setTrainingAssignments] = useState<TrainingAssignmentWithOfficer[]>([])
   const [schulungModules, setSchulungModules] = useState<SchulungModule[]>([])
   const [schulungSessions, setSchulungSessions] = useState<SchulungSession[]>([])
+  const [schulungRegistrationCounts, setSchulungRegistrationCounts] = useState<Record<string, number> | null>(null)
   const [schulungAssignments, setSchulungAssignments] = useState<SchulungAssignmentWithOfficer[]>([])
   const [shoeRefunds, setShoeRefunds] = useState<ShoeRefund[]>([])
   const [shoeRefundCap, setShoeRefundCap] = useState<number | null>(null)
@@ -77,7 +81,7 @@ export default function Approvals() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tAssignRes, sModRes, sSessRes, sAssignRes, refundRes, capRes] = await Promise.all([
+    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tRegRes, tAssignRes, sModRes, sSessRes, sRegRes, sAssignRes, refundRes, capRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, products(name,category,price), quarters(name), profiles(name,dienstnummer,username)')
@@ -100,6 +104,7 @@ export default function Approvals() {
         .order('created_at', { ascending: true }),
       supabase.from('einsatz_training_modules').select('*'),
       supabase.from('einsatz_training_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
+      supabase.from('einsatz_training_registrations').select('session_id'),
       supabase
         .from('einsatz_training_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
@@ -107,6 +112,7 @@ export default function Approvals() {
         .order('proposed_at', { ascending: true }),
       supabase.from('schulungen_module').select('*'),
       supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
+      supabase.from('schulungen_registrations').select('session_id'),
       supabase
         .from('schulungen_assignments')
         .select('*, officer:profiles!officer_id(id,name,dienstnummer,username)')
@@ -144,12 +150,23 @@ export default function Approvals() {
     // verstecken - die Zuteilungsvorschläge selbst bleiben ja unverändert sichtbar.
     if (tSessRes.error) { failed.push('Trainings-Termine'); setTrainingSessions([]) }
     else setTrainingSessions((tSessRes.data ?? []) as EinsatzTrainingSession[])
+    // Belegung dient nur der Anzeige/Auswahlhilfe im Prüfen-Dialog (voll = Option
+    // gesperrt) - die Kapazität wird serverseitig ohnehin beim Einteilen per Trigger
+    // durchgesetzt. Bei einem Fehler lieber gar keine Zahl zeigen als eine falsche.
+    if (tRegRes.error) failed.push('Trainings-Anmeldungen')
+    else setTrainingRegistrationCounts(
+      (tRegRes.data ?? []).reduce<Record<string, number>>((acc, r) => { acc[r.session_id] = (acc[r.session_id] ?? 0) + 1; return acc }, {}),
+    )
     if (tAssignRes.error) failed.push('Trainings-Zuteilungsvorschläge')
     else setTrainingAssignments((tAssignRes.data ?? []) as TrainingAssignmentWithOfficer[])
     if (sModRes.error) failed.push('Schulungsmodule')
     else setSchulungModules((sModRes.data ?? []) as SchulungModule[])
     if (sSessRes.error) { failed.push('Schulungs-Termine'); setSchulungSessions([]) }
     else setSchulungSessions((sSessRes.data ?? []) as SchulungSession[])
+    if (sRegRes.error) failed.push('Schulungs-Anmeldungen')
+    else setSchulungRegistrationCounts(
+      (sRegRes.data ?? []).reduce<Record<string, number>>((acc, r) => { acc[r.session_id] = (acc[r.session_id] ?? 0) + 1; return acc }, {}),
+    )
     if (sAssignRes.error) failed.push('Schulungs-Zuteilungsvorschläge')
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
     if (refundRes.error) failed.push('Schuherstattungen')
@@ -385,12 +402,24 @@ export default function Approvals() {
   const assignmentSessions = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingSessions : schulungSessions).filter(s => s.module_id === reviewingAssignment.item.module_id)
     : []
+  // Belegung fürs jeweils gewählte Modul - null, solange die Anmeldungen (noch) nicht
+  // geladen werden konnten, dann wird keine Zahl behauptet und keine Option als voll
+  // gesperrt (die Kapazitätsprüfung selbst übernimmt ohnehin serverseitig ein Trigger
+  // beim Einteilen).
+  const assignmentRegistrationCounts = reviewingAssignment
+    ? (reviewingAssignment.kind === 'training' ? trainingRegistrationCounts : schulungRegistrationCounts)
+    : null
+  function sessionIsFull(s: EinsatzTrainingSession | SchulungSession) {
+    return s.capacity != null && !!assignmentRegistrationCounts && (assignmentRegistrationCounts[s.id] ?? 0) >= s.capacity
+  }
   // Ein vorbelegter session_id (Selbstanmeldung) kann fehlen, wenn die Termin-Abfrage
   // fehlgeschlagen ist oder der Termin inzwischen nicht mehr angekündigt ist. Dann taucht
   // er in assignmentSessions nicht auf, obwohl reviewSessionId noch einen (unsichtbaren)
   // Wert trägt - "Genehmigen" darf dann nicht aktiv sein, sonst würde ein Termin bestätigt,
-  // den der Genehmiger gar nicht einsehen kann.
-  const reviewSessionValid = assignmentSessions.some(s => s.id === reviewSessionId)
+  // den der Genehmiger gar nicht einsehen kann. Ebenso, wenn der Termin zwar sichtbar,
+  // aber laut geladener Belegung bereits voll ist.
+  const selectedAssignmentSession = assignmentSessions.find(s => s.id === reviewSessionId)
+  const reviewSessionValid = !!selectedAssignmentSession && !sessionIsFull(selectedAssignmentSession)
   const assignmentModuleName = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingModules : schulungModules).find(m => m.id === reviewingAssignment.item.module_id)?.name ?? reviewingAssignment.item.module_id
     : ''
@@ -672,7 +701,11 @@ export default function Approvals() {
               <label className="block text-xs font-medium text-gray-600">Termin für die Einteilung (bei Genehmigung erforderlich)
                 <select className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={reviewSessionId} onChange={e => setReviewSessionId(e.target.value)}>
                   <option value="">– Termin wählen –</option>
-                  {assignmentSessions.map(s => <option key={s.id} value={s.id}>{new Date(s.session_date).toLocaleDateString('de-AT')}{s.note ? ` · ${s.note}` : ''}</option>)}
+                  {assignmentSessions.map(s => {
+                    const count = assignmentRegistrationCounts?.[s.id] ?? 0
+                    const occupancy = s.capacity != null && assignmentRegistrationCounts ? ` · ${count}/${s.capacity}${sessionIsFull(s) ? ' · voll' : ''}` : ''
+                    return <option key={s.id} value={s.id} disabled={sessionIsFull(s)}>{new Date(s.session_date).toLocaleDateString('de-AT')}{s.note ? ` · ${s.note}` : ''}{occupancy}</option>
+                  })}
                 </select>
                 {assignmentSessions.length === 0 ? <span className="text-xs text-amber-700 mt-1 block">Für dieses Modul ist aktuell kein angekündigter Termin vorhanden.</span> : null}
               </label>
