@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Bike, CalendarDays, Car, CheckCircle2, ClipboardCheck, Download, FileText, PackageCheck, Pencil, Plus, Sparkles, Trash2, Upload, Wrench, X } from 'lucide-react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
+import { canManageFuhrpark } from '../lib/fuhrpark'
 import { supabase } from '../lib/supabase'
 import type { FleetAppointment, FleetAppointmentCategory, FleetCareTask, FleetCareTaskKind, FleetDocument, FleetEquipmentItem, FleetEquipmentStatus, FleetEquipmentStatusValue, FleetVehicle as FleetVehicleType, FleetVehicleKind, Profile, VehicleCheck, VehicleCheckStatus } from '../lib/types'
 
@@ -26,6 +27,9 @@ const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 te
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleDateString('de-AT') : null }
+function isTabId(value: string | null): value is TabId {
+  return TABS.some(tab => tab.id === value)
+}
 function formatBytes(size: number | null) {
   if (size == null) return null
   if (size < 1024) return `${size} B`
@@ -37,8 +41,8 @@ export default function FleetVehicle() {
   const { vehicleId } = useParams()
   const navigate = useNavigate()
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const roles = areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.includes('sachbearbeiter') || roles.includes('admin')
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const [searchParams] = useSearchParams()
   const [vehicle, setVehicle] = useState<FleetVehicleType | null>(null)
   const [employees, setEmployees] = useState<Pick<Profile, 'id' | 'name' | 'dienstnummer'>[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,7 +50,12 @@ export default function FleetVehicle() {
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabId>('kontrolle')
+  const tabParam = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState<TabId>(isTabId(tabParam) ? tabParam : 'kontrolle')
+  useEffect(() => {
+    const next = searchParams.get('tab')
+    if (isTabId(next)) setActiveTab(next)
+  }, [searchParams, vehicleId])
 
   const [checks, setChecks] = useState<VehicleCheck[]>([])
   const [items, setItems] = useState<FleetEquipmentItem[]>([])
@@ -95,6 +104,23 @@ export default function FleetVehicle() {
   const openDefects = useMemo(() => items.filter(item => statusByItem.get(item.id) && statusByItem.get(item.id)!.status !== 'vollstaendig'), [items, statusByItem])
   const workshopAppointments = useMemo(() => appointments.filter(item => item.category === 'werkstatt'), [appointments])
   const deadlines = useMemo(() => appointments.filter(item => item.category === 'frist'), [appointments])
+  const openCareTasks = useMemo(() => careTasks.filter(task => task.status === 'offen'), [careTasks])
+  const openWorkshop = useMemo(() => workshopAppointments.filter(item => item.status === 'offen'), [workshopAppointments])
+  const openDeadlines = useMemo(() => deadlines.filter(item => item.status === 'offen'), [deadlines])
+  const badgeForTab = (tabId: TabId): number => (
+    tabId === 'maengel' ? openDefects.length
+      : tabId === 'pflege' ? openCareTasks.length
+        : tabId === 'werkstatt' ? openWorkshop.length
+          : tabId === 'fristen' ? openDeadlines.length
+            : 0
+  )
+  const openPunkte = [
+    { tab: 'maengel' as const, label: 'Mängel', count: openDefects.length },
+    { tab: 'pflege' as const, label: 'Pflege', count: openCareTasks.length },
+    { tab: 'werkstatt' as const, label: 'Werkstatt', count: openWorkshop.length },
+    { tab: 'fristen' as const, label: 'Fristen', count: openDeadlines.length },
+  ]
+  const totalOpen = openPunkte.reduce((sum, item) => sum + item.count, 0)
   if (!hasAreaAccess('fuhrpark')) return <Navigate to="/" replace />
 
   function openEdit() {
@@ -133,12 +159,38 @@ export default function FleetVehicle() {
 
   const VehicleIcon = vehicle.kind === 'Motorrad' ? Bike : Car
   return <div>
-    {canManage ? <div className="flex items-center justify-end gap-3 mb-6"><button type="button" onClick={openEdit} className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50"><Pencil className="w-4 h-4" /> Bearbeiten</button></div> : null}
     {error && !showEdit ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
-    <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden"><div className="p-5 sm:p-6 border-b border-gray-200 flex flex-col sm:flex-row sm:items-start gap-4"><div className="bg-blue-50 text-blue-700 p-3 rounded-xl w-fit"><VehicleIcon className="w-7 h-7" /></div><div className="flex-1"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.kind}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">{vehicle.name}</h1><p className="text-sm text-gray-500 mt-1">{vehicle.call_sign ?? 'Rufname noch offen'}</p></div>{openDefects.length > 0 ? <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-red-100 text-red-800">{openDefects.length} offene{openDefects.length === 1 ? 'r' : ''} Mangel{openDefects.length === 1 ? '' : 'e'}</span> : null}</div><dl className="grid grid-cols-1 sm:grid-cols-4 gap-px bg-gray-200"><div className="bg-white p-4"><dt className="text-xs text-gray-500">Hersteller</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.make ?? 'Noch offen'}</dd></div><div className="bg-white p-4"><dt className="text-xs text-gray-500">Modell</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.model ?? 'Noch offen'}</dd></div><div className="bg-white p-4"><dt className="text-xs text-gray-500">Kennzeichen</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.license_plate ?? 'Noch offen'}</dd></div><div className="bg-white p-4"><dt className="text-xs text-gray-500">Fahrzeugverantwortlich</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.responsible_profile?.name ?? 'Nicht zugewiesen'}</dd></div></dl>{vehicle.notes ? <div className="p-4 border-t border-gray-200"><p className="text-xs text-gray-500">Bemerkungen</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{vehicle.notes}</p></div> : null}</section>
+    <div className="flex items-center justify-between gap-3 mb-4"><div className="flex items-center gap-3 min-w-0"><div className="bg-blue-50 text-blue-700 p-2.5 rounded-xl flex-shrink-0"><VehicleIcon className="w-5 h-5" /></div><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.kind}</p><h1 className="text-xl font-bold text-gray-900 truncate">{vehicle.name}{vehicle.call_sign ? <span className="text-gray-400 font-normal"> · {vehicle.call_sign}</span> : null}</h1></div></div>{canManage ? <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50 flex-shrink-0"><Pencil className="w-4 h-4" /> Bearbeiten</button> : null}</div>
 
-    <nav className="flex gap-1.5 overflow-x-auto pb-2 mt-6 mb-4" aria-label="Fahrzeugbezogene Bereiche">{TABS.map(tab => { const Icon = tab.icon; const badge = tab.id === 'maengel' ? openDefects.length : tab.id === 'pflege' ? careTasks.filter(task => task.status === 'offen').length : tab.id === 'werkstatt' ? workshopAppointments.filter(item => item.status === 'offen').length : tab.id === 'fristen' ? deadlines.filter(item => item.status === 'offen').length : 0; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}{badge > 0 ? <span className="bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{badge}</span> : null}</button> })}</nav>
+    <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-4">
+      <div className="px-5 py-3 border-b border-gray-100"><h2 className="text-sm font-semibold text-gray-900">Offene Punkte</h2></div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-100">
+        {openPunkte.map(item => (
+          <button
+            key={item.tab}
+            type="button"
+            onClick={() => setActiveTab(item.tab)}
+            className={`bg-white p-4 text-left hover:bg-gray-50 transition-colors ${activeTab === item.tab ? 'ring-2 ring-inset ring-blue-300' : ''}`}
+          >
+            <p className={`text-2xl font-bold ${item.count > 0 ? 'text-red-700' : 'text-gray-900'}`}>{item.count}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
+          </button>
+        ))}
+      </div>
+      {totalOpen === 0 ? <p className="px-5 py-3 text-sm text-green-700 bg-green-50 border-t border-green-100">Alles erledigt.</p> : null}
+    </section>
+
+    <details className="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-4 group">
+      <summary className="px-5 py-3 cursor-pointer text-sm font-semibold text-gray-900 flex items-center justify-between">
+        Fahrzeugdaten
+        <span className="text-xs font-normal text-gray-400 group-open:hidden">anzeigen</span>
+      </summary>
+      <dl className="grid grid-cols-1 sm:grid-cols-4 gap-px bg-gray-100 border-t border-gray-100"><div className="bg-white p-4"><dt className="text-xs text-gray-500">Hersteller</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.make ?? 'Noch offen'}</dd></div><div className="bg-white p-4"><dt className="text-xs text-gray-500">Modell</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.model ?? 'Noch offen'}</dd></div><div className="bg-white p-4"><dt className="text-xs text-gray-500">Kennzeichen</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.license_plate ?? 'Noch offen'}</dd></div><div className="bg-white p-4"><dt className="text-xs text-gray-500">Fahrzeugverantwortlich</dt><dd className="font-semibold text-gray-900 mt-1">{vehicle.responsible_profile?.name ?? 'Nicht zugewiesen'}</dd></div></dl>
+      {vehicle.notes ? <div className="p-4 border-t border-gray-100"><p className="text-xs text-gray-500">Bemerkungen</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{vehicle.notes}</p></div> : null}
+    </details>
+
+    <nav className="flex gap-1.5 overflow-x-auto pb-2 mb-4" aria-label="Fahrzeugbezogene Bereiche">{TABS.map(tab => { const Icon = tab.icon; const badge = badgeForTab(tab.id); return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}{badge > 0 ? <span className="bg-red-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">{badge}</span> : null}</button> })}</nav>
 
     {activeTab === 'kontrolle' ? <KontrolleTab vehicleId={vehicle.id} checks={checks} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
     {activeTab === 'fuellliste' ? <FuelllisteTab vehicleId={vehicle.id} items={items} statusByItem={statusByItem} canEdit={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}

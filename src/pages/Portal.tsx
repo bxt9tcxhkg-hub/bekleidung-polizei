@@ -32,6 +32,7 @@ import {
   type PortalAdminLink,
   visiblePortalAdminLinks,
 } from '../lib/portalAccount'
+import { canManageFuhrpark } from '../lib/fuhrpark'
 import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
 import { canManageSchulungen } from '../lib/schulungen'
 import { PORTAL_APPS, type PortalApp, type PortalAppId } from '../lib/portalApps'
@@ -392,7 +393,7 @@ export default function Portal() {
   const adminLinks = visiblePortalAdminLinks(isAdmin)
   const canManageDuties = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManageZentrale = canManageDuties
-  const canManageFuhrpark = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'fuhrpark')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManageFuhrparkArea = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const canManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const canManageSchulungenArea = canManageSchulungen({ isStrictAdmin, isGenehmiger, rows: areaRoles })
 
@@ -404,7 +405,7 @@ export default function Portal() {
       const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number } = {}
       await Promise.all([
         canManageZentrale ? supabase.from('zentrale_entries').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').neq('status', 'erledigt').then(({ count }) => { next.zentrale = count ?? 0 }) : Promise.resolve(),
-        canManageFuhrpark ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
+        canManageFuhrparkArea ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
         canManageEinsatzmittel
           ? Promise.all([
               supabase.from('personal_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
@@ -419,7 +420,7 @@ export default function Portal() {
     }
     void load()
     return () => { cancelled = true }
-  }, [canManageZentrale, canManageFuhrpark, canManageEinsatzmittel, canManageSchulungenArea])
+  }, [canManageZentrale, canManageFuhrparkArea, canManageEinsatzmittel, canManageSchulungenArea])
 
   return (
     <PortalChrome
