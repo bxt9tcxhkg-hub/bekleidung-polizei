@@ -1,0 +1,87 @@
+import { describe, expect, it } from 'vitest'
+import { aktiveSperren, formatZeitraum, latestPerStrasse, strassenKey, strassenName } from './strassenzustand'
+import type { StrassenzustandBerichtzeile } from './types'
+
+function zeile(overrides: Partial<StrassenzustandBerichtzeile>): StrassenzustandBerichtzeile {
+  return {
+    id: overrides.id ?? crypto.randomUUID(),
+    bericht_id: 'bericht-1',
+    strasse_id: 'strasse-1',
+    strasse_freitext: null,
+    zustand: 'normal',
+    zustand_freitext: null,
+    auftraggeber_id: null,
+    auftraggeber_freitext: null,
+    melder_id: null,
+    melder_freitext: null,
+    gueltig_von: '2026-01-01',
+    gueltig_bis: null,
+    meldungsart: 'neuzugang',
+    created_at: '2026-01-01T08:00:00Z',
+    strassenzustand_strassen: { name: 'Ebniterstraße' },
+    ...overrides,
+  }
+}
+
+describe('strassenKey', () => {
+  it('uses the Stammdaten-Id when present', () => {
+    expect(strassenKey({ strasse_id: 'abc', strasse_freitext: null })).toBe('abc')
+  })
+  it('falls back to normalized freitext', () => {
+    expect(strassenKey({ strasse_id: null, strasse_freitext: '  Testweg  ' })).toBe('frei:testweg')
+  })
+})
+
+describe('strassenName', () => {
+  it('prefers the joined Stammdaten name', () => {
+    expect(strassenName(zeile({ strassenzustand_strassen: { name: 'Kehleggerstraße' }, strasse_freitext: 'ignoriert' }))).toBe('Kehleggerstraße')
+  })
+  it('falls back to freitext when no Stammdaten-Eintrag verknüpft ist', () => {
+    expect(strassenName(zeile({ strasse_id: null, strassenzustand_strassen: null, strasse_freitext: 'Testweg' }))).toBe('Testweg')
+  })
+})
+
+describe('latestPerStrasse', () => {
+  it('picks the newest row per Straße, regardless of input order', () => {
+    const alt = zeile({ id: 'a', created_at: '2026-01-01T08:00:00Z', zustand: 'schnee' })
+    const neu = zeile({ id: 'b', created_at: '2026-01-02T08:00:00Z', zustand: 'glatteis' })
+    const andere = zeile({ id: 'c', strasse_id: 'strasse-2', strassenzustand_strassen: { name: 'Kehleggerstraße' }, created_at: '2026-01-01T09:00:00Z' })
+    const result = latestPerStrasse([neu, alt, andere])
+    expect(result).toHaveLength(2)
+    expect(result.find(item => item.strasse_id === 'strasse-1')?.id).toBe('b')
+    expect(result.find(item => item.strasse_id === 'strasse-2')?.id).toBe('c')
+  })
+
+  it('unterscheidet Freitext-Straßen unabhängig von Groß-/Kleinschreibung und Leerzeichen', () => {
+    const first = zeile({ id: 'a', strasse_id: null, strasse_freitext: 'Testweg', created_at: '2026-01-01T08:00:00Z' })
+    const second = zeile({ id: 'b', strasse_id: null, strasse_freitext: ' testweg ', created_at: '2026-01-02T08:00:00Z' })
+    const result = latestPerStrasse([first, second])
+    expect(result).toHaveLength(1)
+    expect(result[0].id).toBe('b')
+  })
+})
+
+describe('aktiveSperren', () => {
+  it('blendet Straßen mit Zustand normal aus und sortiert alphabetisch', () => {
+    const frei = zeile({ id: 'a', strasse_id: 'strasse-1', zustand: 'normal' })
+    const gesperrt1 = zeile({ id: 'b', strasse_id: 'strasse-2', strassenzustand_strassen: { name: 'Kehleggerstraße' }, zustand: 'schnee' })
+    const gesperrt2 = zeile({ id: 'c', strasse_id: 'strasse-3', strassenzustand_strassen: { name: 'Ebniterstraße' }, zustand: 'lawine' })
+    const result = aktiveSperren([frei, gesperrt1, gesperrt2])
+    expect(result.map(item => item.id)).toEqual(['c', 'b'])
+  })
+
+  it('zeigt eine Straße erst wieder als aktiv, nachdem ein neuer Bericht sie widerruft', () => {
+    const neuzugang = zeile({ id: 'a', created_at: '2026-01-01T08:00:00Z', zustand: 'schnee' })
+    const widerruf = zeile({ id: 'b', created_at: '2026-01-02T08:00:00Z', zustand: 'normal' })
+    expect(aktiveSperren([neuzugang, widerruf])).toHaveLength(0)
+  })
+})
+
+describe('formatZeitraum', () => {
+  it('zeigt "bis auf Weiteres" ohne Enddatum', () => {
+    expect(formatZeitraum({ gueltig_von: '2026-01-01', gueltig_bis: null })).toBe('Ab 1.1.2026 (bis auf Weiteres)')
+  })
+  it('zeigt den vollen Zeitraum mit Enddatum', () => {
+    expect(formatZeitraum({ gueltig_von: '2026-01-01', gueltig_bis: '2026-01-05' })).toBe('1.1.2026 – 5.1.2026')
+  })
+})

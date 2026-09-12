@@ -65,6 +65,38 @@ export async function canManageFuhrpark(request: Request, env: AuthEnv): Promise
   }
 }
 
+export async function canManageZentrale(request: Request, env: AuthEnv): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/can_manage_zentrale`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })
+    return response.ok && await response.json() === true
+  } catch {
+    return false
+  }
+}
+
+/** Archivierte Straßenzustandsberichte: Leserecht folgt RLS auf strassenzustand_berichte (has_portal_area_access('zentrale')). */
+export async function canReadStrassenzustandBericht(request: Request, env: AuthEnv, key: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  const encodedKey = encodeURIComponent(key)
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/strassenzustand_berichte?select=id&pdf_file_key=eq.${encodedKey}&limit=1`, { headers })
+    if (!response.ok) return false
+    const rows = await response.json() as { id: string }[]
+    return rows.length > 0
+  } catch {
+    return false
+  }
+}
+
 export async function canReadEinsatzMaterial(request: Request, env: AuthEnv, key: string): Promise<boolean> {
   if (!env.SUPABASE_URL) return false
   const headers = bearerHeaders(request, env)
@@ -157,6 +189,9 @@ export async function canReadFile(request: Request, env: AuthEnv, key: string): 
   }
   if (key.startsWith('fuhrpark-dokumente/')) {
     return canReadFleetDocument(request, env, key)
+  }
+  if (key.startsWith('strassenzustandsberichte/')) {
+    return canReadStrassenzustandBericht(request, env, key)
   }
   const headers = bearerHeaders(request, env)
   if (!headers || !env.SUPABASE_URL || !key.startsWith('vorrechnungen/')) return false
