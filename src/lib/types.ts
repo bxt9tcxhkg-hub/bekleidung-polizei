@@ -779,6 +779,73 @@ export interface InnendienstGebuehrensatzPosition {
   position?: Pick<InnendienstGebuehrenposition, 'id' | 'name' | 'betrag' | 'active'>
 }
 
+/**
+ * Schulungen: Modul-/Termin-Tracking, analog zu Einsatztraining (Paket 5),
+ * aber bewusst einfacher (kein kind/module_type/period, keine Halbjahres-
+ * pflicht). Anmeldung/Zuteilung läuft über schulungen_assignments (Vorschlag
+ * → Genehmiger-Entscheidung), genau wie bei EinsatzTrainingAssignment.
+ */
+export interface SchulungModule {
+  id: string
+  name: string
+  active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export interface SchulungSession {
+  id: string
+  module_id: string
+  session_date: string
+  note: string | null
+  capacity: number | null
+  announced: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+  module?: Pick<SchulungModule, 'id' | 'name' | 'active'>
+}
+
+export interface SchulungRegistration {
+  id: string
+  session_id: string
+  officer_id: string
+  created_at: string
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
+  session?: Pick<SchulungSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
+}
+
+export interface SchulungCompletion {
+  id: string
+  officer_id: string
+  module_id: string
+  session_id: string | null
+  completed_on: string
+  created_at: string
+  created_by: string | null
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
+}
+
+export type SchulungAssignmentStatus = 'vorschlag' | 'eingeteilt' | 'abgelehnt'
+export interface SchulungAssignment {
+  id: string
+  officer_id: string
+  module_id: string
+  session_id: string | null
+  status: SchulungAssignmentStatus
+  proposed_by: string
+  proposed_at: string
+  decided_by: string | null
+  decided_at: string | null
+  note: string | null
+  created_at: string
+  updated_at: string
+  officer?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
+  module?: Pick<SchulungModule, 'id' | 'name' | 'active'>
+  session?: Pick<SchulungSession, 'id' | 'session_date' | 'module_id' | 'capacity' | 'announced' | 'note'>
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 export type SupportTicketKind = 'help' | 'improvement' | 'idea'
 export type SupportTicketTopic = 'general' | 'bekleidung' | 'einsatz_mt' | 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
@@ -823,6 +890,11 @@ type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
+type SchulungModuleRow = Omit<SchulungModule, never>
+type SchulungSessionRow = Omit<SchulungSession, 'module'>
+type SchulungRegistrationRow = Omit<SchulungRegistration, 'officer' | 'session'>
+type SchulungCompletionRow = Omit<SchulungCompletion, 'officer'>
+type SchulungAssignmentRow = Omit<SchulungAssignment, 'officer' | 'module' | 'session'>
 type InnendienstGebuehrenpositionRow = Omit<InnendienstGebuehrenposition, never>
 type InnendienstGebuehrensatzRow = Omit<InnendienstGebuehrensatz, never>
 type InnendienstGebuehrensatzPositionRow = Omit<InnendienstGebuehrensatzPosition, 'position'>
@@ -1045,6 +1117,29 @@ export type Database = {
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_gebuehrensatz_id_fkey'; columns: ['gebuehrensatz_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrensaetze'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_position_id_fkey'; columns: ['position_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrenpositionen'; referencedColumns: ['id'] },
       ] }
+      schulungen_module: { Row: SchulungModuleRow; Insert: Pick<SchulungModuleRow, 'name'> & Partial<Omit<SchulungModuleRow, 'name'>>; Update: Partial<Omit<SchulungModuleRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'schulungen_module_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      schulungen_sessions: { Row: SchulungSessionRow; Insert: Pick<SchulungSessionRow, 'module_id' | 'session_date'> & Partial<Omit<SchulungSessionRow, 'module_id' | 'session_date'>>; Update: Partial<Omit<SchulungSessionRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'schulungen_sessions_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'schulungen_module'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_sessions_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      schulungen_registrations: { Row: SchulungRegistrationRow; Insert: Pick<SchulungRegistrationRow, 'session_id' | 'officer_id'> & Partial<Omit<SchulungRegistrationRow, 'session_id' | 'officer_id'>>; Update: Partial<Omit<SchulungRegistrationRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'schulungen_registrations_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'schulungen_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_registrations_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      schulungen_completions: { Row: SchulungCompletionRow; Insert: Pick<SchulungCompletionRow, 'officer_id' | 'module_id'> & Partial<Omit<SchulungCompletionRow, 'officer_id' | 'module_id'>>; Update: Partial<Omit<SchulungCompletionRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'schulungen_completions_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_completions_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'schulungen_module'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_completions_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'schulungen_sessions'; referencedColumns: ['id'] },
+      ] }
+      schulungen_assignments: { Row: SchulungAssignmentRow; Insert: Pick<SchulungAssignmentRow, 'officer_id' | 'module_id' | 'proposed_by'> & Partial<Omit<SchulungAssignmentRow, 'officer_id' | 'module_id' | 'proposed_by'>>; Update: Partial<Omit<SchulungAssignmentRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'schulungen_assignments_officer_id_fkey'; columns: ['officer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_assignments_module_id_fkey'; columns: ['module_id']; isOneToOne: false; referencedRelation: 'schulungen_module'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_assignments_session_id_fkey'; columns: ['session_id']; isOneToOne: false; referencedRelation: 'schulungen_sessions'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_assignments_proposed_by_fkey'; columns: ['proposed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schulungen_assignments_decided_by_fkey'; columns: ['decided_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
     }
     Views: {
       orders_full: { Row: OrdersFullRow; Relationships: [] }
@@ -1080,6 +1175,8 @@ export type Database = {
       close_mail_delivery: { Args: { p_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
+      can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }
+      decide_schulung_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

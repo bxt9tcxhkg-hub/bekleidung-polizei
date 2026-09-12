@@ -32,6 +32,7 @@ const EinsatzDashboard = lazy(() => import('./pages/EinsatzDashboard'))
 const Einsatzmittel = lazy(() => import('./pages/Einsatzmittel'))
 const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
 const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
+const Schulungen = lazy(() => import('./pages/Schulungen'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
 const PlannedArea = lazy(() => import('./pages/PlannedArea'))
 const Fleet = lazy(() => import('./pages/Fleet'))
@@ -105,7 +106,7 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PortalChrome wide>
-                  <EinsatzMaterials fixedArea="schulungen" />
+                  <Schulungen />
                 </PortalChrome>
               </ProtectedRoute>
             }
