@@ -4,6 +4,8 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
+import { geocodeLocation } from '../lib/geocode'
+import LeafletMap from '../components/LeafletMap'
 import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleEntry, ZentraleEntryCategory } from '../lib/types'
 import { Actions, Area, Empty, EntryList, EntryModal, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
@@ -43,6 +45,7 @@ export default function Zentrale() {
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [dutyFunctions, setDutyFunctions] = useState<DutyFunctionConfig[]>([])
   const [incidents, setIncidents] = useState<IncidentReport[]>([])
+  const [openIncidentsAllDays, setOpenIncidentsAllDays] = useState<IncidentReport[]>([])
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,7 +56,9 @@ export default function Zentrale() {
   const [entry, setEntry] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
-  const [incident, setIncident] = useState({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '' })
+  const [incident, setIncident] = useState({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null })
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState('')
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
@@ -63,19 +68,23 @@ export default function Zentrale() {
     const today = todayLocal()
     // Kontrollaufträge betreffen nur die Streifen (JD/VD) und werden hier
     // bewusst nicht geladen – weder für die Tabs noch für "Sofort wichtig".
-    const [entryResult, dutyResult, functionResult, incidentResult, personResult] = await Promise.all([
+    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
       supabase.from('duty_functions').select('*').eq('active', true).order('sort_order').order('label'),
       supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      // Für die Übersichtskarte unabhängig vom Tagesfilter: Einsätze bleiben
+      // teils über Mitternacht hinaus offen und müssen dort weiter auftauchen.
+      supabase.from('incident_reports').select('*').eq('status', 'offen'),
       supabase.from('operational_person_notes').select('*').eq('active', true).order('updated_at', { ascending: false }),
     ])
-    if (entryResult.error || dutyResult.error || incidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
+    if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
     else setError('')
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
     setAssignments((dutyResult.data ?? []) as unknown as DutyAssignment[])
     setDutyFunctions((functionResult.data ?? []) as DutyFunctionConfig[])
     setIncidents((incidentResult.data ?? []) as IncidentReport[])
+    setOpenIncidentsAllDays((openIncidentResult.data ?? []) as IncidentReport[])
     setPersonNotes(personResult.error ? [] : (personResult.data ?? []) as OperationalPersonNote[])
     setLoading(false)
   }, [])
@@ -93,6 +102,9 @@ export default function Zentrale() {
     if (ownAssignment?.function === 'innendienst') return incidents.filter(item => item.disposition === 'keine_anfahrt')
     return incidents
   }, [incidents, ownAssignment?.function])
+  const openIncidentMarkers = useMemo(() => openIncidentsAllDays
+    .filter(item => item.location_lat !== null && item.location_lng !== null)
+    .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
   const contextEntries = useMemo(() => {
     const place = normalizeText(incident.location), phone = normalizePhone(incident.callerPhone), name = normalizeText(incident.callerName)
     if (!place && !phone && name.length < 3) return []
@@ -123,10 +135,20 @@ export default function Zentrale() {
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
-  function openIncident() { setIncident({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '' }); setShowIncidentForm(true); setError('') }
+  function openIncident() { setIncident({ callerPhone: '', callerName: '', location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null }); setLocateError(''); setShowIncidentForm(true); setError('') }
+  async function locateIncident() {
+    const queried = incident.location.trim()
+    if (!queried) return
+    setLocating(true); setLocateError('')
+    const result = await geocodeLocation(queried)
+    setLocating(false)
+    if (!result) { setLocateError('Ort konnte nicht gefunden werden.'); return }
+    // Falls der Ort während der Anfrage geändert wurde, gehört das Ergebnis nicht mehr dazu.
+    setIncident(current => current.location.trim() === queried ? { ...current, lat: result.lat, lng: result.lng } : current)
+  }
   async function saveIncident() {
     if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
-    setSaving(true); const result = await supabase.from('incident_reports').insert({ caller_phone: incident.callerPhone.trim() || null, caller_name: incident.callerName.trim() || null, location: incident.location.trim() || null, summary: incident.summary.trim(), involved_person: incident.involvedPerson.trim() || null, involved_birth_date: incident.involvedBirthDate || null, disposition: incident.disposition, note: incident.note.trim() || null, status: incident.disposition === 'bp' ? 'weitergegeben' : 'offen', created_by: profile.id }); setSaving(false)
+    setSaving(true); const result = await supabase.from('incident_reports').insert({ caller_phone: incident.callerPhone.trim() || null, caller_name: incident.callerName.trim() || null, location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(), involved_person: incident.involvedPerson.trim() || null, involved_birth_date: incident.involvedBirthDate || null, disposition: incident.disposition, note: incident.note.trim() || null, status: incident.disposition === 'bp' ? 'weitergegeben' : 'offen', created_by: profile.id }); setSaving(false)
     if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
     logAudit('Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`); setShowIncidentForm(false); setActiveTab('einsaetze'); setNotice('Meldung wurde gespeichert.'); await load()
   }
@@ -153,6 +175,7 @@ export default function Zentrale() {
         <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Heute relevant</h2>
         <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Stat label="Kritische Hinweise" value={criticalEntries.length} color="red" /><Stat label="Offene Übergaben" value={entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt').length} color="amber" /></div>
+        <section><h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze – Gemeindegebiet Dornbirn</h2><LeafletMap height={280} markers={openIncidentMarkers} /></section>
         <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
       </div>
       <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (AV/BV & EV, Personenhinweise, Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen …) über die Seitenleiste.</p></div>
@@ -164,7 +187,7 @@ export default function Zentrale() {
 
     {!loading && (activeTab === 'lage' || activeTab === 'uebergabe') ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
 
-    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} saving={saving} error={error} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }
@@ -181,9 +204,11 @@ function SofortWichtig({ entries, onOpen }: { entries: ZentraleEntry[]; onOpen: 
   return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2><div className="space-y-2">{entries.map(item => <button key={item.id} type="button" onClick={() => onOpen(item)} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
 }
 
-function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, saving, error, close, save }: { incident: { callerPhone: string; callerName: string; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; saving: boolean; error: string; close: () => void; save: () => Promise<void> }) {
+function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<typeof incident>) => setIncident(current => ({ ...current, ...values }))
-  return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><Field label="Name des Melders" value={incident.callerName} onChange={value => patch({ callerName: value })} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div><Field label="Einsatzort" value={incident.location} onChange={value => patch({ location: value })} /><Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Beteiligte Person" value={incident.involvedPerson} onChange={value => patch({ involvedPerson: value })} /><Field label="Geburtsdatum zur eindeutigen Zuordnung" type="date" value={incident.involvedBirthDate} onChange={value => patch({ involvedBirthDate: value })} /></div><ContextHints entries={contextEntries} personNotes={contextPersonNotes} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
+  return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><Field label="Name des Melders" value={incident.callerName} onChange={value => patch({ callerName: value })} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
+    <div><Field label="Einsatzort" value={incident.location} onChange={value => patch({ location: value, lat: null, lng: null })} /><button type="button" disabled={!incident.location.trim() || locating} onClick={() => void locate()} className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"><MapPin className="w-3.5 h-3.5" /> {locating ? 'Suche…' : 'Auf Karte anzeigen'}</button>{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}</p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
+    <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Beteiligte Person" value={incident.involvedPerson} onChange={value => patch({ involvedPerson: value })} /><Field label="Geburtsdatum zur eindeutigen Zuordnung" type="date" value={incident.involvedBirthDate} onChange={value => patch({ involvedBirthDate: value })} /></div><ContextHints entries={contextEntries} personNotes={contextPersonNotes} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
 }
 
 function ContextHints({ entries, personNotes }: { entries: ZentraleEntry[]; personNotes: OperationalPersonNote[] }) {
