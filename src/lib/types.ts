@@ -746,6 +746,39 @@ export interface InnendienstRecord {
   related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
 }
 
+/**
+ * Gebührenordnung Innendienst: reine Referenztabelle, vom Genehmiger gepflegt.
+ * Positionen (z. B. Bundesabgabe, Verwaltungsgebühr) werden zu benannten
+ * Sätzen (z. B. "Bescheid Straßenmusik") zusammengesetzt; kein Bezug zu
+ * konkreten innendienst_records-Einträgen.
+ */
+export interface InnendienstGebuehrenposition {
+  id: string
+  name: string
+  betrag: number
+  active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export interface InnendienstGebuehrensatz {
+  id: string
+  name: string
+  active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export interface InnendienstGebuehrensatzPosition {
+  id: string
+  gebuehrensatz_id: string
+  position_id: string
+  created_at: string
+  position?: Pick<InnendienstGebuehrenposition, 'id' | 'name' | 'betrag' | 'active'>
+}
+
 export type SupportTicketStatus = 'open' | 'answered' | 'closed'
 export type SupportTicketKind = 'help' | 'improvement' | 'idea'
 export type SupportTicketTopic = 'general' | 'bekleidung' | 'einsatz_mt' | 'zentrale' | 'innendienst' | 'aussendienst' | 'schulungen' | 'fuhrpark' | 'ueberstunden'
@@ -790,6 +823,9 @@ type SupportTicketRow = Omit<SupportTicket, 'profiles'>
 type SupportMessageRow = Omit<SupportMessage, 'profiles'>
 type PortalAreaRoleRow = Omit<PortalAreaRole, 'profiles'>
 type PersonalEinsatzmittelRow = Omit<PersonalEinsatzmittel, 'officer'>
+type InnendienstGebuehrenpositionRow = Omit<InnendienstGebuehrenposition, never>
+type InnendienstGebuehrensatzRow = Omit<InnendienstGebuehrensatz, never>
+type InnendienstGebuehrensatzPositionRow = Omit<InnendienstGebuehrensatzPosition, 'position'>
 type PersonalEinsatzmittelRequestRow = Omit<PersonalEinsatzmittelRequest, 'requester'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
 type PoolEinsatzmittelRequestRow = Omit<PoolEinsatzmittelRequest, 'requester'>
@@ -998,6 +1034,16 @@ export type Database = {
       innendienst_records: { Row: InnendienstRecordRow; Insert: Pick<InnendienstRecordRow, 'kind' | 'subject' | 'created_by'> & Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'updated_at' | 'kind' | 'subject' | 'created_by'>>; Update: Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'innendienst_records_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_records_related_bescheid_id_fkey'; columns: ['related_bescheid_id']; isOneToOne: false; referencedRelation: 'innendienst_records'; referencedColumns: ['id'] },
+      ] }
+      innendienst_gebuehrenpositionen: { Row: InnendienstGebuehrenpositionRow; Insert: Pick<InnendienstGebuehrenpositionRow, 'name' | 'betrag'> & Partial<Omit<InnendienstGebuehrenpositionRow, 'name' | 'betrag'>>; Update: Partial<Omit<InnendienstGebuehrenpositionRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'innendienst_gebuehrenpositionen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      innendienst_gebuehrensaetze: { Row: InnendienstGebuehrensatzRow; Insert: Pick<InnendienstGebuehrensatzRow, 'name'> & Partial<Omit<InnendienstGebuehrensatzRow, 'name'>>; Update: Partial<Omit<InnendienstGebuehrensatzRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'innendienst_gebuehrensaetze_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      innendienst_gebuehrensatz_positionen: { Row: InnendienstGebuehrensatzPositionRow; Insert: Pick<InnendienstGebuehrensatzPositionRow, 'gebuehrensatz_id' | 'position_id'> & Partial<Omit<InnendienstGebuehrensatzPositionRow, 'gebuehrensatz_id' | 'position_id'>>; Update: Partial<Omit<InnendienstGebuehrensatzPositionRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'innendienst_gebuehrensatz_positionen_gebuehrensatz_id_fkey'; columns: ['gebuehrensatz_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrensaetze'; referencedColumns: ['id'] },
+        { foreignKeyName: 'innendienst_gebuehrensatz_positionen_position_id_fkey'; columns: ['position_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrenpositionen'; referencedColumns: ['id'] },
       ] }
     }
     Views: {
