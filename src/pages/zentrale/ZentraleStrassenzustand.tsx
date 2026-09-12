@@ -108,6 +108,7 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
     for (const row of rows) {
       if (!row.strasseId && !row.strasseFreitext.trim()) { setError('Bitte für jede Zeile eine Straße auswählen oder eingeben.'); return }
       if (row.zustand !== 'frei_befahrbar' && !row.zustandFreitext.trim()) { setError('Bitte bei "Gesperrt" oder "Sonstige" den Grund beschreiben.'); return }
+      if (row.gueltigBisZeit && !row.gueltigBisDatum) { setError('Bitte für die Uhrzeit bei "Gültig bis" auch ein Datum angeben.'); return }
     }
     setSaving(true)
     const { data: bericht, error: berichtError } = await supabase.from('strassenzustand_berichte')
@@ -278,8 +279,8 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
               <Field label="Uhrzeit (optional)" type="time" value={row.gueltigVonZeit} onChange={value => patchRow(index, { gueltigVonZeit: value })} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Gültig bis (optional)" type="date" value={row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisDatum: value })} />
-              <Field label="Uhrzeit (optional)" type="time" value={row.gueltigBisZeit} onChange={value => patchRow(index, { gueltigBisZeit: value })} />
+              <Field label="Gültig bis (optional)" type="date" value={row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisDatum: value, ...(value ? {} : { gueltigBisZeit: '' }) })} />
+              <Field label="Uhrzeit (optional)" type="time" value={row.gueltigBisZeit} disabled={!row.gueltigBisDatum} onChange={value => patchRow(index, { gueltigBisZeit: value })} />
             </div>
           </div>
         </div>)}
