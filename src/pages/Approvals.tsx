@@ -15,7 +15,7 @@ import type {
   StockOrder,
 } from '../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../lib/types'
-import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCap, getCurrentShoeRefundCapResult } from '../lib/budget'
+import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCapResult } from '../lib/budget'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import { PERSONAL_EM_CATEGORY_LABELS, officerDisplayName, personalEmDetailText } from '../lib/personalEinsatzmittel'
@@ -71,12 +71,7 @@ export default function Approvals() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    // Nicht blockierend: der aktuelle Erstattungs-Cap wird für die Anzeige des
-    // tatsächlich erstattungsfähigen Betrags in der Schuherstattungen-Tabelle
-    // gebraucht (reviewShoeRefund() rechnet damit ohnehin zum Zeitpunkt der
-    // Genehmigung neu).
-    getCurrentShoeRefundCap().then(setShoeRefundCap).catch(() => {})
-    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tAssignRes, sModRes, sSessRes, sAssignRes, refundRes] = await Promise.all([
+    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tAssignRes, sModRes, sSessRes, sAssignRes, refundRes, capRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, products(name,category,price), quarters(name), profiles(name,dienstnummer,username)')
@@ -116,6 +111,7 @@ export default function Approvals() {
         .select('*, profiles!shoe_refunds_user_id_fkey(id,name,username,dienstnummer)')
         .eq('status', 'pending')
         .order('created_at', { ascending: true }),
+      getCurrentShoeRefundCapResult(),
     ])
     // Ein fehlgeschlagener Query darf nicht als "keine offenen Fälle" durchgehen -
     // das würde dem Genehmiger echte, noch unentschiedene Fälle verstecken. Bei
@@ -145,6 +141,12 @@ export default function Approvals() {
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
     if (refundRes.error) failed.push('Schuherstattungen')
     else setShoeRefunds((refundRes.data ?? []) as ShoeRefund[])
+    // getCurrentShoeRefundCapResult() (anders als getCurrentShoeRefundCap()) meldet einen
+    // fehlgeschlagenen Lookup statt ihn als DEFAULT_SHOE_CAP zu verschleiern - sonst würde
+    // die Tabelle einen falschen Höchstbetrag als echt ausgeben, während die Genehmigung
+    // selbst (reviewShoeRefund) auf demselben Fehler bereits korrekt abbricht.
+    if (capRes.error) { failed.push('Erstattungs-Höchstbetrag'); setShoeRefundCap(null) }
+    else setShoeRefundCap(capRes.cap)
     setLoadError(failed.length > 0 ? `Nicht alle Freigaben konnten geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
     // Budget-Kontext pro Benutzer laden (Jahresbudget + bereits verbraucht)
     const userIds = Array.from(new Set(pending.map(o => o.user_id)))
@@ -259,10 +261,15 @@ export default function Approvals() {
     if (processing) return
     setProcessing(refund.id)
     setError('')
-    const { data: { user } } = await supabase.auth.getUser()
-    const payload: { status: 'approved' | 'rejected'; reviewed_by: string | null; reviewed_at: string; approved_amount?: number } = {
+    // reviewed_by ist nullable und die UPDATE-Policy verlangt keine Identität - ein
+    // stillschweigendes null bei einem Auth-Fehler würde eine endgültige Entscheidung
+    // ohne Zuordnung, wer sie getroffen hat, festschreiben. Deshalb abbrechen statt
+    // mit null weiterzumachen.
+    const { data: { user }, error: authErr } = await supabase.auth.getUser()
+    if (authErr || !user) { setProcessing(null); setError('Anmeldung konnte nicht überprüft werden. Bitte Seite neu laden.'); return }
+    const payload: { status: 'approved' | 'rejected'; reviewed_by: string; reviewed_at: string; approved_amount?: number } = {
       status,
-      reviewed_by: user?.id ?? null,
+      reviewed_by: user.id,
       reviewed_at: new Date().toISOString(),
     }
     if (status === 'approved') {
