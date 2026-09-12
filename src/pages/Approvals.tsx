@@ -426,21 +426,23 @@ export default function Approvals() {
     ? (reviewingAssignment.kind === 'training' ? trainingSessions : schulungSessions).filter(s => s.module_id === reviewingAssignment.item.module_id)
     : []
   // Belegung fürs jeweils gewählte Modul - null, solange die Anmeldungen (noch) nicht
-  // geladen werden konnten, dann wird keine Zahl behauptet und keine Option als voll
-  // gesperrt (die Kapazitätsprüfung selbst übernimmt ohnehin serverseitig ein Trigger
-  // beim Einteilen).
+  // geladen werden konnten (Fehler oder erkannte Truncation). In dem Fall NICHT
+  // stillschweigend "keine Option ist voll" annehmen (das würde exakt die Lücke wieder
+  // öffnen, die diese Anzeige schließen soll) - stattdessen gilt jeder Termin als nicht
+  // prüfbar und "Genehmigen" bleibt gesperrt, bis die Belegung wieder bekannt ist.
   const assignmentRegistrationCounts = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingRegistrationCounts : schulungRegistrationCounts)
     : null
+  const assignmentOccupancyUnknown = !!reviewingAssignment && assignmentRegistrationCounts == null
   function sessionIsFull(s: EinsatzTrainingSession | SchulungSession) {
-    return s.capacity != null && !!assignmentRegistrationCounts && (assignmentRegistrationCounts[s.id] ?? 0) >= s.capacity
+    return assignmentOccupancyUnknown || (s.capacity != null && !!assignmentRegistrationCounts && (assignmentRegistrationCounts[s.id] ?? 0) >= s.capacity)
   }
   // Ein vorbelegter session_id (Selbstanmeldung) kann fehlen, wenn die Termin-Abfrage
   // fehlgeschlagen ist oder der Termin inzwischen nicht mehr angekündigt ist. Dann taucht
   // er in assignmentSessions nicht auf, obwohl reviewSessionId noch einen (unsichtbaren)
   // Wert trägt - "Genehmigen" darf dann nicht aktiv sein, sonst würde ein Termin bestätigt,
   // den der Genehmiger gar nicht einsehen kann. Ebenso, wenn der Termin zwar sichtbar,
-  // aber laut geladener Belegung bereits voll ist.
+  // aber laut geladener Belegung bereits voll ist (oder die Belegung insgesamt unbekannt ist).
   const selectedAssignmentSession = assignmentSessions.find(s => s.id === reviewSessionId)
   const reviewSessionValid = !!selectedAssignmentSession && !sessionIsFull(selectedAssignmentSession)
   const assignmentModuleName = reviewingAssignment
@@ -760,7 +762,9 @@ export default function Approvals() {
                     return <option key={s.id} value={s.id} disabled={sessionIsFull(s)}>{new Date(s.session_date).toLocaleDateString('de-AT')}{s.note ? ` · ${s.note}` : ''}{occupancy}</option>
                   })}
                 </select>
-                {assignmentSessions.length === 0 ? <span className="text-xs text-amber-700 mt-1 block">Für dieses Modul ist aktuell kein angekündigter Termin vorhanden.</span> : null}
+                {assignmentSessions.length === 0 ? <span className="text-xs text-amber-700 mt-1 block">Für dieses Modul ist aktuell kein angekündigter Termin vorhanden.</span>
+                  : assignmentOccupancyUnknown ? <span className="text-xs text-amber-700 mt-1 block">Belegung konnte nicht ermittelt werden - Genehmigen ist vorübergehend nicht möglich. Bitte Seite neu laden.</span>
+                  : null}
               </label>
               <label className="block text-xs font-medium text-gray-600">Bemerkung (optional)
                 <textarea rows={2} maxLength={500} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={reviewNote} onChange={e => setReviewNote(e.target.value)} />
