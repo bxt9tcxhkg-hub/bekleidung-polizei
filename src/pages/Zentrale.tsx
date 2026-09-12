@@ -62,6 +62,10 @@ export default function Zentrale() {
   const [showEntryForm, setShowEntryForm] = useState(false)
   const [editing, setEditing] = useState<ZentraleEntry | null>(null)
   const [entry, setEntry] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
+  // Kategorie für einen NEUEN Eintrag - unabhängig von activeTab, damit z. B.
+  // "Eintrag" aus der Schichtübergabe-Übersicht auf der Übersicht-Seite
+  // funktioniert, ohne dorthin zu wechseln. Bei editing zählt item.category.
+  const [entryCategory, setEntryCategory] = useState<ZentraleEntryCategory>('lage')
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
   const [incident, setIncident] = useState({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null, coordsPrecise: false })
@@ -102,6 +106,8 @@ export default function Zentrale() {
   const currentTab = TABS.find(tab => tab.id === activeTab) ?? TABS[0]
   const visibleEntries = useMemo(() => entries.filter(item => item.category === activeTab), [activeTab, entries])
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
+  // Offene Schichtübergabe-Punkte direkt in der Übersicht, nicht erst in einem eigenen Tab - die Folgeschicht soll das sofort sehen.
+  const openUebergabeEntries = useMemo(() => entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt'), [entries])
   const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
   const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
   const visibleIncidents = useMemo(() => {
@@ -125,15 +131,14 @@ export default function Zentrale() {
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
-  function openNewEntry() {
-    const fallback: ZentraleEntryCategory = activeTab === 'lage' || activeTab === 'uebergabe' ? activeTab : 'lage'
-    setEditing(null); setEntry(EMPTY_ENTRY_FORM); setActiveTab(fallback); setShowEntryForm(true); setError('')
+  function openNewEntry(category: ZentraleEntryCategory) {
+    setEditing(null); setEntry(EMPTY_ENTRY_FORM); setEntryCategory(category); setShowEntryForm(true); setError('')
   }
-  function openEdit(item: ZentraleEntry) { setEditing(item); setEntry(entryToForm(item)); setShowEntryForm(true); setError('') }
+  function openEdit(item: ZentraleEntry) { setEditing(item); setEntry(entryToForm(item)); setEntryCategory(item.category); setShowEntryForm(true); setError('') }
 
   async function saveEntry() {
     if (!entry.title.trim()) { setError('Bitte eine Bezeichnung eingeben.'); return }
-    const category = (editing?.category ?? activeTab) as ZentraleEntryCategory
+    const category = editing?.category ?? entryCategory
     setSaving(true)
     const payload = { category, title: entry.title.trim(), description: entry.description.trim() || null, priority: entry.priority, status: entry.status, valid_from: entry.validFrom || null, valid_until: entry.validUntil || null, location: entry.location.trim() || null, responsible: entry.responsible.trim() || null, reference: entry.reference.trim() || null, restricted: entry.restricted }
     const response = editing ? await supabase.from('zentrale_entries').update(payload).eq('id', editing.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
@@ -182,7 +187,8 @@ export default function Zentrale() {
       <div className="space-y-4">
         <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Heute relevant</h2>
         <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Stat label="Kritische Hinweise" value={criticalEntries.length} color="red" /><Stat label="Offene Übergaben" value={entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt').length} color="amber" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><Stat label="Kritische Hinweise" value={criticalEntries.length} color="red" /><Stat label="Offene Übergaben" value={openUebergabeEntries.length} color="amber" /></div>
+        <EntryList title="Schichtübergabe" description="Offene Punkte für die Folgeschicht - direkt hier, nicht erst im eigenen Tab." entries={openUebergabeEntries} canManage={canManage} openNew={() => openNewEntry('uebergabe')} openEdit={openEdit} />
         <section><h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze – Gemeindegebiet Dornbirn</h2><LeafletMap height={280} markers={openIncidentMarkers} /></section>
         <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
       </div>
@@ -193,7 +199,7 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'strassenzustand' ? <ZentraleStrassenzustand canManage={canManage} /> : null}
 
-    {!loading && (activeTab === 'lage' || activeTab === 'uebergabe') ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={openNewEntry} openEdit={openEdit} /> : null}
+    {!loading && (activeTab === 'lage' || activeTab === 'uebergabe') ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
