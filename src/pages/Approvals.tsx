@@ -57,10 +57,16 @@ export default function Approvals() {
   const [shoeRefundCap, setShoeRefundCap] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
-  const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' | 'personal' | 'pool' } | null>(null)
+  const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' } | null>(null)
   const [reviewingAssignment, setReviewingAssignment] = useState<{ kind: AssignmentKind; item: TrainingAssignmentWithOfficer | SchulungAssignmentWithOfficer } | null>(null)
   const [reviewSessionId, setReviewSessionId] = useState('')
   const [reviewNote, setReviewNote] = useState('')
+  // Personal-/Pool-Einsatzmittel: ein Dialog für Genehmigen UND Ablehnen (wie die
+  // Fachseiten), statt zwei getrennter Ein-Klick-Buttons - sonst gäbe es beim
+  // Genehmigen keine Möglichkeit, eine Bemerkung zu hinterlegen, und die RPCs
+  // lehnen eine zweite Entscheidung ab, sobald der Status nicht mehr "pending" ist.
+  const [reviewingEm, setReviewingEm] = useState<{ kind: 'personal' | 'pool'; item: PersonalEmWithRequester | PoolEmWithRequester } | null>(null)
+  const [emReviewNote, setEmReviewNote] = useState('')
   const [error, setError] = useState('')
   // Getrennt von error: eine fehlgeschlagene Teil-Ladung darf nicht verschwinden,
   // nur weil währenddessen ein Dialog geöffnet/geschlossen wird (der error für
@@ -177,10 +183,10 @@ export default function Approvals() {
   // Ist dagegen gerade ein Dialog offen, zeigt der die Fehlermeldung bereits selbst an.
   const topErrorRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (error && !cancelReason && !reviewingAssignment) {
+    if (error && !cancelReason && !reviewingAssignment && !reviewingEm) {
       topErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-  }, [error, cancelReason, reviewingAssignment])
+  }, [error, cancelReason, reviewingAssignment, reviewingEm])
 
   async function approve(order: PendingOrder) {
     if (processing) return
@@ -259,7 +265,7 @@ export default function Approvals() {
     setProcessing(null)
     if (err) { setError(err.message || 'Prüfung konnte nicht gespeichert werden.'); return }
     logAudit(approved ? 'Einsatzmittel-Meldung bestätigt' : 'Einsatzmittel-Meldung abgelehnt', `${PERSONAL_EM_CATEGORY_LABELS[item.category]} · ${officerDisplayName(item.requester)}`)
-    setCancelReason(null)
+    setReviewingEm(null)
     load()
   }
 
@@ -272,8 +278,22 @@ export default function Approvals() {
     setProcessing(null)
     if (err) { setError(err.message || 'Entscheidung fehlgeschlagen.'); return }
     logAudit(approve ? 'Beschaffungsantrag genehmigt' : 'Beschaffungsantrag abgelehnt', `${POOL_EM_CATEGORY_LABELS[item.category]} · ${item.anzahl} · ${officerDisplayName(item.requester)}`)
-    setCancelReason(null)
+    setReviewingEm(null)
     load()
+  }
+
+  function openEmReview(kind: 'personal' | 'pool', item: PersonalEmWithRequester | PoolEmWithRequester) {
+    setReviewingEm({ kind, item })
+    setEmReviewNote('')
+    setError('')
+  }
+
+  async function decideEmReview(approve: boolean) {
+    if (!reviewingEm) return
+    if (!approve && !emReviewNote.trim()) { setError('Bitte einen Ablehnungsgrund eintragen.'); return }
+    const { kind, item } = reviewingEm
+    if (kind === 'personal') await reviewPersonalEm(item as PersonalEmWithRequester, approve, emReviewNote)
+    else await reviewPoolEm(item as PoolEmWithRequester, approve, emReviewNote)
   }
 
   async function reviewShoeRefund(refund: ShoeRefund, status: 'approved' | 'rejected') {
@@ -319,7 +339,7 @@ export default function Approvals() {
     load()
   }
 
-  function openCancelReason(id: string, type: 'order' | 'stock' | 'personal' | 'pool') {
+  function openCancelReason(id: string, type: 'order' | 'stock') {
     setError('')
     setCancelReason({ id, reason: '', type })
   }
@@ -373,6 +393,11 @@ export default function Approvals() {
   const reviewSessionValid = assignmentSessions.some(s => s.id === reviewSessionId)
   const assignmentModuleName = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingModules : schulungModules).find(m => m.id === reviewingAssignment.item.module_id)?.name ?? reviewingAssignment.item.module_id
+    : ''
+  const emReviewCategoryLabel = reviewingEm
+    ? reviewingEm.kind === 'personal'
+      ? PERSONAL_EM_CATEGORY_LABELS[(reviewingEm.item as PersonalEmWithRequester).category]
+      : POOL_EM_CATEGORY_LABELS[(reviewingEm.item as PoolEmWithRequester).category]
     : ''
 
   return (
@@ -518,9 +543,7 @@ export default function Approvals() {
                   personalEmDetailText(item) || '–',
                   item.verwahrungsort ? (VERWAHRUNGSORT_LABELS[item.verwahrungsort as keyof typeof VERWAHRUNGSORT_LABELS] ?? item.verwahrungsort) : '–',
                   officerDisplayName(item.requester),
-                  <Actions key="ac" disabled={processing === item.id}
-                    onApprove={() => void reviewPersonalEm(item, true, '')}
-                    onReject={() => openCancelReason(item.id, 'personal')} />,
+                  <div key="ac" className="flex justify-end"><button type="button" onClick={() => openEmReview('personal', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
                 ])}
               />
             )}
@@ -540,9 +563,7 @@ export default function Approvals() {
                   VERWAHRUNGSORT_LABELS[item.verwahrungsort as keyof typeof VERWAHRUNGSORT_LABELS] ?? item.verwahrungsort,
                   item.begruendung,
                   officerDisplayName(item.requester),
-                  <Actions key="ac" disabled={processing === item.id}
-                    onApprove={() => void reviewPoolEm(item, true, '')}
-                    onReject={() => openCancelReason(item.id, 'pool')} />,
+                  <div key="ac" className="flex justify-end"><button type="button" onClick={() => openEmReview('pool', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
                 ])}
               />
             )}
@@ -591,10 +612,7 @@ export default function Approvals() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
             <div className="px-6 py-4 border-b">
               <h2 className="font-bold text-gray-900">
-                {cancelReason.type === 'stock' ? 'Lagerbestellung ablehnen'
-                  : cancelReason.type === 'personal' ? 'Einsatzmittel-Meldung ablehnen'
-                  : cancelReason.type === 'pool' ? 'Beschaffungsantrag ablehnen'
-                  : 'Bestellung ablehnen'}
+                {cancelReason.type === 'stock' ? 'Lagerbestellung ablehnen' : 'Bestellung ablehnen'}
               </h2>
             </div>
             <div className="px-6 py-4">
@@ -610,14 +628,34 @@ export default function Approvals() {
                 onClick={() => {
                   if (!cancelReason) return
                   if (cancelReason.type === 'stock') rejectStockOrder(cancelReason.id, cancelReason.reason)
-                  else if (cancelReason.type === 'personal') { const item = personalEm.find(p => p.id === cancelReason.id); if (item) void reviewPersonalEm(item, false, cancelReason.reason) }
-                  else if (cancelReason.type === 'pool') { const item = poolEm.find(p => p.id === cancelReason.id); if (item) void reviewPoolEm(item, false, cancelReason.reason) }
                   else reject(cancelReason.id, cancelReason.reason)
                 }}
                 disabled={!cancelReason.reason.trim() || processing === cancelReason.id}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 Ablehnen
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reviewingEm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">{reviewingEm.kind === 'personal' ? 'Einsatzmittel-Meldung' : 'Beschaffungsantrag'} prüfen</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{officerDisplayName(reviewingEm.item.requester)} · {emReviewCategoryLabel}</p>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <label className="block text-xs font-medium text-gray-600">Bemerkung (bei Ablehnung erforderlich)
+                <textarea rows={3} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={emReviewNote} onChange={e => setEmReviewNote(e.target.value)} autoFocus />
+              </label>
+              {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setReviewingEm(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={() => void decideEmReview(false)} disabled={processing === reviewingEm.item.id} className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Ablehnen</button>
+              <button onClick={() => void decideEmReview(true)} disabled={processing === reviewingEm.item.id} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Genehmigen</button>
             </div>
           </div>
         </div>
