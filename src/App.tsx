@@ -42,6 +42,9 @@ const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
 const Zentrale = lazy(() => import('./pages/Zentrale'))
+const ZentraleCategoryPage = lazy(() => import('./pages/zentrale/ZentraleCategoryPage'))
+const ZentralePersonenhinweise = lazy(() => import('./pages/zentrale/ZentralePersonenhinweise'))
+const ZentraleRsaRsb = lazy(() => import('./pages/zentrale/ZentraleRsaRsb'))
 const Aussendienst = lazy(() => import('./pages/Aussendienst'))
 const Innendienst = lazy(() => import('./pages/Innendienst'))
 const RsaRsb = lazy(() => import('./pages/RsaRsb'))
@@ -98,6 +101,14 @@ export default function App() {
             }
           >
             <Route path="/zentrale" element={<Zentrale />} />
+            <Route path="/zentrale/av-bv-ev" element={<ZentraleCategoryPage category="verbot" title="AV/BV & EV" description="Laufende Annäherungs-, Betretungs- und einstweilige Verbote" />} />
+            <Route path="/zentrale/personenhinweise" element={<ZentralePersonenhinweise />} />
+            <Route path="/zentrale/fahndungen" element={<ZentraleCategoryPage category="fahndung" title="Fahndungen" description="Aktuell offene interne Fahndungshinweise" />} />
+            <Route path="/zentrale/rsa-rsb" element={<ZentraleRsaRsb />} />
+            <Route path="/zentrale/schluessel" element={<ZentraleCategoryPage category="schluessel" title="Schlüssel" description="Hinterlegte Schlüssel und Zutrittshinweise" />} />
+            <Route path="/zentrale/kontakte" element={<ZentraleCategoryPage category="kontakt" title="Kontakte" description="Dienstlich notwendige Kontakte und Rufbereitschaften" />} />
+            <Route path="/zentrale/alarmierung" element={<ZentraleCategoryPage category="alarmierung" title="Alarmierung" description="Verständigungsreihenfolgen und Eskalationswege" />} />
+            <Route path="/zentrale/unterlagen" element={<ZentraleCategoryPage category="unterlage" title="Unterlagen" description="Formulare, Vorlagen und operative Arbeitshilfen" />} />
           </Route>
           <Route
             element={

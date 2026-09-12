@@ -1,12 +1,22 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { LayoutGrid, LogOut, Menu, Radio, X } from 'lucide-react'
+import { BellRing, BookOpen, Contact, FileClock, KeyRound, LayoutGrid, LogOut, Menu, Radio, Search, ShieldAlert, UserRoundCheck, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import ChangePasswordModal from './ChangePasswordModal'
 
 const baseItems = [
   { to: '/', label: 'Portal', icon: LayoutGrid },
   { to: '/zentrale', label: 'Zentrale', icon: Radio },
+]
+const registerItems = [
+  { to: '/zentrale/av-bv-ev', label: 'AV/BV & EV', icon: ShieldAlert },
+  { to: '/zentrale/personenhinweise', label: 'Personenhinweise', icon: UserRoundCheck },
+  { to: '/zentrale/fahndungen', label: 'Fahndungen', icon: Search },
+  { to: '/zentrale/rsa-rsb', label: 'RSa/RSb', icon: FileClock },
+  { to: '/zentrale/schluessel', label: 'Schlüssel', icon: KeyRound },
+  { to: '/zentrale/kontakte', label: 'Kontakte', icon: Contact },
+  { to: '/zentrale/alarmierung', label: 'Alarmierung', icon: BellRing },
+  { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
 ]
 
 export default function ZentraleLayout() {
@@ -38,27 +48,52 @@ export default function ZentraleLayout() {
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <p className="text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 text-blue-300">
-            Zentrale
-          </p>
-          <div className="space-y-0.5">
-            {baseItems.map(({ to, label, icon: Icon }) => {
-              const active = location.pathname === to
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    active ? 'bg-blue-600 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1">{label}</span>
-                </Link>
-              )
-            })}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 text-blue-300">
+              Zentrale
+            </p>
+            <div className="space-y-0.5">
+              {baseItems.map(({ to, label, icon: Icon }) => {
+                const active = location.pathname === to
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      active ? 'bg-blue-600 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider px-3 mb-1.5 text-blue-300">
+              Register &amp; Hinweise
+            </p>
+            <div className="space-y-0.5">
+              {registerItems.map(({ to, label, icon: Icon }) => {
+                const active = location.pathname === to
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      active ? 'bg-blue-600 text-white' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                )
+              })}
+            </div>
           </div>
         </nav>
 

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, BookOpen, Car, CheckCircle2, ClipboardList, Mail, Radio, ShieldAlert, UsersRound } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { AlertTriangle, BookOpen, Car, CheckCircle2, ClipboardList, Mail, Pencil, Plus, Radio, ShieldAlert, Trash2, UsersRound } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import MailDeliveries from '../components/MailDeliveries'
+import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleEntry } from '../lib/types'
 
@@ -18,11 +20,13 @@ const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
 const ZIELFUNKTION_LABEL: Record<KontrollauftragZielfunktion, string> = { jd: 'Nur JD', vd: 'Nur VD', beide: 'JD und VD' }
 
+const emptyAuftrag = { title: '', description: '', location: '', validFrom: '', validUntil: '', targetFunction: 'beide' as KontrollauftragZielfunktion }
+
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
 
 export default function Aussendienst() {
-  const { profile, hasAreaAccess } = useAuth()
+  const { profile, hasAreaAccess, isGenehmiger } = useAuth()
   const [activeTab, setActiveTab] = useState<TabId>('einsaetze')
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
@@ -35,6 +39,10 @@ export default function Aussendienst() {
   const [saving, setSaving] = useState(false)
   const [checkNote, setCheckNote] = useState('')
   const [showMangelForm, setShowMangelForm] = useState(false)
+  const [showAuftragForm, setShowAuftragForm] = useState(false)
+  const [editingAuftrag, setEditingAuftrag] = useState<ZentraleEntry | null>(null)
+  const [auftrag, setAuftrag] = useState(emptyAuftrag)
+  const [auftragError, setAuftragError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -88,6 +96,24 @@ export default function Aussendienst() {
     setShowMangelForm(false); setCheckNote(''); await load()
   }
 
+  function openNewAuftrag() { setEditingAuftrag(null); setAuftrag(emptyAuftrag); setAuftragError(''); setShowAuftragForm(true) }
+  function openEditAuftrag(item: ZentraleEntry) { setEditingAuftrag(item); setAuftrag({ title: item.title, description: item.description ?? '', location: item.location ?? '', validFrom: item.valid_from?.slice(0, 10) ?? '', validUntil: item.valid_until?.slice(0, 10) ?? '', targetFunction: item.target_function ?? 'beide' }); setAuftragError(''); setShowAuftragForm(true) }
+  async function saveAuftrag() {
+    if (!auftrag.title.trim()) { setAuftragError('Bitte eine Bezeichnung eingeben.'); return }
+    setSaving(true)
+    const payload = { category: 'kontrollauftrag' as const, title: auftrag.title.trim(), description: auftrag.description.trim() || null, location: auftrag.location.trim() || null, valid_from: auftrag.validFrom || null, valid_until: auftrag.validUntil || null, target_function: auftrag.targetFunction }
+    const response = editingAuftrag ? await supabase.from('zentrale_entries').update(payload).eq('id', editingAuftrag.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
+    setSaving(false)
+    if (response.error) { setAuftragError('Kontrollauftrag konnte nicht gespeichert werden.'); return }
+    logAudit(editingAuftrag ? 'Kontrollauftrag bearbeitet' : 'Kontrollauftrag angelegt', auftrag.title.trim()); setShowAuftragForm(false); await load()
+  }
+  async function deleteAuftrag() {
+    if (!editingAuftrag || !window.confirm(`Kontrollauftrag „${editingAuftrag.title}“ endgültig löschen?`)) return
+    const result = await supabase.from('zentrale_entries').delete().eq('id', editingAuftrag.id)
+    if (result.error) { setAuftragError('Kontrollauftrag konnte nicht gelöscht werden.'); return }
+    logAudit('Kontrollauftrag endgültig gelöscht', editingAuftrag.title); setShowAuftragForm(false); await load()
+  }
+
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   return <div>
@@ -115,22 +141,43 @@ export default function Aussendienst() {
     <nav className="flex gap-1.5 overflow-x-auto pb-2 mb-5" aria-label="Bereiche des Außendienstes">{TABS.map(tab => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}</button> })}</nav>
 
     {!loading && activeTab === 'einsaetze' ? <EntryOrIncidentList kind="incidents" incidents={incidents} /> : null}
-    {!loading && activeTab === 'kontrollauftraege' ? <EntryOrIncidentList kind="entries" entries={kontrollauftraege} /> : null}
+    {!loading && activeTab === 'kontrollauftraege' ? <div>
+      {isGenehmiger ? <div className="mb-3 flex justify-end"><button type="button" onClick={openNewAuftrag} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Kontrollauftrag</button></div> : null}
+      <EntryOrIncidentList kind="entries" entries={kontrollauftraege} canManage={isGenehmiger} onEdit={openEditAuftrag} />
+    </div> : null}
     {!loading && activeTab === 'hinweise' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'lage' || item.category === 'verbot' || item.category === 'fahndung')} /> : null}
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
     {!loading && activeTab === 'kontrollbehelfe' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'unterlage')} /> : null}
     {!loading && activeTab === 'fahrzeug' ? (ownVehicle ? <div className="rounded-2xl border border-gray-200 bg-white p-5"><h2 className="font-bold text-gray-900">{ownVehicle.name}</h2><dl className="text-sm mt-3 space-y-1.5"><div className="flex justify-between"><dt className="text-gray-500">Rufname</dt><dd className="font-medium">{ownVehicle.call_sign || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium">{ownVehicle.license_plate || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Marke/Modell</dt><dd className="font-medium">{[ownVehicle.make, ownVehicle.model].filter(Boolean).join(' ') || '–'}</dd></div></dl><Link to={`/fuhrpark/${ownVehicle.id}`} className="inline-block mt-4 text-sm font-semibold text-blue-700">Fahrzeugdetails im Fuhrpark →</Link></div> : <Empty text="Kein Fahrzeug zugewiesen." />) : null}
+
+    {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}
   </div>
 }
 
-function EntryOrIncidentList({ kind, entries, incidents }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: { id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[] }) {
+function EntryOrIncidentList({ kind, entries, incidents, canManage, onEdit }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: { id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void }) {
   if (kind === 'incidents') {
     if (!incidents || incidents.length === 0) return <Empty text="Heute wurden noch keine Meldungen erfasst." />
     return <div className="space-y-3">{incidents.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1">{item.summary}</p><p className="text-xs text-gray-500 mt-2">{DISPOSITION_LABEL[item.disposition]}</p></article>)}</div>
   }
   const list = entries ?? []
   if (list.length === 0) return <Empty text="Keine Einträge vorhanden." />
-  return <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{list.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.title}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span>{item.target_function ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ZIELFUNKTION_LABEL[item.target_function]}</span> : null}</div>{item.description ? <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.description}</p> : null}<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">{item.location ? <span>Ort: {item.location}</span> : null}{item.valid_from ? <span>Ab: {new Date(item.valid_from).toLocaleDateString('de-AT')}</span> : null}{item.valid_until ? <span>Bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}</div></article>)}</div>
+  return <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{list.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.title}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span>{item.target_function ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ZIELFUNKTION_LABEL[item.target_function]}</span> : null}</div>{item.description ? <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.description}</p> : null}<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">{item.location ? <span>Ort: {item.location}</span> : null}{item.valid_from ? <span>Ab: {new Date(item.valid_from).toLocaleDateString('de-AT')}</span> : null}{item.valid_until ? <span>Bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}</div></div>{canManage && onEdit ? <button type="button" onClick={() => onEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Eintrag bearbeiten"><Pencil className="w-4 h-4" /></button> : null}</div></article>)}</div>
+}
+
+function AuftragModal({ auftrag, setAuftrag, editing, saving, error, close, save, remove }: { auftrag: typeof emptyAuftrag; setAuftrag: Dispatch<SetStateAction<typeof emptyAuftrag>>; editing: ZentraleEntry | null; saving: boolean; error: string; close: () => void; save: () => Promise<void>; remove: () => Promise<void> }) {
+  const patch = (values: Partial<typeof emptyAuftrag>) => setAuftrag(current => ({ ...current, ...values }))
+  return <Modal title={editing ? 'Kontrollauftrag bearbeiten' : 'Kontrollauftrag anlegen'} close={close}>
+    <Field label="Bezeichnung *" value={auftrag.title} onChange={value => patch({ title: value })} />
+    <Area label="Welche Kontrollen sind durchzuführen" value={auftrag.description} onChange={value => patch({ description: value })} />
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <Field label="Ort" value={auftrag.location} onChange={value => patch({ location: value })} />
+      <label className="text-xs font-medium text-gray-600">Zielfunktion<select className={inputClass} value={auftrag.targetFunction} onChange={event => patch({ targetFunction: event.target.value as KontrollauftragZielfunktion })}>{Object.entries(ZIELFUNKTION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <Field label="Von" type="date" value={auftrag.validFrom} onChange={value => patch({ validFrom: value })} />
+      <Field label="Bis" type="date" value={auftrag.validUntil} onChange={value => patch({ validUntil: value })} />
+    </div>
+    {error ? <ErrorMessage text={error} /> : null}
+    <div className="flex flex-wrap gap-3 pt-2">{editing ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}<Actions saving={saving} close={close} save={save} /></div>
+  </Modal>
 }
 
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
