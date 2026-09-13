@@ -12,7 +12,7 @@ export function usePersons() {
   const [error, setError] = useState(false)
   const load = useCallback(async () => {
     setLoading(true)
-    const result = await supabase.from('operational_persons').select('*').order('name')
+    const result = await supabase.from('operational_persons').select('*').order('nachname').order('vorname')
     setError(!!result.error)
     setPersons((result.data ?? []) as OperationalPerson[])
     setLoading(false)
@@ -39,6 +39,12 @@ export function useObjects() {
 export function objectLabel(object: Pick<OperationalObject, 'address' | 'label'>) {
   return object.label ? `${object.label} (${object.address})` : object.address
 }
-export function personLabel(person: Pick<OperationalPerson, 'name' | 'birth_date'>) {
-  return person.birth_date ? `${person.name} (geb. ${new Date(person.birth_date).toLocaleDateString('de-AT')})` : person.name
+/** Vorname und Nachname sind beide optional (am Telefon oft erst eines bekannt) - hier zur Anzeige kombiniert. */
+export function personDisplayName(person: Pick<OperationalPerson, 'vorname' | 'nachname'> | null | undefined) {
+  if (!person) return 'Unbekannte Person'
+  return [person.vorname, person.nachname].filter(Boolean).join(' ') || 'Unbekannte Person'
+}
+export function personLabel(person: Pick<OperationalPerson, 'vorname' | 'nachname' | 'birth_date'>) {
+  const name = personDisplayName(person)
+  return person.birth_date ? `${name} (geb. ${new Date(person.birth_date).toLocaleDateString('de-AT')})` : name
 }

@@ -6,13 +6,14 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import type { OperationalPerson } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
+import { personDisplayName } from '../../lib/register'
 
 // Zentrales Personen-Register: Basis für die Verknüpfung von Personenhinweisen,
 // RSa/RSb, AV/BV & EV und Fahndungen auf dieselbe Person, statt Namen in
 // jeder Kategorie separat als Freitext zu erfassen.
 
 type LinkCounts = { hinweise: number; rsaRsb: number; avBv: number; fahndungen: number }
-const emptyForm = { name: '', birthDate: '', phone: '', note: '' }
+const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', note: '' }
 
 export default function ZentralePersonen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
@@ -31,7 +32,7 @@ export default function ZentralePersonen() {
   const load = useCallback(async () => {
     setLoading(true)
     const [personResult, noteResult, mailResult, avBvResult, fahndungResult] = await Promise.all([
-      supabase.from('operational_persons').select('*').order('name'),
+      supabase.from('operational_persons').select('*').order('nachname').order('vorname'),
       supabase.from('operational_person_notes').select('person_id').eq('active', true),
       supabase.from('mail_deliveries').select('person_id').is('closed_at', null),
       supabase.from('zentrale_av_bv').select('person_id').not('person_id', 'is', null),
@@ -59,16 +60,18 @@ export default function ZentralePersonen() {
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
-  function openEdit(item: OperationalPerson) { setEditing(item); setForm({ name: item.name, birthDate: item.birth_date ?? '', phone: item.phone ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }
+  function openEdit(item: OperationalPerson) { setEditing(item); setForm({ vorname: item.vorname ?? '', nachname: item.nachname ?? '', birthDate: item.birth_date ?? '', phone: item.phone ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }
 
   async function save() {
-    if (!form.name.trim()) { setError('Bitte einen Namen eingeben.'); return }
+    // Am Telefon ist oft zunächst nur Vor- oder Nachname bekannt - beide
+    // einzeln optional, aber mindestens eines muss angegeben werden.
+    if (!form.vorname.trim() && !form.nachname.trim()) { setError('Bitte Vor- oder Nachname eingeben.'); return }
     setSaving(true)
-    const payload = { name: form.name.trim(), birth_date: form.birthDate || null, phone: form.phone.trim() || null, note: form.note.trim() || null }
+    const payload = { vorname: form.vorname.trim() || null, nachname: form.nachname.trim() || null, birth_date: form.birthDate || null, phone: form.phone.trim() || null, note: form.note.trim() || null }
     const response = editing ? await supabase.from('operational_persons').update(payload).eq('id', editing.id) : await supabase.from('operational_persons').insert({ ...payload, created_by: profile?.id ?? null })
     setSaving(false)
     if (response.error) { setError('Person konnte nicht gespeichert werden.'); return }
-    logAudit(editing ? 'Person bearbeitet' : 'Person angelegt', form.name.trim()); setShowForm(false); setNotice('Person wurde gespeichert.'); await load()
+    logAudit(editing ? 'Person bearbeitet' : 'Person angelegt', personDisplayName(payload)); setShowForm(false); setNotice('Person wurde gespeichert.'); await load()
   }
   async function remove() {
     if (!editing) return
@@ -77,10 +80,10 @@ export default function ZentralePersonen() {
       setError('Diese Person ist noch mit Einträgen verknüpft (Personenhinweise, RSa/RSb, AV/BV oder Fahndungen) und kann daher nicht gelöscht werden.')
       return
     }
-    if (!window.confirm(`Person „${editing.name}“ endgültig löschen?`)) return
+    if (!window.confirm(`Person „${personDisplayName(editing)}“ endgültig löschen?`)) return
     const result = await supabase.from('operational_persons').delete().eq('id', editing.id)
     if (result.error) { setError('Person konnte nicht gelöscht werden.'); return }
-    logAudit('Person endgültig gelöscht', editing.name); setShowForm(false); setNotice('Person wurde endgültig gelöscht.'); await load()
+    logAudit('Person endgültig gelöscht', personDisplayName(editing)); setShowForm(false); setNotice('Person wurde endgültig gelöscht.'); await load()
   }
 
   return <div>
@@ -98,7 +101,7 @@ export default function ZentralePersonen() {
           const count = links[item.id]
           return <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="font-semibold text-gray-900">{item.name}</h3>
+              <h3 className="font-semibold text-gray-900">{personDisplayName(item)}</h3>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-1">
                 {item.birth_date ? <span>Geb.: {new Date(item.birth_date).toLocaleDateString('de-AT')}</span> : null}
                 {item.phone ? <span>TEL: {item.phone}</span> : null}
@@ -117,7 +120,11 @@ export default function ZentralePersonen() {
       </section>
     )}
     {showForm ? <Modal title={editing ? 'Person bearbeiten' : 'Person anlegen'} close={() => setShowForm(false)}>
-      <Field label="Name *" value={form.name} onChange={value => setForm(current => ({ ...current, name: value }))} />
+      <p className="text-xs text-gray-500 -mt-2">Am Telefon ist oft zunächst nur Vor- oder Nachname bekannt - beide sind einzeln optional, mindestens eines wird benötigt.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Vorname" value={form.vorname} onChange={value => setForm(current => ({ ...current, vorname: value }))} />
+        <Field label="Nachname" value={form.nachname} onChange={value => setForm(current => ({ ...current, nachname: value }))} />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Geburtsdatum" type="date" value={form.birthDate} onChange={value => setForm(current => ({ ...current, birthDate: value }))} />
         <Field label="Telefonnummer" value={form.phone} onChange={value => setForm(current => ({ ...current, phone: value }))} />

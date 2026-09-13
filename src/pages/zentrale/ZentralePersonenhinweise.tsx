@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 import type { OperationalPersonNote, OperationalPersonNoteCategory } from '../../lib/types'
 import { Actions, Area, Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { PersonPicker } from '../../components/RegisterPickers'
-import { usePersons } from '../../lib/register'
+import { personDisplayName, usePersons } from '../../lib/register'
 
 const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infektionsschutz: 'Infektionsschutz', aggressiv: 'Aggressives Verhalten', waffenverbot: 'Waffenverbot', fluchtgefahr: 'Fluchtgefahr', suizidgefahr: 'Suizidgefahr', sonstiges: 'Sonstiger Sicherheitshinweis' }
 const emptyPerson = { personId: null as string | null, location: '', category: 'aggressiv' as OperationalPersonNoteCategory, description: '', guidance: '', source: '', validUntil: '' }
@@ -27,7 +27,7 @@ export default function ZentralePersonenhinweise() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const result = await supabase.from('operational_person_notes').select('*, person:operational_persons(id,name,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false })
+    const result = await supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false })
     if (result.error) setError('Die Hinweise konnten nicht geladen werden.')
     else setError('')
     setPersonNotes((result.data ?? []) as unknown as OperationalPersonNote[])
@@ -44,14 +44,14 @@ export default function ZentralePersonenhinweise() {
     const result = await supabase.from('operational_person_notes').insert({ person_id: person.personId, location: person.location.trim() || null, category: person.category, note: person.description.trim(), action_guidance: person.guidance.trim() || null, source_reference: person.source.trim() || null, valid_until: person.validUntil || null, created_by: profile.id })
     setSaving(false)
     if (result.error) { setError('Der Personenhinweis konnte nicht gespeichert werden.'); return }
-    const personName = persons.find(item => item.id === person.personId)?.name ?? ''
+    const personName = personDisplayName(persons.find(item => item.id === person.personId))
     logAudit('Operativen Personenhinweis angelegt', `${PERSON_NOTE_LABEL[person.category]} · ${personName}`); setShowForm(false); setNotice('Personenhinweis wurde gespeichert.'); await load()
   }
   async function remove(item: OperationalPersonNote) {
-    if (!window.confirm(`Hinweis zu „${item.person?.name ?? 'dieser Person'}“ endgültig löschen?`)) return
+    if (!window.confirm(`Hinweis zu „${personDisplayName(item.person)}“ endgültig löschen?`)) return
     const result = await supabase.from('operational_person_notes').delete().eq('id', item.id)
     if (result.error) { setError('Der Personenhinweis konnte nicht gelöscht werden.'); return }
-    logAudit('Operativen Personenhinweis endgültig gelöscht', item.person?.name ?? item.id); await load()
+    logAudit('Operativen Personenhinweis endgültig gelöscht', personDisplayName(item.person)); await load()
   }
 
   return <div>
@@ -65,10 +65,10 @@ export default function ZentralePersonenhinweise() {
           <div><h2 className="font-bold text-gray-900">Operative Personenhinweise</h2><p className="text-sm text-gray-500">Nur sachliche und aktuell erforderliche Sicherheitsinformationen.</p></div>
           {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Hinweis</button> : null}
         </div>
-        {personNotes.length === 0 ? <Empty text="Keine für dich sichtbaren aktiven Hinweise vorhanden." /> : <div className="divide-y">{personNotes.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.person?.name ?? 'Unbekannte Person'}</h3><span className="text-xs font-semibold bg-red-100 text-red-800 px-2 py-1 rounded-full">{PERSON_NOTE_LABEL[item.category]}</span></div><p className="text-sm text-gray-700 mt-2">{item.note}</p>{item.action_guidance ? <p className="text-sm font-medium text-gray-900 mt-2">Hinweis: {item.action_guidance}</p> : null}<div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-2">{item.person?.birth_date ? <span>Geb.: {new Date(item.person.birth_date).toLocaleDateString('de-AT')}</span> : null}{item.person?.phone ? <span>TEL: {item.person.phone}</span> : null}{item.location ? <span>Adresse: {item.location}</span> : null}{item.valid_until ? <span>Gültig bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{item.source_reference ? <span>Grundlage: {item.source_reference}</span> : null}</div></div>{canManage ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Personenhinweis löschen"><Trash2 className="w-4 h-4" /></button> : null}</article>)}</div>}
+        {personNotes.length === 0 ? <Empty text="Keine für dich sichtbaren aktiven Hinweise vorhanden." /> : <div className="divide-y">{personNotes.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{personDisplayName(item.person)}</h3><span className="text-xs font-semibold bg-red-100 text-red-800 px-2 py-1 rounded-full">{PERSON_NOTE_LABEL[item.category]}</span></div><p className="text-sm text-gray-700 mt-2">{item.note}</p>{item.action_guidance ? <p className="text-sm font-medium text-gray-900 mt-2">Hinweis: {item.action_guidance}</p> : null}<div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-2">{item.person?.birth_date ? <span>Geb.: {new Date(item.person.birth_date).toLocaleDateString('de-AT')}</span> : null}{item.person?.phone ? <span>TEL: {item.person.phone}</span> : null}{item.location ? <span>Adresse: {item.location}</span> : null}{item.valid_until ? <span>Gültig bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{item.source_reference ? <span>Grundlage: {item.source_reference}</span> : null}</div></div>{canManage ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Personenhinweis löschen"><Trash2 className="w-4 h-4" /></button> : null}</article>)}</div>}
       </section>
     )}
-    {showForm ? <PersonModal person={person} setPerson={setPerson} persons={persons} onPersonCreated={created => setPersons(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')))} createdBy={profile?.id ?? null} saving={saving} error={error} close={() => setShowForm(false)} save={save} /> : null}
+    {showForm ? <PersonModal person={person} setPerson={setPerson} persons={persons} onPersonCreated={created => setPersons(current => [...current, created].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} createdBy={profile?.id ?? null} saving={saving} error={error} close={() => setShowForm(false)} save={save} /> : null}
   </div>
 }
 

@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import type { AvBvArt, DutyAssignment, DutyFunctionConfig, FahndungArt, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung, ZentraleUnterlage } from '../lib/types'
+import { personDisplayName } from '../lib/register'
 
 type TabId = 'einsaetze' | 'kontrollauftraege' | 'hinweise' | 'rsa_rsb' | 'kontrollbehelfe' | 'fahrzeug'
 const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
@@ -60,8 +61,8 @@ export default function Aussendienst() {
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
       supabase.from('incident_reports').select('id,reported_at,location,summary,disposition,status,note').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
-      supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,name,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
-      supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,name,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       supabase.from('zentrale_unterlagen').select('*').order('titel'),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
@@ -88,8 +89,8 @@ export default function Aussendienst() {
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const criticalItems = useMemo(() => [
     ...criticalEntries.map(item => ({ id: item.id, title: item.title, description: item.description })),
-    ...avBv.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `AV/BV & EV (${AV_BV_ART_LABEL[item.art]}) · ${item.person?.name ?? item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'}`, description: item.grund })),
-    ...fahndungen.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${item.person?.name ?? item.object?.address ?? 'ohne Zuordnung'}`, description: item.beschreibung })),
+    ...avBv.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `AV/BV & EV (${AV_BV_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'))}`, description: item.grund })),
+    ...fahndungen.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung })),
   ], [avBv, criticalEntries, fahndungen])
   const openIncidents = useMemo(() => {
     const relevant = ownAssignment?.function === 'jd' ? incidents.filter(item => item.disposition === 'jd')
@@ -165,8 +166,8 @@ export default function Aussendienst() {
     {!loading && activeTab === 'hinweise' ? <div className="space-y-4">
       <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'lage')} />
       {avBv.length === 0 && fahndungen.length === 0 ? null : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">
-        {avBv.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{AV_BV_ART_LABEL[item.art]} · {item.person?.name ?? item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.grund}</p></article>)}
-        {fahndungen.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">Fahndung ({FAHNDUNG_ART_LABEL[item.art]}) · {item.person?.name ?? item.object?.address ?? 'ohne Zuordnung'}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.beschreibung}</p></article>)}
+        {avBv.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{AV_BV_ART_LABEL[item.art]} · {(item.person ? personDisplayName(item.person) : (item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'))}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.grund}</p></article>)}
+        {fahndungen.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">Fahndung ({FAHNDUNG_ART_LABEL[item.art]}) · {(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.beschreibung}</p></article>)}
       </div>}
     </div> : null}
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}

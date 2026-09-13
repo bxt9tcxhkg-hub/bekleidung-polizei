@@ -23,21 +23,24 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
   required?: boolean
 }) {
   const [showCreate, setShowCreate] = useState(false)
-  const [name, setName] = useState('')
+  const [vorname, setVorname] = useState('')
+  const [nachname, setNachname] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   async function create() {
-    if (!name.trim()) { setError('Bitte einen Namen eingeben.'); return }
+    // Am Telefon ist oft zunächst nur Vor- oder Nachname bekannt - beide
+    // einzeln optional, aber mindestens eines muss angegeben werden.
+    if (!vorname.trim() && !nachname.trim()) { setError('Bitte Vor- oder Nachname eingeben.'); return }
     setSaving(true)
-    const result = await supabase.from('operational_persons').insert({ name: name.trim(), birth_date: birthDate || null, phone: phone.trim() || null, created_by: createdBy }).select('*').single()
+    const result = await supabase.from('operational_persons').insert({ vorname: vorname.trim() || null, nachname: nachname.trim() || null, birth_date: birthDate || null, phone: phone.trim() || null, created_by: createdBy }).select('*').single()
     setSaving(false)
     if (result.error || !result.data) { setError('Person konnte nicht angelegt werden.'); return }
     onCreated(result.data as OperationalPerson)
     onChange(result.data.id)
-    setShowCreate(false); setName(''); setBirthDate(''); setPhone(''); setError('')
+    setShowCreate(false); setVorname(''); setNachname(''); setBirthDate(''); setPhone(''); setError('')
   }
 
   return <div>
@@ -49,7 +52,10 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
       </select>
     </label>
     {showCreate ? <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-      <input className={inputClass} placeholder="Name *" value={name} onChange={event => setName(event.target.value)} />
+      <div className="grid grid-cols-2 gap-2">
+        <input className={inputClass} placeholder="Vorname" value={vorname} onChange={event => setVorname(event.target.value)} />
+        <input className={inputClass} placeholder="Nachname" value={nachname} onChange={event => setNachname(event.target.value)} />
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <input type="date" className={inputClass} value={birthDate} onChange={event => setBirthDate(event.target.value)} />
         <input className={inputClass} placeholder="Telefon" value={phone} onChange={event => setPhone(event.target.value)} />

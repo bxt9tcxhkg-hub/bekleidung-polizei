@@ -526,7 +526,10 @@ export interface FleetDocument {
 // verbot/fahndung/schluessel/kontakt/alarmierung/unterlage haben eigene
 // Tabellen mit passenden Feldern (siehe ZentraleAvBv, ZentraleFahndung,
 // ZentraleSchluessel, ZentraleKontakt, ZentraleAlarmierung, ZentraleUnterlage
-// weiter unten) - hier nur die weiterhin generischen Kategorien.
+// weiter unten) - hier nur die weiterhin generischen Kategorien. uebergabe
+// wird nur noch von Innendienst als eigener, manuell gepflegter Übergabepunkt
+// genutzt - in der Zentrale-Übersicht ergibt sich die Schichtübergabe
+// stattdessen aus den noch offenen Einsatzmeldungen (siehe Zentrale.tsx).
 export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'brief' | 'uebergabe'
 export type ZentraleEntryPriority = 'normal' | 'hoch' | 'kritisch'
 export type ZentraleEntryStatus = 'offen' | 'in_bearbeitung' | 'erledigt'
@@ -572,7 +575,7 @@ export interface ZentraleAvBv {
   created_by: string | null
   created_at: string
   updated_at: string
-  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date'> | null
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
   object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
 }
 
@@ -593,7 +596,7 @@ export interface ZentraleFahndung {
   created_by: string | null
   created_at: string
   updated_at: string
-  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date'> | null
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
   object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
 }
 
@@ -755,7 +758,9 @@ export interface IncidentReport {
 /** Zentrales Personen-Register - Verknüpfungspunkt für Personenhinweise, RSa/RSb, AV/BV & EV und Fahndungen. */
 export interface OperationalPerson {
   id: string
-  name: string
+  /** Nachname und Vorname sind beide optional (am Telefon oft erst eines bekannt), mindestens eines ist gesetzt - siehe personDisplayName(). */
+  nachname: string | null
+  vorname: string | null
   birth_date: string | null
   phone: string | null
   note: string | null
@@ -790,7 +795,7 @@ export interface OperationalPersonNote {
   created_by: string
   created_at: string
   updated_at: string
-  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date' | 'phone'> | null
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date' | 'phone'> | null
 }
 
 export interface EinsatzTrainingParticipation {
@@ -885,7 +890,7 @@ export interface MailDelivery {
   created_at: string
   updated_at: string
   akteneigentuemer?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
-  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date'> | null
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
 }
 
 /** Stückelungen als {"<Cent-Wert>": Anzahl}, z. B. {"5000":2,"500":3} für 2× 50 € und 3× 5 €. */
@@ -1294,7 +1299,7 @@ export type Database = {
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      operational_persons: { Row: OperationalPersonRow; Insert: Pick<OperationalPersonRow, 'name'> & Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
+      operational_persons: { Row: OperationalPersonRow; Insert: Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       operational_objects: { Row: OperationalObjectRow; Insert: Pick<OperationalObjectRow, 'address'> & Partial<Omit<OperationalObjectRow, 'id' | 'created_at' | 'updated_at' | 'address'>>; Update: Partial<Omit<OperationalObjectRow, 'id' | 'created_at'>>; Relationships: [

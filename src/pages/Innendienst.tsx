@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Plus, Receipt, ShieldAlert, Trash2, X } from 'lucide-react'
+import { BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Pencil, Plus, Receipt, ShieldAlert, Trash2, X } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import MailDeliveries, { OwnerNotifications } from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
+import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry, ZentraleUnterlage } from '../lib/types'
+import { EntryModal } from '../components/ZentraleEntryEditor'
+import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
 import InnendienstGebuehrenPanel from './innendienst/InnendienstGebuehren'
 
 // Euro-Stückelungen in Cent (Ganzzahlen statt Fließkomma, um Rundungsfehler zu vermeiden).
@@ -36,7 +39,8 @@ const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 te
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
 export default function Innendienst() {
-  const { profile, hasAreaAccess, isGenehmiger } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManageZentrale = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [activeTab, setActiveTab] = useState<TabId>('bescheide')
   const [shift, setShift] = useState<'tag' | 'nacht'>('tag')
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
@@ -48,6 +52,10 @@ export default function Innendienst() {
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ kind: 'bescheid_strassenmusik' as InnendienstRecordKind, subject: '', reference: '', note: '', relatedBescheidId: '' })
+  const [showHandoverForm, setShowHandoverForm] = useState(false)
+  const [editingHandover, setEditingHandover] = useState<ZentraleEntry | null>(null)
+  const [handoverForm, setHandoverForm] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
+  const [handoverError, setHandoverError] = useState('')
   const [openRsaRsbCount, setOpenRsaRsbCount] = useState(0)
   const [kasseStep, setKasseStep] = useState<'revenue' | 'count' | null>(null)
   const [expectedRevenueInput, setExpectedRevenueInput] = useState('')
@@ -154,6 +162,24 @@ export default function Innendienst() {
     await load()
   }
 
+  function openNewHandover() { setEditingHandover(null); setHandoverForm(EMPTY_ENTRY_FORM); setShowHandoverForm(true); setHandoverError('') }
+  function openEditHandover(item: ZentraleEntry) { setEditingHandover(item); setHandoverForm(entryToForm(item)); setShowHandoverForm(true); setHandoverError('') }
+  async function saveHandover() {
+    if (!handoverForm.title.trim()) { setHandoverError('Bitte eine Bezeichnung eingeben.'); return }
+    setSaving(true)
+    const payload = { category: 'uebergabe' as const, title: handoverForm.title.trim(), description: handoverForm.description.trim() || null, priority: handoverForm.priority, status: handoverForm.status, valid_from: handoverForm.validFrom || null, valid_until: handoverForm.validUntil || null, location: handoverForm.location.trim() || null, responsible: handoverForm.responsible.trim() || null, reference: handoverForm.reference.trim() || null, restricted: handoverForm.restricted }
+    const response = editingHandover ? await supabase.from('zentrale_entries').update(payload).eq('id', editingHandover.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
+    setSaving(false)
+    if (response.error) { setHandoverError('Übergabepunkt konnte nicht gespeichert werden.'); return }
+    logAudit(editingHandover ? 'Schichtübergabe bearbeitet' : 'Schichtübergabe angelegt', handoverForm.title.trim()); setShowHandoverForm(false); await load()
+  }
+  async function deleteHandover() {
+    if (!editingHandover || !window.confirm(`Übergabepunkt „${editingHandover.title}“ endgültig löschen?`)) return
+    const result = await supabase.from('zentrale_entries').delete().eq('id', editingHandover.id)
+    if (result.error) { setHandoverError('Übergabepunkt konnte nicht gelöscht werden.'); return }
+    logAudit('Schichtübergabe endgültig gelöscht', editingHandover.title); setShowHandoverForm(false); await load()
+  }
+
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   return <div>
@@ -190,7 +216,10 @@ export default function Innendienst() {
 
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
     {!loading && activeTab === 'unterlagen' ? (unterlagen.length === 0 ? <Empty text="Keine Unterlagen vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{unterlagen.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.titel}</h3>{item.fundort ? <p className="text-sm text-gray-600 mt-1">{item.fundort}</p> : null}{item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}</article>)}</div>) : null}
-    {!loading && activeTab === 'uebergabe' ? (handovers.length === 0 ? <Empty text="Keine offenen Übergabepunkte." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{handovers.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</article>)}</div>) : null}
+    {!loading && activeTab === 'uebergabe' ? <div>
+      {canManageZentrale ? <div className="mb-3 flex justify-end"><button type="button" onClick={openNewHandover} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Übergabepunkt</button></div> : null}
+      {handovers.length === 0 ? <Empty text="Keine offenen Übergabepunkte." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{handovers.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</div>{canManageZentrale ? <button type="button" onClick={() => openEditHandover(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Übergabepunkt bearbeiten"><Pencil className="w-4 h-4" /></button> : null}</article>)}</div>}
+    </div> : null}
     {!loading && activeTab === 'gebuehren' ? <InnendienstGebuehrenPanel isGenehmiger={isGenehmiger} /> : null}
 
     {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">{form.kind === 'verstoss' ? 'Verstoß gegen Auflagen melden' : 'Neuer Bescheid'}</h2><button type="button" onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
@@ -202,6 +231,8 @@ export default function Innendienst() {
       {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
       <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving || (form.kind === 'verstoss' && bescheide.length === 0)} onClick={() => void saveRecord()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
     </div></div></div> : null}
+
+    {showHandoverForm ? <EntryModal entry={handoverForm} setEntry={setHandoverForm} editing={editingHandover} saving={saving} error={handoverError} close={() => setShowHandoverForm(false)} save={saveHandover} remove={deleteHandover} /> : null}
 
     {kasseStep ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Kassenabrechnung – {kasseStep === 'revenue' ? '1/2 Erlös' : '2/2 Stückelungen zählen'}</h2><button type="button" onClick={closeKasseWizard} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
       {kasseStep === 'revenue' ? <>

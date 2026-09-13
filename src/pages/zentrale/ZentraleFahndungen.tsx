@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 import type { FahndungArt, ZentraleEntryPriority, ZentraleFahndung, ZentraleRegisterStatus } from '../../lib/types'
 import { Area, Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker, PersonPicker } from '../../components/RegisterPickers'
-import { objectLabel, useObjects, usePersons } from '../../lib/register'
+import { objectLabel, personDisplayName, useObjects, usePersons } from '../../lib/register'
 
 const ART_LABEL: Record<FahndungArt, string> = { person: 'Person', fahrzeug: 'Fahrzeug', objekt: 'Objekt', sonstiges: 'Sonstiges' }
 const emptyForm = { art: 'person' as FahndungArt, personId: null as string | null, objectId: null as string | null, beschreibung: '', aktenzeichen: '', dienststelle: '', gueltigBis: '', note: '', priority: 'normal' as ZentraleEntryPriority, status: 'offen' as ZentraleRegisterStatus, restricted: false }
@@ -29,7 +29,7 @@ export default function ZentraleFahndungenPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const result = await supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,name,birth_date), object:operational_objects(id,address,label)').order('priority').order('updated_at', { ascending: false })
+    const result = await supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').order('priority').order('updated_at', { ascending: false })
     if (result.error) setError('Die Einträge konnten nicht geladen werden.')
     else setError('')
     setItems((result.data ?? []) as unknown as ZentraleFahndung[])
@@ -76,7 +76,7 @@ export default function ZentraleFahndungenPage() {
               <span className="text-xs text-gray-500">{item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span>
               {item.restricted ? <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">Vertraulich</span> : null}
             </div>
-            <h3 className="font-semibold text-gray-900 mt-1.5">{item.person?.name ?? (item.object ? objectLabel(item.object) : 'Ohne Zuordnung')}</h3>
+            <h3 className="font-semibold text-gray-900 mt-1.5">{item.person ? personDisplayName(item.person) : (item.object ? objectLabel(item.object) : 'Ohne Zuordnung')}</h3>
             <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.beschreibung}</p>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-2">
               {item.person && item.object ? <span>Objekt: {objectLabel(item.object)}</span> : null}
@@ -92,7 +92,7 @@ export default function ZentraleFahndungenPage() {
     )}
     {showForm ? <Modal title={editing ? 'Fahndung bearbeiten' : 'Fahndung anlegen'} close={() => setShowForm(false)}>
       <label className="block text-xs font-medium text-gray-600">Fahndungsart *<select className={inputClass} value={form.art} onChange={event => setForm(current => ({ ...current, art: event.target.value as FahndungArt }))}>{Object.entries(ART_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')))} label="Gesuchte Person (falls zutreffend)" />
+      <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} label="Gesuchte Person (falls zutreffend)" />
       <ObjectPicker objects={objects} value={form.objectId} onChange={id => setForm(current => ({ ...current, objectId: id }))} createdBy={profile?.id ?? null} onCreated={created => setObjects(current => [...current, created].sort((a, b) => a.address.localeCompare(b.address, 'de-AT')))} label="Gesuchtes Objekt / Fahrzeugstandort (falls zutreffend)" />
       <Area label="Beschreibung *" value={form.beschreibung} onChange={value => setForm(current => ({ ...current, beschreibung: value }))} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

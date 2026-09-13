@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { MailDelivery, MailDeliveryKind, MailDeliveryStatus } from '../lib/types'
 import { PersonPicker } from './RegisterPickers'
-import { usePersons } from '../lib/register'
+import { personDisplayName, usePersons } from '../lib/register'
 
 const KIND_LABEL: Record<MailDeliveryKind, string> = { rsa: 'RSa', rsb: 'RSb', vernehmung: 'Vernehmung' }
 const STATUS_LABEL: Record<MailDeliveryStatus, string> = {
@@ -62,8 +62,8 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
   const load = useCallback(async () => {
     setLoading(true)
     const [openResult, closedResult] = await Promise.all([
-      supabase.from('mail_deliveries').select('*, person:operational_persons(id,name,birth_date), akteneigentuemer:profiles!mail_deliveries_akteneigentuemer_id_fkey(id,name,dienstnummer)').is('closed_at', null).order('created_at', { ascending: false }),
-      canManage ? supabase.from('mail_deliveries').select('*, person:operational_persons(id,name,birth_date), akteneigentuemer:profiles!mail_deliveries_akteneigentuemer_id_fkey(id,name,dienstnummer)').not('closed_at', 'is', null).order('closed_at', { ascending: false }).limit(100) : Promise.resolve({ data: [], error: null }),
+      supabase.from('mail_deliveries').select('*, person:operational_persons(id,vorname,nachname,birth_date), akteneigentuemer:profiles!mail_deliveries_akteneigentuemer_id_fkey(id,name,dienstnummer)').is('closed_at', null).order('created_at', { ascending: false }),
+      canManage ? supabase.from('mail_deliveries').select('*, person:operational_persons(id,vorname,nachname,birth_date), akteneigentuemer:profiles!mail_deliveries_akteneigentuemer_id_fkey(id,name,dienstnummer)').not('closed_at', 'is', null).order('closed_at', { ascending: false }).limit(100) : Promise.resolve({ data: [], error: null }),
     ])
     if (openResult.error) setError('Die Übersicht konnte nicht geladen werden.')
     else setError('')
@@ -83,7 +83,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
       byPerson.set(key, list)
     }
     return [...byPerson.entries()]
-      .map(([personId, list]) => ({ personId, personName: list[0].person?.name ?? 'Unbekannte Person', items: list, hasOpen: list.some(item => item.status === 'offen' || item.status === 'spaeter_erneut') }))
+      .map(([personId, list]) => ({ personId, personName: personDisplayName(list[0].person), items: list, hasOpen: list.some(item => item.status === 'offen' || item.status === 'spaeter_erneut') }))
       .sort((a, b) => (a.hasOpen === b.hasOpen ? a.personName.localeCompare(b.personName, 'de-AT') : a.hasOpen ? -1 : 1))
   }, [visible])
 
@@ -116,7 +116,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
     await load()
   }
   async function remove(item: MailDelivery) {
-    if (!window.confirm(`Eintrag zu „${item.person?.name ?? 'dieser Person'}“ endgültig löschen?`)) return
+    if (!window.confirm(`Eintrag zu „${personDisplayName(item.person)}“ endgültig löschen?`)) return
     const { error: deleteError } = await supabase.from('mail_deliveries').delete().eq('id', item.id)
     if (deleteError) { setError('Der Eintrag konnte nicht gelöscht werden.'); return }
     await load()
@@ -126,7 +126,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
 
   if (showClosed) return <div className="space-y-4">
     <div className="flex items-center justify-between gap-3"><p className="text-sm text-gray-500">Vom Akteneigentümer geschlossene Akten (Archiv, letzte 100).</p><button type="button" onClick={() => setShowClosed(false)} className="text-sm font-semibold text-blue-700">Zurück zur Übersicht</button></div>
-    {closedItems.length === 0 ? <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><Archive className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">Noch keine geschlossenen Akten.</p></div> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{closedItems.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-900 text-white">{KIND_LABEL[item.kind]}</span><span className="font-semibold text-gray-900">{item.person?.name ?? 'Unbekannte Person'}</span><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div><p className="text-xs text-gray-500 mt-1">Geschlossen {formatDateTime(item.closed_at)}</p></article>)}</div>}
+    {closedItems.length === 0 ? <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><Archive className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">Noch keine geschlossenen Akten.</p></div> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{closedItems.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-900 text-white">{KIND_LABEL[item.kind]}</span><span className="font-semibold text-gray-900">{personDisplayName(item.person)}</span><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div><p className="text-xs text-gray-500 mt-1">Geschlossen {formatDateTime(item.closed_at)}</p></article>)}</div>}
   </div>
 
   return <div className="space-y-4">
@@ -145,7 +145,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
     </div>}
 
     {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Neuer Eintrag</h2><button type="button" onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
-      <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')))} required />
+      <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} required />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <label className="block text-xs font-medium text-gray-600">Art<select className={inputClass} value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value as MailDeliveryKind }))}><option value="rsb">RSb</option><option value="rsa">RSa</option><option value="vernehmung">Vernehmung</option></select></label>
         <label className="block text-xs font-medium text-gray-600">Behördenaktenzahl<input className={inputClass} value={form.behoerdenAktenzahl} onChange={event => setForm(current => ({ ...current, behoerdenAktenzahl: event.target.value }))} /></label>
@@ -162,7 +162,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
 export function OwnerNotifications({ userId }: { userId: string }) {
   const [items, setItems] = useState<MailDelivery[]>([])
   const load = useCallback(async () => {
-    const result = await supabase.from('mail_deliveries').select('*, person:operational_persons(id,name)').eq('akteneigentuemer_id', userId).eq('owner_notified', false).is('closed_at', null).order('last_action_at', { ascending: false })
+    const result = await supabase.from('mail_deliveries').select('*, person:operational_persons(id,vorname,nachname)').eq('akteneigentuemer_id', userId).eq('owner_notified', false).is('closed_at', null).order('last_action_at', { ascending: false })
     setItems((result.data ?? []) as unknown as MailDelivery[])
   }, [userId])
   useEffect(() => { void load() }, [load])
@@ -171,5 +171,5 @@ export function OwnerNotifications({ userId }: { userId: string }) {
     await load()
   }
   if (items.length === 0) return null
-  return <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5"><h2 className="font-bold text-blue-900 flex items-center gap-2"><Clock3 className="w-4 h-4" /> Rückmeldungen zu eigenen Akten</h2><div className="space-y-2 mt-3">{items.map(item => <div key={item.id} className="flex items-center justify-between gap-3 bg-white rounded-lg px-3 py-2"><p className="text-sm text-blue-900"><span className="font-semibold">{item.person?.name ?? 'Unbekannte Person'}</span> · {STATUS_LABEL[item.status]}</p><button type="button" onClick={() => void acknowledge(item)} className="text-xs font-medium text-blue-700 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Gesehen</button></div>)}</div><p className="text-xs text-blue-700 mt-3">Zum endgültigen Abschließen den Akt in der Übersicht öffnen und „Akt erledigt“ wählen.</p></section>
+  return <section className="rounded-2xl border border-blue-200 bg-blue-50 p-4 sm:p-5"><h2 className="font-bold text-blue-900 flex items-center gap-2"><Clock3 className="w-4 h-4" /> Rückmeldungen zu eigenen Akten</h2><div className="space-y-2 mt-3">{items.map(item => <div key={item.id} className="flex items-center justify-between gap-3 bg-white rounded-lg px-3 py-2"><p className="text-sm text-blue-900"><span className="font-semibold">{personDisplayName(item.person)}</span> · {STATUS_LABEL[item.status]}</p><button type="button" onClick={() => void acknowledge(item)} className="text-xs font-medium text-blue-700 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Gesehen</button></div>)}</div><p className="text-xs text-blue-700 mt-3">Zum endgültigen Abschließen den Akt in der Übersicht öffnen und „Akt erledigt“ wählen.</p></section>
 }

@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 import type { AvBvArt, ZentraleAvBv, ZentraleEntryPriority, ZentraleRegisterStatus } from '../../lib/types'
 import { Area, Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker, PersonPicker } from '../../components/RegisterPickers'
-import { objectLabel, useObjects, usePersons } from '../../lib/register'
+import { objectLabel, personDisplayName, useObjects, usePersons } from '../../lib/register'
 
 const ART_LABEL: Record<AvBvArt, string> = { amtsverbot: 'Amtsverbot', betretungsverbot: 'Betretungsverbot', einreiseverbot: 'Einreiseverbot' }
 const emptyForm = { art: 'betretungsverbot' as AvBvArt, personId: null as string | null, objectId: null as string | null, gebiet: '', grund: '', behoerde: '', aktenzeichen: '', gueltigVon: '', gueltigBis: '', note: '', priority: 'normal' as ZentraleEntryPriority, status: 'offen' as ZentraleRegisterStatus, restricted: false }
@@ -29,7 +29,7 @@ export default function ZentraleAvBvPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const result = await supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,name,birth_date), object:operational_objects(id,address,label)').order('priority').order('updated_at', { ascending: false })
+    const result = await supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').order('priority').order('updated_at', { ascending: false })
     if (result.error) setError('Die Einträge konnten nicht geladen werden.')
     else setError('')
     setItems((result.data ?? []) as unknown as ZentraleAvBv[])
@@ -76,7 +76,7 @@ export default function ZentraleAvBvPage() {
               <span className="text-xs text-gray-500">{item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span>
               {item.restricted ? <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">Vertraulich</span> : null}
             </div>
-            <h3 className="font-semibold text-gray-900 mt-1.5">{item.person?.name ?? 'Keine Person hinterlegt'}</h3>
+            <h3 className="font-semibold text-gray-900 mt-1.5">{item.person ? personDisplayName(item.person) : 'Keine Person hinterlegt'}</h3>
             <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.grund}</p>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mt-2">
               {item.object ? <span>Objekt: {objectLabel(item.object)}</span> : null}
@@ -93,7 +93,7 @@ export default function ZentraleAvBvPage() {
     )}
     {showForm ? <Modal title={editing ? 'AV/BV & EV bearbeiten' : 'AV/BV & EV anlegen'} close={() => setShowForm(false)}>
       <label className="block text-xs font-medium text-gray-600">Art *<select className={inputClass} value={form.art} onChange={event => setForm(current => ({ ...current, art: event.target.value as AvBvArt }))}>{Object.entries(ART_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')))} label="Betroffene Person" />
+      <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} label="Betroffene Person" />
       <ObjectPicker objects={objects} value={form.objectId} onChange={id => setForm(current => ({ ...current, objectId: id }))} createdBy={profile?.id ?? null} onCreated={created => setObjects(current => [...current, created].sort((a, b) => a.address.localeCompare(b.address, 'de-AT')))} label="Objekt (z. B. Verbotszone)" />
       <Field label="Gebiet (Freitext, z. B. „gesamtes Gemeindegebiet“)" value={form.gebiet} onChange={value => setForm(current => ({ ...current, gebiet: value }))} />
       <Area label="Grund *" value={form.grund} onChange={value => setForm(current => ({ ...current, grund: value }))} />
