@@ -53,6 +53,7 @@ const ZentraleShell = lazy(() => import('./pages/zentrale/ZentraleShell'))
 const ZentraleUebersicht = lazy(() => import('./pages/zentrale/ZentraleUebersicht'))
 const ZentraleEinsaetze = lazy(() => import('./pages/zentrale/ZentraleEinsaetze'))
 const ZentraleLagePage = lazy(() => import('./pages/zentrale/ZentraleLagePage'))
+const ZentraleBaustellenPage = lazy(() => import('./pages/zentrale/ZentraleBaustellenPage'))
 const ZentraleAvBv = lazy(() => import('./pages/zentrale/ZentraleAvBv'))
 const ZentralePersonenhinweise = lazy(() => import('./pages/zentrale/ZentralePersonenhinweise'))
 const ZentralePersonen = lazy(() => import('./pages/zentrale/ZentralePersonen'))
@@ -141,6 +142,7 @@ export default function App() {
               <Route path="/zentrale" element={<ZentraleUebersicht />} />
               <Route path="/zentrale/einsaetze" element={<ZentraleEinsaetze />} />
               <Route path="/zentrale/lage" element={<ZentraleLagePage />} />
+              <Route path="/zentrale/baustellen" element={<ZentraleBaustellenPage />} />
             </Route>
             <Route path="/zentrale/av-bv-ev" element={<ZentraleAvBv />} />
             <Route path="/zentrale/personenhinweise" element={<ZentralePersonenhinweise />} />

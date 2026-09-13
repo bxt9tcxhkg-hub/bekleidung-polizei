@@ -1,4 +1,4 @@
-import { AlertTriangle, BellRing, BookOpen, Building2, ClipboardList, Contact, KeyRound, LayoutGrid, Mail, MapPin, Radio, Search, ShieldAlert, UserRoundCheck, Users } from 'lucide-react'
+import { AlertTriangle, BellRing, BookOpen, Building2, ClipboardList, Construction, Contact, KeyRound, LayoutGrid, Mail, MapPin, Radio, Search, ShieldAlert, UserRoundCheck, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -27,6 +27,7 @@ export default function ZentraleLayout() {
       { to: '/zentrale/personen', label: 'Personen', icon: Users },
       { to: '/zentrale/objekte', label: 'Objekte', icon: Building2 },
       { to: '/zentrale/strassenzustand', label: 'Straßenzustand', icon: MapPin },
+      { to: '/zentrale/baustellen', label: 'Baustellen', icon: Construction },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]

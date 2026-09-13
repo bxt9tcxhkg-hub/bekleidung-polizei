@@ -5,7 +5,7 @@ import { personDisplayName } from '../../lib/register'
 import { ZUSTAND_LABEL, formatZeitraum, strassenName } from '../../lib/strassenzustand'
 import type { ZentraleEntryCategory } from '../../lib/types'
 import type { ZentraleContext } from './ZentraleShell'
-import { BaustellenList, DutyPanel, IncidentCards, SofortWichtig } from './zentraleShared'
+import { DutyPanel, IncidentCards, SofortWichtig } from './zentraleShared'
 import { AV_BV_ART_LABEL, FAHNDUNG_ART_LABEL, formatTime } from '../../lib/zentraleShared'
 
 // Wohin ein Klick auf einen "Sofort wichtig"-Eintrag führt, dessen Kategorie
@@ -45,12 +45,9 @@ export default function ZentraleUebersicht() {
         nachgeschaut - deshalb bewusst unten, nicht mehr direkt unter
         "Sofort wichtig". */}
     <DutyPanel assignments={ctx.shiftAssignments} functions={ctx.dutyFunctions} dutyShift={ctx.dutyShift} setDutyShift={ctx.setDutyShift} />
-    {/* Baustellen: nice to have für die Streife (Streckenkenntnis), aber nie
-        dringend - deshalb ganz unten statt direkt neben der Einsatzkarte. */}
-    <section>
-      <div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Baustellen</h2><button type="button" onClick={ctx.openNewBaustelle} className="text-sm font-semibold text-blue-700">+ Baustelle melden</button></div>
-      {ctx.baustellen.length > 0 ? <BaustellenList items={ctx.baustellen} canManage={ctx.canManage} onConfirm={ctx.confirmBaustelle} onEdit={ctx.openEditBaustelle} onClose={ctx.closeBaustelle} onDelete={ctx.deleteBaustelle} /> : <p className="text-sm text-gray-500">Keine Baustellen gemeldet.</p>}
-    </section>
-    <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (AV/BV & EV, Personenhinweise, Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen, Personen, Objekte …) über die Seitenleiste.</p></div>
+    {/* Baustellen sind maximal für die Karte relevant (Streckenkenntnis) -
+        keine eigene Verwaltungsliste auf der Übersicht, die lebt jetzt auf
+        einer eigenen Sidebar-Seite (/zentrale/baustellen). */}
+    <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (AV/BV & EV, Personenhinweise, Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen, Personen, Objekte, Baustellen …) über die Seitenleiste.</p></div>
   </div>
 }
