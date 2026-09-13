@@ -8,6 +8,8 @@ import type { FleetAppointment, FleetCareTask, FleetEquipmentStatus, FleetVehicl
 
 type TabId = 'maengel' | 'pflege' | 'werkstatt' | 'fristen'
 const STAT_LABELS: Record<TabId, string> = { maengel: 'Mängel', pflege: 'Pflege', werkstatt: 'Werkstatt', fristen: 'Fristen' }
+// Vormals Tab-Query-Param auf der Fahrzeugseite, jetzt eigene, fahrzeugübergreifende Seiten (siehe FuhrparkLayout.tsx).
+const TAB_ROUTE: Record<TabId, string> = { maengel: '/fuhrpark/maengel', pflege: '/fuhrpark/pflege', werkstatt: '/fuhrpark/werkstatt', fristen: '/fuhrpark/fristen' }
 
 export default function FleetOpenItems() {
   const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
@@ -101,7 +103,7 @@ export default function FleetOpenItems() {
                       {(Object.keys(STAT_LABELS) as TabId[]).map(tab => (
                         <Link
                           key={tab}
-                          to={`/fuhrpark/${vehicle.id}?tab=${tab}`}
+                          to={`${TAB_ROUTE[tab]}?vehicle=${vehicle.id}`}
                           className={`rounded-lg px-3 py-2 text-center ${counts[tab] > 0 ? 'bg-red-50 hover:bg-red-100' : 'bg-gray-50 hover:bg-gray-100'}`}
                         >
                           <p className={`text-lg font-bold ${counts[tab] > 0 ? 'text-red-700' : 'text-gray-400'}`}>{counts[tab]}</p>

@@ -1,4 +1,4 @@
-import { AlertTriangle, Car, LayoutGrid } from 'lucide-react'
+import { AlertTriangle, Car, CalendarDays, FileText, LayoutGrid, Sparkles, Wrench } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -18,8 +18,14 @@ export default function FuhrparkLayout() {
         to: '/fuhrpark',
         label: 'Fahrzeuge',
         icon: Car,
-        isActive: pathname => pathname === '/fuhrpark' || (pathname.startsWith('/fuhrpark/') && pathname !== '/fuhrpark/offen'),
+        isActive: pathname => pathname === '/fuhrpark' || (pathname.startsWith('/fuhrpark/') && !['/fuhrpark/offen', '/fuhrpark/maengel', '/fuhrpark/pflege', '/fuhrpark/werkstatt', '/fuhrpark/fristen', '/fuhrpark/dokumente'].includes(pathname)),
       },
+      // Vormals Tabs auf der einzelnen Fahrzeugseite - jetzt fahrzeugübergreifend hier, wie der Rest der Anwendung.
+      { to: '/fuhrpark/maengel', label: 'Offene Mängel', icon: AlertTriangle },
+      { to: '/fuhrpark/pflege', label: 'Reinigung & Pflege', icon: Sparkles },
+      { to: '/fuhrpark/werkstatt', label: 'Werkstatt & Termine', icon: Wrench },
+      { to: '/fuhrpark/fristen', label: 'Fristen', icon: CalendarDays },
+      { to: '/fuhrpark/dokumente', label: 'Dokumente', icon: FileText },
     ]),
     ...sachbearbeiterSection(isSachbearbeiterHere, [OFFENE_PUNKTE_ITEM]),
     // "Offene Punkte" nur zusätzlich für Genehmiger anzeigen, die nicht ohnehin schon den Sachbearbeiter-Abschnitt sehen.

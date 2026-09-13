@@ -472,6 +472,9 @@ export interface FleetEquipmentStatus {
   checked_at: string
   updated_at: string
   checker?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  /** Nur für die fahrzeugübergreifende Mängel-Seite (FleetMaengel.tsx). */
+  item?: Pick<FleetEquipmentItem, 'id' | 'name' | 'soll_menge' | 'unit' | 'vehicle_id'>
+  vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'kind' | 'call_sign' | 'license_plate' | 'responsible_user_id'>
 }
 
 export type FleetCareTaskKind = 'innenreinigung' | 'aussenreinigung' | 'pflege' | 'sonstiges'
@@ -489,6 +492,8 @@ export interface FleetCareTask {
   resolved_by: string | null
   resolved_at: string | null
   updated_at: string
+  /** Nur für die fahrzeugübergreifende Pflege-Seite (FleetPflege.tsx). */
+  vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'kind' | 'call_sign' | 'license_plate' | 'responsible_user_id'>
 }
 
 export type FleetAppointmentCategory = 'werkstatt' | 'frist'
@@ -507,6 +512,8 @@ export interface FleetAppointment {
   resolved_by: string | null
   resolved_at: string | null
   updated_at: string
+  /** Nur für die fahrzeugübergreifenden Werkstatt-/Fristen-Seiten (FleetWerkstatt.tsx, FleetFristen.tsx). */
+  vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'kind' | 'call_sign' | 'license_plate' | 'responsible_user_id'>
 }
 
 /** Fahrzeuggebundene Dokumente (Zulassung, Serviceheft, ...). */
@@ -521,6 +528,8 @@ export interface FleetDocument {
   uploaded_by: string | null
   created_at: string
   uploader?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+  /** Nur für die fahrzeugübergreifende Dokumente-Seite (FleetDokumente.tsx). */
+  vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'kind' | 'call_sign' | 'license_plate' | 'responsible_user_id'>
 }
 
 // verbot/fahndung/schluessel/kontakt/alarmierung/unterlage haben eigene
@@ -1179,10 +1188,10 @@ type EinsatzMaterialTabRow = Omit<EinsatzMaterialTab, never>
 type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, 'responsible_profile'>
 type FleetEquipmentItemRow = Omit<FleetEquipmentItem, never>
-type FleetEquipmentStatusRow = Omit<FleetEquipmentStatus, 'checker'>
-type FleetCareTaskRow = Omit<FleetCareTask, never>
-type FleetAppointmentRow = Omit<FleetAppointment, never>
-type FleetDocumentRow = Omit<FleetDocument, 'uploader'>
+type FleetEquipmentStatusRow = Omit<FleetEquipmentStatus, 'checker' | 'item' | 'vehicle'>
+type FleetCareTaskRow = Omit<FleetCareTask, 'vehicle'>
+type FleetAppointmentRow = Omit<FleetAppointment, 'vehicle'>
+type FleetDocumentRow = Omit<FleetDocument, 'uploader' | 'vehicle'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
