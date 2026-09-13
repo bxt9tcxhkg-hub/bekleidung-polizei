@@ -27,7 +27,6 @@ export interface InnendienstContext {
   todaysBescheide: InnendienstRecord[]
   openViolations: InnendienstRecord[]
   handovers: ZentraleEntry[]
-  openRsaRsbCount: number
   canManageZentrale: boolean
   openKasseWizard: () => void
   openNewBescheid: (kind: InnendienstRecordKind) => void
@@ -55,7 +54,6 @@ export default function InnendienstShell() {
   const [editingHandover, setEditingHandover] = useState<ZentraleEntry | null>(null)
   const [handoverForm, setHandoverForm] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
   const [handoverError, setHandoverError] = useState('')
-  const [openRsaRsbCount, setOpenRsaRsbCount] = useState(0)
   const [kasseStep, setKasseStep] = useState<'revenue' | 'count' | null>(null)
   const [expectedRevenueInput, setExpectedRevenueInput] = useState('')
   const [denomInputs, setDenomInputs] = useState<Record<string, string>>({})
@@ -65,10 +63,9 @@ export default function InnendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [recordResult, entryResult, mailResult] = await Promise.all([
+    const [recordResult, entryResult] = await Promise.all([
       supabase.from('innendienst_records').select('*, person:operational_persons(id,vorname,nachname,birth_date)').order('issued_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('zentrale_entries').select('*').order('updated_at', { ascending: false }),
-      supabase.from('mail_deliveries').select('id', { count: 'exact', head: true }).in('status', ['offen', 'spaeter_erneut']),
     ])
     const taskResult = userId ? await supabase.from('innendienst_shift_tasks').select('*').eq('user_id', userId).eq('duty_date', today).eq('shift', shift).maybeSingle() : null
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
@@ -76,7 +73,6 @@ export default function InnendienstShell() {
     setOwnTask((taskResult?.data ?? null) as InnendienstShiftTask | null)
     setRecords((recordResult.data ?? []) as unknown as InnendienstRecord[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
-    setOpenRsaRsbCount(mailResult.count ?? 0)
     setLoading(false)
   }, [userId, shift])
   useEffect(() => { void load() }, [load])
@@ -210,7 +206,7 @@ export default function InnendienstShell() {
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   const ctx: InnendienstContext = {
-    loading, shift, ownTask, bescheide, violationsByBescheid, violationCountByPerson, todaysBescheide, openViolations, handovers, openRsaRsbCount, canManageZentrale,
+    loading, shift, ownTask, bescheide, violationsByBescheid, violationCountByPerson, todaysBescheide, openViolations, handovers, canManageZentrale,
     openKasseWizard, openNewBescheid, openNewViolation, toggleStatus, removeRecord, openNewHandover, openEditHandover,
   }
 
