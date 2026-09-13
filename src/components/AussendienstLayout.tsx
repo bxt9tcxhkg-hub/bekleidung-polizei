@@ -1,4 +1,4 @@
-import { BookOpen, LayoutGrid, Mail, Shield } from 'lucide-react'
+import { BookOpen, Car, ClipboardList, LayoutGrid, Mail, Radio, Shield, ShieldAlert } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
@@ -11,6 +11,10 @@ export default function AussendienstLayout() {
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/aussendienst', label: 'Außendienst / Streife', icon: Shield },
+      { to: '/aussendienst/einsaetze', label: 'Einsätze', icon: Radio },
+      { to: '/aussendienst/kontrollauftraege', label: 'Kontrollaufträge', icon: ClipboardList },
+      { to: '/aussendienst/hinweise', label: 'Operative Hinweise', icon: ShieldAlert },
+      { to: '/aussendienst/fahrzeug', label: 'Fahrzeug', icon: Car },
       // Dieselben Seiten wie unter Zentrale/RSa-RSb bzw. Unterlagen - keine
       // eigene Kopie, nur bequem von hier erreichbar.
       { to: '/rsa-rsb', label: 'RSa/RSb', icon: Mail },

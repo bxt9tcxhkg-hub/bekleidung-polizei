@@ -1,0 +1,209 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle } from 'lucide-react'
+import { Link, Navigate, Outlet } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import { logAudit } from '../../lib/audit'
+import { supabase } from '../../lib/supabase'
+import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
+import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
+import { personDisplayName } from '../../lib/register'
+import { AV_BV_ART_LABEL, FAHNDUNG_ART_LABEL } from '../../lib/zentraleShared'
+import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
+import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
+
+// Außendienst ist in eigenständige Sidebar-Seiten aufgeteilt (Übersicht,
+// Einsätze, Kontrollaufträge, Operative Hinweise, Fahrzeug - kein
+// Tab-Streifen mehr, Vorlage ist Bekleidung). Diese Hülle bündelt weiterhin
+// die gemeinsamen Daten/Handler (ein Laden für alle Seiten), rendert Kopfzeile,
+// Meldungen und Modals, und reicht den Rest über den Outlet-Context durch.
+
+function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
+type SimpleIncident = { id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }
+
+export interface AussendienstContext {
+  loading: boolean
+  ownAssignment: DutyAssignment | undefined
+  ownFunction: DutyFunctionConfig | undefined
+  ownVehicle: FleetVehicle | undefined
+  ownCheck: VehicleCheck | undefined
+  patrolMates: DutyAssignment[]
+  criticalItems: { id: string; title: string; description: string | null }[]
+  criticalSourcesError: boolean
+  openIncidents: SimpleIncident[]
+  openOrders: ZentraleEntry[]
+  kontrollauftraege: ZentraleEntry[]
+  incidents: SimpleIncident[]
+  entries: ZentraleEntry[]
+  avBv: ZentraleAvBv[]
+  fahndungen: ZentraleFahndung[]
+  isGenehmiger: boolean
+  saving: boolean
+  checkNote: string
+  setCheckNote: (value: string) => void
+  showMangelForm: boolean
+  setShowMangelForm: (value: boolean) => void
+  saveVehicleCheck: (status: VehicleCheckStatus, note: string) => Promise<void>
+  openNewAuftrag: () => void
+  openEditAuftrag: (item: ZentraleEntry) => void
+  openBaustelleReport: () => void
+}
+
+export default function AussendienstShell() {
+  const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const zentraleRoles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
+  const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  const [assignments, setAssignments] = useState<DutyAssignment[]>([])
+  const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
+  const [checks, setChecks] = useState<VehicleCheck[]>([])
+  const [entries, setEntries] = useState<ZentraleEntry[]>([])
+  const [avBv, setAvBv] = useState<ZentraleAvBv[]>([])
+  const [fahndungen, setFahndungen] = useState<ZentraleFahndung[]>([])
+  // Wie in ZentraleShell.tsx: bei Ladefehler darf "Keine aktuell dringenden
+  // Warnungen" nicht fälschlich Entwarnung geben.
+  const [criticalSourcesError, setCriticalSourcesError] = useState(false)
+  const [incidents, setIncidents] = useState<SimpleIncident[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [checkNote, setCheckNote] = useState('')
+  const [showMangelForm, setShowMangelForm] = useState(false)
+  const [showAuftragForm, setShowAuftragForm] = useState(false)
+  const [editingAuftrag, setEditingAuftrag] = useState<ZentraleEntry | null>(null)
+  const [auftrag, setAuftrag] = useState<AuftragFormState>(EMPTY_AUFTRAG)
+  const [auftragError, setAuftragError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [showBaustelleForm, setShowBaustelleForm] = useState(false)
+  const [baustelleReport, setBaustelleReport] = useState<BaustelleReportState>(EMPTY_BAUSTELLE_REPORT)
+  const [baustelleSaving, setBaustelleSaving] = useState(false)
+  const [baustelleError, setBaustelleError] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const today = todayLocal()
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult] = await Promise.all([
+      supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
+      supabase.from('duty_functions').select('*'),
+      supabase.from('fleet_vehicles').select('*').eq('active', true),
+      supabase.from('vehicle_checks').select('*').eq('duty_date', today),
+      supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,summary,disposition,status,note').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
+      supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+    ])
+    if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
+    else setError('')
+    setAssignments((dutyResult.data ?? []) as unknown as DutyAssignment[])
+    setFunctions((functionResult.data ?? []) as DutyFunctionConfig[])
+    setVehicles((vehicleResult.data ?? []) as FleetVehicle[])
+    setChecks((checkResult.data ?? []) as VehicleCheck[])
+    setEntries((entryResult.data ?? []) as ZentraleEntry[])
+    setIncidents(incidentResult.data ?? [])
+    setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
+    setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
+    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
+    setLoading(false)
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const ownAssignment = assignments.find(item => item.user_id === profile?.id)
+  const ownFunction = functions.find(item => item.code === ownAssignment?.function)
+  const ownVehicle = vehicles.find(item => item.id === ownAssignment?.vehicle_id)
+  const ownCheck = checks.find(item => item.vehicle_id === ownAssignment?.vehicle_id && item.shift === ownAssignment?.shift)
+  const patrolMates = useMemo(() => ownAssignment ? assignments.filter(item => item.user_id !== profile?.id && item.function === ownAssignment.function && item.shift === ownAssignment.shift) : [], [assignments, ownAssignment, profile?.id])
+
+  const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
+  const criticalItems = useMemo(() => [
+    ...criticalEntries.map(item => ({ id: item.id, title: item.title, description: item.description })),
+    ...avBv.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `AV/BV & EV (${AV_BV_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'))}`, description: item.grund })),
+    ...fahndungen.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung })),
+  ], [avBv, criticalEntries, fahndungen])
+  const openIncidents = useMemo(() => {
+    const relevant = ownAssignment?.function === 'jd' ? incidents.filter(item => item.disposition === 'jd')
+      : ownAssignment?.function === 'vd' ? incidents.filter(item => item.disposition === 'vd')
+      : incidents
+    return relevant.filter(item => item.status === 'offen')
+  }, [incidents, ownAssignment?.function])
+  const ownFunctionOrders = useCallback((item: ZentraleEntry) => item.category === 'kontrollauftrag' && (!ownAssignment || item.target_function == null || item.target_function === 'beide' || item.target_function === ownAssignment.function), [ownAssignment])
+  const openOrders = useMemo(() => entries.filter(item => ownFunctionOrders(item) && item.status !== 'erledigt'), [entries, ownFunctionOrders])
+  const kontrollauftraege = useMemo(() => entries.filter(ownFunctionOrders), [entries, ownFunctionOrders])
+
+  async function saveVehicleCheck(status: VehicleCheckStatus, note: string) {
+    if (!profile?.id || !ownAssignment?.vehicle_id) return
+    setSaving(true)
+    const { error: checkError } = await supabase.from('vehicle_checks').upsert(
+      { vehicle_id: ownAssignment.vehicle_id, duty_date: todayLocal(), shift: ownAssignment.shift, status, note: note.trim() || null, checked_by: profile.id },
+      { onConflict: 'vehicle_id,duty_date,shift' },
+    )
+    setSaving(false)
+    if (checkError) { setError('Die Kontrolle konnte nicht gespeichert werden.'); return }
+    setShowMangelForm(false); setCheckNote(''); await load()
+  }
+
+  function openNewAuftrag() { setEditingAuftrag(null); setAuftrag(EMPTY_AUFTRAG); setAuftragError(''); setShowAuftragForm(true) }
+  function openEditAuftrag(item: ZentraleEntry) { setEditingAuftrag(item); setAuftrag({ title: item.title, description: item.description ?? '', location: item.location ?? '', validFrom: item.valid_from?.slice(0, 10) ?? '', validUntil: item.valid_until?.slice(0, 10) ?? '', targetFunction: item.target_function ?? 'beide' }); setAuftragError(''); setShowAuftragForm(true) }
+  async function saveAuftrag() {
+    if (!auftrag.title.trim()) { setAuftragError('Bitte eine Bezeichnung eingeben.'); return }
+    setSaving(true)
+    const payload = { category: 'kontrollauftrag' as const, title: auftrag.title.trim(), description: auftrag.description.trim() || null, location: auftrag.location.trim() || null, valid_from: auftrag.validFrom || null, valid_until: auftrag.validUntil || null, target_function: auftrag.targetFunction }
+    const response = editingAuftrag ? await supabase.from('zentrale_entries').update(payload).eq('id', editingAuftrag.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
+    setSaving(false)
+    if (response.error) { setAuftragError('Kontrollauftrag konnte nicht gespeichert werden.'); return }
+    logAudit(editingAuftrag ? 'Kontrollauftrag bearbeitet' : 'Kontrollauftrag angelegt', auftrag.title.trim()); setShowAuftragForm(false); await load()
+  }
+  async function deleteAuftrag() {
+    if (!editingAuftrag || !window.confirm(`Kontrollauftrag „${editingAuftrag.title}“ endgültig löschen?`)) return
+    const result = await supabase.from('zentrale_entries').delete().eq('id', editingAuftrag.id)
+    if (result.error) { setAuftragError('Kontrollauftrag konnte nicht gelöscht werden.'); return }
+    logAudit('Kontrollauftrag endgültig gelöscht', editingAuftrag.title); setShowAuftragForm(false); await load()
+  }
+
+  function openBaustelleReport() { setBaustelleReport(EMPTY_BAUSTELLE_REPORT); setBaustelleError(''); setShowBaustelleForm(true) }
+  async function saveBaustelleReport() {
+    if (!profile?.id) return
+    if (!baustelleReport.titel.trim()) { setBaustelleError('Bitte eine Bezeichnung eingeben.'); return }
+    const startAddress = baustelleReport.startAddress.trim()
+    if (!startAddress) { setBaustelleError('Bitte zumindest den Standort angeben.'); return }
+    setBaustelleSaving(true)
+    const startResult = await geocodeLocation(startAddress)
+    if (!startResult) { setBaustelleSaving(false); setBaustelleError('Standort konnte nicht gefunden werden.'); return }
+    const endAddress = baustelleReport.endAddress.trim()
+    // Ohne Endadresse gilt derselbe Standort für Start und Ende (kurzer Punkt statt Streckenabschnitt).
+    const endResult = endAddress ? await geocodeLocation(endAddress) : startResult
+    if (!endResult) { setBaustelleSaving(false); setBaustelleError('Der zweite Standort konnte nicht gefunden werden.'); return }
+    // Streckenverlauf entlang des Straßennetzes statt Luftlinie - wie in der
+    // Zentrale-Erfassung; best effort, bei Fehlschlag bleibt path null (Luftlinie).
+    const path = await routeAlongRoad(startResult, endResult)
+    // Ohne Verwaltungsrecht entsteht die Meldung immer als "gemeldet" (ungeprüft) -
+    // Sachbearbeiter/Genehmiger bestätigen sie in der Zentrale (RLS erzwingt das zusätzlich).
+    const response = await supabase.from('zentrale_baustellen').insert({ titel: baustelleReport.titel.trim(), start_lat: startResult.lat, start_lng: startResult.lng, end_lat: endResult.lat, end_lng: endResult.lng, path, note: baustelleReport.note.trim() || null, created_by: profile.id, status: canManageZentrale ? 'offen' : 'gemeldet' })
+    setBaustelleSaving(false)
+    if (response.error) { setBaustelleError('Die Meldung konnte nicht gespeichert werden.'); return }
+    logAudit('Baustelle gemeldet', baustelleReport.titel.trim()); setShowBaustelleForm(false); setNotice(canManageZentrale ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung durch die Zentrale.')
+  }
+
+  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+
+  const ctx: AussendienstContext = {
+    loading, ownAssignment, ownFunction, ownVehicle, ownCheck, patrolMates,
+    criticalItems, criticalSourcesError, openIncidents, openOrders, kontrollauftraege,
+    incidents, entries, avBv, fahndungen, isGenehmiger,
+    saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
+    openNewAuftrag, openEditAuftrag, openBaustelleReport,
+  }
+
+  return <div>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Außendienst / Streife</h1><p className="text-sm text-gray-500 mt-1">Tagesaktuelle Aufträge und Hilfsmittel – als Ergänzung zum Aktenprogramm.</p></div>
+    {error ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
+    {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
+    {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : null}
+
+    {!loading && !ownAssignment ? <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-6 mb-6"><div className="flex items-start gap-3"><AlertTriangle className="w-6 h-6 text-amber-700 flex-shrink-0" /><div><h2 className="font-bold text-gray-900">Noch keine Funktion für heute gewählt</h2><p className="text-sm text-gray-600 mt-1">Bitte zuerst auf der Portal-Startseite die heutige Funktion (z. B. JD oder VD) auswählen, um Streife, Fahrzeug und passende Aufträge zu sehen.</p><Link to="/" className="inline-block mt-3 text-sm font-semibold text-blue-700">Funktion jetzt wählen →</Link></div></div></div> : null}
+
+    {!loading ? <Outlet context={ctx} /> : null}
+
+    {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}
+    {showBaustelleForm ? <BaustelleReportModal report={baustelleReport} setReport={setBaustelleReport} saving={baustelleSaving} error={baustelleError} close={() => setShowBaustelleForm(false)} save={saveBaustelleReport} /> : null}
+  </div>
+}

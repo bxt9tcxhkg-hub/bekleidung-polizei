@@ -1,4 +1,4 @@
-import { BellRing, BookOpen, Building2, Contact, KeyRound, LayoutGrid, Mail, MapPin, Radio, Search, ShieldAlert, UserRoundCheck, Users } from 'lucide-react'
+import { AlertTriangle, BellRing, BookOpen, Building2, ClipboardList, Contact, KeyRound, LayoutGrid, Mail, MapPin, Radio, Search, ShieldAlert, UserRoundCheck, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -13,6 +13,8 @@ export default function ZentraleLayout() {
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/zentrale', label: 'Zentrale', icon: Radio },
+      { to: '/zentrale/einsaetze', label: 'Einsätze', icon: ClipboardList },
+      { to: '/zentrale/lage', label: 'Operative Lage', icon: AlertTriangle },
       { to: '/zentrale/av-bv-ev', label: 'AV/BV & EV', icon: ShieldAlert },
       { to: '/zentrale/personenhinweise', label: 'Personenhinweise', icon: UserRoundCheck },
       { to: '/zentrale/fahndungen', label: 'Fahndungen', icon: Search },

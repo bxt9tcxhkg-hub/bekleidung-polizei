@@ -42,7 +42,10 @@ const PlannedArea = lazy(() => import('./pages/PlannedArea'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
-const Zentrale = lazy(() => import('./pages/Zentrale'))
+const ZentraleShell = lazy(() => import('./pages/zentrale/ZentraleShell'))
+const ZentraleUebersicht = lazy(() => import('./pages/zentrale/ZentraleUebersicht'))
+const ZentraleEinsaetze = lazy(() => import('./pages/zentrale/ZentraleEinsaetze'))
+const ZentraleLagePage = lazy(() => import('./pages/zentrale/ZentraleLagePage'))
 const ZentraleAvBv = lazy(() => import('./pages/zentrale/ZentraleAvBv'))
 const ZentralePersonenhinweise = lazy(() => import('./pages/zentrale/ZentralePersonenhinweise'))
 const ZentralePersonen = lazy(() => import('./pages/zentrale/ZentralePersonen'))
@@ -53,8 +56,17 @@ const ZentraleKontakte = lazy(() => import('./pages/zentrale/ZentraleKontakte'))
 const ZentraleAlarmierung = lazy(() => import('./pages/zentrale/ZentraleAlarmierung'))
 const ZentraleUnterlagen = lazy(() => import('./pages/zentrale/ZentraleUnterlagen'))
 const ZentraleStrassenzustand = lazy(() => import('./pages/zentrale/ZentraleStrassenzustand'))
-const Aussendienst = lazy(() => import('./pages/Aussendienst'))
-const Innendienst = lazy(() => import('./pages/Innendienst'))
+const AussendienstShell = lazy(() => import('./pages/aussendienst/AussendienstShell'))
+const AussendienstUebersicht = lazy(() => import('./pages/aussendienst/AussendienstUebersicht'))
+const AussendienstEinsaetze = lazy(() => import('./pages/aussendienst/AussendienstEinsaetze'))
+const AussendienstKontrollauftraege = lazy(() => import('./pages/aussendienst/AussendienstKontrollauftraege'))
+const AussendienstHinweise = lazy(() => import('./pages/aussendienst/AussendienstHinweise'))
+const AussendienstFahrzeug = lazy(() => import('./pages/aussendienst/AussendienstFahrzeug'))
+const InnendienstShell = lazy(() => import('./pages/innendienst/InnendienstShell'))
+const InnendienstUebersicht = lazy(() => import('./pages/innendienst/InnendienstUebersicht'))
+const InnendienstBescheide = lazy(() => import('./pages/innendienst/InnendienstBescheide'))
+const InnendienstUebergabePage = lazy(() => import('./pages/innendienst/InnendienstUebergabePage'))
+const InnendienstGebuehrenPage = lazy(() => import('./pages/innendienst/InnendienstGebuehrenPage'))
 const RsaRsb = lazy(() => import('./pages/RsaRsb'))
 
 const PageSpinner = () => (
@@ -109,7 +121,11 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/zentrale" element={<Zentrale />} />
+            <Route element={<ZentraleShell />}>
+              <Route path="/zentrale" element={<ZentraleUebersicht />} />
+              <Route path="/zentrale/einsaetze" element={<ZentraleEinsaetze />} />
+              <Route path="/zentrale/lage" element={<ZentraleLagePage />} />
+            </Route>
             <Route path="/zentrale/av-bv-ev" element={<ZentraleAvBv />} />
             <Route path="/zentrale/personenhinweise" element={<ZentralePersonenhinweise />} />
             <Route path="/zentrale/personen" element={<ZentralePersonen />} />
@@ -128,7 +144,13 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/aussendienst" element={<Aussendienst />} />
+            <Route element={<AussendienstShell />}>
+              <Route path="/aussendienst" element={<AussendienstUebersicht />} />
+              <Route path="/aussendienst/einsaetze" element={<AussendienstEinsaetze />} />
+              <Route path="/aussendienst/kontrollauftraege" element={<AussendienstKontrollauftraege />} />
+              <Route path="/aussendienst/hinweise" element={<AussendienstHinweise />} />
+              <Route path="/aussendienst/fahrzeug" element={<AussendienstFahrzeug />} />
+            </Route>
           </Route>
           <Route
             element={
@@ -137,7 +159,12 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/innendienst" element={<Innendienst />} />
+            <Route element={<InnendienstShell />}>
+              <Route path="/innendienst" element={<InnendienstUebersicht />} />
+              <Route path="/innendienst/bescheide" element={<InnendienstBescheide />} />
+              <Route path="/innendienst/uebergabe" element={<InnendienstUebergabePage />} />
+              <Route path="/innendienst/gebuehren" element={<InnendienstGebuehrenPage />} />
+            </Route>
           </Route>
           <Route
             element={
