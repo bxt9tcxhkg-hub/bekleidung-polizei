@@ -25,7 +25,7 @@ type TabId = 'uebersicht' | 'einsaetze' | 'lage' | 'strassenzustand'
 const TABS: { id: TabId; label: string; icon: typeof Radio; description: string }[] = [
   { id: 'uebersicht', label: 'Übersicht', icon: LayoutDashboard, description: 'Besetzung, offene Meldungen und relevante Informationen' },
   { id: 'einsaetze', label: 'Einsätze', icon: Radio, description: 'Meldungen schnell erfassen und disponieren' },
-  { id: 'lage', label: 'Operative Lage', icon: Radio, description: 'Ereignisse, Sperren, Gefahren- und Lagehinweise' },
+  { id: 'lage', label: 'Operative Lage', icon: Radio, description: 'Ereignisse, Sperren, Gefahren- und Lagehinweise – wird aus einem Einsatz im Tab „Einsätze" erklärt' },
   { id: 'strassenzustand', label: 'Straßenzustand', icon: MapPin, description: 'Bericht erfassen, prüfen und als PDF versenden' },
 ]
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
@@ -214,6 +214,14 @@ export default function Zentrale() {
     return [...byId.values()]
   }, [incidents, openIncidentsAllDays, editingLinkedIncident])
   const incidentsById = useMemo(() => Object.fromEntries(lageIncidentOptions.map(item => [item.id, item])), [lageIncidentOptions])
+  // Eine Operative Lage hat immer genau einen auslösenden Einsatz - diese
+  // Zuordnung entscheidet, ob ein Einsatz bereits eine Lage hat (dann öffnet
+  // der Kartenbutton diese zum Bearbeiten) oder noch keine (dann legt er sie an).
+  const lageByIncidentId = useMemo(() => {
+    const map: Record<string, ZentraleEntry> = {}
+    for (const item of entries) if (item.category === 'lage' && item.incident_id) map[item.incident_id] = item
+    return map
+  }, [entries])
   const openIncidentMarkers = useMemo(() => openIncidentsAllDays
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
@@ -289,6 +297,19 @@ export default function Zentrale() {
 
   function openNewEntry(category: ZentraleEntryCategory) {
     setEditing(null); setEntry(EMPTY_ENTRY_FORM); setEntryCategory(category); setShowEntryForm(true); setError(''); setEditingLinkedIncident(null)
+  }
+  // Einzige Möglichkeit, eine Operative Lage anzulegen: ausgehend von einem
+  // konkreten Einsatz (siehe incidentCards) - nie unabhängig davon, sonst
+  // wirkt es fälschlich so, als wäre die Lage ein eigenständiger Bereich.
+  function openLageForIncident(incidentItem: IncidentReport) {
+    const existing = lageByIncidentId[incidentItem.id]
+    if (existing) { setActiveTab('lage'); openEdit(existing); return }
+    setEditing(null)
+    setEntry({ ...EMPTY_ENTRY_FORM, incidentId: incidentItem.id, location: incidentItem.location ?? '' })
+    setEntryCategory('lage')
+    setShowEntryForm(true)
+    setError('')
+    setEditingLinkedIncident(incidentItem)
   }
   function openEdit(item: ZentraleEntry) {
     setEditing(item); setEntry(entryToForm(item)); setEntryCategory(item.category); setShowEntryForm(true); setError('')
@@ -399,7 +420,7 @@ export default function Zentrale() {
 
   const incidentCards = <div className="space-y-3">{visibleIncidents.length === 0
     ? <Empty text="Heute wurden noch keine Meldungen erfasst." />
-    : visibleIncidents.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p><div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">{item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}{item.caller_name ? <span>Melder: {item.caller_name}</span> : null}<span>{DISPOSITION_LABEL[item.disposition]}</span>{item.note ? <span>Bemerkung: {item.note}</span> : null}</div></div><div className="flex gap-2">{canOperateZentrale && item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}{canManage ? <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button> : null}</div></div></article>)}</div>
+    : visibleIncidents.map(item => { const lage = lageByIncidentId[item.id]; return <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p><div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">{item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}{item.caller_name ? <span>Melder: {item.caller_name}</span> : null}<span>{DISPOSITION_LABEL[item.disposition]}</span>{item.note ? <span>Bemerkung: {item.note}</span> : null}</div>{canManage ? <button type="button" onClick={() => openLageForIncident(item)} className={`inline-flex items-center gap-1.5 text-xs font-semibold mt-3 ${lage ? 'text-red-700' : 'text-blue-700'}`}>{lage ? <><AlertTriangle className="w-3.5 h-3.5" /> Operative Lage ansehen</> : 'Als Operative Lage erfassen'}</button> : null}</div><div className="flex gap-2">{canOperateZentrale && item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}{canManage ? <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button> : null}</div></div></article> })}</div>
 
   return <div>
     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Zentrale</h1><p className="text-sm text-gray-500 mt-1">Relevante Informationen auf einen Blick – ergänzend zum Aktenprogramm.</p></div>{canOperateZentrale ? <button type="button" onClick={openIncident} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button> : null}</div>
@@ -441,7 +462,7 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'strassenzustand' ? <ZentraleStrassenzustand canManage={canManage} /> : null}
 
-    {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} incidentsById={incidentsById} /> : null}
+    {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} incidentsById={incidentsById} hideCreate /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category={entryCategory} incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
