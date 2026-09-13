@@ -8,9 +8,9 @@ import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPersonNote, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
-import { personDisplayName } from '../../lib/register'
+import { personDisplayName, usePersons } from '../../lib/register'
 import { BaustelleModal, IncidentModal } from './zentraleShared'
-import { DISPOSITION_LABEL, EMPTY_BAUSTELLE_FORM, formatTime, type BaustelleFormState, type IncidentFormState } from '../../lib/zentraleShared'
+import { DISPOSITION_LABEL, EMPTY_BAUSTELLE_FORM, EMPTY_INCIDENT_FORM, formatTime, type BaustelleFormState, type IncidentFormState } from '../../lib/zentraleShared'
 
 // Zentrale ist in eigenständige Sidebar-Seiten aufgeteilt (Übersicht, Einsätze,
 // Operative Lage - kein Tab-Streifen mehr, Vorlage ist Bekleidung). Diese
@@ -98,7 +98,8 @@ export default function ZentraleShell() {
   const [entry, setEntry] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
-  const [incident, setIncident] = useState<IncidentFormState>({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd', note: '', lat: null, lng: null, coordsPrecise: false })
+  const [incident, setIncident] = useState<IncidentFormState>(EMPTY_INCIDENT_FORM)
+  const { persons, setPersons } = usePersons()
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState('')
   const [priorIncidents, setPriorIncidents] = useState<IncidentReport[]>([])
@@ -227,36 +228,42 @@ export default function ZentraleShell() {
     color: item.status === 'gemeldet' ? '#9ca3af' : '#f97316',
     dashed: item.status === 'gemeldet',
   })), [baustellen])
+  // Melder/beteiligte Person sind jetzt echte Verknüpfungen zum
+  // Personen-Register (person_id-Gleichheit) statt Namens-/Geburtsdatum-
+  // Textabgleich - eindeutig statt fehleranfällig. Der Adressabgleich bleibt
+  // text-basiert (Objekte-Register ist hier noch nicht durchgängig verknüpft).
+  const involvedOrCallerPersonIds = useMemo(() => [incident.callerPersonId, incident.involvedPersonId].filter((value): value is string => !!value), [incident.callerPersonId, incident.involvedPersonId])
   const contextEntries = useMemo(() => {
-    const place = incident.location.trim(), phone = normalizePhone(incident.callerPhone), name = normalizeText(incident.callerName)
+    const place = incident.location.trim(), phone = normalizePhone(incident.callerPhone)
+    const callerPerson = persons.find(item => item.id === incident.callerPersonId)
+    const name = normalizeText(callerPerson ? personDisplayName(callerPerson) : '')
     if (!place && !phone && name.length < 3) return []
     return entries.filter(item => item.status !== 'erledigt' && ((place.length >= 4 && addressesMatch(place, item.location ?? '')) || (phone.length >= 5 && normalizePhone(item.reference).includes(phone)) || (name.length >= 3 && normalizeText(`${item.title} ${item.responsible ?? ''}`).includes(name))))
-  }, [entries, incident.callerName, incident.callerPhone, incident.location])
+  }, [entries, incident.callerPersonId, incident.callerPhone, incident.location, persons])
   const contextPersonNotes = useMemo(() => {
-    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), phone = normalizePhone(incident.callerPhone), place = incident.location.trim()
-    return personNotes.filter(item => {
-      // Adressabgleich zusätzlich zu Name/Telefon: beim Anlegen einer Meldung
-      // ist oft nur der Einsatzort bekannt, noch kein Personenname - z. B.
-      // "an dieser Adresse wohnt eine gefährliche Person".
-      return (phone.length >= 5 && normalizePhone(item.person?.phone) === phone)
-        || (names.includes(normalizeText(personDisplayName(item.person))) && (!item.person?.birth_date || item.person.birth_date === incident.involvedBirthDate))
-        || (place.length >= 4 && addressesMatch(place, item.location ?? ''))
-    })
-  }, [incident.callerName, incident.callerPhone, incident.involvedBirthDate, incident.involvedPerson, incident.location, personNotes])
+    const phone = normalizePhone(incident.callerPhone), place = incident.location.trim()
+    return personNotes.filter(item =>
+      (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
+      || (phone.length >= 5 && normalizePhone(item.person?.phone) === phone)
+      // Adressabgleich zusätzlich: beim Anlegen einer Meldung ist oft nur der
+      // Einsatzort bekannt, noch keine verknüpfte Person - z. B. "an dieser
+      // Adresse wohnt eine gefährliche Person".
+      || (place.length >= 4 && addressesMatch(place, item.location ?? '')))
+  }, [incident.callerPhone, incident.location, involvedOrCallerPersonIds, personNotes])
   // AV/BV & EV und Fahndungen kommen jetzt aus eigenen Tabellen - derselbe
-  // Name-/Adressabgleich wie bei Personenhinweisen, damit ein Zentralist beim
-  // Erfassen einer Einsatzmeldung weiterhin sofort sieht, ob zur Adresse oder
-  // Person bereits ein Verbot oder eine Fahndung vorliegt.
+  // Verknüpfungs-/Adressabgleich wie bei Personenhinweisen, damit ein
+  // Zentralist beim Erfassen einer Einsatzmeldung weiterhin sofort sieht, ob
+  // zur Adresse oder Person bereits ein Verbot oder eine Fahndung vorliegt.
   const contextAvBv = useMemo(() => {
-    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), place = incident.location.trim()
-    return avBvOpen.filter(item => (names.includes(normalizeText(personDisplayName(item.person))) && (!item.person?.birth_date || item.person.birth_date === incident.involvedBirthDate))
+    const place = incident.location.trim()
+    return avBvOpen.filter(item => (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
       || (place.length >= 4 && addressesMatch(place, item.object?.address ?? item.gebiet ?? '')))
-  }, [avBvOpen, incident.callerName, incident.involvedBirthDate, incident.involvedPerson, incident.location])
+  }, [avBvOpen, incident.location, involvedOrCallerPersonIds])
   const contextFahndungen = useMemo(() => {
-    const names = [normalizeText(incident.callerName), normalizeText(incident.involvedPerson)].filter(value => value.length >= 3), place = incident.location.trim()
-    return fahndungenOpen.filter(item => (names.includes(normalizeText(personDisplayName(item.person))) && (!item.person?.birth_date || item.person.birth_date === incident.involvedBirthDate))
+    const place = incident.location.trim()
+    return fahndungenOpen.filter(item => (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
       || (place.length >= 4 && addressesMatch(place, item.object?.address ?? '')))
-  }, [fahndungenOpen, incident.callerName, incident.involvedBirthDate, incident.involvedPerson, incident.location])
+  }, [fahndungenOpen, incident.location, involvedOrCallerPersonIds])
   const criticalAvBv = useMemo(() => avBvOpen.filter(item => item.priority === 'kritisch'), [avBvOpen])
   const criticalFahndungen = useMemo(() => fahndungenOpen.filter(item => item.priority === 'kritisch'), [fahndungenOpen])
   // Frühere Meldungen an derselben Adresse ("gab es dort schon mal was?") -
@@ -323,7 +330,7 @@ export default function ZentraleShell() {
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
-  function openIncident() { setIncident({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null, coordsPrecise: false }); setLocateError(''); setShowIncidentForm(true); setError('') }
+  function openIncident() { setIncident({ ...EMPTY_INCIDENT_FORM, disposition: vdAvailable ? 'vd' : 'jd' }); setLocateError(''); setShowIncidentForm(true); setError('') }
   async function locateIncident() {
     const queried = incident.location.trim()
     if (!queried) return
@@ -336,7 +343,18 @@ export default function ZentraleShell() {
   }
   async function saveIncident() {
     if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
-    setSaving(true); const result = await supabase.from('incident_reports').insert({ caller_phone: incident.callerPhone.trim() || null, caller_name: incident.callerName.trim() || null, location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(), involved_person: incident.involvedPerson.trim() || null, involved_birth_date: incident.involvedBirthDate || null, disposition: incident.disposition, note: incident.note.trim() || null, status: incident.disposition === 'bp' ? 'weitergegeben' : 'offen', created_by: profile.id }); setSaving(false)
+    // Melder/beteiligte Person sind über das Personen-Register verknüpft;
+    // Name/Geburtsdatum stecken abwärtskompatibel für bestehende Anzeigen
+    // (z. B. IncidentCards) zusätzlich als Freitext auf der Meldung, aus der
+    // verknüpften Person abgeleitet statt separat einzugeben.
+    const callerPerson = persons.find(item => item.id === incident.callerPersonId) ?? null
+    const involvedPerson = persons.find(item => item.id === incident.involvedPersonId) ?? null
+    setSaving(true); const result = await supabase.from('incident_reports').insert({
+      caller_phone: incident.callerPhone.trim() || null, caller_person_id: incident.callerPersonId, caller_name: callerPerson ? personDisplayName(callerPerson) : null,
+      location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(),
+      involved_person_id: incident.involvedPersonId, involved_person: involvedPerson ? personDisplayName(involvedPerson) : null, involved_birth_date: involvedPerson?.birth_date ?? null,
+      disposition: incident.disposition, note: incident.note.trim() || null, status: incident.disposition === 'bp' ? 'weitergegeben' : 'offen', created_by: profile.id,
+    }); setSaving(false)
     if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
     logAudit('Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`); setShowIncidentForm(false); navigate('/zentrale/einsaetze'); setNotice('Meldung wurde gespeichert.'); await load()
   }
@@ -422,7 +440,7 @@ export default function ZentraleShell() {
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
 
-    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
     {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canManage={canManage} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
   </div>

@@ -26,4 +26,10 @@ export const EMPTY_BAUSTELLE_FORM = {
 }
 export type BaustelleFormState = typeof EMPTY_BAUSTELLE_FORM
 
-export type IncidentFormState = { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }
+// Melder und beteiligte Person sind Verknüpfungen zum Personen-Register
+// (callerPersonId/involvedPersonId), kein Namens-/Geburtsdatum-Freitext mehr -
+// Name, Geburtsdatum und Telefonnummer stecken in der Person selbst.
+// callerPhone bleibt eigenständig: die Nummer, von der dieser Anruf kam, kann
+// von der im Personen-Register hinterlegten Nummer abweichen.
+export type IncidentFormState = { callerPhone: string; callerPersonId: string | null; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPersonId: string | null; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }
+export const EMPTY_INCIDENT_FORM: IncidentFormState = { callerPhone: '', callerPersonId: null, street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '', lat: null, lng: null, coordsPrecise: false }

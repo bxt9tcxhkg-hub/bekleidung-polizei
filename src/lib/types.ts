@@ -779,20 +779,28 @@ export type IncidentStatus = 'offen' | 'erledigt' | 'weitergegeben'
 export interface IncidentReport {
   id: string
   caller_phone: string | null
+  /** Abwärtskompatible Anzeige - beim Speichern aus caller_person abgeleitet, sofern verknüpft. */
   caller_name: string | null
+  /** Echte Verknüpfung zum Personen-Register statt Namens-Freitext. */
+  caller_person_id: string | null
   reported_at: string
   location: string | null
   location_lat: number | null
   location_lng: number | null
   summary: string
+  /** Abwärtskompatible Anzeige - beim Speichern aus involved_person_id abgeleitet, sofern verknüpft. */
   involved_person: string | null
   involved_birth_date: string | null
+  /** Echte Verknüpfung zum Personen-Register statt Namens-/Geburtsdatum-Freitext. */
+  involved_person_id: string | null
   disposition: IncidentDisposition
   note: string | null
   status: IncidentStatus
   created_by: string
   created_at: string
   updated_at: string
+  caller_person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  involved_person_ref?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
 }
 
 /** Zentrales Personen-Register - Verknüpfungspunkt für Personenhinweise, RSa/RSb, AV/BV & EV und Fahndungen. */
@@ -1172,7 +1180,7 @@ type FleetDocumentRow = Omit<FleetDocument, 'uploader'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
-type IncidentReportRow = Omit<IncidentReport, never>
+type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref'>
 type OperationalPersonRow = Omit<OperationalPerson, 'home_object'>
 type OperationalObjectRow = Omit<OperationalObject, never>
 type OperationalPhoneNumberRow = Omit<OperationalPhoneNumber, 'person' | 'object'>
@@ -1366,6 +1374,8 @@ export type Database = {
       duty_functions: { Row: DutyFunctionConfigRow; Insert: Pick<DutyFunctionConfigRow, 'code' | 'label'> & Partial<Omit<DutyFunctionConfigRow, 'created_at' | 'updated_at' | 'code' | 'label'>>; Update: Partial<Omit<DutyFunctionConfigRow, 'code' | 'created_at'>>; Relationships: [] }
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_caller_person_id_fkey'; columns: ['caller_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_involved_person_id_fkey'; columns: ['involved_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
       ] }
       operational_persons: { Row: OperationalPersonRow; Insert: Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
