@@ -139,8 +139,10 @@ export default function Zentrale() {
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   // Schichtübergabe: kein eigener Eintrag, sondern die am Schichtende noch
   // offenen Einsatzmeldungen - das ist genau das, was an die nächste
-  // Diensthabende Person weitergegeben werden muss.
-  const uebergabeIncidents = useMemo(() => incidents.filter(item => item.status === 'offen'), [incidents])
+  // Diensthabende Person weitergegeben werden muss. openIncidentsAllDays
+  // (statt incidents, das auf heute gefiltert ist) verwenden, weil ein
+  // offener Einsatz über Mitternacht hinaus sonst aus der Übergabe fällt.
+  const uebergabeIncidents = openIncidentsAllDays
   const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
   const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
   const visibleIncidents = useMemo(() => {
@@ -269,7 +271,12 @@ export default function Zentrale() {
       <SofortWichtig items={[
         ...criticalEntries.map(item => ({
           id: item.id, title: item.title, description: item.description,
-          onOpen: () => { if (item.category === 'lage') { setActiveTab(item.category); openEdit(item) } else { const route = CATEGORY_ROUTE[item.category]; if (route) navigate(route) } },
+          onOpen: () => {
+            if (item.category === 'lage') { setActiveTab(item.category); openEdit(item) }
+            // Übergabepunkte werden jetzt ausschließlich im Innendienst angelegt/bearbeitet.
+            else if (item.category === 'uebergabe') { navigate('/innendienst') }
+            else { const route = CATEGORY_ROUTE[item.category]; if (route) navigate(route) }
+          },
         })),
         ...criticalAvBv.map(item => ({ id: item.id, title: `AV/BV & EV (${AV_BV_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'))}`, description: item.grund, onOpen: () => navigate('/zentrale/av-bv-ev') })),
         ...criticalFahndungen.map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung, onOpen: () => navigate('/zentrale/fahndungen') })),
