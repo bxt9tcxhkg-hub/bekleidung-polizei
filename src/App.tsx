@@ -42,6 +42,11 @@ const PlannedArea = lazy(() => import('./pages/PlannedArea'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
+const FleetMaengel = lazy(() => import('./pages/FleetMaengel'))
+const FleetPflege = lazy(() => import('./pages/FleetPflege'))
+const FleetWerkstatt = lazy(() => import('./pages/FleetWerkstatt'))
+const FleetFristen = lazy(() => import('./pages/FleetFristen'))
+const FleetDokumente = lazy(() => import('./pages/FleetDokumente'))
 const ZentraleShell = lazy(() => import('./pages/zentrale/ZentraleShell'))
 const ZentraleUebersicht = lazy(() => import('./pages/zentrale/ZentraleUebersicht'))
 const ZentraleEinsaetze = lazy(() => import('./pages/zentrale/ZentraleEinsaetze'))
@@ -199,6 +204,11 @@ export default function App() {
           >
             <Route path="/fuhrpark" element={<Fleet />} />
             <Route path="/fuhrpark/offen" element={<FleetOpenItems />} />
+            <Route path="/fuhrpark/maengel" element={<FleetMaengel />} />
+            <Route path="/fuhrpark/pflege" element={<FleetPflege />} />
+            <Route path="/fuhrpark/werkstatt" element={<FleetWerkstatt />} />
+            <Route path="/fuhrpark/fristen" element={<FleetFristen />} />
+            <Route path="/fuhrpark/dokumente" element={<FleetDokumente />} />
             <Route path="/fuhrpark/:vehicleId" element={<FleetVehicle />} />
           </Route>
           <Route path="/planung/fuhrpark" element={<Navigate to="/fuhrpark" replace />} />
