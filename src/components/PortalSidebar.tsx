@@ -35,12 +35,12 @@ export function PortalSidebarShell({
         <button
           type="button"
           aria-label="Menü schließen"
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-60 bg-blue-950 flex flex-col transition-transform duration-200 ${
+      <aside className={`fixed lg:static inset-y-0 left-0 z-[45] w-60 bg-blue-950 flex flex-col transition-transform duration-200 ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
         <div className="flex items-center gap-3 px-4 py-5 border-b border-blue-900">
