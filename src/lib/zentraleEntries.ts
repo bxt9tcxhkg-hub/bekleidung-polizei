@@ -17,10 +17,12 @@ export interface EntryFormState {
   responsible: string
   reference: string
   restricted: boolean
+  /** Nur für category 'lage': die auslösende Einsatzmeldung - eine Operative Lage ist kein eigenständiger Bereich, sondern ergibt sich immer aus einem Einsatz. */
+  incidentId: string | null
 }
-export const EMPTY_ENTRY_FORM: EntryFormState = { title: '', description: '', priority: 'normal', status: 'offen', validFrom: '', validUntil: '', location: '', responsible: '', reference: '', restricted: false }
+export const EMPTY_ENTRY_FORM: EntryFormState = { title: '', description: '', priority: 'normal', status: 'offen', validFrom: '', validUntil: '', location: '', responsible: '', reference: '', restricted: false, incidentId: null }
 
 function dateValue(value: string | null) { return value ? value.slice(0, 10) : '' }
 export function entryToForm(item: ZentraleEntry): EntryFormState {
-  return { title: item.title, description: item.description ?? '', priority: item.priority, status: item.status, validFrom: dateValue(item.valid_from), validUntil: dateValue(item.valid_until), location: item.location ?? '', responsible: item.responsible ?? '', reference: item.reference ?? '', restricted: item.restricted }
+  return { title: item.title, description: item.description ?? '', priority: item.priority, status: item.status, validFrom: dateValue(item.valid_from), validUntil: dateValue(item.valid_until), location: item.location ?? '', responsible: item.responsible ?? '', reference: item.reference ?? '', restricted: item.restricted, incidentId: item.incident_id }
 }

@@ -232,7 +232,7 @@ export default function Innendienst() {
       <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving || (form.kind === 'verstoss' && bescheide.length === 0)} onClick={() => void saveRecord()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
     </div></div></div> : null}
 
-    {showHandoverForm ? <EntryModal entry={handoverForm} setEntry={setHandoverForm} editing={editingHandover} saving={saving} error={handoverError} close={() => setShowHandoverForm(false)} save={saveHandover} remove={deleteHandover} /> : null}
+    {showHandoverForm ? <EntryModal entry={handoverForm} setEntry={setHandoverForm} editing={editingHandover} category="uebergabe" saving={saving} error={handoverError} close={() => setShowHandoverForm(false)} save={saveHandover} remove={deleteHandover} /> : null}
 
     {kasseStep ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Kassenabrechnung – {kasseStep === 'revenue' ? '1/2 Erlös' : '2/2 Stückelungen zählen'}</h2><button type="button" onClick={closeKasseWizard} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
       {kasseStep === 'revenue' ? <>

@@ -549,6 +549,8 @@ export interface ZentraleEntry {
   reference: string | null
   restricted: boolean
   target_function: KontrollauftragZielfunktion | null
+  /** Nur für category 'lage' gesetzt (Pflicht) - die auslösende Einsatzmeldung. */
+  incident_id: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -634,15 +636,23 @@ export interface ZentraleKontakt {
   object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
 }
 
+export type AlarmierungBereich = 'polizei' | 'staedtisch' | 'beide'
+
 export interface ZentraleAlarmierung {
   id: string
   anlass: string
   ablauf: string | null
+  /** Die auslösende Operative Lage (zentrale_entries mit category 'lage'), sofern bekannt - Grundgerüst, bis das vollständige Alarmierungsschema vorliegt. */
+  lage_id: string | null
+  bereich: AlarmierungBereich | null
+  stadtfuehrung_informiert: boolean
+  stadtfuehrung_informiert_am: string | null
   gueltig_bis: string | null
   note: string | null
   restricted: boolean
   created_by: string | null
   created_at: string
+  lage?: Pick<ZentraleEntry, 'id' | 'title' | 'incident_id'> | null
   updated_at: string
 }
 
@@ -1116,7 +1126,7 @@ type ZentraleAvBvRow = Omit<ZentraleAvBv, 'person' | 'object'>
 type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
 type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
 type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
-type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, never>
+type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
 type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
@@ -1330,6 +1340,7 @@ export type Database = {
       ] }
       zentrale_alarmierung: { Row: ZentraleAlarmierungRow; Insert: Pick<ZentraleAlarmierungRow, 'anlass' | 'created_by'> & Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'updated_at' | 'anlass' | 'created_by'>>; Update: Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_alarmierung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_alarmierung_lage_id_fkey'; columns: ['lage_id']; isOneToOne: false; referencedRelation: 'zentrale_entries'; referencedColumns: ['id'] },
       ] }
       zentrale_unterlagen: { Row: ZentraleUnterlageRow; Insert: Pick<ZentraleUnterlageRow, 'titel' | 'created_by'> & Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'created_by'>>; Update: Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_unterlagen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

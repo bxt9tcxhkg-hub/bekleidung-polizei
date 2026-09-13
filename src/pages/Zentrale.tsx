@@ -149,6 +149,7 @@ export default function Zentrale() {
     if (ownAssignment?.function === 'innendienst') return incidents.filter(item => item.disposition === 'keine_anfahrt')
     return incidents
   }, [incidents, ownAssignment?.function])
+  const incidentsById = useMemo(() => Object.fromEntries(incidents.map(item => [item.id, item])), [incidents])
   const openIncidentMarkers = useMemo(() => openIncidentsAllDays
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
@@ -221,8 +222,11 @@ export default function Zentrale() {
   async function saveEntry() {
     if (!entry.title.trim()) { setError('Bitte eine Bezeichnung eingeben.'); return }
     const category = editing?.category ?? entryCategory
+    // Eine Operative Lage ist kein eigenständiger Bereich - sie ergibt sich
+    // immer aus einer Einsatzmeldung (DB erzwingt das zusätzlich per CHECK).
+    if (category === 'lage' && !entry.incidentId) { setError('Bitte die auslösende Einsatzmeldung wählen.'); return }
     setSaving(true)
-    const payload = { category, title: entry.title.trim(), description: entry.description.trim() || null, priority: entry.priority, status: entry.status, valid_from: entry.validFrom || null, valid_until: entry.validUntil || null, location: entry.location.trim() || null, responsible: entry.responsible.trim() || null, reference: entry.reference.trim() || null, restricted: entry.restricted }
+    const payload = { category, title: entry.title.trim(), description: entry.description.trim() || null, priority: entry.priority, status: entry.status, valid_from: entry.validFrom || null, valid_until: entry.validUntil || null, location: entry.location.trim() || null, responsible: entry.responsible.trim() || null, reference: entry.reference.trim() || null, restricted: entry.restricted, incident_id: category === 'lage' ? entry.incidentId : null }
     const response = editing ? await supabase.from('zentrale_entries').update(payload).eq('id', editing.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
     setSaving(false)
     if (response.error) { setError('Eintrag konnte nicht gespeichert werden.'); return }
@@ -288,10 +292,10 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'strassenzustand' ? <ZentraleStrassenzustand canManage={canManage} /> : null}
 
-    {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} /> : null}
+    {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} incidentsById={incidentsById} /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
-    {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
+    {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category={entryCategory} incidents={incidents} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }
 
