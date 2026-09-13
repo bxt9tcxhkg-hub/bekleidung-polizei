@@ -6,14 +6,17 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import type { OperationalPerson } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
-import { personDisplayName } from '../../lib/register'
+import { ObjectPicker } from '../../components/RegisterPickers'
+import { objectLabel, personDisplayName, useObjects } from '../../lib/register'
 
 // Zentrales Personen-Register: Basis für die Verknüpfung von Personenhinweisen,
 // RSa/RSb, AV/BV & EV und Fahndungen auf dieselbe Person, statt Namen in
-// jeder Kategorie separat als Freitext zu erfassen.
+// jeder Kategorie separat als Freitext zu erfassen. Die Anschrift ist eine
+// echte Verknüpfung zum Objekte-Register (home_object_id), keine erneute
+// Freitext-Eingabe der Adresse.
 
 type LinkCounts = { hinweise: number; rsaRsb: number; avBv: number; fahndungen: number }
-const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', note: '' }
+const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', homeObjectId: null as string | null, note: '' }
 
 export default function ZentralePersonen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
@@ -28,11 +31,12 @@ export default function ZentralePersonen() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<OperationalPerson | null>(null)
   const [form, setForm] = useState(emptyForm)
+  const { objects, setObjects } = useObjects()
 
   const load = useCallback(async () => {
     setLoading(true)
     const [personResult, noteResult, mailResult, avBvResult, fahndungResult] = await Promise.all([
-      supabase.from('operational_persons').select('*').order('nachname').order('vorname'),
+      supabase.from('operational_persons').select('*, home_object:operational_objects(id, address, label, strasse, hausnummer, plz, ort)').order('nachname').order('vorname'),
       // Für die Löschsperre absichtlich ALLE Hinweise/Zustellungen zählen,
       // nicht nur aktive/offene: person_id ist hier ON DELETE CASCADE, ein
       // archivierter Hinweis oder ein bereits geschlossener RSa/RSb-Fall
@@ -69,14 +73,14 @@ export default function ZentralePersonen() {
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
-  function openEdit(item: OperationalPerson) { setEditing(item); setForm({ vorname: item.vorname ?? '', nachname: item.nachname ?? '', birthDate: item.birth_date ?? '', phone: item.phone ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }
+  function openEdit(item: OperationalPerson) { setEditing(item); setForm({ vorname: item.vorname ?? '', nachname: item.nachname ?? '', birthDate: item.birth_date ?? '', phone: item.phone ?? '', homeObjectId: item.home_object_id, note: item.note ?? '' }); setShowForm(true); setError('') }
 
   async function save() {
     // Am Telefon ist oft zunächst nur Vor- oder Nachname bekannt - beide
     // einzeln optional, aber mindestens eines muss angegeben werden.
     if (!form.vorname.trim() && !form.nachname.trim()) { setError('Bitte Vor- oder Nachname eingeben.'); return }
     setSaving(true)
-    const payload = { vorname: form.vorname.trim() || null, nachname: form.nachname.trim() || null, birth_date: form.birthDate || null, phone: form.phone.trim() || null, note: form.note.trim() || null }
+    const payload = { vorname: form.vorname.trim() || null, nachname: form.nachname.trim() || null, birth_date: form.birthDate || null, phone: form.phone.trim() || null, home_object_id: form.homeObjectId, note: form.note.trim() || null }
     const response = editing ? await supabase.from('operational_persons').update(payload).eq('id', editing.id) : await supabase.from('operational_persons').insert({ ...payload, created_by: profile?.id ?? null })
     setSaving(false)
     if (response.error) { setError('Person konnte nicht gespeichert werden.'); return }
@@ -131,6 +135,7 @@ export default function ZentralePersonen() {
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-1">
                 {item.birth_date ? <span>Geb.: {new Date(item.birth_date).toLocaleDateString('de-AT')}</span> : null}
                 {item.phone ? <span>TEL: {item.phone}</span> : null}
+                {item.home_object ? <span>Anschrift: {objectLabel(item.home_object)}</span> : null}
               </div>
               {item.note ? <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-wrap">{item.note}</p> : null}
               {count ? <div className="flex flex-wrap gap-1.5 mt-2">
@@ -155,6 +160,7 @@ export default function ZentralePersonen() {
         <Field label="Geburtsdatum" type="date" value={form.birthDate} onChange={value => setForm(current => ({ ...current, birthDate: value }))} />
         <Field label="Telefonnummer" value={form.phone} onChange={value => setForm(current => ({ ...current, phone: value }))} />
       </div>
+      <ObjectPicker label="Anschrift" objects={objects} value={form.homeObjectId} onChange={value => setForm(current => ({ ...current, homeObjectId: value }))} createdBy={profile?.id ?? null} onCreated={object => setObjects(current => [...current, object].sort((a, b) => objectLabel(a).localeCompare(objectLabel(b))))} />
       <label className="block text-xs font-medium text-gray-600">Notiz<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>
       {error ? <ErrorMessage text={error} /> : null}
       <div className="flex flex-wrap gap-3 pt-2">

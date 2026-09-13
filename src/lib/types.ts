@@ -809,7 +809,7 @@ export interface OperationalPerson {
   created_by: string | null
   created_at: string
   updated_at: string
-  home_object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
+  home_object?: Pick<OperationalObject, 'id' | 'address' | 'label' | 'strasse' | 'hausnummer' | 'plz' | 'ort'> | null
 }
 
 /** Zentrales Objekte-Register (Adressen/Gebäude) - Verknüpfungspunkt für AV/BV & EV, Fahndungen, Schlüssel, Kontakte und (über home_object_id) Personen. */

@@ -3,16 +3,20 @@ import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
+import { composeObjectAddress, objectLabel } from '../../lib/register'
 import { supabase } from '../../lib/supabase'
 import type { OperationalObject } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 
 // Zentrales Objekte-Register (Adressen/Gebäude): Basis für die Verknüpfung
-// von AV/BV & EV, Fahndungen, Schlüsseln und Kontakten auf dasselbe Objekt,
-// statt Adressen in jeder Kategorie separat als Freitext zu erfassen.
+// von AV/BV & EV, Fahndungen, Schlüsseln, Kontakten und (über home_object_id)
+// Personen auf dasselbe Objekt, statt Adressen in jeder Kategorie separat als
+// Freitext zu erfassen. Die Adresse wird strukturiert erfasst (Straße/
+// Hausnummer/PLZ/Ort), damit eine Person eindeutig - nicht über einen
+// fehleranfälligen Text-Abgleich - mit demselben Objekt verknüpft werden kann.
 
 type LinkCounts = { avBv: number; fahndungen: number; schluessel: number; kontakte: number }
-const emptyForm = { address: '', label: '', note: '' }
+const emptyForm = { strasse: '', hausnummer: '', plz: '', ort: '', label: '', note: '' }
 
 export default function ZentraleObjekte() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
@@ -64,16 +68,20 @@ export default function ZentraleObjekte() {
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
-  function openEdit(item: OperationalObject) { setEditing(item); setForm({ address: item.address, label: item.label ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }
+  function openEdit(item: OperationalObject) { setEditing(item); setForm({ strasse: item.strasse ?? '', hausnummer: item.hausnummer ?? '', plz: item.plz ?? '', ort: item.ort ?? '', label: item.label ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }
 
   async function save() {
-    if (!form.address.trim()) { setError('Bitte eine Adresse eingeben.'); return }
+    const address = composeObjectAddress(form)
+    if (!address) { setError('Bitte Straße, PLZ und Ort eingeben.'); return }
     setSaving(true)
-    const payload = { address: form.address.trim(), label: form.label.trim() || null, note: form.note.trim() || null }
+    const payload = {
+      address, strasse: form.strasse.trim(), hausnummer: form.hausnummer.trim() || null, plz: form.plz.trim(), ort: form.ort.trim(),
+      label: form.label.trim() || null, note: form.note.trim() || null,
+    }
     const response = editing ? await supabase.from('operational_objects').update(payload).eq('id', editing.id) : await supabase.from('operational_objects').insert({ ...payload, created_by: profile?.id ?? null })
     setSaving(false)
     if (response.error) { setError('Objekt konnte nicht gespeichert werden.'); return }
-    logAudit(editing ? 'Objekt bearbeitet' : 'Objekt angelegt', form.address.trim()); setShowForm(false); setNotice('Objekt wurde gespeichert.'); await load()
+    logAudit(editing ? 'Objekt bearbeitet' : 'Objekt angelegt', address); setShowForm(false); setNotice('Objekt wurde gespeichert.'); await load()
   }
   async function remove() {
     if (!editing) return
@@ -99,10 +107,10 @@ export default function ZentraleObjekte() {
       setError('Dieses Objekt ist noch mit Einträgen verknüpft (AV/BV, Fahndungen, Schlüssel oder Kontakte) und kann daher nicht gelöscht werden.')
       return
     }
-    if (!window.confirm(`Objekt „${editing.address}“ endgültig löschen?`)) return
+    if (!window.confirm(`Objekt „${objectLabel(editing)}“ endgültig löschen?`)) return
     const result = await supabase.from('operational_objects').delete().eq('id', objectId)
     if (result.error) { setError('Objekt konnte nicht gelöscht werden.'); return }
-    logAudit('Objekt endgültig gelöscht', editing.address); setShowForm(false); setNotice('Objekt wurde endgültig gelöscht.'); await load()
+    logAudit('Objekt endgültig gelöscht', objectLabel(editing)); setShowForm(false); setNotice('Objekt wurde endgültig gelöscht.'); await load()
   }
 
   return <div>
@@ -120,7 +128,7 @@ export default function ZentraleObjekte() {
           const count = links[item.id]
           return <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="font-semibold text-gray-900">{item.label ? `${item.label} · ${item.address}` : item.address}</h3>
+              <h3 className="font-semibold text-gray-900">{objectLabel(item)}</h3>
               {item.note ? <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-wrap">{item.note}</p> : null}
               {count ? <div className="flex flex-wrap gap-1.5 mt-2">
                 {count.avBv ? <span className="text-xs font-medium bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">{count.avBv}× AV/BV & EV</span> : null}
@@ -135,7 +143,14 @@ export default function ZentraleObjekte() {
       </section>
     )}
     {showForm ? <Modal title={editing ? 'Objekt bearbeiten' : 'Objekt anlegen'} close={() => setShowForm(false)}>
-      <Field label="Adresse *" value={form.address} onChange={value => setForm(current => ({ ...current, address: value }))} />
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2"><Field label="Straße *" value={form.strasse} onChange={value => setForm(current => ({ ...current, strasse: value }))} /></div>
+        <Field label="Hausnr." value={form.hausnummer} onChange={value => setForm(current => ({ ...current, hausnummer: value }))} />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <Field label="PLZ *" value={form.plz} onChange={value => setForm(current => ({ ...current, plz: value }))} />
+        <div className="col-span-2"><Field label="Ort *" value={form.ort} onChange={value => setForm(current => ({ ...current, ort: value }))} /></div>
+      </div>
       <Field label="Bezeichnung (optional, z. B. Name des Gebäudes)" value={form.label} onChange={value => setForm(current => ({ ...current, label: value }))} />
       <label className="block text-xs font-medium text-gray-600">Notiz<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>
       {error ? <ErrorMessage text={error} /> : null}

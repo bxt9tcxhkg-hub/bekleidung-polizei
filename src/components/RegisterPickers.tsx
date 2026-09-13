@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { objectLabel, personLabel } from '../lib/register'
+import { composeObjectAddress, objectLabel, personLabel } from '../lib/register'
 import type { OperationalObject, OperationalPerson } from '../lib/types'
 import { inputClass } from './ZentraleEntryEditor'
 
@@ -79,20 +79,27 @@ export function ObjectPicker({ objects, value, onChange, createdBy, onCreated, l
   required?: boolean
 }) {
   const [showCreate, setShowCreate] = useState(false)
-  const [address, setAddress] = useState('')
+  const [strasse, setStrasse] = useState('')
+  const [hausnummer, setHausnummer] = useState('')
+  const [plz, setPlz] = useState('')
+  const [ort, setOrt] = useState('')
   const [objLabel, setObjLabel] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   async function create() {
-    if (!address.trim()) { setError('Bitte eine Adresse eingeben.'); return }
+    const address = composeObjectAddress({ strasse, hausnummer, plz, ort })
+    if (!address) { setError('Bitte Straße, PLZ und Ort eingeben.'); return }
     setSaving(true)
-    const result = await supabase.from('operational_objects').insert({ address: address.trim(), label: objLabel.trim() || null, created_by: createdBy }).select('*').single()
+    const result = await supabase.from('operational_objects').insert({
+      address, strasse: strasse.trim(), hausnummer: hausnummer.trim() || null, plz: plz.trim(), ort: ort.trim(),
+      label: objLabel.trim() || null, created_by: createdBy,
+    }).select('*').single()
     setSaving(false)
     if (result.error || !result.data) { setError('Objekt konnte nicht angelegt werden.'); return }
     onCreated(result.data as OperationalObject)
     onChange(result.data.id)
-    setShowCreate(false); setAddress(''); setObjLabel(''); setError('')
+    setShowCreate(false); setStrasse(''); setHausnummer(''); setPlz(''); setOrt(''); setObjLabel(''); setError('')
   }
 
   return <div>
@@ -104,7 +111,14 @@ export function ObjectPicker({ objects, value, onChange, createdBy, onCreated, l
       </select>
     </label>
     {showCreate ? <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-      <input className={inputClass} placeholder="Adresse *" value={address} onChange={event => setAddress(event.target.value)} />
+      <div className="grid grid-cols-3 gap-2">
+        <input className={`${inputClass} col-span-2`} placeholder="Straße *" value={strasse} onChange={event => setStrasse(event.target.value)} />
+        <input className={inputClass} placeholder="Hausnr." value={hausnummer} onChange={event => setHausnummer(event.target.value)} />
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <input className={inputClass} placeholder="PLZ *" value={plz} onChange={event => setPlz(event.target.value)} />
+        <input className={`${inputClass} col-span-2`} placeholder="Ort *" value={ort} onChange={event => setOrt(event.target.value)} />
+      </div>
       <input className={inputClass} placeholder="Bezeichnung (optional, z. B. Name des Gebäudes)" value={objLabel} onChange={event => setObjLabel(event.target.value)} />
       {error ? <p className="text-xs text-red-700">{error}</p> : null}
       <div className="flex justify-end gap-2">
