@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { LogOut, Menu, X } from 'lucide-react'
+import { LogOut, Menu, ShieldCheck, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import type { NavSection } from '../lib/sidebarSections'
 import ChangePasswordModal from './ChangePasswordModal'
@@ -25,7 +25,7 @@ export function PortalSidebarShell({
   /** Vorformatierte Rollen-/Dienstgrad-Zeile für die Fußzeile (z. B. über sidebarRoleLabels). */
   footerLine: string
 }) {
-  const { profile, mustChangePassword, mustSetUsername, signOut } = useAuth()
+  const { profile, mustChangePassword, mustSetUsername, signOut, hasElevatedRole, operativeModeActive, setOperativeModeActive } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -87,6 +87,28 @@ export function PortalSidebarShell({
             <p className="text-white text-sm font-medium truncate">{profile?.name || profile?.username}</p>
             <p className="text-blue-300 text-xs truncate">{footerLine}</p>
           </div>
+          {/* Sachbearbeiter/Genehmiger ist kein Dauerzustand: Standard ist die
+              einfache Benutzeransicht, der erweiterte Modus wird bewusst
+              zugeschaltet und ebenso bewusst wieder verlassen - nie automatisch.
+              Nur sichtbar, wenn es überhaupt etwas umzuschalten gibt. */}
+          {hasElevatedRole ? (
+            <button
+              type="button"
+              onClick={() => setOperativeModeActive(!operativeModeActive)}
+              aria-pressed={operativeModeActive}
+              className={`flex items-center justify-between gap-2 w-full px-3 py-2.5 rounded-lg text-sm font-medium mb-1 transition-colors ${
+                operativeModeActive ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25' : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <ShieldCheck className="w-4 h-4 flex-shrink-0" />
+                {operativeModeActive ? 'Erweiterter Modus' : 'Benutzeransicht'}
+              </span>
+              <span className={`inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${operativeModeActive ? 'bg-amber-400' : 'bg-blue-800'}`}>
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${operativeModeActive ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </span>
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => { void signOut() }}

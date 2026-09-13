@@ -74,8 +74,8 @@ function OfficerIdentity({ officer }: { officer: OfficerOption }) {
 }
 
 export default function PersonalEinsatzmittelPanel() {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
 
   const [items, setItems] = useState<PersonalEinsatzmittel[]>([])
   const [officers, setOfficers] = useState<OfficerOption[]>([])

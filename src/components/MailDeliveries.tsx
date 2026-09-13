@@ -46,8 +46,8 @@ function formatDateTime(value: string | null) {
  * kein Erfordernis, "im operativen Dienst" zu sein.
  */
 export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolean }) {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManage = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const { persons, setPersons } = usePersons()
   const [items, setItems] = useState<MailDelivery[]>([])
   const [closedItems, setClosedItems] = useState<MailDelivery[]>([])

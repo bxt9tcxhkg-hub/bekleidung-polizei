@@ -16,9 +16,9 @@ type LinkCounts = { hinweise: number; rsaRsb: number; avBv: number; fahndungen: 
 const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', note: '' }
 
 export default function ZentralePersonen() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [persons, setPersons] = useState<OperationalPerson[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
   const [loading, setLoading] = useState(true)

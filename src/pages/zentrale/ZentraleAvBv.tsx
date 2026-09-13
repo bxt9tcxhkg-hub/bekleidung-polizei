@@ -13,9 +13,9 @@ const ART_LABEL: Record<AvBvArt, string> = { amtsverbot: 'Amtsverbot', betretung
 const emptyForm = { art: 'betretungsverbot' as AvBvArt, personId: null as string | null, objectId: null as string | null, gebiet: '', grund: '', behoerde: '', aktenzeichen: '', gueltigVon: '', gueltigBis: '', note: '', priority: 'normal' as ZentraleEntryPriority, status: 'offen' as ZentraleRegisterStatus, restricted: false }
 
 export default function ZentraleAvBvPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const { persons, setPersons } = usePersons()
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleAvBv[]>([])

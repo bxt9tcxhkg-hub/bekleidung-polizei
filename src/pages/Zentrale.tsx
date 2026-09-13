@@ -76,10 +76,10 @@ function composeIncidentLocation(street: string, houseNumber: string, houseNumbe
 }
 
 export default function Zentrale() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const navigate = useNavigate()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [activeTab, setActiveTab] = useState<TabId>('uebersicht')
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])

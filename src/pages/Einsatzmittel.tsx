@@ -13,9 +13,9 @@ import PoolEinsatzmittelRequestsPanel from './einsatz/PoolEinsatzmittelRequests'
 type TabId = 'persoenlich' | 'pool' | 'lager' | 'meldungen' | 'beschaffung'
 
 export default function Einsatzmittel() {
-  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const [params, setParams] = useSearchParams()
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
   const canPurchase = canPurchasePoolEinsatzmittel({ isStrictAdmin, isGenehmiger })
   const requested = params.get('tab') as TabId | null
   const allowed: TabId[] = canManage

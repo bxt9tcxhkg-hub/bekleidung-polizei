@@ -14,9 +14,9 @@ type Colleague = Pick<Profile, 'id' | 'name' | 'dienstnummer'>
 const emptyForm = { schluesselNummer: '', objectId: null as string | null, verwahrort: '', heldBy: '', note: '', status: 'verfuegbar' as SchluesselStatus, restricted: false }
 
 export default function ZentraleSchluesselPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleSchluessel[]>([])
   const [colleagues, setColleagues] = useState<Colleague[]>([])

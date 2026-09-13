@@ -6,8 +6,8 @@ import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/s
 import { PortalSidebarShell } from './PortalSidebar'
 
 export default function ZentraleLayout() {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const isSachbearbeiterHere = isAreaManager(areaRoles, 'zentrale')
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const isSachbearbeiterHere = isAreaManager(areaRoles, 'zentrale', operativeModeActive)
 
   const sections: NavSection[] = [
     meinBereichSection([

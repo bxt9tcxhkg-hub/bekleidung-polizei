@@ -8,8 +8,8 @@ import { PortalSidebarShell } from './PortalSidebar'
 const OFFENE_PUNKTE_ITEM: NavItem = { to: '/fuhrpark/offen', label: 'Offene Punkte', icon: AlertTriangle }
 
 export default function FuhrparkLayout() {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'fuhrpark')
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'fuhrpark', operativeModeActive)
 
   const sections: NavSection[] = [
     meinBereichSection([

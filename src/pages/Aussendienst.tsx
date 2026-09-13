@@ -35,9 +35,9 @@ function todayLocal() { const date = new Date(); return `${date.getFullYear()}-$
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
 
 export default function Aussendienst() {
-  const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
   const zentraleRoles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManageZentrale = isStrictAdmin || isGenehmiger || zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [activeTab, setActiveTab] = useState<TabId>('einsaetze')
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])

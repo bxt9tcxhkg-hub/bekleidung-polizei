@@ -7,9 +7,9 @@ import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/s
 import { PortalSidebarShell } from './PortalSidebar'
 
 export default function EinsatzLayout() {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
-  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'einsatz_mt')
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'einsatz_mt', operativeModeActive)
 
   const sections: NavSection[] = [
     meinBereichSection([

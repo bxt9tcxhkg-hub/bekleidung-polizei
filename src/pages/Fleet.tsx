@@ -10,8 +10,8 @@ import type { FleetVehicle, FleetVehicleKind, Profile } from '../lib/types'
 const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 export default function Fleet() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
   const [employees, setEmployees] = useState<Pick<Profile, 'id' | 'name' | 'dienstnummer'>[]>([])
   const [defectVehicleIds, setDefectVehicleIds] = useState<string[]>([])

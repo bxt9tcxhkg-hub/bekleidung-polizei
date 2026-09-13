@@ -13,9 +13,9 @@ const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infek
 const emptyPerson = { personId: null as string | null, location: '', category: 'aggressiv' as OperationalPersonNoteCategory, description: '', guidance: '', source: '', validUntil: '' }
 
 export default function ZentralePersonenhinweise() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const { persons, setPersons } = usePersons()
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [loading, setLoading] = useState(true)

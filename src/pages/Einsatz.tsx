@@ -21,13 +21,13 @@ const TABS: { id: EinsatzTab; label: string }[] = [
 ]
 
 export default function Einsatz() {
-  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const [tab, setTab] = useState<EinsatzTab>('einsatzmittel')
   const [emTab, setEmTab] = useState<EmSubTab>('persoenlich')
 
   if (!hasAreaAccess('einsatz_mt')) return <Navigate to="/" replace />
 
-  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
   const subTabs = visibleEmSubTabs(canManage)
   const visibleEmTab = sanitizeEmSubTab(emTab, canManage)
 

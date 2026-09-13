@@ -39,8 +39,8 @@ const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 te
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
 export default function Innendienst() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManageZentrale = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [activeTab, setActiveTab] = useState<TabId>('bescheide')
   const [shift, setShift] = useState<'tag' | 'nacht'>('tag')
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)

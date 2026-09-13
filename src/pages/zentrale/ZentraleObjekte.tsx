@@ -15,9 +15,9 @@ type LinkCounts = { avBv: number; fahndungen: number; schluessel: number; kontak
 const emptyForm = { address: '', label: '', note: '' }
 
 export default function ZentraleObjekte() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [objects, setObjects] = useState<OperationalObject[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
   const [loading, setLoading] = useState(true)

@@ -46,8 +46,8 @@ type CategoryFilter = 'all' | 'ausgebucht' | PoolEmCategory
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
 export default function PoolEinsatzmittelPanel() {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManage = canManagePoolEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManage = canManagePoolEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
   const canPurchase = canPurchasePoolEinsatzmittel({ isStrictAdmin, isGenehmiger })
 
   const [items, setItems] = useState<PoolEinsatzmittel[]>([])
