@@ -21,9 +21,13 @@ export function countedTotalCents(denominations: CashDenominations) {
 
 export const KIND_LABEL: Record<InnendienstRecordKind, string> = { bescheid_strassenmusik: 'Bescheid Straßenmusik', bescheid_strassenkunst: 'Bescheid Straßenkunst', verstoss: 'Verstoß gegen Auflagen' }
 export const BESCHEID_KINDS: InnendienstRecordKind[] = ['bescheid_strassenmusik', 'bescheid_strassenkunst']
+export const STATUS_LABEL: Record<'offen' | 'erledigt' | 'entzogen', string> = { offen: 'Offen', erledigt: 'Erledigt', entzogen: 'Entzogen' }
 export const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 export function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
-export const EMPTY_BESCHEID_FORM = { kind: 'bescheid_strassenmusik' as InnendienstRecordKind, subject: '', reference: '', note: '', relatedBescheidId: '' }
+// personId gilt nur für einen Bescheid (Person, für die er ausgestellt wird) -
+// ein Verstoß übernimmt seine Person automatisch vom zugehörigen Bescheid,
+// subject bleibt dort die Freitext-Beschreibung des Verstoßes.
+export const EMPTY_BESCHEID_FORM = { kind: 'bescheid_strassenmusik' as InnendienstRecordKind, personId: null as string | null, subject: '', reference: '', note: '', relatedBescheidId: '' }
 export type BescheidFormState = typeof EMPTY_BESCHEID_FORM

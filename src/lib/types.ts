@@ -990,13 +990,16 @@ export interface InnendienstShiftTask {
 }
 
 export type InnendienstRecordKind = 'bescheid_strassenmusik' | 'bescheid_strassenkunst' | 'verstoss'
-export type InnendienstRecordStatus = 'offen' | 'erledigt'
+/** 'entzogen' nur bei einem Bescheid, dem automatisch ein Verstoß entgegensteht (siehe Trigger revoke_bescheid_on_verstoss). */
+export type InnendienstRecordStatus = 'offen' | 'erledigt' | 'entzogen'
 
 export interface InnendienstRecord {
   id: string
   kind: InnendienstRecordKind
   reference: string | null
   subject: string
+  /** Bei einem Bescheid die Person, für die er ausgestellt wurde - eine echte Verknüpfung zum Personen-Register statt Namens-Freitext, damit Verstöße je Person eindeutig zählbar sind. Ein Verstoß übernimmt automatisch dieselbe Person von seinem Bescheid. */
+  person_id: string | null
   note: string | null
   status: InnendienstRecordStatus
   issued_date: string
@@ -1006,6 +1009,7 @@ export interface InnendienstRecord {
   created_at: string
   updated_at: string
   creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
   related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
 }
 
@@ -1197,7 +1201,7 @@ type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
 type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
-type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid'>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
 type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>
 type StrassenzustandBerichtzeileRow = Omit<StrassenzustandBerichtzeile, 'strassenzustand_strassen' | 'strassenzustand_auftraggeber' | 'strassenzustand_melder'>
@@ -1440,6 +1444,7 @@ export type Database = {
       innendienst_records: { Row: InnendienstRecordRow; Insert: Pick<InnendienstRecordRow, 'kind' | 'subject' | 'created_by'> & Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'updated_at' | 'kind' | 'subject' | 'created_by'>>; Update: Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'innendienst_records_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_records_related_bescheid_id_fkey'; columns: ['related_bescheid_id']; isOneToOne: false; referencedRelation: 'innendienst_records'; referencedColumns: ['id'] },
+        { foreignKeyName: 'innendienst_records_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
       ] }
       innendienst_gebuehrenpositionen: { Row: InnendienstGebuehrenpositionRow; Insert: Pick<InnendienstGebuehrenpositionRow, 'name' | 'betrag'> & Partial<Omit<InnendienstGebuehrenpositionRow, 'name' | 'betrag'>>; Update: Partial<Omit<InnendienstGebuehrenpositionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'innendienst_gebuehrenpositionen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
