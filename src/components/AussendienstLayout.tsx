@@ -1,4 +1,4 @@
-import { LayoutGrid, Shield } from 'lucide-react'
+import { BookOpen, LayoutGrid, Mail, Shield } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
@@ -11,6 +11,10 @@ export default function AussendienstLayout() {
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/aussendienst', label: 'Außendienst / Streife', icon: Shield },
+      // Dieselben Seiten wie unter Zentrale/RSa-RSb bzw. Unterlagen - keine
+      // eigene Kopie, nur bequem von hier erreichbar.
+      { to: '/rsa-rsb', label: 'RSa/RSb', icon: Mail },
+      { to: '/zentrale/unterlagen', label: 'Kontrollbehelfe', icon: BookOpen },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]

@@ -11,22 +11,22 @@ import type { AvBvArt, DutyAssignment, DutyFunctionConfig, DutyShift, FahndungAr
 import { Actions, Area, Empty, EntryList, EntryModal, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
 import { personDisplayName } from '../lib/register'
-import ZentraleStrassenzustand from './zentrale/ZentraleStrassenzustand'
 
 // Auf der Zentrale-Hauptseite bleiben nur die Bereiche, die den Zentralisten
 // im Tagesgeschäft unmittelbar betreffen. AV/BV & EV, Personenhinweise,
-// Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung und Unterlagen sind
-// eigenständige Seiten in der Sidebar (siehe ZentraleLayout). Kontrollaufträge
-// betreffen nur die Streifen (JD/VD) und werden dort im Außendienst verwaltet.
+// Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen und
+// Straßenzustand sind eigenständige Seiten in der Sidebar (siehe
+// ZentraleLayout) - Straßenzustand ist ein formeller Berichts-/PDF-Workflow,
+// kein Tagesgeschäft, daher kein Tab mehr hier. Kontrollaufträge betreffen
+// nur die Streifen (JD/VD) und werden dort im Außendienst verwaltet.
 // Schichtübergabe ist kein eigener, manuell zu pflegender Eintrag: sie ergibt
 // sich aus den am Schichtende noch offenen Einsatzmeldungen und steht dafür
 // ganz unten in der Übersicht, direkt vor dem Schichtwechsel relevant.
-type TabId = 'uebersicht' | 'einsaetze' | 'lage' | 'strassenzustand'
+type TabId = 'uebersicht' | 'einsaetze' | 'lage'
 const TABS: { id: TabId; label: string; icon: typeof Radio; description: string }[] = [
   { id: 'uebersicht', label: 'Übersicht', icon: LayoutDashboard, description: 'Besetzung, offene Meldungen und relevante Informationen' },
   { id: 'einsaetze', label: 'Einsätze', icon: Radio, description: 'Meldungen schnell erfassen und disponieren' },
   { id: 'lage', label: 'Operative Lage', icon: Radio, description: 'Ereignisse, Sperren, Gefahren- und Lagehinweise – wird aus einem Einsatz im Tab „Einsätze" erklärt' },
-  { id: 'strassenzustand', label: 'Straßenzustand', icon: MapPin, description: 'Bericht erfassen, prüfen und als PDF versenden' },
 ]
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
 const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infektionsschutz: 'Infektionsschutz', aggressiv: 'Aggressives Verhalten', waffenverbot: 'Waffenverbot', fluchtgefahr: 'Fluchtgefahr', suizidgefahr: 'Suizidgefahr', sonstiges: 'Sonstiger Sicherheitshinweis' }
@@ -459,8 +459,6 @@ export default function Zentrale() {
     </div> : null}
 
     {!loading && activeTab === 'einsaetze' ? <section><div className="flex items-center justify-between gap-3 mb-3"><div><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-sm text-gray-500">Kurze interne Koordination, keine Aktenbearbeitung.</p></div>{canOperateZentrale ? <button type="button" onClick={openIncident} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button> : null}</div>{incidentCards}</section> : null}
-
-    {!loading && activeTab === 'strassenzustand' ? <ZentraleStrassenzustand canManage={canManage} /> : null}
 
     {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} incidentsById={incidentsById} hideCreate /> : null}
 

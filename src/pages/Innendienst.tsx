@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BookOpen, CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Pencil, Plus, Receipt, ShieldAlert, Trash2, X } from 'lucide-react'
-import { Navigate } from 'react-router-dom'
-import MailDeliveries, { OwnerNotifications } from '../components/MailDeliveries'
+import { CheckCircle2, ClipboardList, Coins, FileClock, Mail, Music, Palette, Pencil, Plus, Receipt, ShieldAlert, Trash2, X } from 'lucide-react'
+import { Link, Navigate } from 'react-router-dom'
+import { OwnerNotifications } from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry, ZentraleUnterlage } from '../lib/types'
+import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../lib/types'
 import { EntryModal } from '../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
 import InnendienstGebuehrenPanel from './innendienst/InnendienstGebuehren'
@@ -24,11 +24,11 @@ function countedTotalCents(denominations: CashDenominations) {
   return DENOMINATIONS.reduce((sum, item) => sum + item.cents * (denominations[String(item.cents)] ?? 0), 0)
 }
 
-type TabId = 'bescheide' | 'rsa_rsb' | 'unterlagen' | 'uebergabe' | 'gebuehren'
-const TABS: { id: TabId; label: string; icon: typeof BookOpen }[] = [
+// RSa/RSb und Unterlagen sind eigene Sidebar-Seiten (siehe InnendienstLayout) -
+// dieselben Daten hier zusätzlich als Tab zu zeigen, wäre eine Dopplung.
+type TabId = 'bescheide' | 'uebergabe' | 'gebuehren'
+const TABS: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
   { id: 'bescheide', label: 'Bescheide & Verstöße', icon: ClipboardList },
-  { id: 'rsa_rsb', label: 'RSa/RSb', icon: Mail },
-  { id: 'unterlagen', label: 'Formulare & Unterlagen', icon: BookOpen },
   { id: 'uebergabe', label: 'Schichtübergabe', icon: FileClock },
   { id: 'gebuehren', label: 'Gebührenordnung', icon: Receipt },
 ]
@@ -46,7 +46,6 @@ export default function Innendienst() {
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
   const [records, setRecords] = useState<InnendienstRecord[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
-  const [unterlagen, setUnterlagen] = useState<ZentraleUnterlage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -65,11 +64,10 @@ export default function Innendienst() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [recordResult, entryResult, mailResult, unterlageResult] = await Promise.all([
+    const [recordResult, entryResult, mailResult] = await Promise.all([
       supabase.from('innendienst_records').select('*').order('issued_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('zentrale_entries').select('*').order('updated_at', { ascending: false }),
       supabase.from('mail_deliveries').select('id', { count: 'exact', head: true }).in('status', ['offen', 'spaeter_erneut']),
-      supabase.from('zentrale_unterlagen').select('*').order('titel'),
     ])
     const taskResult = userId ? await supabase.from('innendienst_shift_tasks').select('*').eq('user_id', userId).eq('duty_date', today).eq('shift', shift).maybeSingle() : null
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
@@ -77,7 +75,6 @@ export default function Innendienst() {
     setOwnTask((taskResult?.data ?? null) as InnendienstShiftTask | null)
     setRecords((recordResult.data ?? []) as unknown as InnendienstRecord[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
-    setUnterlagen(unterlageResult.error ? [] : (unterlageResult.data ?? []) as ZentraleUnterlage[])
     setOpenRsaRsbCount(mailResult.count ?? 0)
     setLoading(false)
   }, [userId, shift])
@@ -195,7 +192,7 @@ export default function Innendienst() {
         </div> : <div className="mt-2"><p className="text-sm text-gray-500 mb-2">{ownTask?.kasse_confirmed_at ? 'Bestätigt, aber ohne Kassensturz erfasst – bitte nachholen.' : 'Noch nicht bestätigt.'}</p><button type="button" onClick={openKasseWizard} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2 rounded-lg">Kasse abrechnen</button></div>}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Mail className="w-4 h-4 text-blue-700" /> RSa/RSb</h2><p className="text-sm text-gray-700 mt-2">{openRsaRsbCount} offene Sendung{openRsaRsbCount === 1 ? '' : 'en'}.</p><button type="button" onClick={() => setActiveTab('rsa_rsb')} className="text-sm font-semibold text-blue-700 mt-2">Übersicht öffnen →</button>{profile?.id ? <div className="mt-3"><OwnerNotifications userId={profile.id} /></div> : null}</section>
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Mail className="w-4 h-4 text-blue-700" /> RSa/RSb</h2><p className="text-sm text-gray-700 mt-2">{openRsaRsbCount} offene Sendung{openRsaRsbCount === 1 ? '' : 'en'}.</p><Link to="/rsa-rsb" className="text-sm font-semibold text-blue-700 mt-2 inline-block">Übersicht öffnen →</Link>{profile?.id ? <div className="mt-3"><OwnerNotifications userId={profile.id} /></div> : null}</section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex items-center justify-between gap-2"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ClipboardList className="w-4 h-4 text-blue-700" /> Bescheide heute</h2></div><div className="grid grid-cols-2 gap-2 mt-2"><Stat icon={Music} label="Straßenmusik" value={todaysBescheide.filter(item => item.kind === 'bescheid_strassenmusik').length} /><Stat icon={Palette} label="Straßenkunst" value={todaysBescheide.filter(item => item.kind === 'bescheid_strassenkunst').length} /></div><div className="flex flex-wrap gap-2 mt-3"><button type="button" onClick={() => openNewBescheid('bescheid_strassenmusik')} className="inline-flex items-center gap-1.5 text-xs font-medium border border-gray-300 px-3 py-1.5 rounded-lg"><Plus className="w-3.5 h-3.5" /> Straßenmusik</button><button type="button" onClick={() => openNewBescheid('bescheid_strassenkunst')} className="inline-flex items-center gap-1.5 text-xs font-medium border border-gray-300 px-3 py-1.5 rounded-lg"><Plus className="w-3.5 h-3.5" /> Straßenkunst</button></div></section>
 
@@ -214,8 +211,6 @@ export default function Innendienst() {
       </article>
     })}</div>}</section> : null}
 
-    {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
-    {!loading && activeTab === 'unterlagen' ? (unterlagen.length === 0 ? <Empty text="Keine Unterlagen vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{unterlagen.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.titel}</h3>{item.fundort ? <p className="text-sm text-gray-600 mt-1">{item.fundort}</p> : null}{item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}</article>)}</div>) : null}
     {!loading && activeTab === 'uebergabe' ? <div>
       {canManageZentrale ? <div className="mb-3 flex justify-end"><button type="button" onClick={openNewHandover} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Übergabepunkt</button></div> : null}
       {handovers.length === 0 ? <Empty text="Keine offenen Übergabepunkte." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{handovers.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</div>{canManageZentrale ? <button type="button" onClick={() => openEditHandover(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Übergabepunkt bearbeiten"><Pencil className="w-4 h-4" /></button> : null}</article>)}</div>}

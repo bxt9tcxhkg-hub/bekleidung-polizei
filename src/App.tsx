@@ -48,11 +48,11 @@ const ZentralePersonenhinweise = lazy(() => import('./pages/zentrale/ZentralePer
 const ZentralePersonen = lazy(() => import('./pages/zentrale/ZentralePersonen'))
 const ZentraleObjekte = lazy(() => import('./pages/zentrale/ZentraleObjekte'))
 const ZentraleFahndungen = lazy(() => import('./pages/zentrale/ZentraleFahndungen'))
-const ZentraleRsaRsb = lazy(() => import('./pages/zentrale/ZentraleRsaRsb'))
 const ZentraleSchluessel = lazy(() => import('./pages/zentrale/ZentraleSchluessel'))
 const ZentraleKontakte = lazy(() => import('./pages/zentrale/ZentraleKontakte'))
 const ZentraleAlarmierung = lazy(() => import('./pages/zentrale/ZentraleAlarmierung'))
 const ZentraleUnterlagen = lazy(() => import('./pages/zentrale/ZentraleUnterlagen'))
+const ZentraleStrassenzustand = lazy(() => import('./pages/zentrale/ZentraleStrassenzustand'))
 const Aussendienst = lazy(() => import('./pages/Aussendienst'))
 const Innendienst = lazy(() => import('./pages/Innendienst'))
 const RsaRsb = lazy(() => import('./pages/RsaRsb'))
@@ -101,6 +101,7 @@ export default function App() {
             <Route path="unterlagen" element={<EinsatzMaterials />} />
           </Route>
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
+          <Route path="/zentrale/rsa-rsb" element={<Navigate to="/rsa-rsb" replace />} />
           <Route
             element={
               <ProtectedRoute>
@@ -114,11 +115,11 @@ export default function App() {
             <Route path="/zentrale/personen" element={<ZentralePersonen />} />
             <Route path="/zentrale/objekte" element={<ZentraleObjekte />} />
             <Route path="/zentrale/fahndungen" element={<ZentraleFahndungen />} />
-            <Route path="/zentrale/rsa-rsb" element={<ZentraleRsaRsb />} />
             <Route path="/zentrale/schluessel" element={<ZentraleSchluessel />} />
             <Route path="/zentrale/kontakte" element={<ZentraleKontakte />} />
             <Route path="/zentrale/alarmierung" element={<ZentraleAlarmierung />} />
             <Route path="/zentrale/unterlagen" element={<ZentraleUnterlagen />} />
+            <Route path="/zentrale/strassenzustand" element={<ZentraleStrassenzustand />} />
           </Route>
           <Route
             element={

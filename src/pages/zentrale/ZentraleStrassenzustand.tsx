@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, FileArchive, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
@@ -66,8 +67,10 @@ const MELDUNGSART_BADGE: Record<StrassenzustandMeldungsart, string> = {
   widerruf: 'bg-green-100 text-green-800',
 }
 
-export default function ZentraleStrassenzustand({ canManage }: { canManage: boolean }) {
-  const { profile } = useAuth()
+export default function ZentraleStrassenzustand() {
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [strassen, setStrassen] = useState<StrassenzustandStammdatum[]>([])
   const [auftraggeber, setAuftraggeber] = useState<StrassenzustandStammdatum[]>([])
   const [melder, setMelder] = useState<StrassenzustandStammdatum[]>([])
@@ -286,7 +289,10 @@ export default function ZentraleStrassenzustand({ canManage }: { canManage: bool
     await load()
   }
 
+  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+
   return <div>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Straßenzustand</h1><p className="text-sm text-gray-500 mt-1">Bericht erfassen, prüfen und als PDF versenden.</p></div>
     {error ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <div className="space-y-6">

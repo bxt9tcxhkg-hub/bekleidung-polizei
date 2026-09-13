@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
-import { AlertTriangle, BookOpen, Car, CheckCircle2, ClipboardList, Construction, Mail, Pencil, Plus, Radio, ShieldAlert, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, Car, CheckCircle2, ClipboardList, Construction, Pencil, Plus, Radio, ShieldAlert, Trash2, UsersRound } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
-import MailDeliveries from '../components/MailDeliveries'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../lib/geocode'
-import type { AvBvArt, DutyAssignment, DutyFunctionConfig, FahndungArt, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung, ZentraleUnterlage } from '../lib/types'
+import type { AvBvArt, DutyAssignment, DutyFunctionConfig, FahndungArt, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung } from '../lib/types'
 import { personDisplayName } from '../lib/register'
 
-type TabId = 'einsaetze' | 'kontrollauftraege' | 'hinweise' | 'rsa_rsb' | 'kontrollbehelfe' | 'fahrzeug'
+// RSa/RSb und Kontrollbehelfe (Unterlagen) sind eigene Sidebar-Seiten (siehe
+// AussendienstLayout) - dieselben Daten hier zusätzlich als Tab zu zeigen, wäre eine Dopplung.
+type TabId = 'einsaetze' | 'kontrollauftraege' | 'hinweise' | 'fahrzeug'
 const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
   { id: 'einsaetze', label: 'Einsätze', icon: Radio },
   { id: 'kontrollauftraege', label: 'Kontrollaufträge', icon: ClipboardList },
   { id: 'hinweise', label: 'Operative Hinweise', icon: ShieldAlert },
-  { id: 'rsa_rsb', label: 'RSa/RSb', icon: Mail },
-  { id: 'kontrollbehelfe', label: 'Kontrollbehelfe', icon: BookOpen },
   { id: 'fahrzeug', label: 'Fahrzeug', icon: Car },
 ]
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
@@ -49,7 +48,6 @@ export default function Aussendienst() {
   // Wie in Zentrale.tsx: bei Ladefehler darf "Keine aktuell dringenden
   // Warnungen" nicht fälschlich Entwarnung geben.
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
-  const [unterlagen, setUnterlagen] = useState<ZentraleUnterlage[]>([])
   const [incidents, setIncidents] = useState<{ id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -69,7 +67,7 @@ export default function Aussendienst() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult, unterlageResult] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
@@ -79,7 +77,6 @@ export default function Aussendienst() {
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
-      supabase.from('zentrale_unterlagen').select('*').order('titel'),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
@@ -92,7 +89,6 @@ export default function Aussendienst() {
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
     setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
     setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
-    setUnterlagen(unterlageResult.error ? [] : (unterlageResult.data ?? []) as ZentraleUnterlage[])
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -217,8 +213,6 @@ export default function Aussendienst() {
         {fahndungen.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">Fahndung ({FAHNDUNG_ART_LABEL[item.art]}) · {(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.beschreibung}</p></article>)}
       </div>}
     </div> : null}
-    {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
-    {!loading && activeTab === 'kontrollbehelfe' ? (unterlagen.length === 0 ? <Empty text="Keine Kontrollbehelfe vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{unterlagen.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.titel}</h3>{item.fundort ? <p className="text-sm text-gray-600 mt-1">{item.fundort}</p> : null}{item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}</article>)}</div>) : null}
     {!loading && activeTab === 'fahrzeug' ? (ownVehicle ? <div className="rounded-2xl border border-gray-200 bg-white p-5"><h2 className="font-bold text-gray-900">{ownVehicle.name}</h2><dl className="text-sm mt-3 space-y-1.5"><div className="flex justify-between"><dt className="text-gray-500">Rufname</dt><dd className="font-medium">{ownVehicle.call_sign || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium">{ownVehicle.license_plate || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Marke/Modell</dt><dd className="font-medium">{[ownVehicle.make, ownVehicle.model].filter(Boolean).join(' ') || '–'}</dd></div></dl><Link to={`/fuhrpark/${ownVehicle.id}`} className="inline-block mt-4 text-sm font-semibold text-blue-700">Fahrzeugdetails im Fuhrpark →</Link></div> : <Empty text="Kein Fahrzeug zugewiesen." />) : null}
 
     {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}

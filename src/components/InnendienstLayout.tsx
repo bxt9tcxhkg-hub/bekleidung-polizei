@@ -1,4 +1,4 @@
-import { Building2, LayoutGrid } from 'lucide-react'
+import { BookOpen, Building2, LayoutGrid, Mail } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -13,6 +13,9 @@ export default function InnendienstLayout() {
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/innendienst', label: 'Innendienst', icon: Building2 },
+      // Dieselben Seiten wie unter Zentrale/RSa-RSb - keine eigene Kopie, nur bequem von hier erreichbar.
+      { to: '/rsa-rsb', label: 'RSa/RSb', icon: Mail },
+      { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]
