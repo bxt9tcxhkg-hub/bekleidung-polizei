@@ -6,14 +6,17 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import type { OperationalPersonNote, OperationalPersonNoteCategory } from '../../lib/types'
 import { Actions, Area, Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
+import { PersonPicker } from '../../components/RegisterPickers'
+import { usePersons } from '../../lib/register'
 
 const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infektionsschutz: 'Infektionsschutz', aggressiv: 'Aggressives Verhalten', waffenverbot: 'Waffenverbot', fluchtgefahr: 'Fluchtgefahr', suizidgefahr: 'Suizidgefahr', sonstiges: 'Sonstiger Sicherheitshinweis' }
-const emptyPerson = { name: '', birthDate: '', phone: '', location: '', category: 'aggressiv' as OperationalPersonNoteCategory, description: '', guidance: '', source: '', validUntil: '' }
+const emptyPerson = { personId: null as string | null, location: '', category: 'aggressiv' as OperationalPersonNoteCategory, description: '', guidance: '', source: '', validUntil: '' }
 
 export default function ZentralePersonenhinweise() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const { persons, setPersons } = usePersons()
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -24,10 +27,10 @@ export default function ZentralePersonenhinweise() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const result = await supabase.from('operational_person_notes').select('*').eq('active', true).order('updated_at', { ascending: false })
+    const result = await supabase.from('operational_person_notes').select('*, person:operational_persons(id,name,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false })
     if (result.error) setError('Die Hinweise konnten nicht geladen werden.')
     else setError('')
-    setPersonNotes((result.data ?? []) as OperationalPersonNote[])
+    setPersonNotes((result.data ?? []) as unknown as OperationalPersonNote[])
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -36,18 +39,19 @@ export default function ZentralePersonenhinweise() {
 
   function openNew() { setPerson(emptyPerson); setShowForm(true); setError('') }
   async function save() {
-    if (!profile?.id || !person.name.trim() || !person.description.trim()) { setError('Bitte Person und sachlichen Hinweis eingeben.'); return }
+    if (!profile?.id || !person.personId || !person.description.trim()) { setError('Bitte Person und sachlichen Hinweis eingeben.'); return }
     setSaving(true)
-    const result = await supabase.from('operational_person_notes').insert({ person_name: person.name.trim(), birth_date: person.birthDate || null, phone: person.phone.trim() || null, location: person.location.trim() || null, category: person.category, note: person.description.trim(), action_guidance: person.guidance.trim() || null, source_reference: person.source.trim() || null, valid_until: person.validUntil || null, created_by: profile.id })
+    const result = await supabase.from('operational_person_notes').insert({ person_id: person.personId, location: person.location.trim() || null, category: person.category, note: person.description.trim(), action_guidance: person.guidance.trim() || null, source_reference: person.source.trim() || null, valid_until: person.validUntil || null, created_by: profile.id })
     setSaving(false)
     if (result.error) { setError('Der Personenhinweis konnte nicht gespeichert werden.'); return }
-    logAudit('Operativen Personenhinweis angelegt', `${PERSON_NOTE_LABEL[person.category]} · ${person.name.trim()}`); setShowForm(false); setNotice('Personenhinweis wurde gespeichert.'); await load()
+    const personName = persons.find(item => item.id === person.personId)?.name ?? ''
+    logAudit('Operativen Personenhinweis angelegt', `${PERSON_NOTE_LABEL[person.category]} · ${personName}`); setShowForm(false); setNotice('Personenhinweis wurde gespeichert.'); await load()
   }
   async function remove(item: OperationalPersonNote) {
-    if (!window.confirm(`Hinweis zu „${item.person_name}“ endgültig löschen?`)) return
+    if (!window.confirm(`Hinweis zu „${item.person?.name ?? 'dieser Person'}“ endgültig löschen?`)) return
     const result = await supabase.from('operational_person_notes').delete().eq('id', item.id)
     if (result.error) { setError('Der Personenhinweis konnte nicht gelöscht werden.'); return }
-    logAudit('Operativen Personenhinweis endgültig gelöscht', item.person_name); await load()
+    logAudit('Operativen Personenhinweis endgültig gelöscht', item.person?.name ?? item.id); await load()
   }
 
   return <div>
@@ -61,14 +65,18 @@ export default function ZentralePersonenhinweise() {
           <div><h2 className="font-bold text-gray-900">Operative Personenhinweise</h2><p className="text-sm text-gray-500">Nur sachliche und aktuell erforderliche Sicherheitsinformationen.</p></div>
           {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Hinweis</button> : null}
         </div>
-        {personNotes.length === 0 ? <Empty text="Keine für dich sichtbaren aktiven Hinweise vorhanden." /> : <div className="divide-y">{personNotes.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.person_name}</h3><span className="text-xs font-semibold bg-red-100 text-red-800 px-2 py-1 rounded-full">{PERSON_NOTE_LABEL[item.category]}</span></div><p className="text-sm text-gray-700 mt-2">{item.note}</p>{item.action_guidance ? <p className="text-sm font-medium text-gray-900 mt-2">Hinweis: {item.action_guidance}</p> : null}<div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-2">{item.birth_date ? <span>Geb.: {new Date(item.birth_date).toLocaleDateString('de-AT')}</span> : null}{item.phone ? <span>TEL: {item.phone}</span> : null}{item.location ? <span>Adresse: {item.location}</span> : null}{item.valid_until ? <span>Gültig bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{item.source_reference ? <span>Grundlage: {item.source_reference}</span> : null}</div></div>{canManage ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Personenhinweis löschen"><Trash2 className="w-4 h-4" /></button> : null}</article>)}</div>}
+        {personNotes.length === 0 ? <Empty text="Keine für dich sichtbaren aktiven Hinweise vorhanden." /> : <div className="divide-y">{personNotes.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{item.person?.name ?? 'Unbekannte Person'}</h3><span className="text-xs font-semibold bg-red-100 text-red-800 px-2 py-1 rounded-full">{PERSON_NOTE_LABEL[item.category]}</span></div><p className="text-sm text-gray-700 mt-2">{item.note}</p>{item.action_guidance ? <p className="text-sm font-medium text-gray-900 mt-2">Hinweis: {item.action_guidance}</p> : null}<div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-2">{item.person?.birth_date ? <span>Geb.: {new Date(item.person.birth_date).toLocaleDateString('de-AT')}</span> : null}{item.person?.phone ? <span>TEL: {item.person.phone}</span> : null}{item.location ? <span>Adresse: {item.location}</span> : null}{item.valid_until ? <span>Gültig bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{item.source_reference ? <span>Grundlage: {item.source_reference}</span> : null}</div></div>{canManage ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Personenhinweis löschen"><Trash2 className="w-4 h-4" /></button> : null}</article>)}</div>}
       </section>
     )}
-    {showForm ? <PersonModal person={person} setPerson={setPerson} saving={saving} error={error} close={() => setShowForm(false)} save={save} /> : null}
+    {showForm ? <PersonModal person={person} setPerson={setPerson} persons={persons} onPersonCreated={created => setPersons(current => [...current, created].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')))} createdBy={profile?.id ?? null} saving={saving} error={error} close={() => setShowForm(false)} save={save} /> : null}
   </div>
 }
 
-function PersonModal({ person, setPerson, saving, error, close, save }: { person: typeof emptyPerson; setPerson: Dispatch<SetStateAction<typeof emptyPerson>>; saving: boolean; error: string; close: () => void; save: () => Promise<void> }) {
+function PersonModal({ person, setPerson, persons, onPersonCreated, createdBy, saving, error, close, save }: { person: typeof emptyPerson; setPerson: Dispatch<SetStateAction<typeof emptyPerson>>; persons: ReturnType<typeof usePersons>['persons']; onPersonCreated: (person: ReturnType<typeof usePersons>['persons'][number]) => void; createdBy: string | null; saving: boolean; error: string; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<typeof person>) => setPerson(current => ({ ...current, ...values }))
-  return <Modal title="Operativen Personenhinweis anlegen" close={close}><div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">Nur erforderliche, sachliche und überprüfbare Informationen erfassen. Bei Infektionsrisiken möglichst den notwendigen Schutz statt einer Diagnose beschreiben.</div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Person *" value={person.name} onChange={value => patch({ name: value })} /><Field label="Geburtsdatum" type="date" value={person.birthDate} onChange={value => patch({ birthDate: value })} /><Field label="Telefonnummer" value={person.phone} onChange={value => patch({ phone: value })} /><Field label="Adresse (optional)" value={person.location} onChange={value => patch({ location: value })} /><label className="text-xs font-medium text-gray-600">Art<select className={inputClass} value={person.category} onChange={event => patch({ category: event.target.value as OperationalPersonNoteCategory })}>{Object.entries(PERSON_NOTE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><p className="text-xs text-gray-500 -mt-2">Adresse eintragen, wenn der Hinweis auch beim Anlegen einer Meldung an dieser Adresse auffindbar sein soll - unabhängig davon, ob der Name der Person bereits bekannt ist.</p><Area label="Sachlicher Hinweis *" value={person.description} onChange={value => patch({ description: value })} /><Area label="Konkreter Handlungshinweis" value={person.guidance} onChange={value => patch({ guidance: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Grundlage / Referenz" value={person.source} onChange={value => patch({ source: value })} /><Field label="Gültig bis" type="date" value={person.validUntil} onChange={value => patch({ validUntil: value })} /></div>{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
+  return <Modal title="Operativen Personenhinweis anlegen" close={close}><div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">Nur erforderliche, sachliche und überprüfbare Informationen erfassen. Bei Infektionsrisiken möglichst den notwendigen Schutz statt einer Diagnose beschreiben.</div>
+    <PersonPicker persons={persons} value={person.personId} onChange={id => patch({ personId: id })} createdBy={createdBy} onCreated={onPersonCreated} required />
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Adresse (optional)" value={person.location} onChange={value => patch({ location: value })} /><label className="text-xs font-medium text-gray-600">Art<select className={inputClass} value={person.category} onChange={event => patch({ category: event.target.value as OperationalPersonNoteCategory })}>{Object.entries(PERSON_NOTE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+    <p className="text-xs text-gray-500 -mt-2">Adresse eintragen, wenn der Hinweis auch beim Anlegen einer Meldung an dieser Adresse auffindbar sein soll - unabhängig davon, ob die Person bereits im Personen-Register erfasst ist.</p>
+    <Area label="Sachlicher Hinweis *" value={person.description} onChange={value => patch({ description: value })} /><Area label="Konkreter Handlungshinweis" value={person.guidance} onChange={value => patch({ guidance: value })} /><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="Grundlage / Referenz" value={person.source} onChange={value => patch({ source: value })} /><Field label="Gültig bis" type="date" value={person.validUntil} onChange={value => patch({ validUntil: value })} /></div>{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
 }

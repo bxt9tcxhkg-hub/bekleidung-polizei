@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom'
 import MailDeliveries, { OwnerNotifications } from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../lib/types'
+import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry, ZentraleUnterlage } from '../lib/types'
 import InnendienstGebuehrenPanel from './innendienst/InnendienstGebuehren'
 
 // Euro-Stückelungen in Cent (Ganzzahlen statt Fließkomma, um Rundungsfehler zu vermeiden).
@@ -42,6 +42,7 @@ export default function Innendienst() {
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
   const [records, setRecords] = useState<InnendienstRecord[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
+  const [unterlagen, setUnterlagen] = useState<ZentraleUnterlage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -56,10 +57,11 @@ export default function Innendienst() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [recordResult, entryResult, mailResult] = await Promise.all([
+    const [recordResult, entryResult, mailResult, unterlageResult] = await Promise.all([
       supabase.from('innendienst_records').select('*').order('issued_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('zentrale_entries').select('*').order('updated_at', { ascending: false }),
       supabase.from('mail_deliveries').select('id', { count: 'exact', head: true }).in('status', ['offen', 'spaeter_erneut']),
+      supabase.from('zentrale_unterlagen').select('*').order('titel'),
     ])
     const taskResult = userId ? await supabase.from('innendienst_shift_tasks').select('*').eq('user_id', userId).eq('duty_date', today).eq('shift', shift).maybeSingle() : null
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
@@ -67,6 +69,7 @@ export default function Innendienst() {
     setOwnTask((taskResult?.data ?? null) as InnendienstShiftTask | null)
     setRecords((recordResult.data ?? []) as unknown as InnendienstRecord[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
+    setUnterlagen(unterlageResult.error ? [] : (unterlageResult.data ?? []) as ZentraleUnterlage[])
     setOpenRsaRsbCount(mailResult.count ?? 0)
     setLoading(false)
   }, [userId, shift])
@@ -186,7 +189,7 @@ export default function Innendienst() {
     })}</div>}</section> : null}
 
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
-    {!loading && activeTab === 'unterlagen' ? (entries.filter(item => item.category === 'unterlage').length === 0 ? <Empty text="Keine Unterlagen vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{entries.filter(item => item.category === 'unterlage').map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</article>)}</div>) : null}
+    {!loading && activeTab === 'unterlagen' ? (unterlagen.length === 0 ? <Empty text="Keine Unterlagen vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{unterlagen.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.titel}</h3>{item.fundort ? <p className="text-sm text-gray-600 mt-1">{item.fundort}</p> : null}{item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}</article>)}</div>) : null}
     {!loading && activeTab === 'uebergabe' ? (handovers.length === 0 ? <Empty text="Keine offenen Übergabepunkte." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{handovers.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.title}</h3>{item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}</article>)}</div>) : null}
     {!loading && activeTab === 'gebuehren' ? <InnendienstGebuehrenPanel isGenehmiger={isGenehmiger} /> : null}
 

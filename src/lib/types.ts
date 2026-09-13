@@ -523,7 +523,11 @@ export interface FleetDocument {
   uploader?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
 }
 
-export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'verbot' | 'fahndung' | 'brief' | 'schluessel' | 'kontakt' | 'alarmierung' | 'uebergabe' | 'unterlage'
+// verbot/fahndung/schluessel/kontakt/alarmierung/unterlage haben eigene
+// Tabellen mit passenden Feldern (siehe ZentraleAvBv, ZentraleFahndung,
+// ZentraleSchluessel, ZentraleKontakt, ZentraleAlarmierung, ZentraleUnterlage
+// weiter unten) - hier nur die weiterhin generischen Kategorien.
+export type ZentraleEntryCategory = 'lage' | 'kontrollauftrag' | 'brief' | 'uebergabe'
 export type ZentraleEntryPriority = 'normal' | 'hoch' | 'kritisch'
 export type ZentraleEntryStatus = 'offen' | 'in_bearbeitung' | 'erledigt'
 export type KontrollauftragZielfunktion = 'jd' | 'vd' | 'beide'
@@ -542,6 +546,111 @@ export interface ZentraleEntry {
   reference: string | null
   restricted: boolean
   target_function: KontrollauftragZielfunktion | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ZentraleRegisterStatus = 'offen' | 'erledigt'
+
+export type AvBvArt = 'amtsverbot' | 'betretungsverbot' | 'einreiseverbot'
+export interface ZentraleAvBv {
+  id: string
+  art: AvBvArt
+  person_id: string | null
+  object_id: string | null
+  gebiet: string | null
+  grund: string
+  ausstellende_behoerde: string | null
+  aktenzeichen: string | null
+  gueltig_von: string | null
+  gueltig_bis: string | null
+  note: string | null
+  priority: ZentraleEntryPriority
+  status: ZentraleRegisterStatus
+  restricted: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date'> | null
+  object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
+}
+
+export type FahndungArt = 'person' | 'fahrzeug' | 'objekt' | 'sonstiges'
+export interface ZentraleFahndung {
+  id: string
+  art: FahndungArt
+  person_id: string | null
+  object_id: string | null
+  beschreibung: string
+  aktenzeichen: string | null
+  ausschreibende_dienststelle: string | null
+  gueltig_bis: string | null
+  note: string | null
+  priority: ZentraleEntryPriority
+  status: ZentraleRegisterStatus
+  restricted: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date'> | null
+  object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
+}
+
+export type SchluesselStatus = 'verfuegbar' | 'ausgegeben'
+export interface ZentraleSchluessel {
+  id: string
+  schluessel_nummer: string
+  object_id: string | null
+  verwahrort: string | null
+  held_by: string | null
+  note: string | null
+  status: SchluesselStatus
+  restricted: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
+  held_by_profile?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+}
+
+export interface ZentraleKontakt {
+  id: string
+  name: string
+  institution: string | null
+  funktion: string | null
+  telefon: string | null
+  email: string | null
+  erreichbarkeit: string | null
+  object_id: string | null
+  note: string | null
+  restricted: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
+}
+
+export interface ZentraleAlarmierung {
+  id: string
+  anlass: string
+  ablauf: string | null
+  gueltig_bis: string | null
+  note: string | null
+  restricted: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ZentraleUnterlage {
+  id: string
+  titel: string
+  typ: string | null
+  fundort: string | null
+  gueltig_bis: string | null
+  note: string | null
+  restricted: boolean
   created_by: string | null
   created_at: string
   updated_at: string
@@ -643,13 +752,34 @@ export interface IncidentReport {
   updated_at: string
 }
 
+/** Zentrales Personen-Register - Verknüpfungspunkt für Personenhinweise, RSa/RSb, AV/BV & EV und Fahndungen. */
+export interface OperationalPerson {
+  id: string
+  name: string
+  birth_date: string | null
+  phone: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Zentrales Objekte-Register (Adressen/Gebäude) - Verknüpfungspunkt für AV/BV & EV, Fahndungen, Schlüssel und Kontakte. */
+export interface OperationalObject {
+  id: string
+  address: string
+  label: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type OperationalPersonNoteCategory = 'infektionsschutz' | 'aggressiv' | 'waffenverbot' | 'fluchtgefahr' | 'suizidgefahr' | 'sonstiges'
 
 export interface OperationalPersonNote {
   id: string
-  person_name: string
-  birth_date: string | null
-  phone: string | null
+  person_id: string
   location: string | null
   category: OperationalPersonNoteCategory
   note: string
@@ -660,6 +790,7 @@ export interface OperationalPersonNote {
   created_by: string
   created_at: string
   updated_at: string
+  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date' | 'phone'> | null
 }
 
 export interface EinsatzTrainingParticipation {
@@ -736,8 +867,7 @@ export type MailDeliveryStatus = 'offen' | 'zugestellt' | 'schriftlich_in_kenntn
 
 export interface MailDelivery {
   id: string
-  person_name: string
-  person_birth_date: string | null
+  person_id: string
   kind: MailDeliveryKind
   behoerden_aktenzahl: string | null
   eigene_geschaeftszahl: string | null
@@ -755,6 +885,7 @@ export interface MailDelivery {
   created_at: string
   updated_at: string
   akteneigentuemer?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+  person?: Pick<OperationalPerson, 'id' | 'name' | 'birth_date'> | null
 }
 
 /** Stückelungen als {"<Cent-Wert>": Anzahl}, z. B. {"5000":2,"500":3} für 2× 50 € und 3× 5 €. */
@@ -971,9 +1102,17 @@ type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, never>
-type OperationalPersonNoteRow = Omit<OperationalPersonNote, never>
+type OperationalPersonRow = Omit<OperationalPerson, never>
+type OperationalObjectRow = Omit<OperationalObject, never>
+type OperationalPersonNoteRow = Omit<OperationalPersonNote, 'person'>
 type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
-type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer'>
+type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer' | 'person'>
+type ZentraleAvBvRow = Omit<ZentraleAvBv, 'person' | 'object'>
+type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
+type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
+type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
+type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, never>
+type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
 type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
@@ -1155,16 +1294,49 @@ export type Database = {
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_name' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_name' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+      operational_persons: { Row: OperationalPersonRow; Insert: Pick<OperationalPersonRow, 'name'> & Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      operational_objects: { Row: OperationalObjectRow; Insert: Pick<OperationalObjectRow, 'address'> & Partial<Omit<OperationalObjectRow, 'id' | 'created_at' | 'updated_at' | 'address'>>; Update: Partial<Omit<OperationalObjectRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'operational_objects_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_id' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_id' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'operational_person_notes_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_person_notes_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+      ] }
+      zentrale_av_bv: { Row: ZentraleAvBvRow; Insert: Pick<ZentraleAvBvRow, 'art' | 'grund' | 'created_by'> & Partial<Omit<ZentraleAvBvRow, 'id' | 'created_at' | 'updated_at' | 'art' | 'grund' | 'created_by'>>; Update: Partial<Omit<ZentraleAvBvRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_av_bv_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_av_bv_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_av_bv_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
+      ] }
+      zentrale_fahndungen: { Row: ZentraleFahndungRow; Insert: Pick<ZentraleFahndungRow, 'art' | 'beschreibung' | 'created_by'> & Partial<Omit<ZentraleFahndungRow, 'id' | 'created_at' | 'updated_at' | 'art' | 'beschreibung' | 'created_by'>>; Update: Partial<Omit<ZentraleFahndungRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_fahndungen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_fahndungen_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_fahndungen_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
+      ] }
+      zentrale_schluessel: { Row: ZentraleSchluesselRow; Insert: Pick<ZentraleSchluesselRow, 'schluessel_nummer' | 'created_by'> & Partial<Omit<ZentraleSchluesselRow, 'id' | 'created_at' | 'updated_at' | 'schluessel_nummer' | 'created_by'>>; Update: Partial<Omit<ZentraleSchluesselRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_schluessel_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_schluessel_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_schluessel_held_by_fkey'; columns: ['held_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      zentrale_kontakte: { Row: ZentraleKontaktRow; Insert: Pick<ZentraleKontaktRow, 'name' | 'created_by'> & Partial<Omit<ZentraleKontaktRow, 'id' | 'created_at' | 'updated_at' | 'name' | 'created_by'>>; Update: Partial<Omit<ZentraleKontaktRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_kontakte_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_kontakte_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
+      ] }
+      zentrale_alarmierung: { Row: ZentraleAlarmierungRow; Insert: Pick<ZentraleAlarmierungRow, 'anlass' | 'created_by'> & Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'updated_at' | 'anlass' | 'created_by'>>; Update: Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_alarmierung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      zentrale_unterlagen: { Row: ZentraleUnterlageRow; Insert: Pick<ZentraleUnterlageRow, 'titel' | 'created_by'> & Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'created_by'>>; Update: Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_unterlagen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       vehicle_checks: { Row: VehicleCheckRow; Insert: Pick<VehicleCheckRow, 'vehicle_id' | 'checked_by'> & Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'vehicle_id'>>; Relationships: [
         { foreignKeyName: 'vehicle_checks_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'vehicle_checks_checked_by_fkey'; columns: ['checked_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      mail_deliveries: { Row: MailDeliveryRow; Insert: Pick<MailDeliveryRow, 'person_name' | 'kind' | 'created_by'> & Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'updated_at' | 'person_name' | 'kind' | 'created_by'>>; Update: Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+      mail_deliveries: { Row: MailDeliveryRow; Insert: Pick<MailDeliveryRow, 'person_id' | 'kind' | 'created_by'> & Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'updated_at' | 'person_id' | 'kind' | 'created_by'>>; Update: Partial<Omit<MailDeliveryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'mail_deliveries_akteneigentuemer_id_fkey'; columns: ['akteneigentuemer_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'mail_deliveries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'mail_deliveries_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
       ] }
       innendienst_shift_tasks: { Row: InnendienstShiftTaskRow; Insert: Pick<InnendienstShiftTaskRow, 'user_id'> & Partial<Omit<InnendienstShiftTaskRow, 'id' | 'created_at' | 'updated_at' | 'user_id'>>; Update: Partial<Omit<InnendienstShiftTaskRow, 'id' | 'created_at' | 'user_id'>>; Relationships: [
         { foreignKeyName: 'innendienst_shift_tasks_user_id_fkey'; columns: ['user_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

@@ -6,7 +6,7 @@ import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../compon
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleEntry } from '../lib/types'
+import type { AvBvArt, DutyAssignment, DutyFunctionConfig, FahndungArt, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung, ZentraleUnterlage } from '../lib/types'
 
 type TabId = 'einsaetze' | 'kontrollauftraege' | 'hinweise' | 'rsa_rsb' | 'kontrollbehelfe' | 'fahrzeug'
 const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
@@ -19,6 +19,8 @@ const TABS: { id: TabId; label: string; icon: typeof Radio }[] = [
 ]
 const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
 const ZIELFUNKTION_LABEL: Record<KontrollauftragZielfunktion, string> = { jd: 'Nur JD', vd: 'Nur VD', beide: 'JD und VD' }
+const AV_BV_ART_LABEL: Record<AvBvArt, string> = { amtsverbot: 'Amtsverbot', betretungsverbot: 'Betretungsverbot', einreiseverbot: 'Einreiseverbot' }
+const FAHNDUNG_ART_LABEL: Record<FahndungArt, string> = { person: 'Person', fahrzeug: 'Fahrzeug', objekt: 'Objekt', sonstiges: 'Sonstiges' }
 
 const emptyAuftrag = { title: '', description: '', location: '', validFrom: '', validUntil: '', targetFunction: 'beide' as KontrollauftragZielfunktion }
 
@@ -33,6 +35,9 @@ export default function Aussendienst() {
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
   const [checks, setChecks] = useState<VehicleCheck[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
+  const [avBv, setAvBv] = useState<ZentraleAvBv[]>([])
+  const [fahndungen, setFahndungen] = useState<ZentraleFahndung[]>([])
+  const [unterlagen, setUnterlagen] = useState<ZentraleUnterlage[]>([])
   const [incidents, setIncidents] = useState<{ id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -47,13 +52,17 @@ export default function Aussendienst() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult, unterlageResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
       supabase.from('incident_reports').select('id,reported_at,location,summary,disposition,status,note').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
+      supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,name,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,name,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      supabase.from('zentrale_unterlagen').select('*').order('titel'),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
@@ -63,6 +72,9 @@ export default function Aussendienst() {
     setChecks((checkResult.data ?? []) as VehicleCheck[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
     setIncidents(incidentResult.data ?? [])
+    setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
+    setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
+    setUnterlagen(unterlageResult.error ? [] : (unterlageResult.data ?? []) as ZentraleUnterlage[])
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -74,6 +86,11 @@ export default function Aussendienst() {
   const patrolMates = useMemo(() => ownAssignment ? assignments.filter(item => item.user_id !== profile?.id && item.function === ownAssignment.function && item.shift === ownAssignment.shift) : [], [assignments, ownAssignment, profile?.id])
 
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
+  const criticalItems = useMemo(() => [
+    ...criticalEntries.map(item => ({ id: item.id, title: item.title, description: item.description })),
+    ...avBv.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `AV/BV & EV (${AV_BV_ART_LABEL[item.art]}) · ${item.person?.name ?? item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'}`, description: item.grund })),
+    ...fahndungen.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${item.person?.name ?? item.object?.address ?? 'ohne Zuordnung'}`, description: item.beschreibung })),
+  ], [avBv, criticalEntries, fahndungen])
   const openIncidents = useMemo(() => {
     const relevant = ownAssignment?.function === 'jd' ? incidents.filter(item => item.disposition === 'jd')
       : ownAssignment?.function === 'vd' ? incidents.filter(item => item.disposition === 'vd')
@@ -135,7 +152,7 @@ export default function Aussendienst() {
           {showMangelForm ? <div className="mt-3 flex flex-col sm:flex-row gap-2"><input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Was fehlt / ist beschädigt?" value={checkNote} onChange={event => setCheckNote(event.target.value)} /><button type="button" disabled={saving} onClick={() => void saveVehicleCheck('mangel', checkNote)} className="bg-amber-700 hover:bg-amber-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Melden</button></div> : null}</div>}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 lg:col-span-2"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-blue-700" /> Wichtige Hinweise</h2>{criticalEntries.length === 0 ? <p className="text-sm text-gray-500 mt-2">Keine aktuell dringenden Warnungen.</p> : <div className="mt-2 space-y-2">{criticalEntries.map(item => <div key={item.id} className="rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2"><p className="font-bold text-red-900 text-sm">{item.title}</p>{item.description ? <p className="text-sm text-red-800">{item.description}</p> : null}</div>)}</div>}</section>
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 lg:col-span-2"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-blue-700" /> Wichtige Hinweise</h2>{criticalItems.length === 0 ? <p className="text-sm text-gray-500 mt-2">Keine aktuell dringenden Warnungen.</p> : <div className="mt-2 space-y-2">{criticalItems.map(item => <div key={item.id} className="rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2"><p className="font-bold text-red-900 text-sm">{item.title}</p>{item.description ? <p className="text-sm text-red-800">{item.description}</p> : null}</div>)}</div>}</section>
     </div> : null}
 
     <nav className="flex gap-1.5 overflow-x-auto pb-2 mb-5" aria-label="Bereiche des Außendienstes">{TABS.map(tab => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}</button> })}</nav>
@@ -145,9 +162,15 @@ export default function Aussendienst() {
       {isGenehmiger ? <div className="mb-3 flex justify-end"><button type="button" onClick={openNewAuftrag} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Kontrollauftrag</button></div> : null}
       <EntryOrIncidentList kind="entries" entries={kontrollauftraege} canManage={isGenehmiger} onEdit={openEditAuftrag} />
     </div> : null}
-    {!loading && activeTab === 'hinweise' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'lage' || item.category === 'verbot' || item.category === 'fahndung')} /> : null}
+    {!loading && activeTab === 'hinweise' ? <div className="space-y-4">
+      <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'lage')} />
+      {avBv.length === 0 && fahndungen.length === 0 ? null : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">
+        {avBv.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{AV_BV_ART_LABEL[item.art]} · {item.person?.name ?? item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.grund}</p></article>)}
+        {fahndungen.map(item => <article key={item.id} className="p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">Fahndung ({FAHNDUNG_ART_LABEL[item.art]}) · {item.person?.name ?? item.object?.address ?? 'ohne Zuordnung'}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span></div><p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.beschreibung}</p></article>)}
+      </div>}
+    </div> : null}
     {!loading && activeTab === 'rsa_rsb' ? <MailDeliveries /> : null}
-    {!loading && activeTab === 'kontrollbehelfe' ? <EntryOrIncidentList kind="entries" entries={entries.filter(item => item.category === 'unterlage')} /> : null}
+    {!loading && activeTab === 'kontrollbehelfe' ? (unterlagen.length === 0 ? <Empty text="Keine Kontrollbehelfe vorhanden." /> : <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{unterlagen.map(item => <article key={item.id} className="p-4 sm:p-5"><h3 className="font-semibold text-gray-900">{item.titel}</h3>{item.fundort ? <p className="text-sm text-gray-600 mt-1">{item.fundort}</p> : null}{item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}</article>)}</div>) : null}
     {!loading && activeTab === 'fahrzeug' ? (ownVehicle ? <div className="rounded-2xl border border-gray-200 bg-white p-5"><h2 className="font-bold text-gray-900">{ownVehicle.name}</h2><dl className="text-sm mt-3 space-y-1.5"><div className="flex justify-between"><dt className="text-gray-500">Rufname</dt><dd className="font-medium">{ownVehicle.call_sign || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium">{ownVehicle.license_plate || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Marke/Modell</dt><dd className="font-medium">{[ownVehicle.make, ownVehicle.model].filter(Boolean).join(' ') || '–'}</dd></div></dl><Link to={`/fuhrpark/${ownVehicle.id}`} className="inline-block mt-4 text-sm font-semibold text-blue-700">Fahrzeugdetails im Fuhrpark →</Link></div> : <Empty text="Kein Fahrzeug zugewiesen." />) : null}
 
     {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}

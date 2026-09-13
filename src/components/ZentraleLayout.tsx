@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { BellRing, BookOpen, Contact, FileClock, KeyRound, LayoutGrid, LogOut, Menu, Radio, Search, ShieldAlert, UserRoundCheck, X } from 'lucide-react'
+import { BellRing, BookOpen, Building2, Contact, FileClock, KeyRound, LayoutGrid, LogOut, Menu, Radio, Search, ShieldAlert, UserRoundCheck, Users, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import ChangePasswordModal from './ChangePasswordModal'
 
@@ -17,6 +17,8 @@ const registerItems = [
   { to: '/zentrale/kontakte', label: 'Kontakte', icon: Contact },
   { to: '/zentrale/alarmierung', label: 'Alarmierung', icon: BellRing },
   { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
+  { to: '/zentrale/personen', label: 'Personen', icon: Users },
+  { to: '/zentrale/objekte', label: 'Objekte', icon: Building2 },
 ]
 
 export default function ZentraleLayout() {
