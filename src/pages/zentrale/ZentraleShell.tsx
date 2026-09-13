@@ -5,10 +5,11 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
-import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPersonNote, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
+import { aktiveSperren } from '../../lib/strassenzustand'
 import { BaustelleModal, IncidentModal } from './zentraleShared'
 import { DISPOSITION_LABEL, EMPTY_BAUSTELLE_FORM, EMPTY_INCIDENT_FORM, formatTime, type BaustelleFormState, type IncidentFormState } from '../../lib/zentraleShared'
 
@@ -59,6 +60,7 @@ export interface ZentraleContext {
   criticalEntries: ZentraleEntry[]
   criticalAvBv: ZentraleAvBv[]
   criticalFahndungen: ZentraleFahndung[]
+  criticalStrassensperren: StrassenzustandBerichtzeile[]
   criticalSourcesError: boolean
   openIncident: () => void
   openLageForIncident: (item: IncidentReport) => void
@@ -85,6 +87,7 @@ export default function ZentraleShell() {
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [avBvOpen, setAvBvOpen] = useState<ZentraleAvBv[]>([])
   const [fahndungenOpen, setFahndungenOpen] = useState<ZentraleFahndung[]>([])
+  const [strassenzustandZeilen, setStrassenzustandZeilen] = useState<StrassenzustandBerichtzeile[]>([])
   // Wenn eine dieser beiden Quellen nicht geladen werden konnte, darf "Sofort
   // wichtig" NICHT stillschweigend Entwarnung geben - es könnten kritische
   // Verbote/Fahndungen existieren, die nur nicht geladen werden konnten.
@@ -131,7 +134,7 @@ export default function ZentraleShell() {
     const today = todayLocal()
     // Kontrollaufträge betreffen nur die Streifen (JD/VD) und werden hier
     // bewusst nicht geladen – weder für die Seiten noch für "Sofort wichtig".
-    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult] = await Promise.all([
+    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult, strassenzustandResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
       supabase.from('duty_functions').select('*').eq('active', true).order('sort_order').order('label'),
@@ -148,6 +151,9 @@ export default function ZentraleShell() {
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       // Erledigte Baustellen werden nicht mehr auf der Karte/Liste gezeigt (wie erledigte Einsätze).
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
+      // Für "Sofort wichtig": eine Straße mit aktueller Sperre/Maßnahme muss
+      // sichtbar sein, solange sie gilt - siehe aktiveSperren() weiter unten.
+      supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name)').order('created_at', { ascending: false }),
     ])
     if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
     else setError('')
@@ -159,7 +165,8 @@ export default function ZentraleShell() {
     setPersonNotes(personResult.error ? [] : (personResult.data ?? []) as unknown as OperationalPersonNote[])
     setAvBvOpen(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
     setFahndungenOpen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
-    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
+    setStrassenzustandZeilen(strassenzustandResult.error ? [] : (strassenzustandResult.data ?? []) as unknown as StrassenzustandBerichtzeile[])
+    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error || strassenzustandResult.error))
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
     setLoading(false)
   }, [])
@@ -266,6 +273,11 @@ export default function ZentraleShell() {
   }, [fahndungenOpen, incident.location, involvedOrCallerPersonIds])
   const criticalAvBv = useMemo(() => avBvOpen.filter(item => item.priority === 'kritisch'), [avBvOpen])
   const criticalFahndungen = useMemo(() => fahndungenOpen.filter(item => item.priority === 'kritisch'), [fahndungenOpen])
+  // Straßenzustand ist die meiste Zeit irrelevant und gehört in den
+  // Hintergrund (eigene Sidebar-Seite) - sobald aber eine Sperre/Maßnahme
+  // aktuell aktiv ist, muss sie für jeden sofort sichtbar sein, solange sie
+  // gilt (siehe aktiveSperren()).
+  const criticalStrassensperren = useMemo(() => aktiveSperren(strassenzustandZeilen), [strassenzustandZeilen])
   // Frühere Meldungen an derselben Adresse ("gab es dort schon mal was?") -
   // gezielte Datenbankabfrage statt Client-Filter, weil incident_reports über
   // die Zeit groß wird (anders als die überschaubaren zentrale_entries).
@@ -429,7 +441,7 @@ export default function ZentraleShell() {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
     visibleIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines,
     assignments, dutyFunctions, shiftAssignments, dutyShift, setDutyShift,
-    criticalEntries, criticalAvBv, criticalFahndungen, criticalSourcesError,
+    criticalEntries, criticalAvBv, criticalFahndungen, criticalStrassensperren, criticalSourcesError,
     openIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,
     openNewBaustelle, openEditBaustelle, confirmBaustelle, closeBaustelle, deleteBaustelle,
   }
