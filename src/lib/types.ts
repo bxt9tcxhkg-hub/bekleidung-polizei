@@ -669,6 +669,30 @@ export interface ZentraleUnterlage {
   updated_at: string
 }
 
+// Baustellen-Markierung auf der Zentrale-Karte (Streckenabschnitt, keine
+// Verbindung zum Straßenzustandsbericht). 'gemeldet' = von einem Benutzer
+// wahrgenommen und noch nicht bestätigt; 'offen' = bestätigt/aktiv;
+// 'erledigt' = Baustelle beendet.
+export type ZentraleBaustelleStatus = 'gemeldet' | 'offen' | 'erledigt'
+
+export interface ZentraleBaustelle {
+  id: string
+  titel: string
+  start_lat: number
+  start_lng: number
+  end_lat: number
+  end_lng: number
+  note: string | null
+  status: ZentraleBaustelleStatus
+  gueltig_bis: string | null
+  restricted: boolean
+  created_by: string | null
+  confirmed_by: string | null
+  confirmed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type StrassenzustandZustand = 'frei_befahrbar' | 'gesperrt' | 'sonstige'
 export type StrassenzustandMeldungsart = 'neuzugang' | 'aenderung' | 'widerruf'
 
@@ -1127,6 +1151,7 @@ type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
 type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
 type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
 type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
+type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
 type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
@@ -1344,6 +1369,10 @@ export type Database = {
       ] }
       zentrale_unterlagen: { Row: ZentraleUnterlageRow; Insert: Pick<ZentraleUnterlageRow, 'titel' | 'created_by'> & Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'created_by'>>; Update: Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_unterlagen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      zentrale_baustellen: { Row: ZentraleBaustelleRow; Insert: Pick<ZentraleBaustelleRow, 'titel' | 'start_lat' | 'start_lng' | 'end_lat' | 'end_lng' | 'created_by'> & Partial<Omit<ZentraleBaustelleRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'start_lat' | 'start_lng' | 'end_lat' | 'end_lng' | 'created_by'>>; Update: Partial<Omit<ZentraleBaustelleRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_baustellen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_baustellen_confirmed_by_fkey'; columns: ['confirmed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       vehicle_checks: { Row: VehicleCheckRow; Insert: Pick<VehicleCheckRow, 'vehicle_id' | 'checked_by'> & Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'vehicle_id'>>; Relationships: [
         { foreignKeyName: 'vehicle_checks_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },

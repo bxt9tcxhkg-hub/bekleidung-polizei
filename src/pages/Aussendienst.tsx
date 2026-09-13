@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
-import { AlertTriangle, BookOpen, Car, CheckCircle2, ClipboardList, Mail, Pencil, Plus, Radio, ShieldAlert, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, BookOpen, Car, CheckCircle2, ClipboardList, Construction, Mail, Pencil, Plus, Radio, ShieldAlert, Trash2, UsersRound } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import MailDeliveries from '../components/MailDeliveries'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
+import { geocodeLocation } from '../lib/geocode'
 import type { AvBvArt, DutyAssignment, DutyFunctionConfig, FahndungArt, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung, ZentraleUnterlage } from '../lib/types'
 import { personDisplayName } from '../lib/register'
 
@@ -24,12 +25,19 @@ const AV_BV_ART_LABEL: Record<AvBvArt, string> = { amtsverbot: 'Amtsverbot', bet
 const FAHNDUNG_ART_LABEL: Record<FahndungArt, string> = { person: 'Person', fahrzeug: 'Fahrzeug', objekt: 'Objekt', sonstiges: 'Sonstiges' }
 
 const emptyAuftrag = { title: '', description: '', location: '', validFrom: '', validUntil: '', targetFunction: 'beide' as KontrollauftragZielfunktion }
+// Vereinfachte, rein textuelle Baustellen-Meldung für die Streife - kein
+// Kartenzeichnen wie in der Zentrale. Ohne Endpunkt wird derselbe Standort
+// für Start und Ende verwendet (Wahrnehmung ohne genauen Streckenverlauf).
+const EMPTY_BAUSTELLE_REPORT = { titel: '', startAddress: '', endAddress: '', note: '' }
+type BaustelleReportState = typeof EMPTY_BAUSTELLE_REPORT
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
 
 export default function Aussendienst() {
-  const { profile, hasAreaAccess, isGenehmiger } = useAuth()
+  const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles } = useAuth()
+  const zentraleRoles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
+  const canManageZentrale = isStrictAdmin || isGenehmiger || zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [activeTab, setActiveTab] = useState<TabId>('einsaetze')
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
@@ -52,6 +60,11 @@ export default function Aussendienst() {
   const [editingAuftrag, setEditingAuftrag] = useState<ZentraleEntry | null>(null)
   const [auftrag, setAuftrag] = useState(emptyAuftrag)
   const [auftragError, setAuftragError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [showBaustelleForm, setShowBaustelleForm] = useState(false)
+  const [baustelleReport, setBaustelleReport] = useState<BaustelleReportState>(EMPTY_BAUSTELLE_REPORT)
+  const [baustelleSaving, setBaustelleSaving] = useState(false)
+  const [baustelleError, setBaustelleError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -136,11 +149,33 @@ export default function Aussendienst() {
     logAudit('Kontrollauftrag endgültig gelöscht', editingAuftrag.title); setShowAuftragForm(false); await load()
   }
 
+  function openBaustelleReport() { setBaustelleReport(EMPTY_BAUSTELLE_REPORT); setBaustelleError(''); setShowBaustelleForm(true) }
+  async function saveBaustelleReport() {
+    if (!profile?.id) return
+    if (!baustelleReport.titel.trim()) { setBaustelleError('Bitte eine Bezeichnung eingeben.'); return }
+    const startAddress = baustelleReport.startAddress.trim()
+    if (!startAddress) { setBaustelleError('Bitte zumindest den Standort angeben.'); return }
+    setBaustelleSaving(true)
+    const startResult = await geocodeLocation(startAddress)
+    if (!startResult) { setBaustelleSaving(false); setBaustelleError('Standort konnte nicht gefunden werden.'); return }
+    const endAddress = baustelleReport.endAddress.trim()
+    // Ohne Endadresse gilt derselbe Standort für Start und Ende (kurzer Punkt statt Streckenabschnitt).
+    const endResult = endAddress ? await geocodeLocation(endAddress) : startResult
+    if (!endResult) { setBaustelleSaving(false); setBaustelleError('Der zweite Standort konnte nicht gefunden werden.'); return }
+    // Ohne Verwaltungsrecht entsteht die Meldung immer als "gemeldet" (ungeprüft) -
+    // Sachbearbeiter/Genehmiger bestätigen sie in der Zentrale (RLS erzwingt das zusätzlich).
+    const response = await supabase.from('zentrale_baustellen').insert({ titel: baustelleReport.titel.trim(), start_lat: startResult.lat, start_lng: startResult.lng, end_lat: endResult.lat, end_lng: endResult.lng, note: baustelleReport.note.trim() || null, created_by: profile.id, status: canManageZentrale ? 'offen' : 'gemeldet' })
+    setBaustelleSaving(false)
+    if (response.error) { setBaustelleError('Die Meldung konnte nicht gespeichert werden.'); return }
+    logAudit('Baustelle gemeldet', baustelleReport.titel.trim()); setShowBaustelleForm(false); setNotice(canManageZentrale ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung durch die Zentrale.')
+  }
+
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   return <div>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Außendienst / Streife</h1><p className="text-sm text-gray-500 mt-1">Tagesaktuelle Aufträge und Hilfsmittel – als Ergänzung zum Aktenprogramm.</p></div>
     {error ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
+    {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : null}
 
     {!loading && !ownAssignment ? <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-6 mb-6"><div className="flex items-start gap-3"><AlertTriangle className="w-6 h-6 text-amber-700 flex-shrink-0" /><div><h2 className="font-bold text-gray-900">Noch keine Funktion für heute gewählt</h2><p className="text-sm text-gray-600 mt-1">Bitte zuerst auf der Portal-Startseite die heutige Funktion (z. B. JD oder VD) auswählen, um Streife, Fahrzeug und passende Aufträge zu sehen.</p><Link to="/" className="inline-block mt-3 text-sm font-semibold text-blue-700">Funktion jetzt wählen →</Link></div></div></div> : null}
@@ -161,6 +196,8 @@ export default function Aussendienst() {
         {criticalSourcesError ? <p className="text-xs font-medium text-amber-700 flex items-center gap-1.5 mt-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> AV/BV & EV bzw. Fahndungen konnten nicht vollständig geladen werden - es könnten weitere Warnungen fehlen. Bitte Seite neu laden.</p> : null}
         {criticalItems.length === 0 ? (criticalSourcesError ? null : <p className="text-sm text-gray-500 mt-2">Keine aktuell dringenden Warnungen.</p>) : <div className="mt-2 space-y-2">{criticalItems.map(item => <div key={item.id} className="rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2"><p className="font-bold text-red-900 text-sm">{item.title}</p>{item.description ? <p className="text-sm text-red-800">{item.description}</p> : null}</div>)}</div>}
       </section>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 lg:col-span-2"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Construction className="w-4 h-4 text-blue-700" /> Baustelle wahrgenommen?</h2><button type="button" onClick={openBaustelleReport} className="inline-flex items-center gap-2 border border-blue-200 text-blue-800 text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Baustelle melden</button></div><p className="text-sm text-gray-500 mt-1">Wird von der Zentrale geprüft und dort auf der Karte bestätigt.</p></section>
     </div> : null}
 
     <nav className="flex gap-1.5 overflow-x-auto pb-2 mb-5" aria-label="Bereiche des Außendienstes">{TABS.map(tab => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}</button> })}</nav>
@@ -182,6 +219,7 @@ export default function Aussendienst() {
     {!loading && activeTab === 'fahrzeug' ? (ownVehicle ? <div className="rounded-2xl border border-gray-200 bg-white p-5"><h2 className="font-bold text-gray-900">{ownVehicle.name}</h2><dl className="text-sm mt-3 space-y-1.5"><div className="flex justify-between"><dt className="text-gray-500">Rufname</dt><dd className="font-medium">{ownVehicle.call_sign || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Kennzeichen</dt><dd className="font-medium">{ownVehicle.license_plate || '–'}</dd></div><div className="flex justify-between"><dt className="text-gray-500">Marke/Modell</dt><dd className="font-medium">{[ownVehicle.make, ownVehicle.model].filter(Boolean).join(' ') || '–'}</dd></div></dl><Link to={`/fuhrpark/${ownVehicle.id}`} className="inline-block mt-4 text-sm font-semibold text-blue-700">Fahrzeugdetails im Fuhrpark →</Link></div> : <Empty text="Kein Fahrzeug zugewiesen." />) : null}
 
     {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}
+    {showBaustelleForm ? <BaustelleReportModal report={baustelleReport} setReport={setBaustelleReport} saving={baustelleSaving} error={baustelleError} close={() => setShowBaustelleForm(false)} save={saveBaustelleReport} /> : null}
   </div>
 }
 
@@ -212,3 +250,18 @@ function AuftragModal({ auftrag, setAuftrag, editing, saving, error, close, save
 }
 
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
+
+// Rein textuelle Meldung ohne Kartenzeichnen - die genaue Streckenmarkierung
+// (und Bestätigung) erfolgt in der Zentrale, siehe Zentrale.tsx BaustelleModal.
+function BaustelleReportModal({ report, setReport, saving, error, close, save }: { report: BaustelleReportState; setReport: Dispatch<SetStateAction<BaustelleReportState>>; saving: boolean; error: string; close: () => void; save: () => Promise<void> }) {
+  const patch = (values: Partial<BaustelleReportState>) => setReport(current => ({ ...current, ...values }))
+  return <Modal title="Baustelle melden" close={close}>
+    <Field label="Bezeichnung *" value={report.titel} onChange={value => patch({ titel: value })} />
+    <Field label="Standort (Straße/Adresse) *" value={report.startAddress} onChange={value => patch({ startAddress: value })} />
+    <Field label="Bis (optional, bei längerem Streckenabschnitt)" value={report.endAddress} onChange={value => patch({ endAddress: value })} />
+    <Area label="Bemerkung (optional)" value={report.note} onChange={value => patch({ note: value })} />
+    <p className="text-xs text-gray-500">Die Meldung wird als „ungeprüft“ gespeichert, bis die Zentrale sie bestätigt.</p>
+    {error ? <ErrorMessage text={error} /> : null}
+    <Actions saving={saving} close={close} save={save} />
+  </Modal>
+}

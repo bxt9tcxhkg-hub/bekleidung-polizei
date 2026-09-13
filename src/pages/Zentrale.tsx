@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { AlertTriangle, CheckCircle2, LayoutDashboard, MapPin, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, LayoutDashboard, MapPin, Pencil, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import { geocodeLocation, type StreetSuggestion } from '../lib/geocode'
-import LeafletMap from '../components/LeafletMap'
+import LeafletMap, { type MapLine, type MapMarker } from '../components/LeafletMap'
 import StreetAutocomplete from '../components/StreetAutocomplete'
-import type { AvBvArt, DutyAssignment, DutyFunctionConfig, DutyShift, FahndungArt, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleAvBv, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../lib/types'
+import type { AvBvArt, DutyAssignment, DutyFunctionConfig, DutyShift, FahndungArt, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../lib/types'
 import { Actions, Area, Empty, EntryList, EntryModal, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../lib/zentraleEntries'
 import { personDisplayName } from '../lib/register'
@@ -56,6 +56,13 @@ function addressesMatch(a: string, b: string): boolean {
   return shorter.every(word => longer.includes(word))
 }
 function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
+const EMPTY_BAUSTELLE_FORM = {
+  titel: '', startAddress: '', endAddress: '', note: '', gueltigBis: '',
+  startLat: null as number | null, startLng: null as number | null,
+  endLat: null as number | null, endLng: null as number | null,
+  drawMode: false,
+}
+type BaustelleFormState = typeof EMPTY_BAUSTELLE_FORM
 // Fügt Straße und Hausnummer zum gespeicherten Einsatzort zusammen - ohne HNr (oder als "unbekannt" markiert) bleibt es bei der Straße.
 function composeIncidentLocation(street: string, houseNumber: string, houseNumberUnknown: boolean) {
   const trimmedStreet = street.trim()
@@ -103,6 +110,17 @@ export default function Zentrale() {
   // sie in incidents/openIncidentsAllDays - dann gezielt nachladen, damit die
   // Auswahl und die Anzeige "Aus Einsatz: ..." sie trotzdem zeigen.
   const [editingLinkedIncident, setEditingLinkedIncident] = useState<IncidentReport | null>(null)
+  // Baustellen-Markierungen auf der Karte - unabhängig vom Straßenzustandsbericht.
+  // Jeder mit Zentrale-Zugriff kann eine Wahrnehmung melden; ohne canManage
+  // entsteht sie als "gemeldet" (unbestätigt), bis Sachbearbeiter/Genehmiger
+  // sie prüfen (siehe RLS: nur can_manage_zentrale() darf direkt "offen" anlegen).
+  const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
+  const [showBaustelleForm, setShowBaustelleForm] = useState(false)
+  const [editingBaustelle, setEditingBaustelle] = useState<ZentraleBaustelle | null>(null)
+  const [baustelleForm, setBaustelleForm] = useState<BaustelleFormState>(EMPTY_BAUSTELLE_FORM)
+  const [baustelleSaving, setBaustelleSaving] = useState(false)
+  const [baustelleError, setBaustelleError] = useState('')
+  const [baustelleLocating, setBaustelleLocating] = useState<'start' | 'end' | null>(null)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
@@ -112,7 +130,7 @@ export default function Zentrale() {
     const today = todayLocal()
     // Kontrollaufträge betreffen nur die Streifen (JD/VD) und werden hier
     // bewusst nicht geladen – weder für die Tabs noch für "Sofort wichtig".
-    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult] = await Promise.all([
+    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
       supabase.from('duty_functions').select('*').eq('active', true).order('sort_order').order('label'),
@@ -127,6 +145,8 @@ export default function Zentrale() {
       // Einsatzmeldung geladen.
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      // Erledigte Baustellen werden nicht mehr auf der Karte/Liste gezeigt (wie erledigte Einsätze).
+      supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
     ])
     if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
     else setError('')
@@ -139,6 +159,7 @@ export default function Zentrale() {
     setAvBvOpen(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
     setFahndungenOpen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
     setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
+    setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -175,6 +196,13 @@ export default function Zentrale() {
   const openIncidentMarkers = useMemo(() => openIncidentsAllDays
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
+  // Unbestätigte Meldungen ("gemeldet") gestrichelt/grau, bestätigte ("offen") durchgezogen/orange.
+  const baustellenLines: MapLine[] = useMemo(() => baustellen.map(item => ({
+    points: [[item.start_lat, item.start_lng], [item.end_lat, item.end_lng]],
+    popup: `${item.titel}${item.status === 'gemeldet' ? ' (ungeprüft)' : ''}`,
+    color: item.status === 'gemeldet' ? '#9ca3af' : '#f97316',
+    dashed: item.status === 'gemeldet',
+  })), [baustellen])
   const contextEntries = useMemo(() => {
     const place = incident.location.trim(), phone = normalizePhone(incident.callerPhone), name = normalizeText(incident.callerName)
     if (!place && !phone && name.length < 3) return []
@@ -282,6 +310,70 @@ export default function Zentrale() {
   async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
   async function deleteIncident(item: IncidentReport) { if (!window.confirm('Diese Einsatzmeldung endgültig löschen?')) return; const result = await supabase.from('incident_reports').delete().eq('id', item.id); if (result.error) { setError('Die Einsatzmeldung konnte nicht gelöscht werden.'); return } logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80)); await load() }
 
+  function openNewBaustelle() { setEditingBaustelle(null); setBaustelleForm(EMPTY_BAUSTELLE_FORM); setBaustelleError(''); setShowBaustelleForm(true) }
+  function openEditBaustelle(item: ZentraleBaustelle) {
+    setEditingBaustelle(item)
+    setBaustelleForm({ titel: item.titel, startAddress: '', endAddress: '', note: item.note ?? '', gueltigBis: item.gueltig_bis ?? '', startLat: item.start_lat, startLng: item.start_lng, endLat: item.end_lat, endLng: item.end_lng, drawMode: false })
+    setBaustelleError(''); setShowBaustelleForm(true)
+  }
+  async function locateBaustelleStart() {
+    const queried = baustelleForm.startAddress.trim()
+    if (!queried) return
+    setBaustelleLocating('start'); setBaustelleError('')
+    const result = await geocodeLocation(queried)
+    setBaustelleLocating(null)
+    if (!result) { setBaustelleError('Startpunkt konnte nicht gefunden werden.'); return }
+    setBaustelleForm(current => current.startAddress.trim() === queried ? { ...current, startLat: result.lat, startLng: result.lng } : current)
+  }
+  async function locateBaustelleEnd() {
+    const queried = baustelleForm.endAddress.trim()
+    if (!queried) return
+    setBaustelleLocating('end'); setBaustelleError('')
+    const result = await geocodeLocation(queried)
+    setBaustelleLocating(null)
+    if (!result) { setBaustelleError('Endpunkt konnte nicht gefunden werden.'); return }
+    setBaustelleForm(current => current.endAddress.trim() === queried ? { ...current, endLat: result.lat, endLng: result.lng } : current)
+  }
+  // Erster Klick setzt (bzw. setzt neu, falls bereits beide Punkte vorhanden) den Startpunkt, der zweite den Endpunkt.
+  function handleBaustelleMapClick(lat: number, lng: number) {
+    setBaustelleForm(current => {
+      if (!current.drawMode) return current
+      if (current.startLat === null || current.startLng === null || (current.endLat !== null && current.endLng !== null)) return { ...current, startLat: lat, startLng: lng, endLat: null, endLng: null }
+      return { ...current, endLat: lat, endLng: lng }
+    })
+  }
+  async function saveBaustelle() {
+    if (!profile?.id) return
+    if (!baustelleForm.titel.trim()) { setBaustelleError('Bitte eine Bezeichnung eingeben.'); return }
+    if (baustelleForm.startLat === null || baustelleForm.startLng === null || baustelleForm.endLat === null || baustelleForm.endLng === null) { setBaustelleError('Bitte Start- und Endpunkt festlegen (Adresse suchen oder auf der Karte klicken).'); return }
+    setBaustelleSaving(true)
+    const payload = { titel: baustelleForm.titel.trim(), start_lat: baustelleForm.startLat, start_lng: baustelleForm.startLng, end_lat: baustelleForm.endLat, end_lng: baustelleForm.endLng, note: baustelleForm.note.trim() || null, gueltig_bis: baustelleForm.gueltigBis || null }
+    // Ohne Verwaltungsrecht entsteht die Meldung immer als "gemeldet" (ungeprüft) -
+    // die Bestätigung erfolgt separat durch Sachbearbeiter/Genehmiger (RLS erzwingt das zusätzlich).
+    const response = editingBaustelle ? await supabase.from('zentrale_baustellen').update(payload).eq('id', editingBaustelle.id) : await supabase.from('zentrale_baustellen').insert({ ...payload, created_by: profile.id, status: canManage ? 'offen' : 'gemeldet' })
+    setBaustelleSaving(false)
+    if (response.error) { setBaustelleError('Baustelle konnte nicht gespeichert werden.'); return }
+    logAudit(editingBaustelle ? 'Baustelle bearbeitet' : 'Baustelle gemeldet', baustelleForm.titel.trim())
+    setShowBaustelleForm(false); setNotice(editingBaustelle ? 'Baustelle wurde aktualisiert.' : (canManage ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung.')); await load()
+  }
+  async function confirmBaustelle(item: ZentraleBaustelle) {
+    if (!profile?.id) return
+    const result = await supabase.from('zentrale_baustellen').update({ status: 'offen', confirmed_by: profile.id, confirmed_at: new Date().toISOString() }).eq('id', item.id)
+    if (result.error) { setError('Baustelle konnte nicht bestätigt werden.'); return }
+    logAudit('Baustelle bestätigt', item.titel); setNotice('Baustelle wurde bestätigt.'); await load()
+  }
+  async function closeBaustelle(item: ZentraleBaustelle) {
+    const result = await supabase.from('zentrale_baustellen').update({ status: 'erledigt' }).eq('id', item.id)
+    if (result.error) { setError('Baustelle konnte nicht abgeschlossen werden.'); return }
+    logAudit('Baustelle abgeschlossen', item.titel); setNotice('Baustelle wurde als erledigt markiert.'); await load()
+  }
+  async function deleteBaustelle(item: ZentraleBaustelle) {
+    if (!window.confirm(`Baustelle „${item.titel}“ endgültig löschen?`)) return
+    const result = await supabase.from('zentrale_baustellen').delete().eq('id', item.id)
+    if (result.error) { setError('Baustelle konnte nicht gelöscht werden.'); return }
+    logAudit('Baustelle endgültig gelöscht', item.titel); setNotice('Baustelle wurde gelöscht.'); await load()
+  }
+
   const incidentCards = <div className="space-y-3">{visibleIncidents.length === 0
     ? <Empty text="Heute wurden noch keine Meldungen erfasst." />
     : visibleIncidents.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p><div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">{item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}{item.caller_name ? <span>Melder: {item.caller_name}</span> : null}<span>{DISPOSITION_LABEL[item.disposition]}</span>{item.note ? <span>Bemerkung: {item.note}</span> : null}</div></div><div className="flex gap-2">{canOperateZentrale && item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}{canManage ? <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button> : null}</div></div></article>)}</div>
@@ -310,7 +402,8 @@ export default function Zentrale() {
       <div className="space-y-4">
         <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Heute relevant</h2>
         <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
-        <section><h2 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze – Gemeindegebiet Dornbirn</h2><LeafletMap height={280} markers={openIncidentMarkers} /></section>
+        <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze & Baustellen – Gemeindegebiet Dornbirn</h2><button type="button" onClick={openNewBaustelle} className="text-sm font-semibold text-blue-700">+ Baustelle melden</button></div><LeafletMap height={280} markers={openIncidentMarkers} lines={baustellenLines} /></section>
+        {baustellen.length > 0 ? <BaustellenList items={baustellen} canManage={canManage} onConfirm={confirmBaustelle} onEdit={openEditBaustelle} onClose={closeBaustelle} onDelete={deleteBaustelle} /> : null}
         <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{canOperateZentrale ? <button type="button" onClick={openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}</div>{incidentCards}</section>
       </div>
       <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (AV/BV & EV, Personenhinweise, Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen, Personen, Objekte …) über die Seitenleiste.</p></div>
@@ -329,6 +422,7 @@ export default function Zentrale() {
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category={entryCategory} incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
+    {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canManage={canManage} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
   </div>
 }
 
@@ -396,4 +490,47 @@ function ContextHints({ entries, personNotes, avBv, fahndungen, priorIncidents }
     {entries.map(item => { const expired = !!item.valid_until && item.valid_until < today; return <div key={item.id} className="rounded-lg border border-blue-200 bg-white px-3 py-2"><p className="text-sm font-bold text-gray-900">{item.title}</p>{item.description ? <p className="text-sm text-gray-700">{item.description}</p> : null}{item.reference ? <p className="text-xs text-gray-500 mt-1">{item.reference}</p> : null}{item.valid_from || item.valid_until ? <p className={`text-xs mt-1 ${expired ? 'text-red-700 font-semibold' : 'text-gray-500'}`}>{item.valid_from ? `Gültig ab ${new Date(item.valid_from).toLocaleDateString('de-AT')}` : 'Gültig'}{item.valid_until ? ` bis ${new Date(item.valid_until).toLocaleDateString('de-AT')}` : ''}{expired ? ' · Abgelaufen' : ''}</p> : null}</div> })}
     {priorIncidents.length > 0 ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2"><p className="text-sm font-bold text-amber-900">Frühere Meldungen an dieser Adresse</p><div className="space-y-1.5 mt-1.5">{priorIncidents.map(item => <p key={item.id} className="text-sm text-amber-900"><span className="font-semibold">{new Date(item.reported_at).toLocaleDateString('de-AT')}</span> · {item.summary.slice(0, 100)}{item.summary.length > 100 ? '…' : ''}</p>)}</div></div> : null}
   </div></div>
+}
+
+// Baustellen-Markierungen unterhalb der Karte, getrennt nach Status - "gemeldet"
+// (ungeprüft, von einem Benutzer z. B. im Außendienst erfasst) muss von einem
+// Sachbearbeiter/Genehmiger erst bestätigt werden, bevor sie als aktiv gilt.
+function BaustellenList({ items, canManage, onConfirm, onEdit, onClose, onDelete }: { items: ZentraleBaustelle[]; canManage: boolean; onConfirm: (item: ZentraleBaustelle) => Promise<void>; onEdit: (item: ZentraleBaustelle) => void; onClose: (item: ZentraleBaustelle) => Promise<void>; onDelete: (item: ZentraleBaustelle) => Promise<void> }) {
+  return <section><h2 className="font-bold text-gray-900 mb-3">Baustellen</h2><div className="space-y-2">{items.map(item => <div key={item.id} className={`rounded-xl border px-4 py-3 flex flex-wrap items-center justify-between gap-3 ${item.status === 'gemeldet' ? 'border-gray-300 bg-gray-50' : 'border-orange-200 bg-orange-50'}`}>
+    <div>
+      <p className="font-semibold text-gray-900">{item.titel}{item.status === 'gemeldet' ? <span className="text-xs font-semibold text-gray-500 ml-2">ungeprüft</span> : null}</p>
+      {item.note ? <p className="text-sm text-gray-600 mt-0.5">{item.note}</p> : null}
+      {item.gueltig_bis ? <p className="text-xs text-gray-500 mt-0.5">Gültig bis {new Date(item.gueltig_bis).toLocaleDateString('de-AT')}</p> : null}
+    </div>
+    {canManage ? <div className="flex gap-2">
+      {item.status === 'gemeldet' ? <button type="button" onClick={() => void onConfirm(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Bestätigen</button> : null}
+      <button type="button" onClick={() => onEdit(item)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" aria-label="Baustelle bearbeiten"><Pencil className="w-4 h-4" /></button>
+      <button type="button" onClick={() => void onClose(item)} className="text-xs font-medium text-blue-700 border border-blue-200 px-3 py-2 rounded-lg">Erledigt</button>
+      <button type="button" onClick={() => void onDelete(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Baustelle löschen"><Trash2 className="w-4 h-4" /></button>
+    </div> : null}
+  </div>)}</div></section>
+}
+
+function BaustelleModal({ form, setForm, editing, canManage, saving, error, locating, locateStart, locateEnd, onMapClick, close, save }: { form: BaustelleFormState; setForm: Dispatch<SetStateAction<BaustelleFormState>>; editing: ZentraleBaustelle | null; canManage: boolean; saving: boolean; error: string; locating: 'start' | 'end' | null; locateStart: () => Promise<void>; locateEnd: () => Promise<void>; onMapClick: (lat: number, lng: number) => void; close: () => void; save: () => Promise<void> }) {
+  const patch = (values: Partial<BaustelleFormState>) => setForm(current => ({ ...current, ...values }))
+  const hasStart = form.startLat !== null && form.startLng !== null
+  const hasEnd = form.endLat !== null && form.endLng !== null
+  const markers: MapMarker[] = hasStart && !hasEnd ? [{ lat: form.startLat as number, lng: form.startLng as number, popup: 'Startpunkt' }] : []
+  const lines: MapLine[] = hasStart && hasEnd ? [{ points: [[form.startLat as number, form.startLng as number], [form.endLat as number, form.endLng as number]] }] : []
+  return <Modal title={editing ? 'Baustelle bearbeiten' : 'Baustelle melden'} close={close}>
+    <Field label="Bezeichnung *" value={form.titel} onChange={value => patch({ titel: value })} />
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div><Field label="Startpunkt (Adresse)" value={form.startAddress} onChange={value => patch({ startAddress: value })} /><button type="button" disabled={!form.startAddress.trim() || locating === 'start'} onClick={() => void locateStart()} className="mt-1 text-xs font-semibold text-blue-700 disabled:opacity-50">{locating === 'start' ? 'Suche…' : 'Punkt suchen'}</button></div>
+      <div><Field label="Endpunkt (Adresse)" value={form.endAddress} onChange={value => patch({ endAddress: value })} /><button type="button" disabled={!form.endAddress.trim() || locating === 'end'} onClick={() => void locateEnd()} className="mt-1 text-xs font-semibold text-blue-700 disabled:opacity-50">{locating === 'end' ? 'Suche…' : 'Punkt suchen'}</button></div>
+    </div>
+    <div>
+      <button type="button" onClick={() => patch({ drawMode: !form.drawMode })} className={`text-xs font-semibold ${form.drawMode ? 'text-blue-700' : 'text-gray-500'}`}>{form.drawMode ? '✓ Punkte per Klick auf der Karte setzen (erst Start, dann Ende)' : 'Alternativ: Punkte per Klick auf der Karte setzen'}</button>
+      <div className="mt-2"><LeafletMap height={220} markers={markers} lines={lines} onMapClick={onMapClick} /></div>
+    </div>
+    <Field label="Gültig bis (optional)" type="date" value={form.gueltigBis} onChange={value => patch({ gueltigBis: value })} />
+    <Area label="Bemerkung (optional)" value={form.note} onChange={value => patch({ note: value })} />
+    {!canManage ? <p className="text-xs text-gray-500">Die Meldung wird als „ungeprüft“ gespeichert, bis ein Sachbearbeiter oder Genehmiger sie bestätigt.</p> : null}
+    {error ? <ErrorMessage text={error} /> : null}
+    <Actions saving={saving} close={close} save={save} />
+  </Modal>
 }
