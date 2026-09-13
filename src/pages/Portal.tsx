@@ -404,7 +404,15 @@ export default function Portal() {
     async function load() {
       const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number } = {}
       await Promise.all([
-        canManageZentrale ? supabase.from('zentrale_entries').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').neq('status', 'erledigt').then(({ count }) => { next.zentrale = count ?? 0 }) : Promise.resolve(),
+        canManageZentrale
+          // Kritische Punkte kommen inzwischen nicht mehr nur aus zentrale_entries,
+          // sondern auch aus den dedizierten AV/BV- & Fahndungen-Tabellen.
+          ? Promise.all([
+              supabase.from('zentrale_entries').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').neq('status', 'erledigt'),
+              supabase.from('zentrale_av_bv').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').eq('status', 'offen'),
+              supabase.from('zentrale_fahndungen').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').eq('status', 'offen'),
+            ]).then(([entries, avBv, fahndungen]) => { next.zentrale = (entries.count ?? 0) + (avBv.count ?? 0) + (fahndungen.count ?? 0) })
+          : Promise.resolve(),
         canManageFuhrparkArea ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
         canManageEinsatzmittel
           ? Promise.all([

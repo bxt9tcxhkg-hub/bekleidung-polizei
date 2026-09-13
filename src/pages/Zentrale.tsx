@@ -78,6 +78,10 @@ export default function Zentrale() {
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [avBvOpen, setAvBvOpen] = useState<ZentraleAvBv[]>([])
   const [fahndungenOpen, setFahndungenOpen] = useState<ZentraleFahndung[]>([])
+  // Wenn eine dieser beiden Quellen nicht geladen werden konnte, darf "Sofort
+  // wichtig" NICHT stillschweigend Entwarnung geben - es könnten kritische
+  // Verbote/Fahndungen existieren, die nur nicht geladen werden konnten.
+  const [criticalSourcesError, setCriticalSourcesError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -94,6 +98,11 @@ export default function Zentrale() {
   const [locateError, setLocateError] = useState('')
   const [priorIncidents, setPriorIncidents] = useState<IncidentReport[]>([])
   const priorIncidentsRequestRef = useRef(0)
+  // Falls eine bestehende Lage an eine Einsatzmeldung gekoppelt ist, die weder
+  // heute gemeldet noch mehr offen ist (z. B. Tage später bearbeitet), fehlt
+  // sie in incidents/openIncidentsAllDays - dann gezielt nachladen, damit die
+  // Auswahl und die Anzeige "Aus Einsatz: ..." sie trotzdem zeigen.
+  const [editingLinkedIncident, setEditingLinkedIncident] = useState<IncidentReport | null>(null)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
@@ -129,6 +138,7 @@ export default function Zentrale() {
     setPersonNotes(personResult.error ? [] : (personResult.data ?? []) as unknown as OperationalPersonNote[])
     setAvBvOpen(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
     setFahndungenOpen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
+    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -151,7 +161,17 @@ export default function Zentrale() {
     if (ownAssignment?.function === 'innendienst') return incidents.filter(item => item.disposition === 'keine_anfahrt')
     return incidents
   }, [incidents, ownAssignment?.function])
-  const incidentsById = useMemo(() => Object.fromEntries(incidents.map(item => [item.id, item])), [incidents])
+  // Für die Lage-Auswahl/-Anzeige: heutige UND über Mitternacht hinaus offene
+  // Einsätze (sonst wählbar/sichtbar nur bis Mitternacht), plus - falls beim
+  // Bearbeiten benötigt - eine gezielt nachgeladene, bereits geschlossene
+  // Einsatzmeldung aus einem früheren Tag.
+  const lageIncidentOptions = useMemo(() => {
+    const byId = new Map(incidents.map(item => [item.id, item]))
+    for (const item of openIncidentsAllDays) if (!byId.has(item.id)) byId.set(item.id, item)
+    if (editingLinkedIncident && !byId.has(editingLinkedIncident.id)) byId.set(editingLinkedIncident.id, editingLinkedIncident)
+    return [...byId.values()]
+  }, [incidents, openIncidentsAllDays, editingLinkedIncident])
+  const incidentsById = useMemo(() => Object.fromEntries(lageIncidentOptions.map(item => [item.id, item])), [lageIncidentOptions])
   const openIncidentMarkers = useMemo(() => openIncidentsAllDays
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
@@ -217,9 +237,15 @@ export default function Zentrale() {
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   function openNewEntry(category: ZentraleEntryCategory) {
-    setEditing(null); setEntry(EMPTY_ENTRY_FORM); setEntryCategory(category); setShowEntryForm(true); setError('')
+    setEditing(null); setEntry(EMPTY_ENTRY_FORM); setEntryCategory(category); setShowEntryForm(true); setError(''); setEditingLinkedIncident(null)
   }
-  function openEdit(item: ZentraleEntry) { setEditing(item); setEntry(entryToForm(item)); setEntryCategory(item.category); setShowEntryForm(true); setError('') }
+  function openEdit(item: ZentraleEntry) {
+    setEditing(item); setEntry(entryToForm(item)); setEntryCategory(item.category); setShowEntryForm(true); setError('')
+    setEditingLinkedIncident(null)
+    if (item.category === 'lage' && item.incident_id && !incidents.some(row => row.id === item.incident_id) && !openIncidentsAllDays.some(row => row.id === item.incident_id)) {
+      void supabase.from('incident_reports').select('*').eq('id', item.incident_id).maybeSingle().then(({ data }) => { if (data) setEditingLinkedIncident(data as IncidentReport) })
+    }
+  }
 
   async function saveEntry() {
     if (!entry.title.trim()) { setError('Bitte eine Bezeichnung eingeben.'); return }
@@ -280,7 +306,7 @@ export default function Zentrale() {
         })),
         ...criticalAvBv.map(item => ({ id: item.id, title: `AV/BV & EV (${AV_BV_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? item.gebiet ?? 'ohne Zuordnung'))}`, description: item.grund, onOpen: () => navigate('/zentrale/av-bv-ev') })),
         ...criticalFahndungen.map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung, onOpen: () => navigate('/zentrale/fahndungen') })),
-      ]} />
+      ]} incomplete={criticalSourcesError} />
       <div className="space-y-4">
         <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Heute relevant</h2>
         <DutyPanel assignments={shiftAssignments} functions={dutyFunctions} dutyShift={dutyShift} setDutyShift={setDutyShift} />
@@ -302,7 +328,7 @@ export default function Zentrale() {
     {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} incidentsById={incidentsById} /> : null}
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
-    {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category={entryCategory} incidents={incidents} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
+    {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category={entryCategory} incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }
 
@@ -312,9 +338,13 @@ function DutyPanel({ assignments, functions, dutyShift, setDutyShift }: { assign
 
 // Ebene 1 der Übersicht: erfordert jetzt Aufmerksamkeit – direkt hervorgehoben, unabhängig von der Funktion.
 // Fasst kritische Punkte aus mehreren Quellen zusammen (Operative Lage/Schichtübergabe, AV/BV & EV, Fahndungen).
-function SofortWichtig({ items }: { items: { id: string; title: string; description: string | null; onOpen: () => void }[] }) {
-  if (items.length === 0) return <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-2 text-sm text-green-800"><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Keine dringenden Punkte offen.</div>
-  return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2><div className="space-y-2">{items.map(item => <button key={item.id} type="button" onClick={item.onOpen} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
+function SofortWichtig({ items, incomplete }: { items: { id: string; title: string; description: string | null; onOpen: () => void }[]; incomplete?: boolean }) {
+  const warning = incomplete ? <p className="text-xs font-medium text-amber-700 flex items-center gap-1.5 mb-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> AV/BV & EV bzw. Fahndungen konnten nicht vollständig geladen werden - es könnten weitere dringende Punkte fehlen. Bitte Seite neu laden.</p> : null
+  if (items.length === 0) {
+    if (incomplete) return <div>{warning}<div className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">Keine dringenden Punkte aus den verfügbaren Quellen.</div></div>
+    return <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-2 text-sm text-green-800"><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Keine dringenden Punkte offen.</div>
+  }
+  return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2>{warning}<div className="space-y-2">{items.map(item => <button key={item.id} type="button" onClick={item.onOpen} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
 }
 
 function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {

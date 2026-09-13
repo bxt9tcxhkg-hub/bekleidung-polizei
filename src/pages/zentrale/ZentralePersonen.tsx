@@ -28,6 +28,12 @@ export default function ZentralePersonen() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<OperationalPerson | null>(null)
   const [form, setForm] = useState(emptyForm)
+  // Wenn eine der vier Verknüpfungs-Abfragen fehlschlägt, darf remove() NICHT
+  // von "0 Verknüpfungen" ausgehen - ein transienter API/RLS-Fehler dürfte
+  // sonst archivierte Hinweise/RSa-RSb-Fälle per ON DELETE CASCADE unbemerkt
+  // endgültig löschen. Getrennt von "error" gehalten, da openNew/openEdit
+  // "error" zurücksetzen, dieser Zustand aber bis zum nächsten load() bestehen muss.
+  const [linksUnavailable, setLinksUnavailable] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -42,7 +48,10 @@ export default function ZentralePersonen() {
       supabase.from('zentrale_av_bv').select('person_id').not('person_id', 'is', null),
       supabase.from('zentrale_fahndungen').select('person_id').not('person_id', 'is', null),
     ])
+    const linksFailed = Boolean(noteResult.error || mailResult.error || avBvResult.error || fahndungResult.error)
+    setLinksUnavailable(linksFailed)
     if (personResult.error) setError('Das Personen-Register konnte nicht geladen werden.')
+    else if (linksFailed) setError('Verknüpfungen konnten nicht vollständig geladen werden - Löschen ist vorübergehend deaktiviert.')
     else setError('')
     setPersons((personResult.data ?? []) as OperationalPerson[])
     const counts: Record<string, LinkCounts> = {}
@@ -79,6 +88,7 @@ export default function ZentralePersonen() {
   }
   async function remove() {
     if (!editing) return
+    if (linksUnavailable) { setError('Verknüpfungen konnten nicht vollständig geladen werden - Löschen ist vorübergehend deaktiviert.'); return }
     const count = links[editing.id]
     if (count && (count.hinweise || count.rsaRsb || count.avBv || count.fahndungen)) {
       setError('Diese Person ist noch mit Einträgen verknüpft (Personenhinweise, RSa/RSb, AV/BV oder Fahndungen) und kann daher nicht gelöscht werden.')
