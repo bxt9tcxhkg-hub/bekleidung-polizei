@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { canManageFuhrpark } from '../lib/fuhrpark'
 import { supabase } from '../lib/supabase'
-import type { FleetAppointment, FleetCareTask, FleetEquipmentItem, FleetEquipmentStatus, FleetEquipmentStatusValue, FleetVehicle as FleetVehicleType, FleetVehicleKind, Profile, VehicleCheck, VehicleCheckStatus } from '../lib/types'
+import type { FleetAppointment, FleetCareTask, FleetCheckItem, FleetCheckItemStatus, FleetEquipmentItem, FleetEquipmentStatus, FleetEquipmentStatusValue, FleetVehicle as FleetVehicleType, FleetVehicleKind, Profile, VehicleCheck, VehicleCheckStatus } from '../lib/types'
 import { Actions, Empty, Modal, inputClass } from './fleetShared'
 
 // Mängel, Pflege, Werkstatt & Termine, Fristen und Dokumente sind eigene,
@@ -21,6 +21,8 @@ const TABS: { id: TabId; label: string; description: string; icon: typeof Clipbo
 const TONE = { blue: 'bg-blue-50 text-blue-700 border-blue-100' }
 const STATUS_LABEL: Record<FleetEquipmentStatusValue, string> = { vollstaendig: 'Vollständig', fehlend: 'Fehlend', beschaedigt: 'Beschädigt', abgelaufen: 'Abgelaufen' }
 const STATUS_COLOR: Record<FleetEquipmentStatusValue, string> = { vollstaendig: 'bg-green-100 text-green-800', fehlend: 'bg-red-100 text-red-800', beschaedigt: 'bg-amber-100 text-amber-800', abgelaufen: 'bg-orange-100 text-orange-800' }
+const CHECK_STATUS_LABEL: Record<VehicleCheckStatus, string> = { ok: 'In Ordnung', mangel: 'Mangel' }
+const CHECK_STATUS_COLOR: Record<VehicleCheckStatus, string> = { ok: 'bg-green-100 text-green-800', mangel: 'bg-amber-100 text-amber-800' }
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function formatDate(value: string | null) { return value ? new Date(value).toLocaleDateString('de-AT') : null }
@@ -49,6 +51,8 @@ export default function FleetVehicle() {
   }, [searchParams, vehicleId])
 
   const [checks, setChecks] = useState<VehicleCheck[]>([])
+  const [checkItems, setCheckItems] = useState<FleetCheckItem[]>([])
+  const [checkItemStatuses, setCheckItemStatuses] = useState<FleetCheckItemStatus[]>([])
   const [items, setItems] = useState<FleetEquipmentItem[]>([])
   const [statuses, setStatuses] = useState<FleetEquipmentStatus[]>([])
   // careTasks/appointments werden hier nur noch für die "Offene Punkte"-
@@ -71,10 +75,12 @@ export default function FleetVehicle() {
   const load = useCallback(async () => {
     if (!vehicleId) return
     setLoading(true)
-    const [{ data, error: loadError }, employeeResult, checkResult, itemResult, statusResult, careResult, appointmentResult] = await Promise.all([
+    const [{ data, error: loadError }, employeeResult, checkResult, checkItemResult, checkStatusResult, itemResult, statusResult, careResult, appointmentResult] = await Promise.all([
       supabase.from('fleet_vehicles').select('*, responsible_profile:profiles!fleet_vehicles_responsible_user_id_fkey(id,name,dienstnummer)').eq('id', vehicleId).eq('active', true).maybeSingle(),
       canManage ? supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name') : Promise.resolve({ data: [], error: null }),
       supabase.from('vehicle_checks').select('*, checker:profiles!vehicle_checks_checked_by_fkey(id,name,dienstnummer)').eq('vehicle_id', vehicleId).order('duty_date', { ascending: false }).limit(20),
+      supabase.from('fleet_check_items').select('*').eq('vehicle_id', vehicleId).eq('active', true).order('sort_order').order('name'),
+      supabase.from('fleet_check_item_status').select('*, checker:profiles!fleet_check_item_status_checked_by_fkey(id,name,dienstnummer)').eq('vehicle_id', vehicleId),
       supabase.from('fleet_equipment_items').select('*').eq('vehicle_id', vehicleId).eq('active', true).order('sort_order').order('name'),
       supabase.from('fleet_equipment_status').select('*, checker:profiles!fleet_equipment_status_checked_by_fkey(id,name,dienstnummer)').eq('vehicle_id', vehicleId),
       supabase.from('fleet_care_tasks').select('*').eq('vehicle_id', vehicleId).eq('status', 'offen'),
@@ -84,6 +90,8 @@ export default function FleetVehicle() {
     setError(loadError ? 'Fahrzeug konnte nicht geladen werden.' : '')
     setEmployees((employeeResult.data ?? []) as Pick<Profile, 'id' | 'name' | 'dienstnummer'>[])
     setChecks((checkResult.data ?? []) as unknown as VehicleCheck[])
+    setCheckItems((checkItemResult.data ?? []) as FleetCheckItem[])
+    setCheckItemStatuses((checkStatusResult.data ?? []) as unknown as FleetCheckItemStatus[])
     setItems((itemResult.data ?? []) as FleetEquipmentItem[])
     setStatuses((statusResult.data ?? []) as unknown as FleetEquipmentStatus[])
     setCareTasks((careResult.data ?? []) as FleetCareTask[])
@@ -91,6 +99,7 @@ export default function FleetVehicle() {
     setLoading(false)
   }, [vehicleId, canManage])
   useEffect(() => { void load() }, [load])
+  const checkStatusByItem = useMemo(() => new Map(checkItemStatuses.map(status => [status.item_id, status])), [checkItemStatuses])
   const statusByItem = useMemo(() => new Map(statuses.map(status => [status.item_id, status])), [statuses])
   const openDefects = useMemo(() => items.filter(item => statusByItem.get(item.id) && statusByItem.get(item.id)!.status !== 'vollstaendig'), [items, statusByItem])
   const workshopAppointments = useMemo(() => appointments.filter(item => item.category === 'werkstatt'), [appointments])
@@ -178,7 +187,7 @@ export default function FleetVehicle() {
       <Link to={`/fuhrpark/dokumente?vehicle=${vehicle.id}`} className="inline-flex items-center gap-2 whitespace-nowrap border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 px-3 py-2 rounded-xl text-sm font-medium mb-2"><FileText className="w-4 h-4" /> Dokumente</Link>
     </div>
 
-    {activeTab === 'kontrolle' ? <KontrolleTab vehicleId={vehicle.id} checks={checks} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
+    {activeTab === 'kontrolle' ? <KontrolleTab vehicleId={vehicle.id} checks={checks} checkItems={checkItems} checkStatusByItem={checkStatusByItem} canEdit={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
     {activeTab === 'fuellliste' ? <FuelllisteTab vehicleId={vehicle.id} items={items} statusByItem={statusByItem} canEdit={canEditVehicle} onSaved={(message) => { setNotice(message); void load() }} onError={setError} /> : null}
 
     {showEdit ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[92vh] overflow-y-auto"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Fahrzeug bearbeiten</h2><button type="button" onClick={() => setShowEdit(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4"><label className="block text-xs font-medium text-gray-600">Bezeichnung *<input className={inputClass} maxLength={80} value={name} onChange={event => setName(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Fahrzeugart<select className={inputClass} value={kind} onChange={event => setKind(event.target.value as FleetVehicleKind)}><option>Dienstfahrzeug</option><option>Motorrad</option></select></label><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><label className="block text-xs font-medium text-gray-600">Hersteller<input className={inputClass} maxLength={60} value={make} onChange={event => setMake(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Modell<input className={inputClass} maxLength={60} value={model} onChange={event => setModel(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Rufname<input className={inputClass} maxLength={80} value={callSign} onChange={event => setCallSign(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Kennzeichen<input className={inputClass} maxLength={20} value={licensePlate} onChange={event => setLicensePlate(event.target.value)} /></label></div><label className="block text-xs font-medium text-gray-600">Fahrzeugverantwortlicher Mitarbeiter<select className={inputClass} value={responsibleUserId} onChange={event => setResponsibleUserId(event.target.value)}><option value="">Noch nicht zugewiesen</option>{employees.map(employee => <option key={employee.id} value={employee.id}>{employee.name}{employee.dienstnummer ? ` · DN ${employee.dienstnummer}` : ''}</option>)}</select></label><label className="block text-xs font-medium text-gray-600">Bemerkungen<textarea className={`${inputClass} min-h-24 resize-y`} maxLength={1000} value={notes} onChange={event => setNotes(event.target.value)} /></label>{error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}</div><div className="flex flex-wrap gap-3 px-5 sm:px-6 py-4 border-t"><button type="button" disabled={saving} onClick={() => { void deleteVehicle() }} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50 disabled:opacity-60"><Trash2 className="w-4 h-4" /> Endgültig löschen</button><button type="button" onClick={() => setShowEdit(false)} className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving} onClick={() => { void saveVehicle() }} className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Speichern'}</button></div></div></div> : null}
@@ -190,7 +199,7 @@ function TabShell({ tone, title, description, action, children }: { tone: 'blue'
 }
 
 // --- Fahrzeugkontrolle -------------------------------------------------
-function KontrolleTab({ vehicleId, checks, onSaved, onError }: { vehicleId: string; checks: VehicleCheck[]; onSaved: (message: string) => void; onError: (message: string) => void }) {
+function KontrolleTab({ vehicleId, checks, checkItems, checkStatusByItem, canEdit, onSaved, onError }: { vehicleId: string; checks: VehicleCheck[]; checkItems: FleetCheckItem[]; checkStatusByItem: Map<string, FleetCheckItemStatus>; canEdit: boolean; onSaved: (message: string) => void; onError: (message: string) => void }) {
   const { profile } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [dutyDate, setDutyDate] = useState(todayLocal())
@@ -212,13 +221,75 @@ function KontrolleTab({ vehicleId, checks, onSaved, onError }: { vehicleId: stri
     setShowForm(false); onSaved('Kontrolle wurde erfasst.')
   }
 
-  return <TabShell tone="blue" title="Fahrzeugkontrolle" description="Checkliste vor Dienstbeginn und letzte Kontrollen." action={<button type="button" onClick={openForm} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Kontrolle erfassen</button>}>
-    {checks.length === 0 ? <Empty text="Noch keine Kontrollen erfasst." /> : <div className="divide-y divide-gray-100">{checks.map(item => <div key={item.id} className="py-3 flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-gray-900">{formatDate(item.duty_date)} · {item.shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}</p><p className="text-xs text-gray-500 mt-0.5">{item.checker?.name ?? 'Unbekannt'}{item.note ? ` · ${item.note}` : ''}</p></div><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${item.status === 'ok' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'ok' ? 'In Ordnung' : 'Mangel'}</span></div>)}</div>}
-    {showForm ? <Modal title="Kontrolle erfassen" close={() => setShowForm(false)}>
-      <div className="grid grid-cols-2 gap-3"><label className="block text-xs font-medium text-gray-600">Datum<input type="date" className={inputClass} value={dutyDate} onChange={event => setDutyDate(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Schicht<select className={inputClass} value={shift} onChange={event => setShift(event.target.value as 'tag' | 'nacht')}><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select></label></div>
-      <label className="block text-xs font-medium text-gray-600">Ergebnis<select className={inputClass} value={status} onChange={event => setStatus(event.target.value as VehicleCheckStatus)}><option value="ok">In Ordnung</option><option value="mangel">Mangel</option></select></label>
-      <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-20 resize-y`} value={note} onChange={event => setNote(event.target.value)} /></label>
-      <Actions saving={saving} close={() => setShowForm(false)} save={save} />
+  return <div className="space-y-4">
+    <TabShell tone="blue" title="Fahrzeugkontrolle" description="Gesamtergebnis vor Dienstbeginn und letzte Kontrollen." action={<button type="button" onClick={openForm} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Kontrolle erfassen</button>}>
+      {checks.length === 0 ? <Empty text="Noch keine Kontrollen erfasst." /> : <div className="divide-y divide-gray-100">{checks.map(item => <div key={item.id} className="py-3 flex items-center justify-between gap-3"><div><p className="text-sm font-medium text-gray-900">{formatDate(item.duty_date)} · {item.shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}</p><p className="text-xs text-gray-500 mt-0.5">{item.checker?.name ?? 'Unbekannt'}{item.note ? ` · ${item.note}` : ''}</p></div><span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${CHECK_STATUS_COLOR[item.status]}`}>{CHECK_STATUS_LABEL[item.status]}</span></div>)}</div>}
+      {showForm ? <Modal title="Kontrolle erfassen" close={() => setShowForm(false)}>
+        <div className="grid grid-cols-2 gap-3"><label className="block text-xs font-medium text-gray-600">Datum<input type="date" className={inputClass} value={dutyDate} onChange={event => setDutyDate(event.target.value)} /></label><label className="block text-xs font-medium text-gray-600">Schicht<select className={inputClass} value={shift} onChange={event => setShift(event.target.value as 'tag' | 'nacht')}><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select></label></div>
+        <label className="block text-xs font-medium text-gray-600">Ergebnis<select className={inputClass} value={status} onChange={event => setStatus(event.target.value as VehicleCheckStatus)}><option value="ok">In Ordnung</option><option value="mangel">Mangel</option></select></label>
+        <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-20 resize-y`} value={note} onChange={event => setNote(event.target.value)} /></label>
+        <Actions saving={saving} close={() => setShowForm(false)} save={save} />
+      </Modal> : null}
+    </TabShell>
+    <ChecklisteTab vehicleId={vehicleId} items={checkItems} statusByItem={checkStatusByItem} canEdit={canEdit} onSaved={onSaved} onError={onError} />
+  </div>
+}
+
+// --- Fahrzeugcheck: Checkliste für den Fahrzeugzustand -------------------------------------------------
+function ChecklisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onError }: { vehicleId: string; items: FleetCheckItem[]; statusByItem: Map<string, FleetCheckItemStatus>; canEdit: boolean; onSaved: (message: string) => void; onError: (message: string) => void }) {
+  const { profile } = useAuth()
+  const [showItemForm, setShowItemForm] = useState(false)
+  const [itemName, setItemName] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [draft, setDraft] = useState<Record<string, { status: VehicleCheckStatus; note: string }>>({})
+  const [saving, setSaving] = useState(false)
+
+  function openItemForm() { setItemName(''); setShowItemForm(true) }
+  async function saveItem() {
+    if (!profile?.id || !itemName.trim()) { onError('Bitte eine Bezeichnung angeben.'); return }
+    setSaving(true)
+    const { error } = await supabase.from('fleet_check_items').insert({ vehicle_id: vehicleId, name: itemName.trim(), created_by: profile.id })
+    setSaving(false)
+    if (error) { onError('Die Position konnte nicht angelegt werden.'); return }
+    setShowItemForm(false); onSaved('Position wurde angelegt.')
+  }
+  async function removeItem(item: FleetCheckItem) {
+    if (!window.confirm(`Position „${item.name}“ endgültig entfernen?`)) return
+    const { error } = await supabase.from('fleet_check_items').update({ active: false }).eq('id', item.id)
+    if (error) { onError('Die Position konnte nicht entfernt werden.'); return }
+    onSaved('Position wurde entfernt.')
+  }
+
+  function startCheck() {
+    const next: Record<string, { status: VehicleCheckStatus; note: string }> = {}
+    for (const item of items) {
+      const current = statusByItem.get(item.id)
+      next[item.id] = { status: current?.status ?? 'ok', note: current?.note ?? '' }
+    }
+    setDraft(next); setChecking(true)
+  }
+  async function submitCheck() {
+    if (!profile?.id) return
+    setSaving(true)
+    const rows = items.map(item => ({ item_id: item.id, vehicle_id: vehicleId, status: draft[item.id]?.status ?? 'ok', note: draft[item.id]?.note.trim() || null, checked_by: profile.id, checked_at: new Date().toISOString() }))
+    const { error } = await supabase.from('fleet_check_item_status').upsert(rows, { onConflict: 'item_id' })
+    setSaving(false)
+    if (error) { onError('Die Kontrolle konnte nicht gespeichert werden.'); return }
+    setChecking(false); onSaved('Checkliste wurde kontrolliert.')
+  }
+
+  return <TabShell tone="blue" title="Checkliste Fahrzeugzustand" description="Reifen, Beleuchtung, Ölstand, Sauberkeit und Ähnliches je Fahrzeug." action={<div className="flex gap-2">{canEdit ? <button type="button" onClick={openItemForm} className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Position</button> : null}{items.length > 0 ? <button type="button" onClick={startCheck} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><ClipboardCheck className="w-4 h-4" /> Kontrolle starten</button> : null}</div>}>
+    {items.length === 0 ? <Empty text="Noch keine Positionen für die Checkliste hinterlegt." /> : <div className="divide-y divide-gray-100">{items.map(item => { const current = statusByItem.get(item.id); return <div key={item.id} className="py-3 flex items-center justify-between gap-3"><div className="min-w-0"><p className="text-sm font-medium text-gray-900">{item.name}</p><p className="text-xs text-gray-500 mt-0.5">{current ? `geprüft ${formatDate(current.checked_at)} von ${current.checker?.name ?? '–'}` : 'noch ungeprüft'}{current?.note ? ` · ${current.note}` : ''}</p></div><div className="flex items-center gap-2 flex-shrink-0">{current ? <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${CHECK_STATUS_COLOR[current.status]}`}>{CHECK_STATUS_LABEL[current.status]}</span> : <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">Ungeprüft</span>}{canEdit ? <button type="button" onClick={() => void removeItem(item)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Position entfernen"><Trash2 className="w-3.5 h-3.5" /></button> : null}</div></div> })}</div>}
+
+    {showItemForm ? <Modal title="Position anlegen" close={() => setShowItemForm(false)}>
+      <label className="block text-xs font-medium text-gray-600">Bezeichnung *<input className={inputClass} value={itemName} onChange={event => setItemName(event.target.value)} placeholder="z. B. Reifen" /></label>
+      <Actions saving={saving} close={() => setShowItemForm(false)} save={saveItem} />
+    </Modal> : null}
+
+    {checking ? <Modal title="Fahrzeugzustand kontrollieren" close={() => setChecking(false)} wide>
+      <p className="text-sm text-gray-600">Jede Position prüfen und bei Bedarf anpassen, dann gesammelt speichern.</p>
+      <div className="space-y-3">{items.map(item => <div key={item.id} className="rounded-xl border border-gray-200 p-3"><p className="text-sm font-semibold text-gray-900">{item.name}</p><div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2"><label className="block text-xs font-medium text-gray-600">Ergebnis<select className={inputClass} value={draft[item.id]?.status ?? 'ok'} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], status: event.target.value as VehicleCheckStatus } }))}><option value="ok">In Ordnung</option><option value="mangel">Mangel</option></select></label><label className="block text-xs font-medium text-gray-600">Bemerkung<input className={inputClass} value={draft[item.id]?.note ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} /></label></div></div>)}</div>
+      <Actions saving={saving} close={() => setChecking(false)} save={submitCheck} label="Kontrolle abschließen" />
     </Modal> : null}
   </TabShell>
 }
