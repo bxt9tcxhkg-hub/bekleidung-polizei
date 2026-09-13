@@ -45,6 +45,7 @@ export interface AussendienstContext {
   saveVehicleCheck: (status: VehicleCheckStatus, note: string) => Promise<void>
   openNewAuftrag: () => void
   openEditAuftrag: (item: ZentraleEntry) => void
+  toggleKontrollauftragErledigt: (item: ZentraleEntry) => Promise<void>
   openBaustelleReport: () => void
 }
 
@@ -158,6 +159,16 @@ export default function AussendienstShell() {
     if (result.error) { setAuftragError('Kontrollauftrag konnte nicht gelöscht werden.'); return }
     logAudit('Kontrollauftrag endgültig gelöscht', editingAuftrag.title); setShowAuftragForm(false); await load()
   }
+  // To-do-Charakter: mit einem Klick erledigt/wieder offen - die dabei
+  // gespeicherte Uhrzeit ist keine Nachweis-Uhrzeit, nur eine Gedankenstütze
+  // für die spätere Protokollierung im PAD. Ohne Genehmiger-Rolle lässt die
+  // Datenbank ausschließlich diese beiden Felder ändern (siehe Migration).
+  async function toggleKontrollauftragErledigt(item: ZentraleEntry) {
+    const nowErledigt = item.status !== 'erledigt'
+    const result = await supabase.from('zentrale_entries').update({ status: nowErledigt ? 'erledigt' : 'offen', erledigt_at: nowErledigt ? new Date().toISOString() : null }).eq('id', item.id)
+    if (result.error) { setError('Der Status konnte nicht geändert werden.'); return }
+    await load()
+  }
 
   function openBaustelleReport() { setBaustelleReport(EMPTY_BAUSTELLE_REPORT); setBaustelleError(''); setShowBaustelleForm(true) }
   async function saveBaustelleReport() {
@@ -190,7 +201,7 @@ export default function AussendienstShell() {
     criticalItems, criticalSourcesError, openIncidents, openOrders, kontrollauftraege,
     incidents, entries, avBv, fahndungen, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
-    openNewAuftrag, openEditAuftrag, openBaustelleReport,
+    openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
   }
 
   return <div>

@@ -553,6 +553,8 @@ export interface ZentraleEntry {
   incident_id: string | null
   /** Erledigungsfrist, z. B. bei einem automatisch aus einem AV/BV-Ausspruch erzeugten Kontrollauftrag (72 Stunden). Nicht auf diese Kategorie beschränkt. */
   due_at: string | null
+  /** Zeitpunkt des Erledigt-Klicks bei einem Kontrollauftrag - reine Gedankenstütze für die spätere Protokollierung im PAD, kein Nachweis. */
+  erledigt_at: string | null
   created_by: string | null
   created_at: string
   updated_at: string
