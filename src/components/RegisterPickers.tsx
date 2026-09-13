@@ -35,9 +35,16 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
     // einzeln optional, aber mindestens eines muss angegeben werden.
     if (!vorname.trim() && !nachname.trim()) { setError('Bitte Vor- oder Nachname eingeben.'); return }
     setSaving(true)
-    const result = await supabase.from('operational_persons').insert({ vorname: vorname.trim() || null, nachname: nachname.trim() || null, birth_date: birthDate || null, phone: phone.trim() || null, created_by: createdBy }).select('*').single()
+    const result = await supabase.from('operational_persons').insert({ vorname: vorname.trim() || null, nachname: nachname.trim() || null, birth_date: birthDate || null, created_by: createdBy }).select('*').single()
+    if (result.error || !result.data) { setSaving(false); setError('Person konnte nicht angelegt werden.'); return }
+    // Telefonnummer lebt im gemeinsamen, verknüpfbaren Register statt als
+    // eigenes Feld bei der Person (siehe ZentralePersonen.tsx).
+    if (phone.trim()) {
+      const today = new Date()
+      const erhobenAm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      await supabase.from('operational_phone_numbers').insert({ person_id: result.data.id, number: phone.trim(), erhoben_am: erhobenAm, created_by: createdBy })
+    }
     setSaving(false)
-    if (result.error || !result.data) { setError('Person konnte nicht angelegt werden.'); return }
     onCreated(result.data as OperationalPerson)
     onChange(result.data.id)
     setShowCreate(false); setVorname(''); setNachname(''); setBirthDate(''); setPhone(''); setError('')

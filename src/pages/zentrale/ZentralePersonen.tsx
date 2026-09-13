@@ -16,7 +16,9 @@ import { objectLabel, personDisplayName, useObjects } from '../../lib/register'
 // Freitext-Eingabe der Adresse.
 
 type LinkCounts = { hinweise: number; rsaRsb: number; avBv: number; fahndungen: number }
-const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', homeObjectId: null as string | null, note: '' }
+type PhoneEntry = { id: string; number: string; erhoben_am: string }
+function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
+const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', phoneErhobenAm: '', phoneNumberId: null as string | null, homeObjectId: null as string | null, note: '' }
 
 export default function ZentralePersonen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
@@ -24,6 +26,7 @@ export default function ZentralePersonen() {
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [persons, setPersons] = useState<OperationalPerson[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
+  const [phoneByPerson, setPhoneByPerson] = useState<Record<string, PhoneEntry>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -35,7 +38,7 @@ export default function ZentralePersonen() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [personResult, noteResult, mailResult, avBvResult, fahndungResult] = await Promise.all([
+    const [personResult, noteResult, mailResult, avBvResult, fahndungResult, phoneResult] = await Promise.all([
       supabase.from('operational_persons').select('*, home_object:operational_objects(id, address, label, strasse, hausnummer, plz, ort)').order('nachname').order('vorname'),
       // Für die Löschsperre absichtlich ALLE Hinweise/Zustellungen zählen,
       // nicht nur aktive/offene: person_id ist hier ON DELETE CASCADE, ein
@@ -45,11 +48,14 @@ export default function ZentralePersonen() {
       supabase.from('mail_deliveries').select('person_id'),
       supabase.from('zentrale_av_bv').select('person_id').not('person_id', 'is', null),
       supabase.from('zentrale_fahndungen').select('person_id').not('person_id', 'is', null),
+      // Eine Person hat höchstens eine Telefonnummer im gemeinsamen Register
+      // (von dieser Seite so gepflegt, keine DB-Eindeutigkeit erzwungen).
+      supabase.from('operational_phone_numbers').select('id, person_id, number, erhoben_am').not('person_id', 'is', null),
     ])
     // Diese Zähler dienen nur der Anzeige (Badges je Person) - remove() prüft
     // die tatsächliche Löschsperre separat per exact-count, unabhängig von
     // Ladefehlern oder API-Seitenlimits hier.
-    const linksFailed = Boolean(noteResult.error || mailResult.error || avBvResult.error || fahndungResult.error)
+    const linksFailed = Boolean(noteResult.error || mailResult.error || avBvResult.error || fahndungResult.error || phoneResult.error)
     if (personResult.error) setError('Das Personen-Register konnte nicht geladen werden.')
     else if (linksFailed) setError('Verknüpfungszahlen konnten nicht vollständig geladen werden (Anzeige ggf. unvollständig).')
     else setError('')
@@ -66,24 +72,45 @@ export default function ZentralePersonen() {
     for (const row of avBvResult.data ?? []) bump(row.person_id, 'avBv')
     for (const row of fahndungResult.data ?? []) bump(row.person_id, 'fahndungen')
     setLinks(counts)
+    const phones: Record<string, PhoneEntry> = {}
+    for (const row of phoneResult.data ?? []) { if (row.person_id) phones[row.person_id] = { id: row.id, number: row.number, erhoben_am: row.erhoben_am } }
+    setPhoneByPerson(phones)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
-  function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
-  function openEdit(item: OperationalPerson) { setEditing(item); setForm({ vorname: item.vorname ?? '', nachname: item.nachname ?? '', birthDate: item.birth_date ?? '', phone: item.phone ?? '', homeObjectId: item.home_object_id, note: item.note ?? '' }); setShowForm(true); setError('') }
+  function openNew() { setEditing(null); setForm({ ...emptyForm, phoneErhobenAm: todayLocal() }); setShowForm(true); setError('') }
+  function openEdit(item: OperationalPerson) {
+    setEditing(item)
+    const phone = phoneByPerson[item.id]
+    setForm({ vorname: item.vorname ?? '', nachname: item.nachname ?? '', birthDate: item.birth_date ?? '', phone: phone?.number ?? '', phoneErhobenAm: phone?.erhoben_am ?? todayLocal(), phoneNumberId: phone?.id ?? null, homeObjectId: item.home_object_id, note: item.note ?? '' })
+    setShowForm(true); setError('')
+  }
 
   async function save() {
     // Am Telefon ist oft zunächst nur Vor- oder Nachname bekannt - beide
     // einzeln optional, aber mindestens eines muss angegeben werden.
     if (!form.vorname.trim() && !form.nachname.trim()) { setError('Bitte Vor- oder Nachname eingeben.'); return }
     setSaving(true)
-    const payload = { vorname: form.vorname.trim() || null, nachname: form.nachname.trim() || null, birth_date: form.birthDate || null, phone: form.phone.trim() || null, home_object_id: form.homeObjectId, note: form.note.trim() || null }
-    const response = editing ? await supabase.from('operational_persons').update(payload).eq('id', editing.id) : await supabase.from('operational_persons').insert({ ...payload, created_by: profile?.id ?? null })
+    const payload = { vorname: form.vorname.trim() || null, nachname: form.nachname.trim() || null, birth_date: form.birthDate || null, home_object_id: form.homeObjectId, note: form.note.trim() || null }
+    const response = editing
+      ? await supabase.from('operational_persons').update(payload).eq('id', editing.id).select('id').single()
+      : await supabase.from('operational_persons').insert({ ...payload, created_by: profile?.id ?? null }).select('id').single()
+    if (response.error || !response.data) { setSaving(false); setError('Person konnte nicht gespeichert werden.'); return }
+    const personId = response.data.id
+    // Telefonnummer lebt im gemeinsamen Register (operational_phone_numbers),
+    // eine Person hat davon höchstens eine - hier direkt verwaltet statt über
+    // eine eigene Auswahlkomponente.
+    const number = form.phone.trim()
+    const phoneResponse = number
+      ? (form.phoneNumberId
+        ? await supabase.from('operational_phone_numbers').update({ number, erhoben_am: form.phoneErhobenAm || todayLocal() }).eq('id', form.phoneNumberId)
+        : await supabase.from('operational_phone_numbers').insert({ person_id: personId, number, erhoben_am: form.phoneErhobenAm || todayLocal(), created_by: profile?.id ?? null }))
+      : (form.phoneNumberId ? await supabase.from('operational_phone_numbers').delete().eq('id', form.phoneNumberId) : { error: null })
     setSaving(false)
-    if (response.error) { setError('Person konnte nicht gespeichert werden.'); return }
+    if (phoneResponse.error) { setError('Person wurde gespeichert, die Telefonnummer konnte aber nicht gespeichert werden.'); await load(); return }
     logAudit(editing ? 'Person bearbeitet' : 'Person angelegt', personDisplayName(payload)); setShowForm(false); setNotice('Person wurde gespeichert.'); await load()
   }
   async function remove() {
@@ -111,6 +138,10 @@ export default function ZentralePersonen() {
       return
     }
     if (!window.confirm(`Person „${personDisplayName(editing)}“ endgültig löschen?`)) return
+    // Verknüpfte Telefonnummer gehört zur Person und wird mitgelöscht (kein
+    // eigenständiger Datensatz wie Personenhinweise/RSa-RSb/AV-BV/Fahndungen,
+    // die den Löschvorgang oben blockieren).
+    if (form.phoneNumberId) await supabase.from('operational_phone_numbers').delete().eq('id', form.phoneNumberId)
     const result = await supabase.from('operational_persons').delete().eq('id', personId)
     if (result.error) { setError('Person konnte nicht gelöscht werden.'); return }
     logAudit('Person endgültig gelöscht', personDisplayName(editing)); setShowForm(false); setNotice('Person wurde endgültig gelöscht.'); await load()
@@ -129,12 +160,13 @@ export default function ZentralePersonen() {
         </div>
         {persons.length === 0 ? <Empty text="Noch keine Personen erfasst." /> : <div className="divide-y divide-gray-100">{persons.map(item => {
           const count = links[item.id]
+          const phone = phoneByPerson[item.id]
           return <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3 className="font-semibold text-gray-900">{personDisplayName(item)}</h3>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-1">
                 {item.birth_date ? <span>Geb.: {new Date(item.birth_date).toLocaleDateString('de-AT')}</span> : null}
-                {item.phone ? <span>TEL: {item.phone}</span> : null}
+                {phone ? <span>TEL: {phone.number} (erhoben {new Date(phone.erhoben_am).toLocaleDateString('de-AT')})</span> : null}
                 {item.home_object ? <span>Anschrift: {objectLabel(item.home_object)}</span> : null}
               </div>
               {item.note ? <p className="text-sm text-gray-600 mt-1.5 whitespace-pre-wrap">{item.note}</p> : null}
@@ -156,9 +188,10 @@ export default function ZentralePersonen() {
         <Field label="Vorname" value={form.vorname} onChange={value => setForm(current => ({ ...current, vorname: value }))} />
         <Field label="Nachname" value={form.nachname} onChange={value => setForm(current => ({ ...current, nachname: value }))} />
       </div>
+      <Field label="Geburtsdatum" type="date" value={form.birthDate} onChange={value => setForm(current => ({ ...current, birthDate: value }))} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Geburtsdatum" type="date" value={form.birthDate} onChange={value => setForm(current => ({ ...current, birthDate: value }))} />
         <Field label="Telefonnummer" value={form.phone} onChange={value => setForm(current => ({ ...current, phone: value }))} />
+        <Field label="Erhoben am" type="date" value={form.phoneErhobenAm} onChange={value => setForm(current => ({ ...current, phoneErhobenAm: value }))} />
       </div>
       <ObjectPicker label="Anschrift" objects={objects} value={form.homeObjectId} onChange={value => setForm(current => ({ ...current, homeObjectId: value }))} createdBy={profile?.id ?? null} onCreated={object => setObjects(current => [...current, object].sort((a, b) => objectLabel(a).localeCompare(objectLabel(b))))} />
       <label className="block text-xs font-medium text-gray-600">Notiz<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>

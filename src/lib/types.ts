@@ -836,6 +836,8 @@ export interface OperationalPhoneNumber {
   label: string | null
   person_id: string | null
   object_id: string | null
+  /** Wann diese Nummer erhoben wurde - kann vom Erfassungsdatum (created_at) abweichen, z. B. bei einer nacherfassten älteren Vernehmung. */
+  erhoben_am: string
   note: string | null
   created_by: string | null
   created_at: string
