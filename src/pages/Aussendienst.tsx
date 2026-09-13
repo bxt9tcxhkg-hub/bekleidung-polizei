@@ -38,6 +38,9 @@ export default function Aussendienst() {
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [avBv, setAvBv] = useState<ZentraleAvBv[]>([])
   const [fahndungen, setFahndungen] = useState<ZentraleFahndung[]>([])
+  // Wie in Zentrale.tsx: bei Ladefehler darf "Keine aktuell dringenden
+  // Warnungen" nicht fälschlich Entwarnung geben.
+  const [criticalSourcesError, setCriticalSourcesError] = useState(false)
   const [unterlagen, setUnterlagen] = useState<ZentraleUnterlage[]>([])
   const [incidents, setIncidents] = useState<{ id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,6 +78,7 @@ export default function Aussendienst() {
     setIncidents(incidentResult.data ?? [])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
     setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
+    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
     setUnterlagen(unterlageResult.error ? [] : (unterlageResult.data ?? []) as ZentraleUnterlage[])
     setLoading(false)
   }, [])
@@ -153,7 +157,10 @@ export default function Aussendienst() {
           {showMangelForm ? <div className="mt-3 flex flex-col sm:flex-row gap-2"><input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Was fehlt / ist beschädigt?" value={checkNote} onChange={event => setCheckNote(event.target.value)} /><button type="button" disabled={saving} onClick={() => void saveVehicleCheck('mangel', checkNote)} className="bg-amber-700 hover:bg-amber-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Melden</button></div> : null}</div>}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 lg:col-span-2"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-blue-700" /> Wichtige Hinweise</h2>{criticalItems.length === 0 ? <p className="text-sm text-gray-500 mt-2">Keine aktuell dringenden Warnungen.</p> : <div className="mt-2 space-y-2">{criticalItems.map(item => <div key={item.id} className="rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2"><p className="font-bold text-red-900 text-sm">{item.title}</p>{item.description ? <p className="text-sm text-red-800">{item.description}</p> : null}</div>)}</div>}</section>
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 lg:col-span-2"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-blue-700" /> Wichtige Hinweise</h2>
+        {criticalSourcesError ? <p className="text-xs font-medium text-amber-700 flex items-center gap-1.5 mt-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> AV/BV & EV bzw. Fahndungen konnten nicht vollständig geladen werden - es könnten weitere Warnungen fehlen. Bitte Seite neu laden.</p> : null}
+        {criticalItems.length === 0 ? (criticalSourcesError ? null : <p className="text-sm text-gray-500 mt-2">Keine aktuell dringenden Warnungen.</p>) : <div className="mt-2 space-y-2">{criticalItems.map(item => <div key={item.id} className="rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2"><p className="font-bold text-red-900 text-sm">{item.title}</p>{item.description ? <p className="text-sm text-red-800">{item.description}</p> : null}</div>)}</div>}
+      </section>
     </div> : null}
 
     <nav className="flex gap-1.5 overflow-x-auto pb-2 mb-5" aria-label="Bereiche des Außendienstes">{TABS.map(tab => { const Icon = tab.icon; return <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 whitespace-nowrap border px-3 py-2 rounded-xl text-sm font-medium ${activeTab === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}><Icon className="w-4 h-4" />{tab.label}</button> })}</nav>

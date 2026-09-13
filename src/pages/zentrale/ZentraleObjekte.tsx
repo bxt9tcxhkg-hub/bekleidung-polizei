@@ -37,7 +37,12 @@ export default function ZentraleObjekte() {
       supabase.from('zentrale_schluessel').select('object_id').not('object_id', 'is', null),
       supabase.from('zentrale_kontakte').select('object_id').not('object_id', 'is', null),
     ])
+    // Diese Zähler dienen nur der Anzeige (Badges je Objekt) - remove() prüft
+    // die tatsächliche Löschsperre separat per exact-count, unabhängig von
+    // Ladefehlern oder API-Seitenlimits hier.
+    const linksFailed = Boolean(avBvResult.error || fahndungResult.error || schluesselResult.error || kontaktResult.error)
     if (objectResult.error) setError('Das Objekte-Register konnte nicht geladen werden.')
+    else if (linksFailed) setError('Verknüpfungszahlen konnten nicht vollständig geladen werden (Anzeige ggf. unvollständig).')
     else setError('')
     setObjects((objectResult.data ?? []) as OperationalObject[])
     const counts: Record<string, LinkCounts> = {}
@@ -72,13 +77,30 @@ export default function ZentraleObjekte() {
   }
   async function remove() {
     if (!editing) return
-    const count = links[editing.id]
-    if (count && (count.avBv || count.fahndungen || count.schluessel || count.kontakte)) {
+    const objectId = editing.id
+    // Gezielte exact-count-Abfragen statt der oben geladenen Bulk-Listen: die
+    // Bulk-Listen laden ALLE object_id-Werte der Tabellen ohne Paginierung und
+    // würden ab mehr Zeilen als das API-Seitenlimit stillschweigend
+    // unvollständig - ein außerhalb der geladenen Seite liegender Eintrag
+    // würde das Objekt fälschlich als unverknüpft erscheinen lassen. Ein
+    // exact-count ist dagegen unabhängig von der Tabellengröße korrekt.
+    const [avBvCount, fahndungCount, schluesselCount, kontaktCount] = await Promise.all([
+      supabase.from('zentrale_av_bv').select('id', { count: 'exact', head: true }).eq('object_id', objectId),
+      supabase.from('zentrale_fahndungen').select('id', { count: 'exact', head: true }).eq('object_id', objectId),
+      supabase.from('zentrale_schluessel').select('id', { count: 'exact', head: true }).eq('object_id', objectId),
+      supabase.from('zentrale_kontakte').select('id', { count: 'exact', head: true }).eq('object_id', objectId),
+    ])
+    if (avBvCount.error || fahndungCount.error || schluesselCount.error || kontaktCount.error) {
+      setError('Verknüpfungen konnten nicht geprüft werden - Löschen abgebrochen.')
+      return
+    }
+    const total = (avBvCount.count ?? 0) + (fahndungCount.count ?? 0) + (schluesselCount.count ?? 0) + (kontaktCount.count ?? 0)
+    if (total > 0) {
       setError('Dieses Objekt ist noch mit Einträgen verknüpft (AV/BV, Fahndungen, Schlüssel oder Kontakte) und kann daher nicht gelöscht werden.')
       return
     }
     if (!window.confirm(`Objekt „${editing.address}“ endgültig löschen?`)) return
-    const result = await supabase.from('operational_objects').delete().eq('id', editing.id)
+    const result = await supabase.from('operational_objects').delete().eq('id', objectId)
     if (result.error) { setError('Objekt konnte nicht gelöscht werden.'); return }
     logAudit('Objekt endgültig gelöscht', editing.address); setShowForm(false); setNotice('Objekt wurde endgültig gelöscht.'); await load()
   }

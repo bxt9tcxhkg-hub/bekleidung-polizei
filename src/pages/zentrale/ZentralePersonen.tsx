@@ -28,12 +28,6 @@ export default function ZentralePersonen() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<OperationalPerson | null>(null)
   const [form, setForm] = useState(emptyForm)
-  // Wenn eine der vier Verknüpfungs-Abfragen fehlschlägt, darf remove() NICHT
-  // von "0 Verknüpfungen" ausgehen - ein transienter API/RLS-Fehler dürfte
-  // sonst archivierte Hinweise/RSa-RSb-Fälle per ON DELETE CASCADE unbemerkt
-  // endgültig löschen. Getrennt von "error" gehalten, da openNew/openEdit
-  // "error" zurücksetzen, dieser Zustand aber bis zum nächsten load() bestehen muss.
-  const [linksUnavailable, setLinksUnavailable] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -48,10 +42,12 @@ export default function ZentralePersonen() {
       supabase.from('zentrale_av_bv').select('person_id').not('person_id', 'is', null),
       supabase.from('zentrale_fahndungen').select('person_id').not('person_id', 'is', null),
     ])
+    // Diese Zähler dienen nur der Anzeige (Badges je Person) - remove() prüft
+    // die tatsächliche Löschsperre separat per exact-count, unabhängig von
+    // Ladefehlern oder API-Seitenlimits hier.
     const linksFailed = Boolean(noteResult.error || mailResult.error || avBvResult.error || fahndungResult.error)
-    setLinksUnavailable(linksFailed)
     if (personResult.error) setError('Das Personen-Register konnte nicht geladen werden.')
-    else if (linksFailed) setError('Verknüpfungen konnten nicht vollständig geladen werden - Löschen ist vorübergehend deaktiviert.')
+    else if (linksFailed) setError('Verknüpfungszahlen konnten nicht vollständig geladen werden (Anzeige ggf. unvollständig).')
     else setError('')
     setPersons((personResult.data ?? []) as OperationalPerson[])
     const counts: Record<string, LinkCounts> = {}
@@ -88,14 +84,30 @@ export default function ZentralePersonen() {
   }
   async function remove() {
     if (!editing) return
-    if (linksUnavailable) { setError('Verknüpfungen konnten nicht vollständig geladen werden - Löschen ist vorübergehend deaktiviert.'); return }
-    const count = links[editing.id]
-    if (count && (count.hinweise || count.rsaRsb || count.avBv || count.fahndungen)) {
+    const personId = editing.id
+    // Gezielte exact-count-Abfragen statt der oben geladenen Bulk-Listen: die
+    // Bulk-Listen laden ALLE person_id-Werte der Tabellen ohne Paginierung und
+    // würden ab mehr Zeilen als das API-Seitenlimit stillschweigend
+    // unvollständig - ein außerhalb der geladenen Seite liegender Hinweis
+    // würde die Person fälschlich als unverknüpft erscheinen lassen. Ein
+    // exact-count ist dagegen unabhängig von der Tabellengröße korrekt.
+    const [noteCount, mailCount, avBvCount, fahndungCount] = await Promise.all([
+      supabase.from('operational_person_notes').select('id', { count: 'exact', head: true }).eq('person_id', personId),
+      supabase.from('mail_deliveries').select('id', { count: 'exact', head: true }).eq('person_id', personId),
+      supabase.from('zentrale_av_bv').select('id', { count: 'exact', head: true }).eq('person_id', personId),
+      supabase.from('zentrale_fahndungen').select('id', { count: 'exact', head: true }).eq('person_id', personId),
+    ])
+    if (noteCount.error || mailCount.error || avBvCount.error || fahndungCount.error) {
+      setError('Verknüpfungen konnten nicht geprüft werden - Löschen abgebrochen.')
+      return
+    }
+    const total = (noteCount.count ?? 0) + (mailCount.count ?? 0) + (avBvCount.count ?? 0) + (fahndungCount.count ?? 0)
+    if (total > 0) {
       setError('Diese Person ist noch mit Einträgen verknüpft (Personenhinweise, RSa/RSb, AV/BV oder Fahndungen) und kann daher nicht gelöscht werden.')
       return
     }
     if (!window.confirm(`Person „${personDisplayName(editing)}“ endgültig löschen?`)) return
-    const result = await supabase.from('operational_persons').delete().eq('id', editing.id)
+    const result = await supabase.from('operational_persons').delete().eq('id', personId)
     if (result.error) { setError('Person konnte nicht gelöscht werden.'); return }
     logAudit('Person endgültig gelöscht', personDisplayName(editing)); setShowForm(false); setNotice('Person wurde endgültig gelöscht.'); await load()
   }
