@@ -15,9 +15,9 @@ const BEREICH_LABEL: Record<AlarmierungBereich, string> = { polizei: 'Polizeilic
 const emptyForm = { anlass: '', ablauf: '', lageId: null as string | null, bereich: '' as AlarmierungBereich | '', stadtfuehrungInformiert: false, gueltigBis: '', note: '', restricted: false }
 
 export default function ZentraleAlarmierungPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [items, setItems] = useState<ZentraleAlarmierung[]>([])
   const [lagen, setLagen] = useState<ZentraleEntry[]>([])
   const [loading, setLoading] = useState(true)

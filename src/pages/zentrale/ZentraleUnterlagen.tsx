@@ -10,9 +10,9 @@ import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/
 const emptyForm = { titel: '', typ: '', fundort: '', gueltigBis: '', note: '', restricted: false }
 
 export default function ZentraleUnterlagenPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [items, setItems] = useState<ZentraleUnterlage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

@@ -12,9 +12,9 @@ import { objectLabel, useObjects } from '../../lib/register'
 const emptyForm = { name: '', institution: '', funktion: '', telefon: '', email: '', erreichbarkeit: '', objectId: null as string | null, note: '', restricted: false }
 
 export default function ZentraleKontaktePage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleKontakt[]>([])
   const [loading, setLoading] = useState(true)

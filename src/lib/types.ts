@@ -551,6 +551,10 @@ export interface ZentraleEntry {
   target_function: KontrollauftragZielfunktion | null
   /** Nur für category 'lage' gesetzt (Pflicht) - die auslösende Einsatzmeldung. */
   incident_id: string | null
+  /** Erledigungsfrist, z. B. bei einem automatisch aus einem AV/BV-Ausspruch erzeugten Kontrollauftrag (72 Stunden). Nicht auf diese Kategorie beschränkt. */
+  due_at: string | null
+  /** Zeitpunkt des Erledigt-Klicks bei einem Kontrollauftrag - reine Gedankenstütze für die spätere Protokollierung im PAD, kein Nachweis. */
+  erledigt_at: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -669,6 +673,34 @@ export interface ZentraleUnterlage {
   updated_at: string
 }
 
+// Baustellen-Markierung auf der Zentrale-Karte (Streckenabschnitt, keine
+// Verbindung zum Straßenzustandsbericht). 'gemeldet' = von einem Benutzer
+// wahrgenommen und noch nicht bestätigt; 'offen' = bestätigt/aktiv;
+// 'erledigt' = Baustelle beendet.
+export type ZentraleBaustelleStatus = 'gemeldet' | 'offen' | 'erledigt'
+
+export interface ZentraleBaustelle {
+  id: string
+  titel: string
+  start_lat: number
+  start_lng: number
+  end_lat: number
+  end_lng: number
+  // Abgeleiteter Streckenverlauf entlang des Straßennetzes (Routing-Dienst,
+  // siehe lib/routing.ts) - null, falls die Route nicht berechnet werden
+  // konnte; dann wird ersatzweise die Luftlinie zwischen Start/Ende gezeigt.
+  path: [number, number][] | null
+  note: string | null
+  status: ZentraleBaustelleStatus
+  gueltig_bis: string | null
+  restricted: boolean
+  created_by: string | null
+  confirmed_by: string | null
+  confirmed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type StrassenzustandZustand = 'frei_befahrbar' | 'gesperrt' | 'sonstige'
 export type StrassenzustandMeldungsart = 'neuzugang' | 'aenderung' | 'widerruf'
 
@@ -749,20 +781,28 @@ export type IncidentStatus = 'offen' | 'erledigt' | 'weitergegeben'
 export interface IncidentReport {
   id: string
   caller_phone: string | null
+  /** Abwärtskompatible Anzeige - beim Speichern aus caller_person abgeleitet, sofern verknüpft. */
   caller_name: string | null
+  /** Echte Verknüpfung zum Personen-Register statt Namens-Freitext. */
+  caller_person_id: string | null
   reported_at: string
   location: string | null
   location_lat: number | null
   location_lng: number | null
   summary: string
+  /** Abwärtskompatible Anzeige - beim Speichern aus involved_person_id abgeleitet, sofern verknüpft. */
   involved_person: string | null
   involved_birth_date: string | null
+  /** Echte Verknüpfung zum Personen-Register statt Namens-/Geburtsdatum-Freitext. */
+  involved_person_id: string | null
   disposition: IncidentDisposition
   note: string | null
   status: IncidentStatus
   created_by: string
   created_at: string
   updated_at: string
+  caller_person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  involved_person_ref?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
 }
 
 /** Zentrales Personen-Register - Verknüpfungspunkt für Personenhinweise, RSa/RSb, AV/BV & EV und Fahndungen. */
@@ -773,21 +813,47 @@ export interface OperationalPerson {
   vorname: string | null
   birth_date: string | null
   phone: string | null
+  /** Anschrift als echte Verknüpfung zum Objekte-Register statt erneuter Freitext-Eingabe. */
+  home_object_id: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  home_object?: Pick<OperationalObject, 'id' | 'address' | 'label' | 'strasse' | 'hausnummer' | 'plz' | 'ort'> | null
+}
+
+/** Zentrales Objekte-Register (Adressen/Gebäude) - Verknüpfungspunkt für AV/BV & EV, Fahndungen, Schlüssel, Kontakte und (über home_object_id) Personen. */
+export interface OperationalObject {
+  id: string
+  /** Freitext-Adresse - bleibt nutzbar, bis ein Objekt auf die strukturierten Felder umgestellt wird. */
+  address: string
+  /** Strukturierte Adressfelder - Voraussetzung für eine eindeutige Verknüpfung (z. B. Personen-Anschrift) statt Text-Abgleich. Optional, solange nicht jedes Objekt umgestellt ist. */
+  strasse: string | null
+  hausnummer: string | null
+  plz: string | null
+  ort: string | null
+  label: string | null
   note: string | null
   created_by: string | null
   created_at: string
   updated_at: string
 }
 
-/** Zentrales Objekte-Register (Adressen/Gebäude) - Verknüpfungspunkt für AV/BV & EV, Fahndungen, Schlüssel und Kontakte. */
-export interface OperationalObject {
+/** Telefonnummern-Register - verknüpfbar mit Person und/oder Objekt, wie bei AV/BV & EV und Fahndungen. */
+export interface OperationalPhoneNumber {
   id: string
-  address: string
+  number: string
   label: string | null
+  person_id: string | null
+  object_id: string | null
+  /** Wann diese Nummer erhoben wurde - kann vom Erfassungsdatum (created_at) abweichen, z. B. bei einer nacherfassten älteren Vernehmung. */
+  erhoben_am: string
   note: string | null
   created_by: string | null
   created_at: string
   updated_at: string
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
 }
 
 export type OperationalPersonNoteCategory = 'infektionsschutz' | 'aggressiv' | 'waffenverbot' | 'fluchtgefahr' | 'suizidgefahr' | 'sonstiges'
@@ -924,13 +990,16 @@ export interface InnendienstShiftTask {
 }
 
 export type InnendienstRecordKind = 'bescheid_strassenmusik' | 'bescheid_strassenkunst' | 'verstoss'
-export type InnendienstRecordStatus = 'offen' | 'erledigt'
+/** 'entzogen' nur bei einem Bescheid, dem automatisch ein Verstoß entgegensteht (siehe Trigger revoke_bescheid_on_verstoss). */
+export type InnendienstRecordStatus = 'offen' | 'erledigt' | 'entzogen'
 
 export interface InnendienstRecord {
   id: string
   kind: InnendienstRecordKind
   reference: string | null
   subject: string
+  /** Bei einem Bescheid die Person, für die er ausgestellt wurde - eine echte Verknüpfung zum Personen-Register statt Namens-Freitext, damit Verstöße je Person eindeutig zählbar sind. Ein Verstoß übernimmt automatisch dieselbe Person von seinem Bescheid. */
+  person_id: string | null
   note: string | null
   status: InnendienstRecordStatus
   issued_date: string
@@ -940,6 +1009,7 @@ export interface InnendienstRecord {
   created_at: string
   updated_at: string
   creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
   related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
 }
 
@@ -1116,9 +1186,10 @@ type FleetDocumentRow = Omit<FleetDocument, 'uploader'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
-type IncidentReportRow = Omit<IncidentReport, never>
-type OperationalPersonRow = Omit<OperationalPerson, never>
+type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref'>
+type OperationalPersonRow = Omit<OperationalPerson, 'home_object'>
 type OperationalObjectRow = Omit<OperationalObject, never>
+type OperationalPhoneNumberRow = Omit<OperationalPhoneNumber, 'person' | 'object'>
 type OperationalPersonNoteRow = Omit<OperationalPersonNote, 'person'>
 type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
 type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer' | 'person'>
@@ -1127,9 +1198,10 @@ type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
 type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
 type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
 type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
+type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
-type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'related_bescheid'>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid'>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
 type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>
 type StrassenzustandBerichtzeileRow = Omit<StrassenzustandBerichtzeile, 'strassenzustand_strassen' | 'strassenzustand_auftraggeber' | 'strassenzustand_melder'>
@@ -1308,12 +1380,20 @@ export type Database = {
       duty_functions: { Row: DutyFunctionConfigRow; Insert: Pick<DutyFunctionConfigRow, 'code' | 'label'> & Partial<Omit<DutyFunctionConfigRow, 'created_at' | 'updated_at' | 'code' | 'label'>>; Update: Partial<Omit<DutyFunctionConfigRow, 'code' | 'created_at'>>; Relationships: [] }
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_caller_person_id_fkey'; columns: ['caller_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_involved_person_id_fkey'; columns: ['involved_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
       ] }
       operational_persons: { Row: OperationalPersonRow; Insert: Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_persons_home_object_id_fkey'; columns: ['home_object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
       ] }
       operational_objects: { Row: OperationalObjectRow; Insert: Pick<OperationalObjectRow, 'address'> & Partial<Omit<OperationalObjectRow, 'id' | 'created_at' | 'updated_at' | 'address'>>; Update: Partial<Omit<OperationalObjectRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_objects_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      operational_phone_numbers: { Row: OperationalPhoneNumberRow; Insert: Pick<OperationalPhoneNumberRow, 'number'> & Partial<Omit<OperationalPhoneNumberRow, 'id' | 'created_at' | 'updated_at' | 'number'>>; Update: Partial<Omit<OperationalPhoneNumberRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'operational_phone_numbers_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_phone_numbers_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_phone_numbers_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
       ] }
       operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_id' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_id' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'operational_person_notes_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
@@ -1345,6 +1425,10 @@ export type Database = {
       zentrale_unterlagen: { Row: ZentraleUnterlageRow; Insert: Pick<ZentraleUnterlageRow, 'titel' | 'created_by'> & Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'created_by'>>; Update: Partial<Omit<ZentraleUnterlageRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_unterlagen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      zentrale_baustellen: { Row: ZentraleBaustelleRow; Insert: Pick<ZentraleBaustelleRow, 'titel' | 'start_lat' | 'start_lng' | 'end_lat' | 'end_lng' | 'created_by'> & Partial<Omit<ZentraleBaustelleRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'start_lat' | 'start_lng' | 'end_lat' | 'end_lng' | 'created_by'>>; Update: Partial<Omit<ZentraleBaustelleRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'zentrale_baustellen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'zentrale_baustellen_confirmed_by_fkey'; columns: ['confirmed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
       vehicle_checks: { Row: VehicleCheckRow; Insert: Pick<VehicleCheckRow, 'vehicle_id' | 'checked_by'> & Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<VehicleCheckRow, 'id' | 'created_at' | 'vehicle_id'>>; Relationships: [
         { foreignKeyName: 'vehicle_checks_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'vehicle_checks_checked_by_fkey'; columns: ['checked_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
@@ -1360,6 +1444,7 @@ export type Database = {
       innendienst_records: { Row: InnendienstRecordRow; Insert: Pick<InnendienstRecordRow, 'kind' | 'subject' | 'created_by'> & Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'updated_at' | 'kind' | 'subject' | 'created_by'>>; Update: Partial<Omit<InnendienstRecordRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'innendienst_records_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_records_related_bescheid_id_fkey'; columns: ['related_bescheid_id']; isOneToOne: false; referencedRelation: 'innendienst_records'; referencedColumns: ['id'] },
+        { foreignKeyName: 'innendienst_records_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
       ] }
       innendienst_gebuehrenpositionen: { Row: InnendienstGebuehrenpositionRow; Insert: Pick<InnendienstGebuehrenpositionRow, 'name' | 'betrag'> & Partial<Omit<InnendienstGebuehrenpositionRow, 'name' | 'betrag'>>; Update: Partial<Omit<InnendienstGebuehrenpositionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'innendienst_gebuehrenpositionen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

@@ -25,8 +25,8 @@ const USER_TABS: { id: SchulungenTab; label: string }[] = [
 ]
 
 export default function Schulungen() {
-  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const canManage = canManageSchulungen({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const canManage = canManageSchulungen({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
   const tabs = canManage ? MANAGE_TABS : USER_TABS
   const [subTab, setSubTab] = useState<SchulungenTab>('module')
   const visibleTab = tabs.some(tab => tab.id === subTab) ? subTab : 'module'

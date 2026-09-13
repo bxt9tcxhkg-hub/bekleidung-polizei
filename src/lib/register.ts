@@ -36,8 +36,15 @@ export function useObjects() {
   return { objects, setObjects, loading, error, reload: load }
 }
 
-export function objectLabel(object: Pick<OperationalObject, 'address' | 'label'>) {
-  return object.label ? `${object.label} (${object.address})` : object.address
+/** Baut aus den strukturierten Adressfeldern eine Anzeige-/Speicheradresse ("Straße Hausnummer, PLZ Ort"). Fehlt eines der Pflichtfelder (Straße/PLZ/Ort), wird null zurückgegeben - der Aufrufer fällt dann auf das Freitextfeld `address` zurück. */
+export function composeObjectAddress(fields: { strasse?: string | null; hausnummer?: string | null; plz?: string | null; ort?: string | null }) {
+  if (!fields.strasse?.trim() || !fields.plz?.trim() || !fields.ort?.trim()) return null
+  const strasseHausnummer = [fields.strasse.trim(), fields.hausnummer?.trim()].filter(Boolean).join(' ')
+  return `${strasseHausnummer}, ${fields.plz.trim()} ${fields.ort.trim()}`
+}
+export function objectLabel(object: Pick<OperationalObject, 'address' | 'label'> & Partial<Pick<OperationalObject, 'strasse' | 'hausnummer' | 'plz' | 'ort'>>) {
+  const address = composeObjectAddress(object) ?? object.address
+  return object.label ? `${object.label} (${address})` : address
 }
 /** Vorname und Nachname sind beide optional (am Telefon oft erst eines bekannt) - hier zur Anzeige kombiniert. */
 export function personDisplayName(person: Pick<OperationalPerson, 'vorname' | 'nachname'> | null | undefined) {

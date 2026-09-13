@@ -388,23 +388,35 @@ function MyVehicleCard({ userId }: { userId: string }) {
 }
 
 export default function Portal() {
-  const { profile, isAdmin, isStrictAdmin, isGenehmiger, areaRoles, hasAreaAccess } = useAuth()
-  const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const { profile, isAdmin, isStrictAdmin, isGenehmiger, isGenehmigerEntitlement, areaRoles, hasAreaAccess, operativeModeActive, setOperativeModeActive } = useAuth()
+  // Sichtbarkeit der Portal-Kacheln bleibt immer bestehen, unabhängig vom
+  // Sachbearbeiter/Genehmiger-Umschalter (isGenehmigerEntitlement ist roh) -
+  // sonst würde ein Genehmiger im Benutzer-Modus ganze Bereiche verlieren.
+  const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const adminLinks = visiblePortalAdminLinks(isAdmin)
-  const canManageDuties = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
-  const canManageZentrale = canManageDuties
-  const canManageFuhrparkArea = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
-  const canManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
-  const canManageSchulungenArea = canManageSchulungen({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const zentraleManagerRole = (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
+  // Roh (unabhängig vom Modus) - ob überhaupt eine Sachbearbeiter/Genehmiger-
+  // Berechtigung besteht. Steuert, welche offen-Zahlen geladen werden, für
+  // den einen zusammengefassten "offene Aufgaben"-Hinweis unten (der genau
+  // deshalb auch im Benutzer-Modus sichtbar bleibt - er lädt ja zum Umschalten ein).
+  const rawCanManageZentrale = isStrictAdmin || isGenehmigerEntitlement || zentraleManagerRole
+  const rawCanManageFuhrpark = canManageFuhrpark({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
+  const rawCanManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
+  const rawCanManageSchulungen = canManageSchulungen({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
+  // Gated (nur im erweiterten Modus aktiv) - steuert die tatsächlich
+  // angezeigte Verwaltungs-Aktion ("Dienste verwalten"-Button).
+  const canManageDuties = isStrictAdmin || isGenehmiger || (operativeModeActive && zentraleManagerRole)
 
-  // Kleine "offen"-Kennzahl je Bereich, nur für dessen Verwaltung – Details gibt's erst im Bereich selbst.
+  // Ein einziger zusammengefasster "X offene Aufgaben"-Hinweis statt
+  // verstreuter Kacheln-Badges je Bereich (siehe unten) - lädt im
+  // Benutzer-Modus zum Umschalten ein, statt die Zahlen an mehreren Stellen zu verteilen.
   const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number }>({})
   useEffect(() => {
     let cancelled = false
     async function load() {
       const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number } = {}
       await Promise.all([
-        canManageZentrale
+        rawCanManageZentrale
           // Kritische Punkte kommen inzwischen nicht mehr nur aus zentrale_entries,
           // sondern auch aus den dedizierten AV/BV- & Fahndungen-Tabellen.
           ? Promise.all([
@@ -413,14 +425,14 @@ export default function Portal() {
               supabase.from('zentrale_fahndungen').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').eq('status', 'offen'),
             ]).then(([entries, avBv, fahndungen]) => { next.zentrale = (entries.count ?? 0) + (avBv.count ?? 0) + (fahndungen.count ?? 0) })
           : Promise.resolve(),
-        canManageFuhrparkArea ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
-        canManageEinsatzmittel
+        rawCanManageFuhrpark ? supabase.from('fleet_equipment_status').select('vehicle_id').neq('status', 'vollstaendig').then(({ data }) => { next.fuhrpark = new Set((data ?? []).map(row => row.vehicle_id)).size }) : Promise.resolve(),
+        rawCanManageEinsatzmittel
           ? Promise.all([
               supabase.from('personal_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
               supabase.from('pool_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
             ]).then(([personal, pool]) => { next.einsatz_mt = (personal.count ?? 0) + (pool.count ?? 0) })
           : Promise.resolve(),
-        canManageSchulungenArea
+        rawCanManageSchulungen
           ? supabase.from('schulungen_assignments').select('id', { count: 'exact', head: true }).eq('status', 'vorschlag').then(({ count }) => { next.schulungen = count ?? 0 })
           : Promise.resolve(),
       ])
@@ -428,7 +440,8 @@ export default function Portal() {
     }
     void load()
     return () => { cancelled = true }
-  }, [canManageZentrale, canManageFuhrparkArea, canManageEinsatzmittel, canManageSchulungenArea])
+  }, [rawCanManageZentrale, rawCanManageFuhrpark, rawCanManageEinsatzmittel, rawCanManageSchulungen])
+  const totalOpenTasks = Object.values(openCounts).reduce((sum: number, value) => sum + (value ?? 0), 0)
 
   return (
     <PortalChrome
@@ -467,13 +480,25 @@ export default function Portal() {
         ) : null}
       </div>
 
+      {totalOpenTasks > 0 ? (
+        <section className={`rounded-2xl border p-4 sm:p-5 mb-6 flex flex-wrap items-center justify-between gap-3 ${operativeModeActive ? 'border-amber-200 bg-amber-50' : 'border-blue-200 bg-blue-50'}`}>
+          <div className="flex items-center gap-3">
+            <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${operativeModeActive ? 'text-amber-700' : 'text-blue-700'}`} />
+            <p className="text-sm font-medium text-gray-800">{totalOpenTasks} offene {totalOpenTasks === 1 ? 'Aufgabe' : 'Aufgaben'} aus deiner Sachbearbeiter-/Genehmiger-Tätigkeit.</p>
+          </div>
+          {!operativeModeActive ? (
+            <button type="button" onClick={() => setOperativeModeActive(true)} className="text-sm font-semibold text-blue-800 bg-white border border-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-50 flex-shrink-0">Jetzt bearbeiten</button>
+          ) : null}
+        </section>
+      ) : null}
+
       {profile?.id && hasAreaAccess('zentrale') ? <TodayFunctionCard userId={profile.id} canManage={canManageDuties} /> : null}
       {profile?.id && hasAreaAccess('zentrale') ? <div className="mb-6"><OwnerNotifications userId={profile.id} /></div> : null}
       {profile?.id ? <MyVehicleCard userId={profile.id} /> : null}
 
       <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
         {hasAreaAccess('zentrale') ? (
-          <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} badge={openCounts.zentrale} />
+          <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} />
         ) : null}
         {hasAreaAccess('zentrale') ? (
           <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck, Kontrollaufträge und RSa/RSb" icon={Shield} />
@@ -487,12 +512,12 @@ export default function Portal() {
       </PortalSection>
 
       <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">
-        {apps.map(app => <AppTile key={app.id} app={app} badge={app.id === 'einsatz_mt' ? openCounts.einsatz_mt : undefined} />)}
+        {apps.map(app => <AppTile key={app.id} app={app} />)}
         {hasAreaAccess('schulungen') ? (
-          <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} badge={openCounts.schulungen} />
+          <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} />
         ) : null}
         {hasAreaAccess('fuhrpark') ? (
-          <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} badge={openCounts.fuhrpark} />
+          <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} />
         ) : null}
       </PortalSection>
 

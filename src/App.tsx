@@ -8,6 +8,7 @@ import AussendienstLayout from './components/AussendienstLayout'
 import InnendienstLayout from './components/InnendienstLayout'
 import RsaRsbLayout from './components/RsaRsbLayout'
 import FuhrparkLayout from './components/FuhrparkLayout'
+import SchulungenLayout from './components/SchulungenLayout'
 import PortalChrome from './components/PortalChrome'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -32,8 +33,15 @@ const Analyse = lazy(() => import('./pages/Analyse'))
 const Grundausstattung = lazy(() => import('./pages/Grundausstattung'))
 const Hilfe = lazy(() => import('./pages/Hilfe'))
 const EinsatzDashboard = lazy(() => import('./pages/EinsatzDashboard'))
-const Einsatzmittel = lazy(() => import('./pages/Einsatzmittel'))
-const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
+const EinsatzmittelPersoenlich = lazy(() => import('./pages/einsatz/EinsatzmittelPersoenlich'))
+const EinsatzmittelPool = lazy(() => import('./pages/einsatz/EinsatzmittelPool'))
+const EinsatzmittelLager = lazy(() => import('./pages/einsatz/EinsatzmittelLager'))
+const EinsatzmittelBeschaffung = lazy(() => import('./pages/einsatz/EinsatzmittelBeschaffung'))
+const EinsatzmittelMeldungen = lazy(() => import('./pages/einsatz/EinsatzmittelMeldungen'))
+const EinsatztrainingModule = lazy(() => import('./pages/einsatz/EinsatztrainingModule'))
+const EinsatztrainingOffen = lazy(() => import('./pages/einsatz/EinsatztrainingOffen'))
+const EinsatztrainingAusschreibung = lazy(() => import('./pages/einsatz/EinsatztrainingAusschreibung'))
+const EinsatztrainingProtokoll = lazy(() => import('./pages/einsatz/EinsatztrainingProtokoll'))
 const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const Schulungen = lazy(() => import('./pages/Schulungen'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
@@ -41,19 +49,32 @@ const PlannedArea = lazy(() => import('./pages/PlannedArea'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
-const Zentrale = lazy(() => import('./pages/Zentrale'))
+const ZentraleShell = lazy(() => import('./pages/zentrale/ZentraleShell'))
+const ZentraleUebersicht = lazy(() => import('./pages/zentrale/ZentraleUebersicht'))
+const ZentraleEinsaetze = lazy(() => import('./pages/zentrale/ZentraleEinsaetze'))
+const ZentraleLagePage = lazy(() => import('./pages/zentrale/ZentraleLagePage'))
+const ZentraleBaustellenPage = lazy(() => import('./pages/zentrale/ZentraleBaustellenPage'))
 const ZentraleAvBv = lazy(() => import('./pages/zentrale/ZentraleAvBv'))
 const ZentralePersonenhinweise = lazy(() => import('./pages/zentrale/ZentralePersonenhinweise'))
 const ZentralePersonen = lazy(() => import('./pages/zentrale/ZentralePersonen'))
 const ZentraleObjekte = lazy(() => import('./pages/zentrale/ZentraleObjekte'))
 const ZentraleFahndungen = lazy(() => import('./pages/zentrale/ZentraleFahndungen'))
-const ZentraleRsaRsb = lazy(() => import('./pages/zentrale/ZentraleRsaRsb'))
 const ZentraleSchluessel = lazy(() => import('./pages/zentrale/ZentraleSchluessel'))
 const ZentraleKontakte = lazy(() => import('./pages/zentrale/ZentraleKontakte'))
 const ZentraleAlarmierung = lazy(() => import('./pages/zentrale/ZentraleAlarmierung'))
 const ZentraleUnterlagen = lazy(() => import('./pages/zentrale/ZentraleUnterlagen'))
-const Aussendienst = lazy(() => import('./pages/Aussendienst'))
-const Innendienst = lazy(() => import('./pages/Innendienst'))
+const ZentraleStrassenzustand = lazy(() => import('./pages/zentrale/ZentraleStrassenzustand'))
+const AussendienstShell = lazy(() => import('./pages/aussendienst/AussendienstShell'))
+const AussendienstUebersicht = lazy(() => import('./pages/aussendienst/AussendienstUebersicht'))
+const AussendienstEinsaetze = lazy(() => import('./pages/aussendienst/AussendienstEinsaetze'))
+const AussendienstKontrollauftraege = lazy(() => import('./pages/aussendienst/AussendienstKontrollauftraege'))
+const AussendienstHinweise = lazy(() => import('./pages/aussendienst/AussendienstHinweise'))
+const AussendienstFahrzeug = lazy(() => import('./pages/aussendienst/AussendienstFahrzeug'))
+const InnendienstShell = lazy(() => import('./pages/innendienst/InnendienstShell'))
+const InnendienstUebersicht = lazy(() => import('./pages/innendienst/InnendienstUebersicht'))
+const InnendienstBescheide = lazy(() => import('./pages/innendienst/InnendienstBescheide'))
+const InnendienstUebergabePage = lazy(() => import('./pages/innendienst/InnendienstUebergabePage'))
+const InnendienstGebuehrenPage = lazy(() => import('./pages/innendienst/InnendienstGebuehrenPage'))
 const RsaRsb = lazy(() => import('./pages/RsaRsb'))
 
 const PageSpinner = () => (
@@ -95,11 +116,21 @@ export default function App() {
             }
           >
             <Route index element={<EinsatzDashboard />} />
-            <Route path="einsatzmittel" element={<Einsatzmittel />} />
-            <Route path="training" element={<Einsatztraining />} />
+            <Route path="einsatzmittel" element={<Navigate to="/einsatz/einsatzmittel/persoenlich" replace />} />
+            <Route path="einsatzmittel/persoenlich" element={<EinsatzmittelPersoenlich />} />
+            <Route path="einsatzmittel/pool" element={<EinsatzmittelPool />} />
+            <Route path="einsatzmittel/lager" element={<EinsatzmittelLager />} />
+            <Route path="einsatzmittel/beschaffung" element={<EinsatzmittelBeschaffung />} />
+            <Route path="einsatzmittel/meldungen" element={<EinsatzmittelMeldungen />} />
+            <Route path="training" element={<Navigate to="/einsatz/training/module" replace />} />
+            <Route path="training/module" element={<EinsatztrainingModule />} />
+            <Route path="training/offen" element={<EinsatztrainingOffen />} />
+            <Route path="training/ausschreibung" element={<EinsatztrainingAusschreibung />} />
+            <Route path="training/protokoll" element={<EinsatztrainingProtokoll />} />
             <Route path="unterlagen" element={<EinsatzMaterials />} />
           </Route>
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
+          <Route path="/zentrale/rsa-rsb" element={<Navigate to="/rsa-rsb" replace />} />
           <Route
             element={
               <ProtectedRoute>
@@ -107,17 +138,22 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/zentrale" element={<Zentrale />} />
+            <Route element={<ZentraleShell />}>
+              <Route path="/zentrale" element={<ZentraleUebersicht />} />
+              <Route path="/zentrale/einsaetze" element={<ZentraleEinsaetze />} />
+              <Route path="/zentrale/lage" element={<ZentraleLagePage />} />
+              <Route path="/zentrale/baustellen" element={<ZentraleBaustellenPage />} />
+            </Route>
             <Route path="/zentrale/av-bv-ev" element={<ZentraleAvBv />} />
             <Route path="/zentrale/personenhinweise" element={<ZentralePersonenhinweise />} />
             <Route path="/zentrale/personen" element={<ZentralePersonen />} />
             <Route path="/zentrale/objekte" element={<ZentraleObjekte />} />
             <Route path="/zentrale/fahndungen" element={<ZentraleFahndungen />} />
-            <Route path="/zentrale/rsa-rsb" element={<ZentraleRsaRsb />} />
             <Route path="/zentrale/schluessel" element={<ZentraleSchluessel />} />
             <Route path="/zentrale/kontakte" element={<ZentraleKontakte />} />
             <Route path="/zentrale/alarmierung" element={<ZentraleAlarmierung />} />
             <Route path="/zentrale/unterlagen" element={<ZentraleUnterlagen />} />
+            <Route path="/zentrale/strassenzustand" element={<ZentraleStrassenzustand />} />
           </Route>
           <Route
             element={
@@ -126,7 +162,13 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/aussendienst" element={<Aussendienst />} />
+            <Route element={<AussendienstShell />}>
+              <Route path="/aussendienst" element={<AussendienstUebersicht />} />
+              <Route path="/aussendienst/einsaetze" element={<AussendienstEinsaetze />} />
+              <Route path="/aussendienst/kontrollauftraege" element={<AussendienstKontrollauftraege />} />
+              <Route path="/aussendienst/hinweise" element={<AussendienstHinweise />} />
+              <Route path="/aussendienst/fahrzeug" element={<AussendienstFahrzeug />} />
+            </Route>
           </Route>
           <Route
             element={
@@ -135,7 +177,12 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/innendienst" element={<Innendienst />} />
+            <Route element={<InnendienstShell />}>
+              <Route path="/innendienst" element={<InnendienstUebersicht />} />
+              <Route path="/innendienst/bescheide" element={<InnendienstBescheide />} />
+              <Route path="/innendienst/uebergabe" element={<InnendienstUebergabePage />} />
+              <Route path="/innendienst/gebuehren" element={<InnendienstGebuehrenPage />} />
+            </Route>
           </Route>
           <Route
             element={
@@ -150,15 +197,14 @@ export default function App() {
           <Route path="/planung/innendienst" element={<Navigate to="/innendienst" replace />} />
           <Route path="/planung/aussendienst" element={<Navigate to="/aussendienst" replace />} />
           <Route
-            path="/schulungen"
             element={
               <ProtectedRoute>
-                <PortalChrome wide>
-                  <Schulungen />
-                </PortalChrome>
+                <SchulungenLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route path="/schulungen" element={<Schulungen />} />
+          </Route>
           <Route path="/planung/schulungen" element={<Navigate to="/schulungen" replace />} />
           <Route
             element={

@@ -26,9 +26,33 @@ export interface MapMarker {
   popup?: string
 }
 
-export default function LeafletMap({ markers, height = 220, zoom }: { markers: readonly MapMarker[]; height?: number; zoom?: number }) {
+export interface MapLine {
+  points: readonly [number, number][]
+  popup?: string
+  /** CSS-Farbe der Linie, z. B. für den Status einer Baustelle. Default: Blau wie die Standard-Marker. */
+  color?: string
+  /** Gestrichelt statt durchgezogen darstellen, z. B. für noch unbestätigte Meldungen. */
+  dashed?: boolean
+}
+
+export default function LeafletMap({
+  markers,
+  lines,
+  height = 220,
+  zoom,
+  onMapClick,
+}: {
+  markers: readonly MapMarker[]
+  lines?: readonly MapLine[]
+  height?: number
+  zoom?: number
+  /** Wird bei jedem Klick auf die Karte mit den geklickten Koordinaten aufgerufen - z. B. zum Einzeichnen eines Streckenabschnitts. */
+  onMapClick?: (lat: number, lng: number) => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const onMapClickRef = useRef(onMapClick)
+  useEffect(() => { onMapClickRef.current = onMapClick })
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -38,6 +62,7 @@ export default function LeafletMap({ markers, height = 220, zoom }: { markers: r
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
     }).addTo(map)
+    map.on('click', (event: L.LeafletMouseEvent) => onMapClickRef.current?.(event.latlng.lat, event.latlng.lng))
     return () => { map.remove(); mapRef.current = null }
   }, [])
 
@@ -56,14 +81,30 @@ export default function LeafletMap({ markers, height = 220, zoom }: { markers: r
         placed.bindPopup(popupEl)
       }
     })
-    if (markers.length > 0) {
-      const bounds = L.latLngBounds(markers.map(marker => [marker.lat, marker.lng] as [number, number]))
+    ;(lines ?? []).forEach(line => {
+      const placed = L.polyline(line.points as [number, number][], {
+        color: line.color ?? '#2563eb',
+        weight: 4,
+        dashArray: line.dashed ? '8 6' : undefined,
+      }).addTo(layerGroup)
+      if (line.popup) {
+        const popupEl = document.createElement('div')
+        popupEl.textContent = line.popup
+        placed.bindPopup(popupEl)
+      }
+    })
+    const allPoints: [number, number][] = [
+      ...markers.map(marker => [marker.lat, marker.lng] as [number, number]),
+      ...(lines ?? []).flatMap(line => line.points as [number, number][]),
+    ]
+    if (allPoints.length > 0) {
+      const bounds = L.latLngBounds(allPoints)
       map.fitBounds(bounds.pad(0.25), { maxZoom: zoom ?? 16 })
     } else {
       map.setView(DORNBIRN_CENTER, zoom ?? 13)
     }
     return () => { layerGroup.remove() }
-  }, [markers, zoom])
+  }, [markers, lines, zoom])
 
   // isolate: Leaflets interne Ebenen (Zoom-Controls, Marker, Popups) haben
   // von Haus aus hohe z-index-Werte (bis 1000). Ohne eigenen Stacking-

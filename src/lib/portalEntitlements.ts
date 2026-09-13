@@ -172,6 +172,27 @@ export function rolesForArea(
 }
 
 /**
+ * Ist die Person Sachbearbeiter/Admin GENAU in diesem Bereich (eigene
+ * portal_area_roles-Zeile) - bewusst ohne den isStrictAdmin/isGenehmiger-
+ * Bonus von canManage*(), damit die Sidebar "Sachbearbeiter" nur zeigt, wenn
+ * das auch inhaltlich stimmt (Admin/Genehmiger bekommen ihre eigene,
+ * richtig beschriftete Kennzeichnung).
+ *
+ * @param operativeModeActive Sachbearbeiter ist kein Dauerzustand - default
+ *   true hält bestehende Aufrufe/Tests unverändert, echte Aufrufstellen
+ *   reichen den aktuellen Modus aus dem AuthContext durch.
+ */
+export function isAreaManager(
+  rows: readonly { area: string; roles: string[] }[] | null,
+  area: PortalArea,
+  operativeModeActive = true,
+): boolean {
+  if (!rows || !operativeModeActive) return false
+  const roles = rolesForArea(rows, area)
+  return roles.includes('sachbearbeiter') || roles.includes('admin')
+}
+
+/**
  * @param rows `null` = Tabelle nicht lesbar (Migration fehlt). Sonst geladene Zeilen.
  * @param isGenehmiger Genehmiger ist bereichsübergreifende Aufsicht: wie Admin
  *   sieht/betritt er jeden Bereich, auch ohne eigene portal_area_roles-Zeile.
