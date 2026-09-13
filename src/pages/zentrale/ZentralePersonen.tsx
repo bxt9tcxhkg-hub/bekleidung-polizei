@@ -33,8 +33,12 @@ export default function ZentralePersonen() {
     setLoading(true)
     const [personResult, noteResult, mailResult, avBvResult, fahndungResult] = await Promise.all([
       supabase.from('operational_persons').select('*').order('nachname').order('vorname'),
-      supabase.from('operational_person_notes').select('person_id').eq('active', true),
-      supabase.from('mail_deliveries').select('person_id').is('closed_at', null),
+      // Für die Löschsperre absichtlich ALLE Hinweise/Zustellungen zählen,
+      // nicht nur aktive/offene: person_id ist hier ON DELETE CASCADE, ein
+      // archivierter Hinweis oder ein bereits geschlossener RSa/RSb-Fall
+      // dürfen beim Löschen der Person nicht unbemerkt mitgelöscht werden.
+      supabase.from('operational_person_notes').select('person_id'),
+      supabase.from('mail_deliveries').select('person_id'),
       supabase.from('zentrale_av_bv').select('person_id').not('person_id', 'is', null),
       supabase.from('zentrale_fahndungen').select('person_id').not('person_id', 'is', null),
     ])
