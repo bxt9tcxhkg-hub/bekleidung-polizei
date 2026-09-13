@@ -8,6 +8,7 @@ import AussendienstLayout from './components/AussendienstLayout'
 import InnendienstLayout from './components/InnendienstLayout'
 import RsaRsbLayout from './components/RsaRsbLayout'
 import FuhrparkLayout from './components/FuhrparkLayout'
+import SchulungenLayout from './components/SchulungenLayout'
 import PortalChrome from './components/PortalChrome'
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -150,15 +151,14 @@ export default function App() {
           <Route path="/planung/innendienst" element={<Navigate to="/innendienst" replace />} />
           <Route path="/planung/aussendienst" element={<Navigate to="/aussendienst" replace />} />
           <Route
-            path="/schulungen"
             element={
               <ProtectedRoute>
-                <PortalChrome wide>
-                  <Schulungen />
-                </PortalChrome>
+                <SchulungenLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route path="/schulungen" element={<Schulungen />} />
+          </Route>
           <Route path="/planung/schulungen" element={<Navigate to="/schulungen" replace />} />
           <Route
             element={

@@ -1,18 +1,18 @@
-import { LayoutGrid, Mail } from 'lucide-react'
+import { GraduationCap, LayoutGrid } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
 import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
 import { PortalSidebarShell } from './PortalSidebar'
 
-export default function RsaRsbLayout() {
+export default function SchulungenLayout() {
   const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
-  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'zentrale')
+  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'schulungen')
 
   const sections: NavSection[] = [
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
-      { to: '/rsa-rsb', label: 'RSa/RSb & Vernehmungen', icon: Mail },
+      { to: '/schulungen', label: 'Schulungen', icon: GraduationCap },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]
@@ -23,5 +23,5 @@ export default function RsaRsbLayout() {
     profile?.dienstnummer ? `DNr. ${profile.dienstnummer}` : null,
   ].filter(Boolean).join(' · ')
 
-  return <PortalSidebarShell areaTagline="RSa/RSb & Vernehmungen" mobileTitle="RSa/RSb" sections={sections} footerLine={footerLine} />
+  return <PortalSidebarShell areaTagline="Schulungen" mobileTitle="Schulungen" sections={sections} footerLine={footerLine} />
 }
