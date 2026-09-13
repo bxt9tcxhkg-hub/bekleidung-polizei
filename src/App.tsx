@@ -33,8 +33,15 @@ const Analyse = lazy(() => import('./pages/Analyse'))
 const Grundausstattung = lazy(() => import('./pages/Grundausstattung'))
 const Hilfe = lazy(() => import('./pages/Hilfe'))
 const EinsatzDashboard = lazy(() => import('./pages/EinsatzDashboard'))
-const Einsatzmittel = lazy(() => import('./pages/Einsatzmittel'))
-const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
+const EinsatzmittelPersoenlich = lazy(() => import('./pages/einsatz/EinsatzmittelPersoenlich'))
+const EinsatzmittelPool = lazy(() => import('./pages/einsatz/EinsatzmittelPool'))
+const EinsatzmittelLager = lazy(() => import('./pages/einsatz/EinsatzmittelLager'))
+const EinsatzmittelBeschaffung = lazy(() => import('./pages/einsatz/EinsatzmittelBeschaffung'))
+const EinsatzmittelMeldungen = lazy(() => import('./pages/einsatz/EinsatzmittelMeldungen'))
+const EinsatztrainingModule = lazy(() => import('./pages/einsatz/EinsatztrainingModule'))
+const EinsatztrainingOffen = lazy(() => import('./pages/einsatz/EinsatztrainingOffen'))
+const EinsatztrainingAusschreibung = lazy(() => import('./pages/einsatz/EinsatztrainingAusschreibung'))
+const EinsatztrainingProtokoll = lazy(() => import('./pages/einsatz/EinsatztrainingProtokoll'))
 const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const Schulungen = lazy(() => import('./pages/Schulungen'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
@@ -108,8 +115,17 @@ export default function App() {
             }
           >
             <Route index element={<EinsatzDashboard />} />
-            <Route path="einsatzmittel" element={<Einsatzmittel />} />
-            <Route path="training" element={<Einsatztraining />} />
+            <Route path="einsatzmittel" element={<Navigate to="/einsatz/einsatzmittel/persoenlich" replace />} />
+            <Route path="einsatzmittel/persoenlich" element={<EinsatzmittelPersoenlich />} />
+            <Route path="einsatzmittel/pool" element={<EinsatzmittelPool />} />
+            <Route path="einsatzmittel/lager" element={<EinsatzmittelLager />} />
+            <Route path="einsatzmittel/beschaffung" element={<EinsatzmittelBeschaffung />} />
+            <Route path="einsatzmittel/meldungen" element={<EinsatzmittelMeldungen />} />
+            <Route path="training" element={<Navigate to="/einsatz/training/module" replace />} />
+            <Route path="training/module" element={<EinsatztrainingModule />} />
+            <Route path="training/offen" element={<EinsatztrainingOffen />} />
+            <Route path="training/ausschreibung" element={<EinsatztrainingAusschreibung />} />
+            <Route path="training/protokoll" element={<EinsatztrainingProtokoll />} />
             <Route path="unterlagen" element={<EinsatzMaterials />} />
           </Route>
           <Route path="/benutzer" element={<Navigate to="/portal/benutzer" replace />} />
