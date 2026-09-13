@@ -122,6 +122,10 @@ do $$
 declare t text;
 begin
   foreach t in array array['zentrale_av_bv','zentrale_fahndungen','zentrale_schluessel','zentrale_kontakte','zentrale_alarmierung','zentrale_unterlagen'] loop
+    -- Wie bei jeder anderen Tabelle in diesem Schema: RLS-Policies ersetzen
+    -- keine SQL-Tabellenrechte (siehe 20261015 für die ausführliche Begründung).
+    execute format('revoke all on table public.%1$s from public, anon', t);
+    execute format('grant select, insert, update, delete on table public.%1$s to authenticated', t);
     execute format('create policy "%1$s lesen" on public.%1$s for select using (public.has_portal_area_access(''zentrale'') and (not restricted or public.can_manage_zentrale()))', t);
     execute format('create policy "%1$s anlegen" on public.%1$s for insert with check (public.can_manage_zentrale() and created_by = (select auth.uid()))', t);
     execute format('create policy "%1$s ändern" on public.%1$s for update using (public.can_manage_zentrale()) with check (public.can_manage_zentrale())', t);

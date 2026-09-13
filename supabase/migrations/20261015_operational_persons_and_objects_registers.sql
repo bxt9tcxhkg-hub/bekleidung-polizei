@@ -32,6 +32,15 @@ create trigger operational_objects_updated_at before update on public.operationa
 
 alter table public.operational_persons enable row level security;
 alter table public.operational_objects enable row level security;
+-- Wie bei jeder anderen Tabelle in diesem Schema: RLS-Policies ersetzen keine
+-- SQL-Tabellenrechte. Ohne diese GRANTs scheitert ein Zugriff durch
+-- "authenticated" unabhängig von der Policy, und ohne das REVOKE bliebe
+-- "anon" auf Tabellenebene zugriffsberechtigt (nur durch die auth.uid()-
+-- Bedingungen in den Policies blockiert, nicht durch fehlende Rechte).
+revoke all on table public.operational_persons from public, anon;
+revoke all on table public.operational_objects from public, anon;
+grant select, insert, update, delete on table public.operational_persons to authenticated;
+grant select, insert, update, delete on table public.operational_objects to authenticated;
 
 create policy "Personen lesen" on public.operational_persons for select
   using (public.has_portal_area_access('zentrale'));
