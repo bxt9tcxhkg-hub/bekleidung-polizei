@@ -1023,20 +1023,36 @@ export default function Users() {
                   <p className="text-xs text-gray-400 mt-1">Bestimmt welche Produkte im Katalog sichtbar sind.</p>
                 </div>
               )}
-              {isStrictAdmin && (
+              {(isStrictAdmin || isGenehmiger) && (
                 <fieldset className="border border-purple-200 bg-purple-50/40 rounded-xl p-3.5">
                   <legend className="px-1 text-sm font-semibold text-purple-800">Portalweite Rolle</legend>
-                  <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${isSelfEdit ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' : 'cursor-pointer bg-white border-purple-200 hover:bg-purple-50'}`}>
-                    <input type="checkbox" checked={form.roles.includes('admin')} onChange={() => toggleRole('admin')} disabled={isSelfEdit} className="rounded disabled:cursor-not-allowed" />
-                    <span className="text-sm font-medium text-gray-700">Admin</span>
-                  </label>
-                  <p className="text-xs text-gray-500 mt-2">Übergeordneter Zugriff auf das gesamte Portal; keine Zuordnung zu Stadtpolizei, Parkaufsicht oder Verwaltung.</p>
+                  <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2">
+                    {isStrictAdmin && (
+                      <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${isSelfEdit ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' : 'cursor-pointer bg-white border-purple-200 hover:bg-purple-50'}`}>
+                        <input type="checkbox" checked={form.roles.includes('admin')} onChange={() => toggleRole('admin')} disabled={isSelfEdit} className="rounded disabled:cursor-not-allowed" />
+                        <span className="text-sm font-medium text-gray-700">Admin</span>
+                      </label>
+                    )}
+                    {(() => {
+                      const restricted = isSelfEdit || form.roles.includes('admin') || !canAssignRole('genehmiger')
+                      return (
+                        <label className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${restricted ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200' : 'cursor-pointer bg-white border-purple-200 hover:bg-purple-50'}`}>
+                          <input type="checkbox" checked={form.roles.includes('genehmiger')} onChange={() => toggleRole('genehmiger')} disabled={restricted} className="rounded disabled:cursor-not-allowed" />
+                          <span className="text-sm font-medium text-gray-700">Genehmiger</span>
+                        </label>
+                      )
+                    })()}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">Admin: übergeordneter Zugriff auf das gesamte Portal; keine Zuordnung zu Stadtpolizei, Parkaufsicht oder Verwaltung. Genehmiger: kann Freigaben in allen Bereichen (Bekleidung, Einsatzmittel, Training, Schulungen, Fuhrpark, Zentrale) entscheiden — keine Beschränkung auf einen einzelnen Bereich.</p>
+                  {isSelfEdit && (
+                    <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
+                  )}
                 </fieldset>
               )}
               <fieldset className={`border border-gray-200 rounded-xl p-3.5 ${form.roles.includes('admin') ? 'opacity-50' : ''}`}>
                 <legend className="px-1 text-sm font-semibold text-gray-800">Rechte · Bekleidung</legend>
                 <div className="grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 mt-1">
-                  {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter'], ['genehmiger', 'Genehmiger']] as [string, string][]).map(([role, label]) => {
+                  {([['user', 'Benutzer'], ['sachbearbeiter', 'Sachbearbeiter']] as [string, string][]).map(([role, label]) => {
                     const restricted = isSelfEdit || form.roles.includes('admin') || !canAssignRole(role)
                     return (
                       <label key={role} className={`flex items-center gap-2.5 rounded-lg border border-gray-200 px-3 py-2.5 ${restricted ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'cursor-pointer hover:bg-gray-50'}`}>
@@ -1049,9 +1065,6 @@ export default function Users() {
                 <p className="text-xs text-gray-400 mt-2">Mehrere Funktionen können gleichzeitig vergeben werden.</p>
                 {isSelfEdit && (
                   <p className="text-xs text-amber-700 mt-1">Eigene Rollen können nicht geändert werden.</p>
-                )}
-                {!isSelfEdit && !isStrictAdmin && !isGenehmiger && (
-                  <p className="text-xs text-gray-400 mt-1">Die Genehmiger-Rolle kann nur von Admins oder Genehmigern vergeben werden.</p>
                 )}
               </fieldset>
               {isStrictAdmin && !form.roles.includes('admin') && (
