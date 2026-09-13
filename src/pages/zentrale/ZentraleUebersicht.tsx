@@ -34,8 +34,7 @@ export default function ZentraleUebersicht() {
       ...ctx.criticalFahndungen.map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung, onOpen: () => navigate('/zentrale/fahndungen') })),
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError} />
-    <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900 flex items-center gap-2"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze & Baustellen – Gemeindegebiet Dornbirn</h2><button type="button" onClick={ctx.openNewBaustelle} className="text-sm font-semibold text-blue-700">+ Baustelle melden</button></div><LeafletMap height={280} markers={ctx.openIncidentMarkers} lines={ctx.baustellenLines} /></section>
-    {ctx.baustellen.length > 0 ? <BaustellenList items={ctx.baustellen} canManage={ctx.canManage} onConfirm={ctx.confirmBaustelle} onEdit={ctx.openEditBaustelle} onClose={ctx.closeBaustelle} onDelete={ctx.deleteBaustelle} /> : null}
+    <section><h2 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><MapPin className="w-4 h-4 text-blue-700" /> Aktive Einsätze – Gemeindegebiet Dornbirn</h2><LeafletMap height={280} markers={ctx.openIncidentMarkers} lines={ctx.baustellenLines} /></section>
     <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{ctx.canOperateZentrale ? <button type="button" onClick={ctx.openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}</div><IncidentCards visibleIncidents={ctx.visibleIncidents} lageByIncidentId={ctx.lageByIncidentId} canManage={ctx.canManage} canOperateZentrale={ctx.canOperateZentrale} openLageForIncident={ctx.openLageForIncident} completeIncident={ctx.completeIncident} deleteIncident={ctx.deleteIncident} /></section>
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
       <h2 className="font-bold text-amber-900 flex items-center gap-2"><UsersRound className="w-4 h-4" /> Schichtübergabe</h2>
@@ -46,6 +45,12 @@ export default function ZentraleUebersicht() {
         nachgeschaut - deshalb bewusst unten, nicht mehr direkt unter
         "Sofort wichtig". */}
     <DutyPanel assignments={ctx.shiftAssignments} functions={ctx.dutyFunctions} dutyShift={ctx.dutyShift} setDutyShift={ctx.setDutyShift} />
+    {/* Baustellen: nice to have für die Streife (Streckenkenntnis), aber nie
+        dringend - deshalb ganz unten statt direkt neben der Einsatzkarte. */}
+    <section>
+      <div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Baustellen</h2><button type="button" onClick={ctx.openNewBaustelle} className="text-sm font-semibold text-blue-700">+ Baustelle melden</button></div>
+      {ctx.baustellen.length > 0 ? <BaustellenList items={ctx.baustellen} canManage={ctx.canManage} onConfirm={ctx.confirmBaustelle} onEdit={ctx.openEditBaustelle} onClose={ctx.closeBaustelle} onDelete={ctx.deleteBaustelle} /> : <p className="text-sm text-gray-500">Keine Baustellen gemeldet.</p>}
+    </section>
     <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (AV/BV & EV, Personenhinweise, Fahndungen, RSa/RSb, Schlüssel, Kontakte, Alarmierung, Unterlagen, Personen, Objekte …) über die Seitenleiste.</p></div>
   </div>
 }
