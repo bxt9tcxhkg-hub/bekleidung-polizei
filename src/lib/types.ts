@@ -551,6 +551,8 @@ export interface ZentraleEntry {
   target_function: KontrollauftragZielfunktion | null
   /** Nur für category 'lage' gesetzt (Pflicht) - die auslösende Einsatzmeldung. */
   incident_id: string | null
+  /** Erledigungsfrist, z. B. bei einem automatisch aus einem AV/BV-Ausspruch erzeugten Kontrollauftrag (72 Stunden). Nicht auf diese Kategorie beschränkt. */
+  due_at: string | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -801,21 +803,45 @@ export interface OperationalPerson {
   vorname: string | null
   birth_date: string | null
   phone: string | null
+  /** Anschrift als echte Verknüpfung zum Objekte-Register statt erneuter Freitext-Eingabe. */
+  home_object_id: string | null
+  note: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+  home_object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
+}
+
+/** Zentrales Objekte-Register (Adressen/Gebäude) - Verknüpfungspunkt für AV/BV & EV, Fahndungen, Schlüssel, Kontakte und (über home_object_id) Personen. */
+export interface OperationalObject {
+  id: string
+  /** Freitext-Adresse - bleibt nutzbar, bis ein Objekt auf die strukturierten Felder umgestellt wird. */
+  address: string
+  /** Strukturierte Adressfelder - Voraussetzung für eine eindeutige Verknüpfung (z. B. Personen-Anschrift) statt Text-Abgleich. Optional, solange nicht jedes Objekt umgestellt ist. */
+  strasse: string | null
+  hausnummer: string | null
+  plz: string | null
+  ort: string | null
+  label: string | null
   note: string | null
   created_by: string | null
   created_at: string
   updated_at: string
 }
 
-/** Zentrales Objekte-Register (Adressen/Gebäude) - Verknüpfungspunkt für AV/BV & EV, Fahndungen, Schlüssel und Kontakte. */
-export interface OperationalObject {
+/** Telefonnummern-Register - verknüpfbar mit Person und/oder Objekt, wie bei AV/BV & EV und Fahndungen. */
+export interface OperationalPhoneNumber {
   id: string
-  address: string
+  number: string
   label: string | null
+  person_id: string | null
+  object_id: string | null
   note: string | null
   created_by: string | null
   created_at: string
   updated_at: string
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
 }
 
 export type OperationalPersonNoteCategory = 'infektionsschutz' | 'aggressiv' | 'waffenverbot' | 'fluchtgefahr' | 'suizidgefahr' | 'sonstiges'
@@ -1145,8 +1171,9 @@ type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, never>
-type OperationalPersonRow = Omit<OperationalPerson, never>
+type OperationalPersonRow = Omit<OperationalPerson, 'home_object'>
 type OperationalObjectRow = Omit<OperationalObject, never>
+type OperationalPhoneNumberRow = Omit<OperationalPhoneNumber, 'person' | 'object'>
 type OperationalPersonNoteRow = Omit<OperationalPersonNote, 'person'>
 type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
 type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer' | 'person'>
@@ -1340,9 +1367,15 @@ export type Database = {
       ] }
       operational_persons: { Row: OperationalPersonRow; Insert: Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_persons_home_object_id_fkey'; columns: ['home_object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
       ] }
       operational_objects: { Row: OperationalObjectRow; Insert: Pick<OperationalObjectRow, 'address'> & Partial<Omit<OperationalObjectRow, 'id' | 'created_at' | 'updated_at' | 'address'>>; Update: Partial<Omit<OperationalObjectRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_objects_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      operational_phone_numbers: { Row: OperationalPhoneNumberRow; Insert: Pick<OperationalPhoneNumberRow, 'number'> & Partial<Omit<OperationalPhoneNumberRow, 'id' | 'created_at' | 'updated_at' | 'number'>>; Update: Partial<Omit<OperationalPhoneNumberRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'operational_phone_numbers_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_phone_numbers_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'operational_phone_numbers_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
       ] }
       operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_id' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_id' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'operational_person_notes_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
