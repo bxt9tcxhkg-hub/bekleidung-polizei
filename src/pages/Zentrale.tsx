@@ -4,7 +4,7 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import { geocodeLocation, type StreetSuggestion } from '../lib/geocode'
+import { geocodeLocation, routeAlongRoad, type StreetSuggestion } from '../lib/geocode'
 import LeafletMap, { type MapLine, type MapMarker } from '../components/LeafletMap'
 import StreetAutocomplete from '../components/StreetAutocomplete'
 import type { AvBvArt, DutyAssignment, DutyFunctionConfig, DutyShift, FahndungArt, IncidentDisposition, IncidentReport, OperationalPersonNote, OperationalPersonNoteCategory, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../lib/types'
@@ -60,6 +60,10 @@ const EMPTY_BAUSTELLE_FORM = {
   titel: '', startAddress: '', endAddress: '', note: '', gueltigBis: '',
   startLat: null as number | null, startLng: null as number | null,
   endLat: null as number | null, endLng: null as number | null,
+  // Entlang des Straßennetzes berechnete Route (siehe routeAlongRoad) - wird
+  // automatisch neu berechnet, sobald Start/Ende feststehen. null = noch
+  // nicht berechnet bzw. nicht verfügbar, dann zeigt die Vorschau die Luftlinie.
+  path: null as [number, number][] | null,
   drawMode: false,
 }
 type BaustelleFormState = typeof EMPTY_BAUSTELLE_FORM
@@ -121,6 +125,8 @@ export default function Zentrale() {
   const [baustelleSaving, setBaustelleSaving] = useState(false)
   const [baustelleError, setBaustelleError] = useState('')
   const [baustelleLocating, setBaustelleLocating] = useState<'start' | 'end' | null>(null)
+  const [baustelleRouting, setBaustelleRouting] = useState(false)
+  const baustelleRouteRequestRef = useRef(0)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
@@ -164,6 +170,21 @@ export default function Zentrale() {
   }, [])
   useEffect(() => { void load() }, [load])
   useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
+  // Sobald Start und Ende feststehen, die Luftlinie im Formular durch den
+  // tatsächlichen Straßenverlauf ersetzen (Routing-Dienst, best effort - bei
+  // Fehlschlag bleibt es bei der Luftlinie). Generation-Zähler verhindert,
+  // dass eine spät eintreffende Antwort eine inzwischen geänderte Auswahl überschreibt.
+  useEffect(() => {
+    const { startLat, startLng, endLat, endLng } = baustelleForm
+    if (startLat === null || startLng === null || endLat === null || endLng === null) return
+    const requestId = ++baustelleRouteRequestRef.current
+    setBaustelleRouting(true)
+    void routeAlongRoad({ lat: startLat, lng: startLng }, { lat: endLat, lng: endLng }).then(path => {
+      if (baustelleRouteRequestRef.current !== requestId) return
+      setBaustelleRouting(false)
+      setBaustelleForm(current => current.startLat === startLat && current.startLng === startLng && current.endLat === endLat && current.endLng === endLng ? { ...current, path } : current)
+    })
+  }, [baustelleForm.startLat, baustelleForm.startLng, baustelleForm.endLat, baustelleForm.endLng])
 
   const currentTab = TABS.find(tab => tab.id === activeTab) ?? TABS[0]
   const visibleEntries = useMemo(() => entries.filter(item => item.category === activeTab), [activeTab, entries])
@@ -198,7 +219,9 @@ export default function Zentrale() {
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
   // Unbestätigte Meldungen ("gemeldet") gestrichelt/grau, bestätigte ("offen") durchgezogen/orange.
   const baustellenLines: MapLine[] = useMemo(() => baustellen.map(item => ({
-    points: [[item.start_lat, item.start_lng], [item.end_lat, item.end_lng]],
+    // path folgt dem tatsächlichen Straßenverlauf (siehe routeAlongRoad) - ohne
+    // berechnete Route (Dienst nicht erreichbar) ersatzweise die Luftlinie.
+    points: item.path && item.path.length >= 2 ? item.path : [[item.start_lat, item.start_lng], [item.end_lat, item.end_lng]],
     popup: `${item.titel}${item.status === 'gemeldet' ? ' (ungeprüft)' : ''}`,
     color: item.status === 'gemeldet' ? '#9ca3af' : '#f97316',
     dashed: item.status === 'gemeldet',
@@ -313,7 +336,7 @@ export default function Zentrale() {
   function openNewBaustelle() { setEditingBaustelle(null); setBaustelleForm(EMPTY_BAUSTELLE_FORM); setBaustelleError(''); setShowBaustelleForm(true) }
   function openEditBaustelle(item: ZentraleBaustelle) {
     setEditingBaustelle(item)
-    setBaustelleForm({ titel: item.titel, startAddress: '', endAddress: '', note: item.note ?? '', gueltigBis: item.gueltig_bis ?? '', startLat: item.start_lat, startLng: item.start_lng, endLat: item.end_lat, endLng: item.end_lng, drawMode: false })
+    setBaustelleForm({ titel: item.titel, startAddress: '', endAddress: '', note: item.note ?? '', gueltigBis: item.gueltig_bis ?? '', startLat: item.start_lat, startLng: item.start_lng, endLat: item.end_lat, endLng: item.end_lng, path: item.path, drawMode: false })
     setBaustelleError(''); setShowBaustelleForm(true)
   }
   async function locateBaustelleStart() {
@@ -347,7 +370,7 @@ export default function Zentrale() {
     if (!baustelleForm.titel.trim()) { setBaustelleError('Bitte eine Bezeichnung eingeben.'); return }
     if (baustelleForm.startLat === null || baustelleForm.startLng === null || baustelleForm.endLat === null || baustelleForm.endLng === null) { setBaustelleError('Bitte Start- und Endpunkt festlegen (Adresse suchen oder auf der Karte klicken).'); return }
     setBaustelleSaving(true)
-    const payload = { titel: baustelleForm.titel.trim(), start_lat: baustelleForm.startLat, start_lng: baustelleForm.startLng, end_lat: baustelleForm.endLat, end_lng: baustelleForm.endLng, note: baustelleForm.note.trim() || null, gueltig_bis: baustelleForm.gueltigBis || null }
+    const payload = { titel: baustelleForm.titel.trim(), start_lat: baustelleForm.startLat, start_lng: baustelleForm.startLng, end_lat: baustelleForm.endLat, end_lng: baustelleForm.endLng, path: baustelleForm.path, note: baustelleForm.note.trim() || null, gueltig_bis: baustelleForm.gueltigBis || null }
     // Ohne Verwaltungsrecht entsteht die Meldung immer als "gemeldet" (ungeprüft) -
     // die Bestätigung erfolgt separat durch Sachbearbeiter/Genehmiger (RLS erzwingt das zusätzlich).
     const response = editingBaustelle ? await supabase.from('zentrale_baustellen').update(payload).eq('id', editingBaustelle.id) : await supabase.from('zentrale_baustellen').insert({ ...payload, created_by: profile.id, status: canManage ? 'offen' : 'gemeldet' })
@@ -422,7 +445,7 @@ export default function Zentrale() {
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category={entryCategory} incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
-    {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canManage={canManage} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
+    {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canManage={canManage} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
   </div>
 }
 
@@ -511,12 +534,13 @@ function BaustellenList({ items, canManage, onConfirm, onEdit, onClose, onDelete
   </div>)}</div></section>
 }
 
-function BaustelleModal({ form, setForm, editing, canManage, saving, error, locating, locateStart, locateEnd, onMapClick, close, save }: { form: BaustelleFormState; setForm: Dispatch<SetStateAction<BaustelleFormState>>; editing: ZentraleBaustelle | null; canManage: boolean; saving: boolean; error: string; locating: 'start' | 'end' | null; locateStart: () => Promise<void>; locateEnd: () => Promise<void>; onMapClick: (lat: number, lng: number) => void; close: () => void; save: () => Promise<void> }) {
+function BaustelleModal({ form, setForm, editing, canManage, saving, error, locating, routing, locateStart, locateEnd, onMapClick, close, save }: { form: BaustelleFormState; setForm: Dispatch<SetStateAction<BaustelleFormState>>; editing: ZentraleBaustelle | null; canManage: boolean; saving: boolean; error: string; locating: 'start' | 'end' | null; routing: boolean; locateStart: () => Promise<void>; locateEnd: () => Promise<void>; onMapClick: (lat: number, lng: number) => void; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<BaustelleFormState>) => setForm(current => ({ ...current, ...values }))
   const hasStart = form.startLat !== null && form.startLng !== null
   const hasEnd = form.endLat !== null && form.endLng !== null
   const markers: MapMarker[] = hasStart && !hasEnd ? [{ lat: form.startLat as number, lng: form.startLng as number, popup: 'Startpunkt' }] : []
-  const lines: MapLine[] = hasStart && hasEnd ? [{ points: [[form.startLat as number, form.startLng as number], [form.endLat as number, form.endLng as number]] }] : []
+  // Solange keine Route berechnet ist (oder der Dienst nicht erreichbar war), zeigt die Vorschau ersatzweise die Luftlinie.
+  const lines: MapLine[] = hasStart && hasEnd ? [{ points: form.path && form.path.length >= 2 ? form.path : [[form.startLat as number, form.startLng as number], [form.endLat as number, form.endLng as number]] }] : []
   return <Modal title={editing ? 'Baustelle bearbeiten' : 'Baustelle melden'} close={close}>
     <Field label="Bezeichnung *" value={form.titel} onChange={value => patch({ titel: value })} />
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -524,7 +548,10 @@ function BaustelleModal({ form, setForm, editing, canManage, saving, error, loca
       <div><Field label="Endpunkt (Adresse)" value={form.endAddress} onChange={value => patch({ endAddress: value })} /><button type="button" disabled={!form.endAddress.trim() || locating === 'end'} onClick={() => void locateEnd()} className="mt-1 text-xs font-semibold text-blue-700 disabled:opacity-50">{locating === 'end' ? 'Suche…' : 'Punkt suchen'}</button></div>
     </div>
     <div>
-      <button type="button" onClick={() => patch({ drawMode: !form.drawMode })} className={`text-xs font-semibold ${form.drawMode ? 'text-blue-700' : 'text-gray-500'}`}>{form.drawMode ? '✓ Punkte per Klick auf der Karte setzen (erst Start, dann Ende)' : 'Alternativ: Punkte per Klick auf der Karte setzen'}</button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => patch({ drawMode: !form.drawMode })} className={`text-xs font-semibold ${form.drawMode ? 'text-blue-700' : 'text-gray-500'}`}>{form.drawMode ? '✓ Punkte per Klick auf der Karte setzen (erst Start, dann Ende)' : 'Alternativ: Punkte per Klick auf der Karte setzen'}</button>
+        {hasStart && hasEnd ? <span className="text-xs text-gray-400">{routing ? 'Route entlang der Straße wird berechnet…' : (form.path ? 'Folgt dem Straßenverlauf' : 'Straßenverlauf nicht verfügbar – zeigt Luftlinie')}</span> : null}
+      </div>
       <div className="mt-2"><LeafletMap height={220} markers={markers} lines={lines} onMapClick={onMapClick} /></div>
     </div>
     <Field label="Gültig bis (optional)" type="date" value={form.gueltigBis} onChange={value => patch({ gueltigBis: value })} />

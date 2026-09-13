@@ -51,6 +51,35 @@ export async function suggestStreets(query: string): Promise<StreetSuggestion[]>
   return suggestions
 }
 
+/**
+ * Berechnet eine Route entlang des tatsächlichen Straßennetzes zwischen zwei
+ * Punkten (statt einer Luftlinie), über den öffentlichen OSRM-Demo-Dienst
+ * (Open Source Routing Machine, ebenfalls auf OpenStreetMap-Daten). Wie bei
+ * Nominatim kostenlos und ohne API-Key, aber nur für gelegentliche Anfragen
+ * gedacht (Fair-Use) - deshalb nur beim Speichern/Zeichnen aufrufen, nicht
+ * laufend. Bei Fehlern (Dienst nicht erreichbar, keine Route gefunden) wird
+ * null zurückgegeben - aufrufseitig fällt die Karte dann auf die Luftlinie
+ * zwischen den beiden Punkten zurück, es gibt also keinen Hartausfall.
+ */
+export async function routeAlongRoad(start: { lat: number; lng: number }, end: { lat: number; lng: number }): Promise<[number, number][] | null> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`
+  let response: Response
+  try {
+    response = await fetch(url)
+  } catch {
+    return null
+  }
+  if (!response.ok) return null
+  const result = await response.json().catch(() => null) as { code?: string; routes?: { geometry?: { coordinates?: [number, number][] } }[] } | null
+  const coordinates = result?.code === 'Ok' ? result.routes?.[0]?.geometry?.coordinates : null
+  if (!coordinates || coordinates.length < 2) return null
+  // GeoJSON liefert [lng, lat] - Leaflet erwartet [lat, lng].
+  const points: [number, number][] = coordinates
+    .filter((pair): pair is [number, number] => Array.isArray(pair) && Number.isFinite(pair[0]) && Number.isFinite(pair[1]))
+    .map(([lng, lat]) => [lat, lng])
+  return points.length >= 2 ? points : null
+}
+
 export async function geocodeLocation(query: string): Promise<GeocodeResult | null> {
   const trimmed = query.trim()
   if (!trimmed) return null

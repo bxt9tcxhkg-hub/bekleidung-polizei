@@ -6,7 +6,7 @@ import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../compon
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
-import { geocodeLocation } from '../lib/geocode'
+import { geocodeLocation, routeAlongRoad } from '../lib/geocode'
 import type { AvBvArt, DutyAssignment, DutyFunctionConfig, FahndungArt, FleetVehicle, IncidentDisposition, KontrollauftragZielfunktion, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung, ZentraleUnterlage } from '../lib/types'
 import { personDisplayName } from '../lib/register'
 
@@ -162,9 +162,12 @@ export default function Aussendienst() {
     // Ohne Endadresse gilt derselbe Standort für Start und Ende (kurzer Punkt statt Streckenabschnitt).
     const endResult = endAddress ? await geocodeLocation(endAddress) : startResult
     if (!endResult) { setBaustelleSaving(false); setBaustelleError('Der zweite Standort konnte nicht gefunden werden.'); return }
+    // Streckenverlauf entlang des Straßennetzes statt Luftlinie - wie in der
+    // Zentrale-Erfassung; best effort, bei Fehlschlag bleibt path null (Luftlinie).
+    const path = await routeAlongRoad(startResult, endResult)
     // Ohne Verwaltungsrecht entsteht die Meldung immer als "gemeldet" (ungeprüft) -
     // Sachbearbeiter/Genehmiger bestätigen sie in der Zentrale (RLS erzwingt das zusätzlich).
-    const response = await supabase.from('zentrale_baustellen').insert({ titel: baustelleReport.titel.trim(), start_lat: startResult.lat, start_lng: startResult.lng, end_lat: endResult.lat, end_lng: endResult.lng, note: baustelleReport.note.trim() || null, created_by: profile.id, status: canManageZentrale ? 'offen' : 'gemeldet' })
+    const response = await supabase.from('zentrale_baustellen').insert({ titel: baustelleReport.titel.trim(), start_lat: startResult.lat, start_lng: startResult.lng, end_lat: endResult.lat, end_lng: endResult.lng, path, note: baustelleReport.note.trim() || null, created_by: profile.id, status: canManageZentrale ? 'offen' : 'gemeldet' })
     setBaustelleSaving(false)
     if (response.error) { setBaustelleError('Die Meldung konnte nicht gespeichert werden.'); return }
     logAudit('Baustelle gemeldet', baustelleReport.titel.trim()); setShowBaustelleForm(false); setNotice(canManageZentrale ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung durch die Zentrale.')

@@ -682,6 +682,10 @@ export interface ZentraleBaustelle {
   start_lng: number
   end_lat: number
   end_lng: number
+  // Abgeleiteter Streckenverlauf entlang des Straßennetzes (Routing-Dienst,
+  // siehe lib/routing.ts) - null, falls die Route nicht berechnet werden
+  // konnte; dann wird ersatzweise die Luftlinie zwischen Start/Ende gezeigt.
+  path: [number, number][] | null
   note: string | null
   status: ZentraleBaustelleStatus
   gueltig_bis: string | null
