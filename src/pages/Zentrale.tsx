@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { AlertTriangle, CheckCircle2, LayoutDashboard, MapPin, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, LayoutDashboard, MapPin, Pencil, Plus, Radio, Trash2, UsersRound } from 'lucide-react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
@@ -88,6 +88,7 @@ export default function Zentrale() {
   const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
   const [showAllUebergabe, setShowAllUebergabe] = useState(false)
   const [showIncidentForm, setShowIncidentForm] = useState(false)
+  const [editingIncident, setEditingIncident] = useState<IncidentReport | null>(null)
   const [incident, setIncident] = useState({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: 'jd' as IncidentDisposition, note: '', lat: null as number | null, lng: null as number | null, coordsPrecise: false })
   const [locating, setLocating] = useState(false)
   const [locateError, setLocateError] = useState('')
@@ -181,11 +182,12 @@ export default function Zentrale() {
       void supabase.from('incident_reports').select('*').ilike('location', `%${escaped}%`).order('reported_at', { ascending: false }).limit(20).then(result => {
         if (priorIncidentsRequestRef.current !== requestId) return
         const candidates = result.error ? [] : (result.data ?? []) as IncidentReport[]
-        setPriorIncidents(candidates.filter(item => addressesMatch(targetAddress, item.location ?? '')).slice(0, 5))
+        // Beim Bearbeiten nicht die Meldung selbst als "frühere Meldung" anzeigen.
+        setPriorIncidents(candidates.filter(item => item.id !== editingIncident?.id && addressesMatch(targetAddress, item.location ?? '')).slice(0, 5))
       })
     }, 400)
     return () => clearTimeout(timer)
-  }, [incident.street, incident.location, showIncidentForm])
+  }, [incident.street, incident.location, showIncidentForm, editingIncident?.id])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
@@ -206,7 +208,15 @@ export default function Zentrale() {
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
-  function openIncident() { setIncident({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null, coordsPrecise: false }); setLocateError(''); setShowIncidentForm(true); setError('') }
+  function openIncident() { setEditingIncident(null); setIncident({ callerPhone: '', callerName: '', street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPerson: '', involvedBirthDate: '', disposition: vdAvailable ? 'vd' : 'jd', note: '', lat: null, lng: null, coordsPrecise: false }); setLocateError(''); setShowIncidentForm(true); setError('') }
+  function openEditIncident(item: IncidentReport) {
+    setEditingIncident(item)
+    // Straße/Hausnummer werden nicht getrennt gespeichert - beim Bearbeiten
+    // steht die gespeicherte Adresse daher als Ganzes im Straßenfeld
+    // (HNr unbekannt vorbelegt), bleibt aber frei editierbar.
+    setIncident({ callerPhone: item.caller_phone ?? '', callerName: item.caller_name ?? '', street: item.location ?? '', houseNumber: '', houseNumberUnknown: true, location: item.location ?? '', summary: item.summary, involvedPerson: item.involved_person ?? '', involvedBirthDate: item.involved_birth_date ?? '', disposition: item.disposition, note: item.note ?? '', lat: item.location_lat, lng: item.location_lng, coordsPrecise: item.location_lat !== null && item.location_lng !== null })
+    setLocateError(''); setShowIncidentForm(true); setError('')
+  }
   async function locateIncident() {
     const queried = incident.location.trim()
     if (!queried) return
@@ -219,16 +229,26 @@ export default function Zentrale() {
   }
   async function saveIncident() {
     if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
-    setSaving(true); const result = await supabase.from('incident_reports').insert({ caller_phone: incident.callerPhone.trim() || null, caller_name: incident.callerName.trim() || null, location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(), involved_person: incident.involvedPerson.trim() || null, involved_birth_date: incident.involvedBirthDate || null, disposition: incident.disposition, note: incident.note.trim() || null, status: incident.disposition === 'bp' ? 'weitergegeben' : 'offen', created_by: profile.id }); setSaving(false)
-    if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
-    logAudit('Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`); setShowIncidentForm(false); setActiveTab('einsaetze'); setNotice('Meldung wurde gespeichert.'); await load()
+    setSaving(true)
+    const payload = { caller_phone: incident.callerPhone.trim() || null, caller_name: incident.callerName.trim() || null, location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(), involved_person: incident.involvedPerson.trim() || null, involved_birth_date: incident.involvedBirthDate || null, disposition: incident.disposition, note: incident.note.trim() || null }
+    // Bereits erledigte Meldungen bleiben beim Bearbeiten erledigt (die
+    // eigentliche Statusänderung läuft über den separaten "Erledigt"-Button);
+    // ansonsten ergibt sich der Status wie beim Anlegen aus der Behandlung.
+    const status = editingIncident?.status === 'erledigt' ? 'erledigt' : incident.disposition === 'bp' ? 'weitergegeben' : 'offen'
+    const result = editingIncident
+      ? await supabase.from('incident_reports').update({ ...payload, status }).eq('id', editingIncident.id)
+      : await supabase.from('incident_reports').insert({ ...payload, status, created_by: profile.id })
+    setSaving(false)
+    if (result.error) { setError(editingIncident ? 'Die Meldung konnte nicht gespeichert werden.' : 'Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
+    logAudit(editingIncident ? 'Einsatzmeldung bearbeitet' : 'Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`)
+    setShowIncidentForm(false); setEditingIncident(null); setActiveTab('einsaetze'); setNotice(editingIncident ? 'Meldung wurde aktualisiert.' : 'Meldung wurde gespeichert.'); await load()
   }
   async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
   async function deleteIncident(item: IncidentReport) { if (!window.confirm('Diese Einsatzmeldung endgültig löschen?')) return; const result = await supabase.from('incident_reports').delete().eq('id', item.id); if (result.error) { setError('Die Einsatzmeldung konnte nicht gelöscht werden.'); return } logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80)); await load() }
 
   const incidentCards = <div className="space-y-3">{visibleIncidents.length === 0
     ? <Empty text="Heute wurden noch keine Meldungen erfasst." />
-    : visibleIncidents.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p><div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">{item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}{item.caller_name ? <span>Melder: {item.caller_name}</span> : null}<span>{DISPOSITION_LABEL[item.disposition]}</span>{item.note ? <span>Bemerkung: {item.note}</span> : null}</div></div><div className="flex gap-2">{canOperateZentrale && item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}{canManage ? <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button> : null}</div></div></article>)}</div>
+    : visibleIncidents.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p><div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">{item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}{item.caller_name ? <span>Melder: {item.caller_name}</span> : null}<span>{DISPOSITION_LABEL[item.disposition]}</span>{item.note ? <span>Bemerkung: {item.note}</span> : null}</div></div><div className="flex gap-2">{canOperateZentrale ? <button type="button" onClick={() => openEditIncident(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Einsatzmeldung bearbeiten"><Pencil className="w-4 h-4" /></button> : null}{canOperateZentrale && item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}{canManage ? <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button> : null}</div></div></article>)}</div>
 
   return <div>
     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Zentrale</h1><p className="text-sm text-gray-500 mt-1">Relevante Informationen auf einen Blick – ergänzend zum Aktenprogramm.</p></div>{canOperateZentrale ? <button type="button" onClick={openIncident} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button> : null}</div>
@@ -264,7 +284,7 @@ export default function Zentrale() {
 
     {!loading && activeTab === 'lage' ? <EntryList title={currentTab.label} description={currentTab.description} entries={visibleEntries} canManage={canManage} openNew={() => openNewEntry(activeTab)} openEdit={openEdit} /> : null}
 
-    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} editing={editingIncident} vdAvailable={vdAvailable} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setShowIncidentForm(false); setEditingIncident(null) }} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }
@@ -279,9 +299,9 @@ function SofortWichtig({ entries, onOpen }: { entries: ZentraleEntry[]; onOpen: 
   return <section><h2 className="text-xs font-bold uppercase tracking-wider text-red-700 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Sofort wichtig</h2><div className="space-y-2">{entries.map(item => <button key={item.id} type="button" onClick={() => onOpen(item)} className="w-full text-left rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3 hover:bg-red-100"><p className="font-bold text-red-900">{item.title}</p>{item.description ? <p className="text-sm text-red-800 mt-0.5 line-clamp-2">{item.description}</p> : null}</button>)}</div></section>
 }
 
-function IncidentModal({ incident, setIncident, vdAvailable, contextEntries, contextPersonNotes, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }; setIncident: Dispatch<SetStateAction<typeof incident>>; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
+function IncidentModal({ incident, setIncident, editing, vdAvailable, contextEntries, contextPersonNotes, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: { callerPhone: string; callerName: string; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPerson: string; involvedBirthDate: string; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }; setIncident: Dispatch<SetStateAction<typeof incident>>; editing: IncidentReport | null; vdAvailable: boolean; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<typeof incident>) => setIncident(current => ({ ...current, ...values }))
-  return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><Field label="Name des Melders" value={incident.callerName} onChange={value => patch({ callerName: value })} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
+  return <Modal title={editing ? `Meldung vom ${formatTime(editing.reported_at)} bearbeiten` : 'Neue Meldung'} close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><Field label="Name des Melders" value={incident.callerName} onChange={value => patch({ callerName: value })} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {(editing ? new Date(editing.reported_at) : new Date()).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
     <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
       <StreetAutocomplete
         label="Straße"
