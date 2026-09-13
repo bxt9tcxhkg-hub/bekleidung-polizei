@@ -477,6 +477,34 @@ export interface FleetEquipmentStatus {
   vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'kind' | 'call_sign' | 'license_plate' | 'responsible_user_id'>
 }
 
+// Fahrzeugcheck: eigene, verwaltbare Checkliste für den Fahrzeugzustand
+// (Reifen, Beleuchtung, Ölstand, Sauberkeit, ...) - unabhängig von den
+// Ausstattungs-Positionen der Füllliste. Ergänzt die bestehende schnelle
+// Tages-/Schicht-Kontrolle (vehicle_checks, auch von Außendienst genutzt),
+// ersetzt sie nicht.
+export interface FleetCheckItem {
+  id: string
+  vehicle_id: string
+  name: string
+  sort_order: number
+  active: boolean
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Aktueller Ist-Zustand je Fahrzeugcheck-Position; fehlt die Zeile, gilt die Position als ungeprüft. */
+export interface FleetCheckItemStatus {
+  item_id: string
+  vehicle_id: string
+  status: VehicleCheckStatus
+  note: string | null
+  checked_by: string
+  checked_at: string
+  updated_at: string
+  checker?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+}
+
 export type FleetCareTaskKind = 'innenreinigung' | 'aussenreinigung' | 'pflege' | 'sonstiges'
 export type FleetTaskStatus = 'offen' | 'erledigt'
 
@@ -1189,6 +1217,8 @@ type EinsatzMaterialRow = Omit<EinsatzMaterial, never>
 type FleetVehicleRow = Omit<FleetVehicle, 'responsible_profile'>
 type FleetEquipmentItemRow = Omit<FleetEquipmentItem, never>
 type FleetEquipmentStatusRow = Omit<FleetEquipmentStatus, 'checker' | 'item' | 'vehicle'>
+type FleetCheckItemRow = Omit<FleetCheckItem, never>
+type FleetCheckItemStatusRow = Omit<FleetCheckItemStatus, 'checker'>
 type FleetCareTaskRow = Omit<FleetCareTask, 'vehicle'>
 type FleetAppointmentRow = Omit<FleetAppointment, 'vehicle'>
 type FleetDocumentRow = Omit<FleetDocument, 'uploader' | 'vehicle'>
@@ -1356,6 +1386,13 @@ export type Database = {
       fleet_equipment_status: { Row: FleetEquipmentStatusRow; Insert: Pick<FleetEquipmentStatusRow, 'item_id' | 'vehicle_id' | 'checked_by'> & Partial<Omit<FleetEquipmentStatusRow, 'item_id' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<FleetEquipmentStatusRow, 'item_id' | 'vehicle_id'>>; Relationships: [
         { foreignKeyName: 'fleet_equipment_status_item_id_fkey'; columns: ['item_id']; isOneToOne: true; referencedRelation: 'fleet_equipment_items'; referencedColumns: ['id'] },
         { foreignKeyName: 'fleet_equipment_status_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
+      fleet_check_items: { Row: FleetCheckItemRow; Insert: Pick<FleetCheckItemRow, 'vehicle_id' | 'name'> & Partial<Omit<FleetCheckItemRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'name'>>; Update: Partial<Omit<FleetCheckItemRow, 'id' | 'created_at' | 'vehicle_id'>>; Relationships: [
+        { foreignKeyName: 'fleet_check_items_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+      ] }
+      fleet_check_item_status: { Row: FleetCheckItemStatusRow; Insert: Pick<FleetCheckItemStatusRow, 'item_id' | 'vehicle_id' | 'checked_by'> & Partial<Omit<FleetCheckItemStatusRow, 'item_id' | 'vehicle_id' | 'checked_by'>>; Update: Partial<Omit<FleetCheckItemStatusRow, 'item_id' | 'vehicle_id'>>; Relationships: [
+        { foreignKeyName: 'fleet_check_item_status_item_id_fkey'; columns: ['item_id']; isOneToOne: true; referencedRelation: 'fleet_check_items'; referencedColumns: ['id'] },
+        { foreignKeyName: 'fleet_check_item_status_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
       ] }
       fleet_care_tasks: { Row: FleetCareTaskRow; Insert: Pick<FleetCareTaskRow, 'vehicle_id' | 'subject' | 'created_by'> & Partial<Omit<FleetCareTaskRow, 'id' | 'created_at' | 'updated_at' | 'vehicle_id' | 'subject' | 'created_by'>>; Update: Partial<Omit<FleetCareTaskRow, 'id' | 'created_at' | 'vehicle_id' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'fleet_care_tasks_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
