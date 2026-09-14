@@ -59,16 +59,17 @@ export default function Ueberstunden() {
   const [decideNote, setDecideNote] = useState('')
   const [monat, setMonat] = useState(thisMonthLocal())
   const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
+  const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
 
+  // "Meine Meldungen" - absichtlich ohne .limit()/Pagination, die (von
+  // Supabase serverseitig gedeckelte) Standard-Seitengröße reicht für die
+  // eigene Historie. "Zu entscheiden" und die Monatsübersicht brauchen
+  // dagegen GARANTIERT vollständige Ergebnisse (sonst könnte eine ältere
+  // eingereichte Meldung aus der gedeckelten Liste fallen und für den
+  // Genehmiger unsichtbar bleiben) - beide holen sich deshalb unten eine
+  // eigene, gezielt gefilterte Abfrage statt diese Liste wiederzuverwenden.
   const load = useCallback(async () => {
     setLoading(true)
-    // RLS liefert automatisch die eigenen Meldungen (jeder Status) plus - nur
-    // für Genehmiger - alle übrigen, siehe Policy "Überstundenmeldungen lesen".
-    // Absichtlich ohne .limit()/Pagination - für "Zu entscheiden" und "Meine
-    // Meldungen" reicht die (von Supabase serverseitig gedeckelte) Standard-
-    // Seitengröße; für die Monatsübersicht/Sammelansicht (die ALLE
-    // genehmigten Meldungen eines Monats braucht, nicht nur die neuesten
-    // Zeilen) gibt es unten eine eigene, gezielt gefilterte Abfrage.
     const result = await supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
       .order('von_datum', { ascending: false }).order('created_at', { ascending: false })
@@ -78,6 +79,16 @@ export default function Ueberstunden() {
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
+
+  const loadZuEntscheiden = useCallback(async () => {
+    if (!isGenehmiger) { setZuEntscheiden([]); return }
+    const result = await supabase.from('ueberstunden_meldungen')
+      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+      .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true })
+    if (result.error) { setError('Die zu entscheidenden Meldungen konnten nicht geladen werden.'); return }
+    setZuEntscheiden(((result.data ?? []) as unknown as UeberstundenMeldung[]).filter(item => item.beamter_id !== profile?.id))
+  }, [isGenehmiger, profile?.id])
+  useEffect(() => { void loadZuEntscheiden() }, [loadZuEntscheiden])
 
   // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage statt die
   // (potenziell paginierte) meldungen-Liste zu verwenden - sonst könnten bei
@@ -97,7 +108,6 @@ export default function Ueberstunden() {
   useEffect(() => { void loadUebersicht() }, [loadUebersicht])
 
   const eigene = useMemo(() => meldungen.filter(item => item.beamter_id === profile?.id), [meldungen, profile?.id])
-  const zuEntscheiden = useMemo(() => meldungen.filter(item => item.status === 'eingereicht' && item.beamter_id !== profile?.id), [meldungen, profile?.id])
   // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt wird.
   const zeitraum = useMemo(() => meldungZeitraum(form), [form])
   const vorschau = useMemo(() => zeitraum ? berechneAufschluesselung(zeitraum.von, zeitraum.bis) : null, [zeitraum])
@@ -121,18 +131,18 @@ export default function Ueberstunden() {
       : await supabase.from('ueberstunden_meldungen').insert({ ...payload, beamter_id: profile.id, created_by: profile.id })
     setSaving(false)
     if (response.error) { setError('Die Meldung konnte nicht gespeichert werden.'); return }
-    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await load()
+    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await Promise.all([load(), loadZuEntscheiden()])
   }
   async function submitMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'eingereicht', eingereicht_at: new Date().toISOString() }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht eingereicht werden.'); return }
     logAudit('Überstundenmeldung eingereicht', `${formatZeitraum(item)} · ${formatStunden(totalStunden(item))} Std.`)
-    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await load()
+    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await Promise.all([load(), loadZuEntscheiden()])
   }
   async function withdrawMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'entwurf' }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht zurückgezogen werden.'); return }
-    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await load()
+    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await Promise.all([load(), loadZuEntscheiden()])
   }
   async function deleteMeldung(item: UeberstundenMeldung) {
     if (!window.confirm('Diesen Entwurf endgültig löschen?')) return
@@ -147,7 +157,7 @@ export default function Ueberstunden() {
     logAudit(`Überstundenmeldung ${STATUS_LABEL[status].toLowerCase()}`, `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`)
     setDeciding(null); setDecideNote('')
     setNotice(status === 'genehmigt' ? 'Meldung wurde genehmigt.' : status === 'abgelehnt' ? 'Meldung wurde abgelehnt.' : 'Meldung wurde zur Rückfrage zurückgelegt.')
-    await Promise.all([load(), loadUebersicht()])
+    await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
 
   function printMeldung(item: UeberstundenMeldung) {
