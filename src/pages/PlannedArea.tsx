@@ -2,7 +2,7 @@ import { ArrowLeft, CheckCircle2, Construction } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import PortalChrome from '../components/PortalChrome'
 
-export type PlannedAreaId = 'zentrale' | 'schulungen' | 'ueberstunden'
+export type PlannedAreaId = 'zentrale' | 'schulungen'
 
 const AREA_CONTENT: Record<PlannedAreaId, { title: string; group: string; description: string; items: string[] }> = {
   zentrale: {
@@ -16,12 +16,6 @@ const AREA_CONTENT: Record<PlannedAreaId, { title: string; group: string; descri
     group: 'Organisatorische Angelegenheiten',
     description: 'Allgemeine Aus- und Fortbildungen außerhalb des operativen Einsatztrainings.',
     items: ['Übersicht', 'PAD', 'Weitere Schulungen', 'Rechtsinformationen zu KFG, StVO und weiteren Themen', 'Meine Schulungen', 'Unterlagen'],
-  },
-  ueberstunden: {
-    title: 'Überstundenmeldung',
-    group: 'Mein Bereich',
-    description: 'Überstunden über das vorgegebene Formular erfassen und zur Prüfung abgeben.',
-    items: ['Neue Überstundenmeldung', 'PDF-Vorschau', 'Meldung abgeben', 'Meine Meldungen', 'Rückfragen & Bearbeitungsstatus'],
   },
 }
 

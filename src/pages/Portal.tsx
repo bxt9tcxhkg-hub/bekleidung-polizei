@@ -75,18 +75,6 @@ const ADMIN_ICONS: Record<PortalAdminId, LucideIcon> = {
   auditlog: ClipboardList,
 }
 
-type PlannedPortalArea = {
-  id: 'ueberstunden'
-  title: string
-  description: string
-  path: string
-  icon: LucideIcon
-}
-
-const PERSONAL_AREAS: PlannedPortalArea[] = [
-  { id: 'ueberstunden', title: 'Überstundenmeldung', description: 'Überstunden erfassen und zur Prüfung abgeben', path: '/planung/ueberstunden', icon: Clock3 },
-]
-
 function AppTile({ app, badge }: { app: PortalApp; badge?: number }) {
   const Icon = APP_ICONS[app.id]
 
@@ -129,28 +117,6 @@ function AppTile({ app, badge }: { app: PortalApp; badge?: number }) {
       ) : null}
     </Link>
   )
-}
-
-function PlannedTile({ area, admin }: { area: PlannedPortalArea; admin: boolean }) {
-  const Icon = area.icon
-  const content = (
-    <>
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className={`p-2.5 rounded-lg ${admin ? 'bg-amber-50' : 'bg-gray-100'}`}>
-          <Icon className={`w-5 h-5 ${admin ? 'text-amber-700' : 'text-gray-400'}`} />
-        </div>
-        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">In Planung</span>
-      </div>
-      <h2 className={`text-lg font-semibold ${admin ? 'text-gray-900' : 'text-gray-500'}`}>{area.title}</h2>
-      <p className="text-sm text-gray-500 mt-1">{area.description}</p>
-      {admin ? <p className="text-xs font-medium text-amber-700 mt-3">Grundstruktur ansehen</p> : null}
-    </>
-  )
-
-  if (admin) {
-    return <Link to={area.path} className="rounded-xl border border-dashed border-amber-300 bg-white p-5 hover:border-amber-500 hover:shadow-sm transition-all block">{content}</Link>
-  }
-  return <div aria-disabled="true" title="In Planung" className="rounded-xl border border-gray-200 bg-gray-50 p-5 opacity-65 cursor-not-allowed select-none">{content}</div>
 }
 
 function PortalSection({
@@ -522,7 +488,7 @@ export default function Portal() {
       </PortalSection>
 
       <PortalSection title="Mein Bereich" description="Persönliche Meldungen und Anträge" tone="persoenlich">
-        {PERSONAL_AREAS.map(area => <PlannedTile key={area.id} area={area} admin={isAdmin} />)}
+        <NavTile to="/ueberstunden" label="Überstundenmeldung" description="Überstunden erfassen und zur Prüfung abgeben" icon={Clock3} />
       </PortalSection>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 pt-8 border-t border-gray-200">

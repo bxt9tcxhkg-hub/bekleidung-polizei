@@ -1105,6 +1105,40 @@ export interface InnendienstGebuehrensatzPosition {
   position?: Pick<InnendienstGebuehrenposition, 'id' | 'name' | 'betrag' | 'active'>
 }
 
+// Überstundenmeldung: self-service - jede/r Bedienstete erfasst die eigenen
+// Überstunden und reicht sie ein, der Genehmiger entscheidet (siehe
+// enforce_ueberstunden_update() für die Feld-Einschränkung je Rolle).
+export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt'
+
+export interface UeberstundenMeldung {
+  id: string
+  beamter_id: string
+  datum: string
+  zeit_von: string | null
+  zeit_bis: string | null
+  grund: string
+  /** Werktage Mo 06-19 Uhr, 50 % (LA 3250). */
+  std_werktag_50: number
+  /** Sonn-/Feiertage bis 8 Std, 100 % (LA 3520). */
+  std_sonn_100: number
+  /** Zeit 19-22 Uhr, 50 % (LA 3500). */
+  std_19_22: number
+  /** Zeit 22-06 Uhr, 100 % (LA 3510). */
+  std_22_06: number
+  /** Sonn-/Feiertage ab 8 Std, 200 % (LA 3530). */
+  std_sonn_200: number
+  status: UeberstundenStatus
+  eingereicht_at: string | null
+  genehmiger_id: string | null
+  genehmigt_at: string | null
+  genehmiger_note: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  beamter?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  genehmiger?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+}
+
 /**
  * Schulungen: Modul-/Termin-Tracking, analog zu Einsatztraining (Paket 5),
  * aber bewusst einfacher (kein kind/module_type/period, keine Halbjahres-
@@ -1224,6 +1258,7 @@ type SchulungAssignmentRow = Omit<SchulungAssignment, 'officer' | 'module' | 'se
 type InnendienstGebuehrenpositionRow = Omit<InnendienstGebuehrenposition, never>
 type InnendienstGebuehrensatzRow = Omit<InnendienstGebuehrensatz, never>
 type InnendienstGebuehrensatzPositionRow = Omit<InnendienstGebuehrensatzPosition, 'position'>
+type UeberstundenMeldungRow = Omit<UeberstundenMeldung, 'beamter' | 'genehmiger'>
 type PersonalEinsatzmittelRequestRow = Omit<PersonalEinsatzmittelRequest, 'requester'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
 type PoolEinsatzmittelRequestRow = Omit<PoolEinsatzmittelRequest, 'requester'>
@@ -1524,6 +1559,11 @@ export type Database = {
       innendienst_gebuehrensatz_positionen: { Row: InnendienstGebuehrensatzPositionRow; Insert: Pick<InnendienstGebuehrensatzPositionRow, 'gebuehrensatz_id' | 'position_id'> & Partial<Omit<InnendienstGebuehrensatzPositionRow, 'gebuehrensatz_id' | 'position_id'>>; Update: Partial<Omit<InnendienstGebuehrensatzPositionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_gebuehrensatz_id_fkey'; columns: ['gebuehrensatz_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrensaetze'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_position_id_fkey'; columns: ['position_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrenpositionen'; referencedColumns: ['id'] },
+      ] }
+      ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'datum' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'datum' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'ueberstunden_meldungen_beamter_id_fkey'; columns: ['beamter_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ueberstunden_meldungen_genehmiger_id_fkey'; columns: ['genehmiger_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ueberstunden_meldungen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       schulungen_module: { Row: SchulungModuleRow; Insert: Pick<SchulungModuleRow, 'name'> & Partial<Omit<SchulungModuleRow, 'name'>>; Update: Partial<Omit<SchulungModuleRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'schulungen_module_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
