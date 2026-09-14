@@ -156,18 +156,18 @@ export default function Ueberstunden() {
       : await supabase.from('ueberstunden_meldungen').insert({ ...payload, beamter_id: profile.id, created_by: profile.id })
     setSaving(false)
     if (response.error) { setError('Die Meldung konnte nicht gespeichert werden.'); return }
-    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await Promise.all([load(), loadZuEntscheiden()])
+    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
   async function submitMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'eingereicht', eingereicht_at: new Date().toISOString() }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht eingereicht werden.'); return }
     logAudit('Überstundenmeldung eingereicht', `${formatZeitraum(item)} · ${formatStunden(totalStunden(item))} Std.`)
-    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await Promise.all([load(), loadZuEntscheiden()])
+    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
   async function withdrawMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'entwurf' }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht zurückgezogen werden.'); return }
-    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await Promise.all([load(), loadZuEntscheiden()])
+    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
   async function deleteMeldung(item: UeberstundenMeldung) {
     if (!window.confirm('Diesen Entwurf endgültig löschen?')) return
