@@ -6,15 +6,16 @@ import { supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, FORM_FIELD_BY_KATEGORIE, KATEGORIEN, STATUS_COLOR, STATUS_LABEL, formToPayload, formatStunden, meldungToForm, totalStunden, type MeldungFormState } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, STATUS_COLOR, STATUS_LABEL, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, meldungToForm, meldungZeitraum, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung } from '../lib/types'
 
 // Überstundenmeldung: self-service - jede/r Bedienstete erfasst die eigenen
-// Überstunden (siehe lib/ueberstunden.ts für Kategorien/Kodierung),
-// verwaltet sie als Entwurf und reicht sie ein; der Genehmiger entscheidet
-// darüber (Abschnitt "Zu entscheiden", nur für Genehmiger sichtbar). Kein
-// eigener Bereichs-Layout/Sidebar nötig, dafür ist die Seite zu klein -
-// eine einzelne Seite wie z. B. Hilfe.tsx.
+// Überstunden über einen Zeitraum (von Datum/Uhrzeit bis Datum/Uhrzeit); die
+// Aufschlüsselung nach Lohnarten (siehe lib/ueberstunden.ts) wird daraus
+// automatisch berechnet, nicht manuell eingegeben. Verwaltet als Entwurf,
+// dann eingereicht; der Genehmiger entscheidet (Abschnitt "Zu entscheiden",
+// nur für Genehmiger sichtbar). Kein eigener Bereichs-Layout/Sidebar nötig,
+// dafür ist die Seite zu klein - eine einzelne Seite wie z. B. Hilfe.tsx.
 
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
 
@@ -22,6 +23,24 @@ function StundenBreakdown({ item }: { item: UeberstundenMeldung }) {
   const parts = KATEGORIEN.filter(kat => item[kat.key] > 0).map(kat => `${kat.code} ${formatStunden(item[kat.key])} Std.`)
   if (parts.length === 0) return null
   return <p className="text-xs text-gray-500 mt-1">{parts.join(' · ')}</p>
+}
+
+// Tabellarische Aufschlüsselung nach Lohnarten - einheitlich formatierte
+// Zeilen (Label + Hinweis/Satz/Code + rechtsbündiger Wert) statt einzelner
+// Kacheln, die je nach Kategorie unterschiedlich viel Text enthielten.
+function AufschluesselungTabelle({ werte }: { werte: Record<UeberstundenKategorieKey, number> | null }) {
+  const gesamt = werte ? KATEGORIEN.reduce((sum, kat) => sum + werte[kat.key], 0) : null
+  return <div className="rounded-lg border border-gray-200 overflow-hidden">
+    <table className="w-full text-sm">
+      <tbody>
+        {KATEGORIEN.map(kat => <tr key={kat.key} className="border-b border-gray-100 last:border-0">
+          <td className="px-3 py-2 align-top"><p className="font-medium text-gray-800">{kat.label}</p><p className="text-xs text-gray-400 mt-0.5">{kat.hinweis} · {kat.satz} · {kat.code}</p></td>
+          <td className="px-3 py-2 text-right align-top font-semibold text-gray-900 tabular-nums whitespace-nowrap">{werte ? formatStunden(werte[kat.key]) : '–'} Std.</td>
+        </tr>)}
+        <tr className="bg-gray-50"><td className="px-3 py-2 font-bold text-gray-900">Gesamt</td><td className="px-3 py-2 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">{gesamt !== null ? formatStunden(gesamt) : '–'} Std.</td></tr>
+      </tbody>
+    </table>
+  </div>
 }
 
 export default function Ueberstunden() {
@@ -43,7 +62,7 @@ export default function Ueberstunden() {
     // für Genehmiger - alle übrigen, siehe Policy "Überstundenmeldungen lesen".
     const result = await supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
-      .order('datum', { ascending: false }).order('created_at', { ascending: false })
+      .order('von_datum', { ascending: false }).order('created_at', { ascending: false })
     if (result.error) setError('Die Überstundenmeldungen konnten nicht geladen werden.')
     else setError('')
     setMeldungen((result.data ?? []) as unknown as UeberstundenMeldung[])
@@ -53,6 +72,9 @@ export default function Ueberstunden() {
 
   const eigene = useMemo(() => meldungen.filter(item => item.beamter_id === profile?.id), [meldungen, profile?.id])
   const zuEntscheiden = useMemo(() => meldungen.filter(item => item.status === 'eingereicht' && item.beamter_id !== profile?.id), [meldungen, profile?.id])
+  // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt wird.
+  const zeitraum = useMemo(() => meldungZeitraum(form), [form])
+  const vorschau = useMemo(() => zeitraum ? berechneAufschluesselung(zeitraum.von, zeitraum.bis) : null, [zeitraum])
 
   function openNew() { setEditing(null); setForm(EMPTY_MELDUNG_FORM); setShowForm(true); setError('') }
   function openEdit(item: UeberstundenMeldung) { setEditing(item); setForm(meldungToForm(item)); setShowForm(true); setError('') }
@@ -60,8 +82,8 @@ export default function Ueberstunden() {
   async function saveDraft() {
     if (!profile?.id) return
     if (!form.grund.trim()) { setError('Bitte den Grund der Überstunde(n) angeben.'); return }
+    if (!zeitraum) { setError('Bitte einen gültigen Zeitraum angeben (Von/Bis vollständig ausfüllen, Ende muss nach Beginn liegen).'); return }
     const payload = formToPayload(form)
-    if (totalStunden(payload) <= 0) { setError('Bitte mindestens eine Stundenkategorie ausfüllen.'); return }
     setSaving(true)
     const response = editing
       ? await supabase.from('ueberstunden_meldungen').update(payload).eq('id', editing.id)
@@ -73,7 +95,7 @@ export default function Ueberstunden() {
   async function submitMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'eingereicht', eingereicht_at: new Date().toISOString() }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht eingereicht werden.'); return }
-    logAudit('Überstundenmeldung eingereicht', `${item.datum} · ${formatStunden(totalStunden(item))} Std.`)
+    logAudit('Überstundenmeldung eingereicht', `${formatZeitraum(item)} · ${formatStunden(totalStunden(item))} Std.`)
     setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await load()
   }
   async function withdrawMeldung(item: UeberstundenMeldung) {
@@ -91,14 +113,14 @@ export default function Ueberstunden() {
     if (!profile?.id) return
     const result = await supabase.from('ueberstunden_meldungen').update({ status, genehmiger_id: profile.id, genehmigt_at: new Date().toISOString(), genehmiger_note: note.trim() || null }).eq('id', item.id)
     if (result.error) { setError('Die Entscheidung konnte nicht gespeichert werden.'); return }
-    logAudit(status === 'genehmigt' ? 'Überstundenmeldung genehmigt' : 'Überstundenmeldung abgelehnt', `${item.beamter?.name ?? '–'} · ${item.datum}`)
+    logAudit(status === 'genehmigt' ? 'Überstundenmeldung genehmigt' : 'Überstundenmeldung abgelehnt', `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`)
     setRejecting(null); setRejectNote(''); setNotice(status === 'genehmigt' ? 'Meldung wurde genehmigt.' : 'Meldung wurde abgelehnt.'); await load()
   }
 
   function printMeldung(item: UeberstundenMeldung) {
     generateUeberstundenPdf({
       beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName: item.genehmiger?.name ?? null,
-      datum: item.datum, zeitVon: item.zeit_von?.slice(0, 5) ?? null, zeitBis: item.zeit_bis?.slice(0, 5) ?? null, grund: item.grund,
+      vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
       stunden: { std_werktag_50: item.std_werktag_50, std_sonn_100: item.std_sonn_100, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_200: item.std_sonn_200 },
     })
   }
@@ -114,7 +136,7 @@ export default function Ueberstunden() {
         {zuEntscheiden.length === 0 ? <Empty text="Keine eingereichten Meldungen zu entscheiden." /> : <div className="space-y-3">{zuEntscheiden.map(item => <article key={item.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{new Date(item.datum).toLocaleDateString('de-AT')}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{formatZeitraum(item)}</span></div>
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
@@ -133,7 +155,7 @@ export default function Ueberstunden() {
         {eigene.length === 0 ? <Empty text="Noch keine Überstundenmeldung erfasst." /> : <div className="space-y-3">{eigene.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{new Date(item.datum).toLocaleDateString('de-AT')}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatZeitraum(item)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div>
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
@@ -155,15 +177,21 @@ export default function Ueberstunden() {
     </div>}
 
     {showForm ? <Modal title={editing ? 'Überstundenmeldung bearbeiten' : 'Neue Überstundenmeldung'} close={() => setShowForm(false)}>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Field label="Datum *" type="date" value={form.datum} onChange={value => setForm(current => ({ ...current, datum: value }))} />
-        <Field label="Uhrzeit von" type="time" value={form.zeitVon} onChange={value => setForm(current => ({ ...current, zeitVon: value }))} />
-        <Field label="Uhrzeit bis" type="time" value={form.zeitBis} onChange={value => setForm(current => ({ ...current, zeitBis: value }))} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Von – Datum *" type="date" value={form.vonDatum} onChange={value => setForm(current => ({ ...current, vonDatum: value }))} />
+          <Field label="Von – Uhrzeit *" type="time" value={form.vonZeit} onChange={value => setForm(current => ({ ...current, vonZeit: value }))} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Bis – Datum *" type="date" value={form.bisDatum} onChange={value => setForm(current => ({ ...current, bisDatum: value }))} />
+          <Field label="Bis – Uhrzeit *" type="time" value={form.bisZeit} onChange={value => setForm(current => ({ ...current, bisZeit: value }))} />
+        </div>
       </div>
+      {!zeitraum ? <p className="text-xs text-amber-700 -mt-2">Bitte Von/Bis vollständig angeben – das Ende muss nach dem Beginn liegen.</p> : null}
       <Area label="Grund der Überstunde(n) *" value={form.grund} onChange={value => setForm(current => ({ ...current, grund: value }))} />
       <div>
-        <p className="text-xs font-medium text-gray-600 mb-2">Ü-Std aufgeschlüsselt</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{KATEGORIEN.map(kat => { const field = FORM_FIELD_BY_KATEGORIE[kat.key]; return <label key={kat.key} className="block text-xs font-medium text-gray-600 rounded-lg border border-gray-200 p-2.5">{kat.label}{kat.hinweis ? <span className="block text-[11px] font-normal text-gray-400 mt-0.5">{kat.hinweis}</span> : null}<span className="block text-[11px] font-normal text-gray-400 mt-0.5">{kat.satz} · {kat.code}</span><input inputMode="decimal" className={inputClass} placeholder="0" value={form[field]} onChange={event => setForm(current => ({ ...current, [field]: event.target.value }))} /></label> })}</div>
+        <p className="text-xs font-medium text-gray-600 mb-2">Ü-Std aufgeschlüsselt <span className="font-normal text-gray-400">– wird automatisch aus dem Zeitraum berechnet (österreichische Feiertage berücksichtigt)</span></p>
+        <AufschluesselungTabelle werte={vorschau} />
       </div>
       {error ? <ErrorMessage text={error} /> : null}
       <Actions saving={saving} close={() => setShowForm(false)} save={saveDraft} />

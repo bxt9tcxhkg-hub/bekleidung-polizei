@@ -1,3 +1,4 @@
+import { isSonnOderFeiertag } from './austrianHolidays'
 import type { UeberstundenMeldung, UeberstundenStatus } from './types'
 
 // Von Ueberstunden.tsx (Seite) und lib/ueberstundenPdf.ts (PDF-Export)
@@ -12,10 +13,10 @@ export type UeberstundenKategorieKey = 'std_werktag_50' | 'std_sonn_100' | 'std_
 // "Ü-Std aufgeschlüsselt") - Bezeichnung, Lohnsatz und LA-Code je Kategorie.
 export const KATEGORIEN: { key: UeberstundenKategorieKey; label: string; hinweis: string; satz: string; code: string }[] = [
   { key: 'std_werktag_50', label: 'Überstunden an Werktagen', hinweis: 'Mo 06.00 bis 19.00 Uhr (werden mit 50 % Lohn verrechnet)', satz: '50 %', code: 'LA 3250' },
-  { key: 'std_sonn_100', label: 'Überstunden an Sonn- und Feiertagen', hinweis: 'im Ausmaß von 8 Stunden - alle Mehrstunden sind 200 %', satz: 'So 100 %', code: 'LA 3520' },
-  { key: 'std_19_22', label: 'Stunden in der Zeit von 19-22 Uhr', hinweis: '', satz: '50 %', code: 'LA 3500' },
-  { key: 'std_22_06', label: 'Stunden in der Zeit von 22-06 Uhr', hinweis: '', satz: '100 %', code: 'LA 3510' },
-  { key: 'std_sonn_200', label: 'Überstunden an Sonn- u. Feiertagen', hinweis: 'ab 8 Stunden', satz: '200 %', code: 'LA 3530' },
+  { key: 'std_19_22', label: 'Stunden in der Zeit von 19-22 Uhr', hinweis: 'an Werktagen', satz: '50 %', code: 'LA 3500' },
+  { key: 'std_22_06', label: 'Stunden in der Zeit von 22-06 Uhr', hinweis: 'an Werktagen', satz: '100 %', code: 'LA 3510' },
+  { key: 'std_sonn_100', label: 'Überstunden an Sonn- und Feiertagen', hinweis: 'die ersten 8 Stunden je Tag', satz: 'So 100 %', code: 'LA 3520' },
+  { key: 'std_sonn_200', label: 'Überstunden an Sonn- u. Feiertagen', hinweis: 'ab der 9. Stunde je Tag', satz: '200 %', code: 'LA 3530' },
 ]
 
 export function totalStunden(item: Pick<UeberstundenMeldung, UeberstundenKategorieKey>): number {
@@ -29,36 +30,92 @@ export function formatStunden(value: number): string {
 export function todayLocal(): string { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
 export const EMPTY_MELDUNG_FORM = {
-  datum: todayLocal(), zeitVon: '', zeitBis: '', grund: '',
-  stdWerktag50: '', stdSonn100: '', std1922: '', std2206: '', stdSonn200: '',
+  vonDatum: todayLocal(), vonZeit: '', bisDatum: todayLocal(), bisZeit: '', grund: '',
 }
 export type MeldungFormState = typeof EMPTY_MELDUNG_FORM
 
-// Feldname im Formular je Kategorie - für generische Eingabe/Auslese in Schleifen.
-export const FORM_FIELD_BY_KATEGORIE: Record<UeberstundenKategorieKey, keyof MeldungFormState> = {
-  std_werktag_50: 'stdWerktag50', std_sonn_100: 'stdSonn100', std_19_22: 'std1922', std_22_06: 'std2206', std_sonn_200: 'stdSonn200',
+const LEERE_AUFSCHLUESSELUNG: Record<UeberstundenKategorieKey, number> = { std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }
+
+/**
+ * Zerlegt den Zeitraum [von, bis) tageweise und ordnet jeden Abschnitt der
+ * passenden Lohnart zu:
+ * - An einem Sonn-/Feiertag zählt der gesamte Tag zur Feiertagsregel,
+ *   unabhängig von der Uhrzeit: die ersten 8 Überstunden dieses Tages zu
+ *   100 % (LA 3520), alles darüber hinaus an diesem Tag zu 200 % (LA 3530).
+ * - An einem Werktag wird nach Uhrzeit unterschieden: 06:00-19:00 zu 50 %
+ *   (LA 3250), 19:00-22:00 zu 50 % (LA 3500), 22:00-06:00 zu 100 % (LA 3510) -
+ *   Stunden vor 06:00 zählen dabei zur Nachtstunden-Kategorie des Vortags.
+ * Feiertage nach lib/austrianHolidays.ts (bundesweite österreichische
+ * Feiertage - gelten auch für Vorarlberg, keine gesonderten Landesfeiertage).
+ */
+export function berechneAufschluesselung(von: Date, bis: Date): Record<UeberstundenKategorieKey, number> {
+  const result: Record<UeberstundenKategorieKey, number> = { ...LEERE_AUFSCHLUESSELUNG }
+  if (!(bis > von)) return result
+  let cursor = new Date(von)
+  while (cursor < bis) {
+    const tagesbeginn = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+    const naechsterTag = new Date(tagesbeginn.getFullYear(), tagesbeginn.getMonth(), tagesbeginn.getDate() + 1)
+    const abschnittsende = bis < naechsterTag ? bis : naechsterTag
+    const dauerStunden = (abschnittsende.getTime() - cursor.getTime()) / 3_600_000
+
+    if (isSonnOderFeiertag(tagesbeginn)) {
+      const ersten8 = Math.min(dauerStunden, 8)
+      result.std_sonn_100 += ersten8
+      result.std_sonn_200 += dauerStunden - ersten8
+    } else {
+      const fenster: [number, number, UeberstundenKategorieKey][] = [
+        [0, 6, 'std_22_06'], [6, 19, 'std_werktag_50'], [19, 22, 'std_19_22'], [22, 24, 'std_22_06'],
+      ]
+      for (const [vonStunde, bisStunde, kategorie] of fenster) {
+        const fensterStart = new Date(tagesbeginn.getTime() + vonStunde * 3_600_000)
+        const fensterEnde = new Date(tagesbeginn.getTime() + bisStunde * 3_600_000)
+        const ueberlappStart = cursor > fensterStart ? cursor : fensterStart
+        const ueberlappEnde = abschnittsende < fensterEnde ? abschnittsende : fensterEnde
+        if (ueberlappEnde > ueberlappStart) result[kategorie] += (ueberlappEnde.getTime() - ueberlappStart.getTime()) / 3_600_000
+      }
+    }
+    cursor = abschnittsende
+  }
+  // Auf Viertelstunden runden - wie bei der Lohnverrechnung üblich.
+  for (const key of Object.keys(result) as UeberstundenKategorieKey[]) result[key] = Math.round(result[key] * 4) / 4
+  return result
 }
 
-function parseStunden(raw: string): number {
-  const value = Number(raw.replace(',', '.'))
-  return Number.isFinite(value) && value >= 0 ? value : 0
+function parseZeitpunkt(datum: string, zeit: string): Date | null {
+  if (!datum || !zeit) return null
+  const [year, month, day] = datum.split('-').map(Number)
+  const [hours, minutes] = zeit.split(':').map(Number)
+  if ([year, month, day, hours, minutes].some(n => Number.isNaN(n))) return null
+  return new Date(year, month - 1, day, hours, minutes)
+}
+
+/** Liefert den gültigen Zeitraum aus dem Formular, oder null solange er unvollständig/ungültig ist (bis muss nach von liegen). */
+export function meldungZeitraum(form: Pick<MeldungFormState, 'vonDatum' | 'vonZeit' | 'bisDatum' | 'bisZeit'>): { von: Date; bis: Date } | null {
+  const von = parseZeitpunkt(form.vonDatum, form.vonZeit)
+  const bis = parseZeitpunkt(form.bisDatum, form.bisZeit)
+  if (!von || !bis || !(bis > von)) return null
+  return { von, bis }
+}
+
+/** "14.09.2026, 20:00 – 23:00 Uhr" bzw. bei mehrtägigem Zeitraum "14.09.2026, 20:00 Uhr – 15.09.2026, 02:00 Uhr". */
+export function formatZeitraum(item: Pick<UeberstundenMeldung, 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit'>): string {
+  const vonDatum = new Date(`${item.von_datum}T00:00`).toLocaleDateString('de-AT')
+  const vonZeit = item.von_zeit.slice(0, 5)
+  const bisZeit = item.bis_zeit.slice(0, 5)
+  if (item.von_datum === item.bis_datum) return `${vonDatum}, ${vonZeit} – ${bisZeit} Uhr`
+  const bisDatum = new Date(`${item.bis_datum}T00:00`).toLocaleDateString('de-AT')
+  return `${vonDatum}, ${vonZeit} Uhr – ${bisDatum}, ${bisZeit} Uhr`
 }
 
 export function meldungToForm(item: UeberstundenMeldung): MeldungFormState {
-  return {
-    datum: item.datum, zeitVon: item.zeit_von?.slice(0, 5) ?? '', zeitBis: item.zeit_bis?.slice(0, 5) ?? '', grund: item.grund,
-    stdWerktag50: item.std_werktag_50 ? String(item.std_werktag_50) : '',
-    stdSonn100: item.std_sonn_100 ? String(item.std_sonn_100) : '',
-    std1922: item.std_19_22 ? String(item.std_19_22) : '',
-    std2206: item.std_22_06 ? String(item.std_22_06) : '',
-    stdSonn200: item.std_sonn_200 ? String(item.std_sonn_200) : '',
-  }
+  return { vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund }
 }
 
 export function formToPayload(form: MeldungFormState) {
+  const zeitraum = meldungZeitraum(form)
+  const aufschluesselung = zeitraum ? berechneAufschluesselung(zeitraum.von, zeitraum.bis) : LEERE_AUFSCHLUESSELUNG
   return {
-    datum: form.datum, zeit_von: form.zeitVon || null, zeit_bis: form.zeitBis || null, grund: form.grund.trim(),
-    std_werktag_50: parseStunden(form.stdWerktag50), std_sonn_100: parseStunden(form.stdSonn100),
-    std_19_22: parseStunden(form.std1922), std_22_06: parseStunden(form.std2206), std_sonn_200: parseStunden(form.stdSonn200),
+    von_datum: form.vonDatum, von_zeit: form.vonZeit, bis_datum: form.bisDatum, bis_zeit: form.bisZeit,
+    grund: form.grund.trim(), ...aufschluesselung,
   }
 }

@@ -11,9 +11,10 @@ export interface UeberstundenPdfInput {
   beamterName: string
   bearbeiterName: string
   genehmigerName: string | null
-  datum: string
-  zeitVon: string | null
-  zeitBis: string | null
+  vonDatum: string
+  vonZeit: string
+  bisDatum: string
+  bisZeit: string
   grund: string
   stunden: Record<UeberstundenKategorieKey, number>
 }
@@ -25,7 +26,9 @@ function formatDateShort(isoDate: string): string {
 }
 
 export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
-  const zeit = input.zeitVon && input.zeitBis ? `${input.zeitVon} bis ${input.zeitBis} Uhr` : '–'
+  const mehrtaegig = input.vonDatum !== input.bisDatum
+  const datumText = mehrtaegig ? `${formatDateShort(input.vonDatum)} bis ${formatDateShort(input.bisDatum)}` : formatDateShort(input.vonDatum)
+  const zeit = `${input.vonZeit} bis ${input.bisZeit} Uhr`
   const cols = KATEGORIEN.map(kat => {
     const value = input.stunden[kat.key]
     return `<td>
@@ -62,7 +65,7 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
   <div class="kt">Überstundenmeldung</div>
   <table class="meta">
     <tr><td>Name des Beamten:</td><td>${escHtml(input.beamterName)}</td></tr>
-    <tr><td>Datum:</td><td>${escHtml(formatDateShort(input.datum))}</td></tr>
+    <tr><td>Datum:</td><td>${escHtml(datumText)}</td></tr>
     <tr><td>Uhrzeit:</td><td>${escHtml(zeit)}</td></tr>
     <tr><td>Grund der Überstunde(n):</td><td>${escHtml(input.grund)}</td></tr>
   </table>

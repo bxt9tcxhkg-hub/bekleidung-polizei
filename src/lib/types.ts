@@ -1113,9 +1113,12 @@ export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abge
 export interface UeberstundenMeldung {
   id: string
   beamter_id: string
-  datum: string
-  zeit_von: string | null
-  zeit_bis: string | null
+  /** Beginn des Zeitraums, aus dem die Lohnarten-Aufschlüsselung automatisch berechnet wird (siehe lib/ueberstunden.ts berechneAufschluesselung()). */
+  von_datum: string
+  von_zeit: string
+  /** Ende des Zeitraums - kann an einem späteren Tag liegen als von_datum (mehrtägiger Dienst). */
+  bis_datum: string
+  bis_zeit: string
   grund: string
   /** Werktage Mo 06-19 Uhr, 50 % (LA 3250). */
   std_werktag_50: number
@@ -1560,7 +1563,7 @@ export type Database = {
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_gebuehrensatz_id_fkey'; columns: ['gebuehrensatz_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrensaetze'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_position_id_fkey'; columns: ['position_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrenpositionen'; referencedColumns: ['id'] },
       ] }
-      ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'datum' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'datum' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
+      ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'ueberstunden_meldungen_beamter_id_fkey'; columns: ['beamter_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'ueberstunden_meldungen_genehmiger_id_fkey'; columns: ['genehmiger_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'ueberstunden_meldungen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
