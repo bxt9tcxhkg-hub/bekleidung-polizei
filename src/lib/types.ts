@@ -1108,7 +1108,8 @@ export interface InnendienstGebuehrensatzPosition {
 // Überstundenmeldung: self-service - jede/r Bedienstete erfasst die eigenen
 // Überstunden und reicht sie ein, der Genehmiger entscheidet (siehe
 // enforce_ueberstunden_update() für die Feld-Einschränkung je Rolle).
-export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt'
+export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt' | 'rueckfrage'
+export type UeberstundenVerguetung = 'auszahlung' | 'stundenersatz'
 
 export interface UeberstundenMeldung {
   id: string
@@ -1120,6 +1121,7 @@ export interface UeberstundenMeldung {
   bis_datum: string
   bis_zeit: string
   grund: string
+  verguetung: UeberstundenVerguetung
   /** Werktage Mo 06-19 Uhr, 50 % (LA 3250). */
   std_werktag_50: number
   /** Sonn-/Feiertage bis 8 Std, 100 % (LA 3520). */

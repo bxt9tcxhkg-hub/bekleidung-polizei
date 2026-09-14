@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { berechneAufschluesselung } from './ueberstunden'
+import { berechneAufschluesselung, monatsUebersicht } from './ueberstunden'
+import type { UeberstundenMeldung } from './types'
 
 // Montag, 14.09.2026 - ein gewöhnlicher Werktag (siehe austrianHolidays.test.ts).
 const WERKTAG = (h: number, m = 0) => new Date(2026, 8, 14, h, m)
@@ -61,5 +62,48 @@ describe('berechneAufschluesselung', () => {
   it('rundet auf Viertelstunden', () => {
     const result = berechneAufschluesselung(WERKTAG(10, 0), WERKTAG(10, 40))
     expect(result.std_werktag_50).toBe(0.75) // 40 Minuten ≈ 0.667 Std, nächste Viertelstunde
+  })
+})
+
+function meldung(overrides: Partial<UeberstundenMeldung>): UeberstundenMeldung {
+  return {
+    id: 'x', beamter_id: 'b1', von_datum: '2026-09-14', von_zeit: '10:00', bis_datum: '2026-09-14', bis_zeit: '14:00',
+    grund: 'Test', verguetung: 'auszahlung',
+    std_werktag_50: 4, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0,
+    status: 'genehmigt', eingereicht_at: null, genehmiger_id: null, genehmigt_at: null, genehmiger_note: null,
+    created_by: 'b1', created_at: '', updated_at: '',
+    beamter: { id: 'b1', name: 'Max Muster', dienstnummer: '123' },
+    ...overrides,
+  }
+}
+
+describe('monatsUebersicht', () => {
+  it('summiert genehmigte Meldungen je Beamten für den gewählten Monat', () => {
+    const result = monatsUebersicht([
+      meldung({ id: '1', std_werktag_50: 4 }),
+      meldung({ id: '2', std_werktag_50: 2, std_19_22: 1 }),
+    ], '2026-09')
+    expect(result).toHaveLength(1)
+    expect(result[0].beamterName).toBe('Max Muster')
+    expect(result[0].stunden.std_werktag_50).toBe(6)
+    expect(result[0].stunden.std_19_22).toBe(1)
+    expect(result[0].gesamt).toBe(7)
+  })
+
+  it('ignoriert nicht genehmigte Meldungen und andere Monate', () => {
+    const result = monatsUebersicht([
+      meldung({ id: '1', status: 'eingereicht' }),
+      meldung({ id: '2', status: 'abgelehnt' }),
+      meldung({ id: '3', von_datum: '2026-08-31', bis_datum: '2026-08-31' }),
+    ], '2026-09')
+    expect(result).toEqual([])
+  })
+
+  it('gruppiert mehrere Beamte getrennt und sortiert alphabetisch', () => {
+    const result = monatsUebersicht([
+      meldung({ id: '1', beamter_id: 'b2', beamter: { id: 'b2', name: 'Zora Zach', dienstnummer: null } }),
+      meldung({ id: '2', beamter_id: 'b1', beamter: { id: 'b1', name: 'Anna Adler', dienstnummer: null } }),
+    ], '2026-09')
+    expect(result.map(z => z.beamterName)).toEqual(['Anna Adler', 'Zora Zach'])
   })
 })

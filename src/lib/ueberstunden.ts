@@ -1,11 +1,13 @@
 import { isSonnOderFeiertag } from './austrianHolidays'
-import type { UeberstundenMeldung, UeberstundenStatus } from './types'
+import type { UeberstundenMeldung, UeberstundenStatus, UeberstundenVerguetung } from './types'
 
 // Von Ueberstunden.tsx (Seite) und lib/ueberstundenPdf.ts (PDF-Export)
 // gemeinsam genutzte Konstanten/Hilfsfunktionen.
 
-export const STATUS_LABEL: Record<UeberstundenStatus, string> = { entwurf: 'Entwurf', eingereicht: 'Eingereicht', genehmigt: 'Genehmigt', abgelehnt: 'Abgelehnt' }
-export const STATUS_COLOR: Record<UeberstundenStatus, string> = { entwurf: 'bg-gray-100 text-gray-600', eingereicht: 'bg-amber-100 text-amber-800', genehmigt: 'bg-green-100 text-green-800', abgelehnt: 'bg-red-100 text-red-800' }
+export const STATUS_LABEL: Record<UeberstundenStatus, string> = { entwurf: 'Entwurf', eingereicht: 'Eingereicht', genehmigt: 'Genehmigt', abgelehnt: 'Abgelehnt', rueckfrage: 'Rückfrage' }
+export const STATUS_COLOR: Record<UeberstundenStatus, string> = { entwurf: 'bg-gray-100 text-gray-600', eingereicht: 'bg-amber-100 text-amber-800', genehmigt: 'bg-green-100 text-green-800', abgelehnt: 'bg-red-100 text-red-800', rueckfrage: 'bg-blue-100 text-blue-800' }
+
+export const VERGUETUNG_LABEL: Record<UeberstundenVerguetung, string> = { auszahlung: 'Auszahlung', stundenersatz: 'Stundenersatz' }
 
 export type UeberstundenKategorieKey = 'std_werktag_50' | 'std_sonn_100' | 'std_19_22' | 'std_22_06' | 'std_sonn_200'
 
@@ -30,7 +32,7 @@ export function formatStunden(value: number): string {
 export function todayLocal(): string { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
 export const EMPTY_MELDUNG_FORM = {
-  vonDatum: todayLocal(), vonZeit: '', bisDatum: todayLocal(), bisZeit: '', grund: '',
+  vonDatum: todayLocal(), vonZeit: '', bisDatum: todayLocal(), bisZeit: '', grund: '', verguetung: 'auszahlung' as UeberstundenVerguetung,
 }
 export type MeldungFormState = typeof EMPTY_MELDUNG_FORM
 
@@ -108,7 +110,7 @@ export function formatZeitraum(item: Pick<UeberstundenMeldung, 'von_datum' | 'vo
 }
 
 export function meldungToForm(item: UeberstundenMeldung): MeldungFormState {
-  return { vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund }
+  return { vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund, verguetung: item.verguetung }
 }
 
 export function formToPayload(form: MeldungFormState) {
@@ -116,6 +118,38 @@ export function formToPayload(form: MeldungFormState) {
   const aufschluesselung = zeitraum ? berechneAufschluesselung(zeitraum.von, zeitraum.bis) : LEERE_AUFSCHLUESSELUNG
   return {
     von_datum: form.vonDatum, von_zeit: form.vonZeit, bis_datum: form.bisDatum, bis_zeit: form.bisZeit,
-    grund: form.grund.trim(), ...aufschluesselung,
+    grund: form.grund.trim(), verguetung: form.verguetung, ...aufschluesselung,
   }
 }
+
+export interface MonatsZeile {
+  beamterId: string
+  beamterName: string
+  dienstnummer: string | null
+  stunden: Record<UeberstundenKategorieKey, number>
+  gesamt: number
+}
+
+/**
+ * Genehmiger-Übersicht: alle genehmigten Meldungen eines Monats (nach
+ * von_datum), je Beamten/-in zu einer Zeile aufsummiert - Grundlage für die
+ * Sammelansicht zur Weiterleitung an die Lohnberechnung. Eine über
+ * Mitternacht in den Folgemonat reichende Meldung zählt dabei komplett zum
+ * Monat ihres von_datum.
+ */
+export function monatsUebersicht(meldungen: readonly UeberstundenMeldung[], monat: string): MonatsZeile[] {
+  const zeilenByBeamter = new Map<string, MonatsZeile>()
+  for (const item of meldungen) {
+    if (item.status !== 'genehmigt' || !item.von_datum.startsWith(monat)) continue
+    let zeile = zeilenByBeamter.get(item.beamter_id)
+    if (!zeile) {
+      zeile = { beamterId: item.beamter_id, beamterName: item.beamter?.name ?? '–', dienstnummer: item.beamter?.dienstnummer ?? null, stunden: { ...LEERE_AUFSCHLUESSELUNG }, gesamt: 0 }
+      zeilenByBeamter.set(item.beamter_id, zeile)
+    }
+    for (const kat of KATEGORIEN) zeile.stunden[kat.key] += item[kat.key] || 0
+    zeile.gesamt += totalStunden(item)
+  }
+  return Array.from(zeilenByBeamter.values()).sort((a, b) => a.beamterName.localeCompare(b.beamterName, 'de-AT'))
+}
+
+export function thisMonthLocal(): string { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` }
