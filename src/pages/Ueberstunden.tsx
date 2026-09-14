@@ -47,7 +47,7 @@ function AufschluesselungTabelle({ werte }: { werte: Record<UeberstundenKategori
 
 export default function Ueberstunden() {
   const { profile, isGenehmiger } = useAuth()
-  const [meldungen, setMeldungen] = useState<UeberstundenMeldung[]>([])
+  const [eigene, setEigene] = useState<UeberstundenMeldung[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -61,23 +61,28 @@ export default function Ueberstunden() {
   const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
   const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
 
-  // "Meine Meldungen" - absichtlich ohne .limit()/Pagination, die (von
-  // Supabase serverseitig gedeckelte) Standard-Seitengröße reicht für die
-  // eigene Historie. "Zu entscheiden" und die Monatsübersicht brauchen
-  // dagegen GARANTIERT vollständige Ergebnisse (sonst könnte eine ältere
-  // eingereichte Meldung aus der gedeckelten Liste fallen und für den
-  // Genehmiger unsichtbar bleiben) - beide holen sich deshalb unten eine
-  // eigene, gezielt gefilterte Abfrage statt diese Liste wiederzuverwenden.
+  // "Meine Meldungen" - explizit nach beamter_id gefiltert (nicht nur
+  // clientseitig aus einer allgemeinen Liste herausgefiltert): die RLS-
+  // Policy zeigt einem Genehmiger nämlich ALLE Meldungen aller Beamten, eine
+  // unfilterte Abfrage würde bei wachsender Tabelle also schon von fremden
+  // Zeilen gedeckelt, bevor überhaupt nach den eigenen gefiltert wird - eine
+  // eigene ältere Meldung könnte dadurch für einen Genehmiger unsichtbar und
+  // unbearbeitbar werden. Zusätzlich mit fetchAllPages, falls ein Beamter
+  // selbst mehr Meldungen hat als eine einzelne Seite fasst.
+  const profileId = profile?.id
   const load = useCallback(async () => {
+    if (!profileId) return
     setLoading(true)
-    const result = await supabase.from('ueberstunden_meldungen')
+    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
+      .eq('beamter_id', profileId)
       .order('von_datum', { ascending: false }).order('created_at', { ascending: false })
+      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) setError('Die Überstundenmeldungen konnten nicht geladen werden.')
     else setError('')
-    setMeldungen((result.data ?? []) as unknown as UeberstundenMeldung[])
+    setEigene(result.data)
     setLoading(false)
-  }, [])
+  }, [profileId])
   useEffect(() => { void load() }, [load])
 
   const loadZuEntscheiden = useCallback(async () => {
@@ -95,9 +100,8 @@ export default function Ueberstunden() {
   }, [isGenehmiger, profile?.id])
   useEffect(() => { void loadZuEntscheiden() }, [loadZuEntscheiden])
 
-  // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage statt die
-  // (potenziell paginierte) meldungen-Liste zu verwenden - sonst könnten bei
-  // wachsender Tabelle ältere Monate unvollständige Sammelansichten liefern.
+  // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage (alle
+  // Beamten, nicht nur der aktuelle) für die Genehmiger-Monatsübersicht.
   const loadUebersicht = useCallback(async () => {
     if (!isGenehmiger) { setUebersichtMeldungen([]); return }
     const [jahr, monatNr] = monat.split('-').map(Number)
@@ -117,7 +121,6 @@ export default function Ueberstunden() {
   }, [monat, isGenehmiger])
   useEffect(() => { void loadUebersicht() }, [loadUebersicht])
 
-  const eigene = useMemo(() => meldungen.filter(item => item.beamter_id === profile?.id), [meldungen, profile?.id])
   // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt
   // wird - berücksichtigt dabei die eigenen, bereits im Feiertags-Topf
   // zählenden Meldungen (eingereicht/genehmigt/Rückfrage, siehe
