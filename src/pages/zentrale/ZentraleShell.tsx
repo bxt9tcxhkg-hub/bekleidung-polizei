@@ -9,7 +9,7 @@ import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, Ope
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
-import { aktiveSperren } from '../../lib/strassenzustand'
+import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
 import { BaustelleModal, IncidentModal } from './zentraleShared'
 import { DISPOSITION_LABEL, EMPTY_BAUSTELLE_FORM, EMPTY_INCIDENT_FORM, formatTime, type BaustelleFormState, type IncidentFormState } from '../../lib/zentraleShared'
 
@@ -52,6 +52,7 @@ export interface ZentraleContext {
   openIncidentMarkers: { lat: number; lng: number; popup: string }[]
   baustellen: ZentraleBaustelle[]
   baustellenLines: { points: readonly [number, number][]; popup?: string; color?: string; dashed?: boolean }[]
+  sperrenLines: { points: readonly [number, number][]; popup?: string; color?: string; dashed?: boolean }[]
   assignments: DutyAssignment[]
   dutyFunctions: DutyFunctionConfig[]
   shiftAssignments: DutyAssignment[]
@@ -153,7 +154,8 @@ export default function ZentraleShell() {
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
       // Für "Sofort wichtig": eine Straße mit aktueller Sperre/Maßnahme muss
       // sichtbar sein, solange sie gilt - siehe aktiveSperren() weiter unten.
-      supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name)').order('created_at', { ascending: false }),
+      // Geometriefelder zusätzlich für die Kartendarstellung (sperrenLines).
+      supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name,start_lat,start_lng,end_lat,end_lng,path)').order('created_at', { ascending: false }),
     ])
     if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
     else setError('')
@@ -278,6 +280,21 @@ export default function ZentraleShell() {
   // aktuell aktiv ist, muss sie für jeden sofort sichtbar sein, solange sie
   // gilt (siehe aktiveSperren()).
   const criticalStrassensperren = useMemo(() => aktiveSperren(strassenzustandZeilen), [strassenzustandZeilen])
+  // Eine "gesperrt"-Sperre erscheint automatisch als Linie auf der Karte,
+  // sofern für ihre Straße bereits eine Position hinterlegt ist (siehe
+  // ZentraleStrassenzustand.tsx) - "frei befahrbar"/"sonstige" sind keine
+  // Sperrung und Freitext-Straßen ("Sonstige") haben keine wiederverwendbare
+  // Geometrie, deshalb hier gefiltert statt wie criticalStrassensperren alles zu zeigen.
+  const sperrenLines = useMemo(() => criticalStrassensperren
+    .filter(zeile => zeile.zustand === 'gesperrt' && zeile.strassenzustand_strassen?.start_lat != null && zeile.strassenzustand_strassen.start_lng != null && zeile.strassenzustand_strassen.end_lat != null && zeile.strassenzustand_strassen.end_lng != null)
+    .map(zeile => {
+      const strasse = zeile.strassenzustand_strassen!
+      return {
+        points: strasse.path && strasse.path.length >= 2 ? strasse.path : [[strasse.start_lat as number, strasse.start_lng as number], [strasse.end_lat as number, strasse.end_lng as number]] as readonly [number, number][],
+        popup: `${strassenName(zeile)} · Gesperrt`,
+        color: '#dc2626',
+      }
+    }), [criticalStrassensperren])
   // Frühere Meldungen an derselben Adresse ("gab es dort schon mal was?") -
   // gezielte Datenbankabfrage statt Client-Filter, weil incident_reports über
   // die Zeit groß wird (anders als die überschaubaren zentrale_entries).
@@ -439,7 +456,7 @@ export default function ZentraleShell() {
 
   const ctx: ZentraleContext = {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
-    visibleIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines,
+    visibleIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines, sperrenLines,
     assignments, dutyFunctions, shiftAssignments, dutyShift, setDutyShift,
     criticalEntries, criticalAvBv, criticalFahndungen, criticalStrassensperren, criticalSourcesError,
     openIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,
@@ -452,7 +469,7 @@ export default function ZentraleShell() {
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
 
-    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} baustellen={baustellen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
     {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canManage={canManage} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
   </div>

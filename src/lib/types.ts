@@ -750,6 +750,17 @@ export interface StrassenzustandStammdatum {
   updated_at: string
 }
 
+// Nur strassenzustand_strassen hat zusätzlich eine optionale Kartengeometrie
+// (strassenzustand_auftraggeber/_melder nicht) - siehe ZentraleStrassenzustand.tsx.
+// Ohne Geometrie erscheint eine aktive Sperre dieser Straße nicht automatisch auf der Karte.
+export interface StrassenzustandStrasse extends StrassenzustandStammdatum {
+  start_lat: number | null
+  start_lng: number | null
+  end_lat: number | null
+  end_lng: number | null
+  path: [number, number][] | null
+}
+
 export interface StrassenzustandBericht {
   id: string
   nummer: number
@@ -779,7 +790,10 @@ export interface StrassenzustandBerichtzeile {
   gueltig_bis: string | null
   meldungsart: StrassenzustandMeldungsart
   created_at: string
-  strassenzustand_strassen?: { name: string } | null
+  // Geometriefelder nur geladen, wo für die Kartendarstellung benötigt (siehe
+  // ZentraleShell.tsx) - dort explizit mitselektiert statt immer, weil die
+  // meisten Verwendungen (Berichte-Archiv, Stammdaten) nur den Namen brauchen.
+  strassenzustand_strassen?: { name: string; start_lat?: number | null; start_lng?: number | null; end_lat?: number | null; end_lng?: number | null; path?: [number, number][] | null } | null
   strassenzustand_auftraggeber?: { name: string } | null
   strassenzustand_melder?: { name: string } | null
 }
@@ -1242,6 +1256,7 @@ type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
 type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid'>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
+type StrassenzustandStrasseRow = Omit<StrassenzustandStrasse, never>
 type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>
 type StrassenzustandBerichtzeileRow = Omit<StrassenzustandBerichtzeile, 'strassenzustand_strassen' | 'strassenzustand_auftraggeber' | 'strassenzustand_melder'>
 
@@ -1407,7 +1422,7 @@ export type Database = {
       zentrale_entries: { Row: ZentraleEntryRow; Insert: Pick<ZentraleEntryRow, 'category' | 'title'> & Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'updated_at' | 'category' | 'title'>>; Update: Partial<Omit<ZentraleEntryRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_entries_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      strassenzustand_strassen: { Row: StrassenzustandStammdatumRow; Insert: Pick<StrassenzustandStammdatumRow, 'name'> & Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at'>>; Relationships: [] }
+      strassenzustand_strassen: { Row: StrassenzustandStrasseRow; Insert: Pick<StrassenzustandStrasseRow, 'name'> & Partial<Omit<StrassenzustandStrasseRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStrasseRow, 'id' | 'created_at'>>; Relationships: [] }
       strassenzustand_auftraggeber: { Row: StrassenzustandStammdatumRow; Insert: Pick<StrassenzustandStammdatumRow, 'name'> & Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at'>>; Relationships: [] }
       strassenzustand_melder: { Row: StrassenzustandStammdatumRow; Insert: Pick<StrassenzustandStammdatumRow, 'name'> & Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at' | 'updated_at' | 'name'>>; Update: Partial<Omit<StrassenzustandStammdatumRow, 'id' | 'created_at'>>; Relationships: [] }
       strassenzustand_berichte: { Row: StrassenzustandBerichtRow; Insert: Pick<StrassenzustandBerichtRow, 'bearbeiter'> & Partial<Omit<StrassenzustandBerichtRow, 'id' | 'nummer' | 'created_at' | 'updated_at' | 'bearbeiter'>>; Update: Partial<Omit<StrassenzustandBerichtRow, 'id' | 'nummer' | 'created_at' | 'bearbeiter'>>; Relationships: [
