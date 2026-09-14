@@ -180,11 +180,11 @@ export default function Ueberstunden() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="grid grid-cols-2 gap-2">
           <Field label="Von – Datum *" type="date" value={form.vonDatum} onChange={value => setForm(current => ({ ...current, vonDatum: value }))} />
-          <Field label="Von – Uhrzeit *" type="time" value={form.vonZeit} onChange={value => setForm(current => ({ ...current, vonZeit: value }))} />
+          <Field label="Von – Uhrzeit *" type="time" step={900} value={form.vonZeit} onChange={value => setForm(current => ({ ...current, vonZeit: value }))} />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Field label="Bis – Datum *" type="date" value={form.bisDatum} onChange={value => setForm(current => ({ ...current, bisDatum: value }))} />
-          <Field label="Bis – Uhrzeit *" type="time" value={form.bisZeit} onChange={value => setForm(current => ({ ...current, bisZeit: value }))} />
+          <Field label="Bis – Uhrzeit *" type="time" step={900} value={form.bisZeit} onChange={value => setForm(current => ({ ...current, bisZeit: value }))} />
         </div>
       </div>
       {!zeitraum ? <p className="text-xs text-amber-700 -mt-2">Bitte Von/Bis vollständig angeben – das Ende muss nach dem Beginn liegen.</p> : null}
