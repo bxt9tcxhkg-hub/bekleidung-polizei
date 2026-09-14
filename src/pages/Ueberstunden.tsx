@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, FileOutput, HelpCircle, Pencil, Plus, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
-import { supabase } from '../lib/supabase'
+import { fetchAllPages, supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, KATEGORIEN, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
 const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
@@ -82,11 +82,16 @@ export default function Ueberstunden() {
 
   const loadZuEntscheiden = useCallback(async () => {
     if (!isGenehmiger) { setZuEntscheiden([]); return }
-    const result = await supabase.from('ueberstunden_meldungen')
+    // fetchAllPages statt einer einzelnen Abfrage - sonst würde eine ältere
+    // eingereichte Meldung bei einer sehr großen Tabelle aus der von
+    // PostgREST gedeckelten Standard-Seite fallen und für den Genehmiger
+    // unsichtbar bleiben.
+    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
       .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) { setError('Die zu entscheidenden Meldungen konnten nicht geladen werden.'); return }
-    setZuEntscheiden(((result.data ?? []) as unknown as UeberstundenMeldung[]).filter(item => item.beamter_id !== profile?.id))
+    setZuEntscheiden(result.data.filter(item => item.beamter_id !== profile?.id))
   }, [isGenehmiger, profile?.id])
   useEffect(() => { void loadZuEntscheiden() }, [loadZuEntscheiden])
 
@@ -99,18 +104,35 @@ export default function Ueberstunden() {
     if (!jahr || !monatNr) return
     const vonDatum = `${monat}-01`
     const bisDatum = monatNr === 12 ? `${jahr + 1}-01-01` : `${jahr}-${String(monatNr + 1).padStart(2, '0')}-01`
-    const result = await supabase.from('ueberstunden_meldungen')
+    // fetchAllPages statt einer einzelnen Abfrage - ein Monat mit mehr
+    // genehmigten Meldungen als die von PostgREST gedeckelte Standard-
+    // Seitengröße würde sonst eine unvollständige (aber unauffällig falsche)
+    // Sammelansicht/Monatsübersicht liefern.
+    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
       .eq('status', 'genehmigt').gte('von_datum', vonDatum).lt('von_datum', bisDatum)
+      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
-    setUebersichtMeldungen((result.data ?? []) as unknown as UeberstundenMeldung[])
+    setUebersichtMeldungen(result.data)
   }, [monat, isGenehmiger])
   useEffect(() => { void loadUebersicht() }, [loadUebersicht])
 
   const eigene = useMemo(() => meldungen.filter(item => item.beamter_id === profile?.id), [meldungen, profile?.id])
-  // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt wird.
+  // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt
+  // wird - berücksichtigt dabei die eigenen, bereits im Feiertags-Topf
+  // zählenden Meldungen (eingereicht/genehmigt/Rückfrage, siehe
+  // POOL_STATUS), damit sie nicht von der serverseitig beim Speichern
+  // berechneten Aufteilung abweicht (fremde Meldungen anderer Beamter
+  // fließen bewusst nicht ein - die sieht die Vorschau nicht).
   const zeitraum = useMemo(() => meldungZeitraum(form), [form])
-  const vorschau = useMemo(() => zeitraum ? berechneAufschluesselung(zeitraum.von, zeitraum.bis) : null, [zeitraum])
+  const vorschau = useMemo(() => {
+    if (!zeitraum) return null
+    const andereEigene = eigene
+      .filter(item => POOL_STATUS.includes(item.status) && item.id !== editing?.id)
+      .map(item => meldungZeitraum(meldungToForm(item)))
+      .filter((z): z is { von: Date; bis: Date } => z !== null)
+    return berechneAufschluesselung(zeitraum.von, zeitraum.bis, bereitsVerwendeteFeiertagsstunden(andereEigene, zeitraum.von))
+  }, [zeitraum, eigene, editing?.id])
   // Genehmiger-Monatsübersicht: alle genehmigten Meldungen aller Bediensteten
   // im gewählten Monat, je Beamten/-in aufsummiert - Grundlage für die
   // Sammelansicht zur Weiterleitung an die Lohnberechnung.

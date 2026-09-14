@@ -9,6 +9,9 @@ export const STATUS_COLOR: Record<UeberstundenStatus, string> = { entwurf: 'bg-g
 
 export const VERGUETUNG_LABEL: Record<UeberstundenVerguetung, string> = { auszahlung: 'Auszahlung', stundenersatz: 'Stundenersatz' }
 
+/** Meldungen mit diesem Status zählen zum gemeinsamen Feiertags-Topf - Pendant zu SQL ueberstunden_zaehlt_zum_topf(). */
+export const POOL_STATUS: UeberstundenStatus[] = ['eingereicht', 'genehmigt', 'rueckfrage']
+
 export type UeberstundenKategorieKey = 'std_werktag_50' | 'std_sonn_100' | 'std_19_22' | 'std_22_06' | 'std_sonn_200'
 
 // Reihenfolge/Aufteilung wie in der offiziellen Vorlage (Spalten der Tabelle
@@ -38,19 +41,61 @@ export type MeldungFormState = typeof EMPTY_MELDUNG_FORM
 
 const LEERE_AUFSCHLUESSELUNG: Record<UeberstundenKategorieKey, number> = { std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }
 
+/** JS-Pendant zu SQL ueberstunden_tagesstunden() - Gesamtstunden je Kalendertag für einen Zeitraum. */
+function tageStunden(von: Date, bis: Date): { tag: Date; stunden: number }[] {
+  const result: { tag: Date; stunden: number }[] = []
+  if (!(bis > von)) return result
+  let cursor = new Date(von)
+  while (cursor < bis) {
+    const tagesbeginn = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+    const naechsterTag = new Date(tagesbeginn.getFullYear(), tagesbeginn.getMonth(), tagesbeginn.getDate() + 1)
+    const abschnittsende = bis < naechsterTag ? bis : naechsterTag
+    result.push({ tag: tagesbeginn, stunden: (abschnittsende.getTime() - cursor.getTime()) / 3_600_000 })
+    cursor = abschnittsende
+  }
+  return result
+}
+
+/**
+ * Baut aus den (bereits eingereichten/genehmigten/zur Rückfrage stehenden)
+ * eigenen Meldungen einen Nachschlage-Wert "an diesem Tag bereits verwendete
+ * Feiertagsstunden" für die Live-Vorschau - nur zeitlich VOR dem eigenen
+ * Zeitraum liegende Meldungen zählen (dieselbe Prioritätsregel wie
+ * serverseitig, siehe ueberstunden_berechne_aufschluesselung), sonst würde
+ * die Vorschau von der beim Speichern serverseitig berechneten Aufteilung
+ * abweichen.
+ */
+export function bereitsVerwendeteFeiertagsstunden(andereMeldungen: readonly { von: Date; bis: Date }[], eigenerVon: Date): (tag: Date) => number {
+  const proTag = new Map<number, number>()
+  for (const m of andereMeldungen) {
+    if (!(m.von < eigenerVon)) continue
+    for (const { tag, stunden } of tageStunden(m.von, m.bis)) {
+      const key = tag.getTime()
+      proTag.set(key, (proTag.get(key) ?? 0) + stunden)
+    }
+  }
+  return (tag: Date) => proTag.get(tag.getTime()) ?? 0
+}
+
 /**
  * Zerlegt den Zeitraum [von, bis) tageweise und ordnet jeden Abschnitt der
  * passenden Lohnart zu:
  * - An einem Sonn-/Feiertag zählt der gesamte Tag zur Feiertagsregel,
  *   unabhängig von der Uhrzeit: die ersten 8 Überstunden dieses Tages zu
- *   100 % (LA 3520), alles darüber hinaus an diesem Tag zu 200 % (LA 3530).
+ *   100 % (LA 3520), alles darüber hinaus an diesem Tag zu 200 % (LA 3530) -
+ *   "die ersten 8" nach Abzug schon anderweitig (siehe bereitsVerwendet)
+ *   verbrauchter Stunden desselben Tages.
  * - An einem Werktag wird nach Uhrzeit unterschieden: 06:00-19:00 zu 50 %
  *   (LA 3250), 19:00-22:00 zu 50 % (LA 3500), 22:00-06:00 zu 100 % (LA 3510) -
  *   Stunden vor 06:00 zählen dabei zur Nachtstunden-Kategorie des Vortags.
  * Feiertage nach lib/austrianHolidays.ts (bundesweite österreichische
  * Feiertage - gelten auch für Vorarlberg, keine gesonderten Landesfeiertage).
+ * bereitsVerwendet ist nur für die Live-Vorschau relevant (siehe
+ * bereitsVerwendeteFeiertagsstunden) - die serverseitige Berechnung
+ * (Migration ueberstunden_berechne_aufschluesselung) ist die eigentliche
+ * Quelle der Wahrheit und berücksichtigt zusätzlich fremde Meldungen.
  */
-export function berechneAufschluesselung(von: Date, bis: Date): Record<UeberstundenKategorieKey, number> {
+export function berechneAufschluesselung(von: Date, bis: Date, bereitsVerwendet: (tag: Date) => number = () => 0): Record<UeberstundenKategorieKey, number> {
   const result: Record<UeberstundenKategorieKey, number> = { ...LEERE_AUFSCHLUESSELUNG }
   if (!(bis > von)) return result
   let cursor = new Date(von)
@@ -61,7 +106,8 @@ export function berechneAufschluesselung(von: Date, bis: Date): Record<Ueberstun
     const dauerStunden = (abschnittsende.getTime() - cursor.getTime()) / 3_600_000
 
     if (isSonnOderFeiertag(tagesbeginn)) {
-      const ersten8 = Math.min(dauerStunden, 8)
+      const verbleibend = Math.max(8 - bereitsVerwendet(tagesbeginn), 0)
+      const ersten8 = Math.min(dauerStunden, verbleibend)
       result.std_sonn_100 += ersten8
       result.std_sonn_200 += dauerStunden - ersten8
     } else {

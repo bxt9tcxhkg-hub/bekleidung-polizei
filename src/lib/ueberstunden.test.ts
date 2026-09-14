@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { berechneAufschluesselung, istViertelstundenRaster, monatsUebersicht } from './ueberstunden'
+import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istViertelstundenRaster, monatsUebersicht } from './ueberstunden'
 import type { UeberstundenMeldung } from './types'
 
 // Montag, 14.09.2026 - ein gewöhnlicher Werktag (siehe austrianHolidays.test.ts).
@@ -117,6 +117,27 @@ describe('monatsUebersicht', () => {
     const stundenersatz = result.find(z => z.verguetung === 'stundenersatz')
     expect(auszahlung?.gesamt).toBe(4)
     expect(stundenersatz?.gesamt).toBe(3)
+  })
+})
+
+describe('bereitsVerwendeteFeiertagsstunden (Vorschau-Kontext)', () => {
+  it('berücksichtigt nur zeitlich frühere eigene Meldungen desselben Tages', () => {
+    const bereits = bereitsVerwendeteFeiertagsstunden(
+      [{ von: SONNTAG(0), bis: SONNTAG(8) }], // 8 Std, 00-08 Uhr
+      SONNTAG(10), // eigener Zeitraum beginnt danach
+    )
+    expect(bereits(new Date(2026, 8, 13))).toBe(8)
+    const result = berechneAufschluesselung(SONNTAG(10), SONNTAG(12), bereits)
+    expect(result.std_sonn_100).toBe(0)
+    expect(result.std_sonn_200).toBe(2)
+  })
+
+  it('ignoriert zeitlich spätere Meldungen (die Vorschau bezieht sich nur auf den eigenen, gerade bearbeiteten Zeitraum)', () => {
+    const bereits = bereitsVerwendeteFeiertagsstunden(
+      [{ von: SONNTAG(14), bis: SONNTAG(18) }], // liegt NACH dem eigenen Start
+      SONNTAG(10),
+    )
+    expect(bereits(new Date(2026, 8, 13))).toBe(0)
   })
 })
 
