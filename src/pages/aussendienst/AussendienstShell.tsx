@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
-import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
 import { personDisplayName } from '../../lib/register'
 import { AV_BV_ART_LABEL, FAHNDUNG_ART_LABEL } from '../../lib/zentraleShared'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
@@ -18,7 +18,9 @@ import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 // Meldungen und Modals, und reicht den Rest über den Outlet-Context durch.
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
-type SimpleIncident = { id: string; reported_at: string; location: string | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }
+// location_lat/-lng zusätzlich zur Zentrale-Ansicht: damit sich eine Baustelle
+// in der Nähe des Einsatzorts auch hier anzeigen lässt (siehe baustellen unten).
+type SimpleIncident = { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }
 
 export interface AussendienstContext {
   loading: boolean
@@ -36,6 +38,7 @@ export interface AussendienstContext {
   entries: ZentraleEntry[]
   avBv: ZentraleAvBv[]
   fahndungen: ZentraleFahndung[]
+  baustellen: ZentraleBaustelle[]
   isGenehmiger: boolean
   saving: boolean
   checkNote: string
@@ -60,6 +63,7 @@ export default function AussendienstShell() {
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [avBv, setAvBv] = useState<ZentraleAvBv[]>([])
   const [fahndungen, setFahndungen] = useState<ZentraleFahndung[]>([])
+  const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
   // Wie in ZentraleShell.tsx: bei Ladefehler darf "Keine aktuell dringenden
   // Warnungen" nicht fälschlich Entwarnung geben.
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
@@ -82,16 +86,18 @@ export default function AussendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult, baustelleResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,summary,disposition,status,note').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
+      // Für "Baustelle in der Nähe" auf der Einsatzliste - erledigte Baustellen wie in der Zentrale ausgeblendet.
+      supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
@@ -103,6 +109,7 @@ export default function AussendienstShell() {
     setIncidents(incidentResult.data ?? [])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
     setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
+    setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
     setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
     setLoading(false)
   }, [])
@@ -199,7 +206,7 @@ export default function AussendienstShell() {
   const ctx: AussendienstContext = {
     loading, ownAssignment, ownFunction, ownVehicle, ownCheck, patrolMates,
     criticalItems, criticalSourcesError, openIncidents, openOrders, kontrollauftraege,
-    incidents, entries, avBv, fahndungen, isGenehmiger,
+    incidents, entries, avBv, fahndungen, baustellen, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
   }

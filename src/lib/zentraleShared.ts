@@ -17,6 +17,18 @@ export function composeIncidentLocation(street: string, houseNumber: string, hou
   return `${trimmedStreet} ${houseNumber.trim()}`
 }
 
+// Analog zu EMPTY_BAUSTELLE_FORM, aber ohne Bezeichnung/Bemerkung/Gültigkeit -
+// hier wird nur einmalig die Position einer Stammdaten-Straße festgelegt
+// (siehe ZentraleStrassenzustand.tsx), nicht ein einzelner Bericht.
+export const EMPTY_STRASSE_GEOMETRIE_FORM = {
+  startAddress: '', endAddress: '',
+  startLat: null as number | null, startLng: null as number | null,
+  endLat: null as number | null, endLng: null as number | null,
+  path: null as [number, number][] | null,
+  drawMode: false,
+}
+export type StrasseGeometrieFormState = typeof EMPTY_STRASSE_GEOMETRIE_FORM
+
 export const EMPTY_BAUSTELLE_FORM = {
   titel: '', startAddress: '', endAddress: '', note: '', gueltigBis: '',
   startLat: null as number | null, startLng: null as number | null,

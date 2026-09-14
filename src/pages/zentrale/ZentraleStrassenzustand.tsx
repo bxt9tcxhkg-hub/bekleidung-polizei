@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, FileArchive, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CheckCircle2, FileArchive, MapPin, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
+import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import { MELDUNGSART_LABEL, ZUSTAND_LABEL, aktiveSperren, formatZeitraum, fromTimestamp, strassenName, toTimestamp } from '../../lib/strassenzustand'
 import { generateStrassenzustandPdf } from '../../lib/strassenzustandPdf'
 import { Actions, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
+import { EMPTY_STRASSE_GEOMETRIE_FORM, type StrasseGeometrieFormState } from '../../lib/zentraleShared'
+import { StrasseGeometrieModal } from './zentraleShared'
 import type {
   StrassenzustandBericht,
   StrassenzustandBerichtzeile,
   StrassenzustandMeldungsart,
   StrassenzustandStammdatum,
+  StrassenzustandStrasse,
   StrassenzustandZustand,
 } from '../../lib/types'
 
@@ -71,7 +75,7 @@ export default function ZentraleStrassenzustand() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
-  const [strassen, setStrassen] = useState<StrassenzustandStammdatum[]>([])
+  const [strassen, setStrassen] = useState<StrassenzustandStrasse[]>([])
   const [auftraggeber, setAuftraggeber] = useState<StrassenzustandStammdatum[]>([])
   const [melder, setMelder] = useState<StrassenzustandStammdatum[]>([])
   const [berichte, setBerichte] = useState<StrassenzustandBericht[]>([])
@@ -89,6 +93,17 @@ export default function ZentraleStrassenzustand() {
   const [showStammdaten, setShowStammdaten] = useState<'strassen' | 'auftraggeber' | 'melder' | null>(null)
   const [neuerName, setNeuerName] = useState('')
 
+  // Einmalige Kartenposition je Straße (siehe StrasseGeometrieModal) - unabhängig
+  // vom eigentlichen Bericht, wird von jeder aktiven Sperre dieser Straße
+  // wiederverwendet (siehe sperrenLines in ZentraleShell.tsx).
+  const [geometrieStrasse, setGeometrieStrasse] = useState<StrassenzustandStrasse | null>(null)
+  const [geometrieForm, setGeometrieForm] = useState<StrasseGeometrieFormState>(EMPTY_STRASSE_GEOMETRIE_FORM)
+  const [geometrieSaving, setGeometrieSaving] = useState(false)
+  const [geometrieError, setGeometrieError] = useState('')
+  const [geometrieLocating, setGeometrieLocating] = useState<'start' | 'end' | null>(null)
+  const [geometrieRouting, setGeometrieRouting] = useState(false)
+  const geometrieRouteRequestRef = useRef(0)
+
   const load = useCallback(async () => {
     setLoading(true)
     const [strassenRes, auftraggeberRes, melderRes, berichteRes, zeilenRes] = await Promise.all([
@@ -100,7 +115,7 @@ export default function ZentraleStrassenzustand() {
     ])
     if (strassenRes.error || berichteRes.error || zeilenRes.error) setError('Die Straßenzustandsdaten konnten nicht vollständig geladen werden.')
     else setError('')
-    setStrassen((strassenRes.data ?? []) as StrassenzustandStammdatum[])
+    setStrassen((strassenRes.data ?? []) as StrassenzustandStrasse[])
     setAuftraggeber((auftraggeberRes.data ?? []) as StrassenzustandStammdatum[])
     setMelder((melderRes.data ?? []) as StrassenzustandStammdatum[])
     setBerichte((berichteRes.data ?? []) as unknown as StrassenzustandBericht[])
@@ -108,6 +123,20 @@ export default function ZentraleStrassenzustand() {
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
+  // Sobald Start und Ende feststehen, die Luftlinie im Formular durch den
+  // tatsächlichen Straßenverlauf ersetzen (wie bei der Baustellen-Erfassung,
+  // siehe ZentraleShell.tsx) - best effort, bei Fehlschlag bleibt es bei der Luftlinie.
+  useEffect(() => {
+    const { startLat, startLng, endLat, endLng } = geometrieForm
+    if (startLat === null || startLng === null || endLat === null || endLng === null) return
+    const requestId = ++geometrieRouteRequestRef.current
+    setGeometrieRouting(true)
+    void routeAlongRoad({ lat: startLat, lng: startLng }, { lat: endLat, lng: endLng }).then(path => {
+      if (geometrieRouteRequestRef.current !== requestId) return
+      setGeometrieRouting(false)
+      setGeometrieForm(current => current.startLat === startLat && current.startLng === startLng && current.endLat === endLat && current.endLng === endLng ? { ...current, path } : current)
+    })
+  }, [geometrieForm.startLat, geometrieForm.startLng, geometrieForm.endLat, geometrieForm.endLng])
 
   const aktive = useMemo(() => aktiveSperren(zeilen), [zeilen])
   const zeilenByBericht = useMemo(() => {
@@ -289,6 +318,50 @@ export default function ZentraleStrassenzustand() {
     await load()
   }
 
+  function openGeometrie(strasse: StrassenzustandStrasse) {
+    setGeometrieStrasse(strasse)
+    setGeometrieForm({ ...EMPTY_STRASSE_GEOMETRIE_FORM, startLat: strasse.start_lat, startLng: strasse.start_lng, endLat: strasse.end_lat, endLng: strasse.end_lng, path: strasse.path })
+    setGeometrieError('')
+  }
+  async function locateGeometrieStart() {
+    const queried = geometrieForm.startAddress.trim()
+    if (!queried) return
+    setGeometrieLocating('start'); setGeometrieError('')
+    const result = await geocodeLocation(queried)
+    setGeometrieLocating(null)
+    if (!result) { setGeometrieError('Startpunkt konnte nicht gefunden werden.'); return }
+    setGeometrieForm(current => current.startAddress.trim() === queried ? { ...current, startLat: result.lat, startLng: result.lng } : current)
+  }
+  async function locateGeometrieEnd() {
+    const queried = geometrieForm.endAddress.trim()
+    if (!queried) return
+    setGeometrieLocating('end'); setGeometrieError('')
+    const result = await geocodeLocation(queried)
+    setGeometrieLocating(null)
+    if (!result) { setGeometrieError('Endpunkt konnte nicht gefunden werden.'); return }
+    setGeometrieForm(current => current.endAddress.trim() === queried ? { ...current, endLat: result.lat, endLng: result.lng } : current)
+  }
+  // Erster Klick setzt (bzw. setzt neu, falls bereits beide Punkte vorhanden) den Startpunkt, der zweite den Endpunkt.
+  function handleGeometrieMapClick(lat: number, lng: number) {
+    setGeometrieForm(current => {
+      if (!current.drawMode) return current
+      if (current.startLat === null || current.startLng === null || (current.endLat !== null && current.endLng !== null)) return { ...current, startLat: lat, startLng: lng, endLat: null, endLng: null }
+      return { ...current, endLat: lat, endLng: lng }
+    })
+  }
+  async function saveGeometrie() {
+    if (!geometrieStrasse) return
+    if (geometrieForm.startLat === null || geometrieForm.startLng === null || geometrieForm.endLat === null || geometrieForm.endLng === null) { setGeometrieError('Bitte Start- und Endpunkt festlegen (Adresse suchen oder auf der Karte klicken).'); return }
+    setGeometrieSaving(true)
+    const result = await supabase.from('strassenzustand_strassen').update({ start_lat: geometrieForm.startLat, start_lng: geometrieForm.startLng, end_lat: geometrieForm.endLat, end_lng: geometrieForm.endLng, path: geometrieForm.path }).eq('id', geometrieStrasse.id)
+    setGeometrieSaving(false)
+    if (result.error) { setGeometrieError('Position konnte nicht gespeichert werden.'); return }
+    logAudit('Straßenposition gespeichert', geometrieStrasse.name)
+    setGeometrieStrasse(null)
+    setNotice('Position wurde gespeichert.')
+    await load()
+  }
+
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   return <div>
@@ -375,10 +448,20 @@ export default function ZentraleStrassenzustand() {
 
     {showStammdaten ? <Modal title={`${showStammdaten === 'strassen' ? 'Straßen' : showStammdaten === 'auftraggeber' ? 'Auftraggeber' : 'Meldende'} verwalten`} close={() => setShowStammdaten(null)}>
       <div className="space-y-2">
-        {(showStammdaten === 'strassen' ? strassen : showStammdaten === 'auftraggeber' ? auftraggeber : melder).map(item => <div key={item.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2"><span className={`text-sm ${item.active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{item.name}</span><button type="button" onClick={() => void toggleStammdatum(showStammdaten, item)} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${item.active ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'}`}>{item.active ? 'Deaktivieren' : 'Aktivieren'}</button></div>)}
+        {showStammdaten === 'strassen'
+          ? strassen.map(item => <div key={item.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2">
+              <span className={`text-sm ${item.active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{item.name}</span>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => openGeometrie(item)} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${item.start_lat !== null ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600'}`}><MapPin className="w-3.5 h-3.5" /> {item.start_lat !== null ? 'Position gesetzt' : 'Position setzen'}</button>
+                <button type="button" onClick={() => void toggleStammdatum('strassen', item)} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${item.active ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'}`}>{item.active ? 'Deaktivieren' : 'Aktivieren'}</button>
+              </div>
+            </div>)
+          : (showStammdaten === 'auftraggeber' ? auftraggeber : melder).map(item => <div key={item.id} className="flex items-center justify-between gap-3 border border-gray-200 rounded-lg px-3 py-2"><span className={`text-sm ${item.active ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{item.name}</span><button type="button" onClick={() => void toggleStammdatum(showStammdaten, item)} className={`text-xs font-semibold px-2.5 py-1 rounded-full ${item.active ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'}`}>{item.active ? 'Deaktivieren' : 'Aktivieren'}</button></div>)}
       </div>
       <div className="flex gap-2 pt-2"><input className={`${inputClass} mt-0 flex-1`} placeholder="Neuer Eintrag" value={neuerName} onChange={event => setNeuerName(event.target.value)} /><button type="button" onClick={() => void addStammdatum(showStammdaten)} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg">Hinzufügen</button></div>
     </Modal> : null}
+
+    {geometrieStrasse ? <StrasseGeometrieModal strasse={geometrieStrasse} form={geometrieForm} setForm={setGeometrieForm} saving={geometrieSaving} error={geometrieError} locating={geometrieLocating} routing={geometrieRouting} locateStart={locateGeometrieStart} locateEnd={locateGeometrieEnd} onMapClick={handleGeometrieMapClick} close={() => setGeometrieStrasse(null)} save={saveGeometrie} /> : null}
   </div>
 }
 
