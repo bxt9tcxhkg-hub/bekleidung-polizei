@@ -159,7 +159,7 @@ export default function InnendienstShell() {
       kind: item.kind, personId: item.person_id, subject: item.subject, reference: item.reference ?? '', note: item.note ?? '', relatedBescheidId: '',
       standplaetze: item.standplaetze && item.standplaetze.length > 0 ? item.standplaetze : [''],
       zeitVon: item.zeit_von?.slice(0, 5) ?? '', zeitBis: item.zeit_bis?.slice(0, 5) ?? '',
-      gebuehrensatzId: item.gebuehrensatz_id ?? '',
+      gebuehrensatzId: item.gebuehrensatz_id ?? '', planbeilage: item.planbeilage,
     })
     setShowForm(true); setError('')
   }
@@ -191,6 +191,7 @@ export default function InnendienstShell() {
         standplaetze: standplaetze.length > 0 ? standplaetze : null,
         zeit_von: form.zeitVon || null, zeit_bis: form.zeitBis || null,
         gebuehrensatz_id: form.gebuehrensatzId || null,
+        planbeilage: form.planbeilage,
       }
       const { error: saveError } = editingBescheid
         ? await supabase.from('innendienst_records').update(payload).eq('id', editingBescheid.id)
@@ -220,6 +221,7 @@ export default function InnendienstShell() {
       zeitBis: item.zeit_bis?.slice(0, 5) ?? null,
       kostenPositionen: positionen,
       issuedDate: item.issued_date,
+      planbeilage: item.planbeilage,
     })
   }
   async function toggleStatus(item: InnendienstRecord) {
@@ -290,6 +292,10 @@ export default function InnendienstShell() {
             </div>)}
             <button type="button" onClick={() => setForm(current => ({ ...current, standplaetze: [...current.standplaetze, ''] }))} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700"><Plus className="w-3.5 h-3.5" /> Weiterer Standplatz</button>
           </div>
+          <label className="flex items-start gap-2 text-xs text-gray-600">
+            <input type="checkbox" className="mt-0.5" checked={form.planbeilage} onChange={event => setForm(current => ({ ...current, planbeilage: event.target.checked }))} />
+            <span>Planbeilage (Luftbild + Katasterplan der Marktplatz-Standplätze a)/b)) anhängen – nur ankreuzen, wenn die oben eingetragenen Standplätze tatsächlich diese Location betreffen.</span>
+          </label>
           {form.kind === 'bescheid_strassenkunst' ? <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs font-medium text-gray-600">Zeit von<input type="time" className={inputClass} value={form.zeitVon} onChange={event => setForm(current => ({ ...current, zeitVon: event.target.value }))} /></label>
             <label className="block text-xs font-medium text-gray-600">Zeit bis<input type="time" className={inputClass} value={form.zeitBis} onChange={event => setForm(current => ({ ...current, zeitBis: event.target.value }))} /></label>

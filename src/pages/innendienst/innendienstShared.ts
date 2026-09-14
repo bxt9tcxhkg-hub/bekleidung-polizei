@@ -33,5 +33,5 @@ export function todayLocal() { const date = new Date(); return `${date.getFullYe
 // eines Bescheids relevant (siehe lib/innendienstBescheidPdf.ts) - optional,
 // ein Bescheid ohne diese Angaben lässt sich trotzdem erfassen, das PDF zeigt
 // dann Platzhalter statt der Angaben.
-export const EMPTY_BESCHEID_FORM = { kind: 'bescheid_strassenmusik' as InnendienstRecordKind, personId: null as string | null, subject: '', reference: '', note: '', relatedBescheidId: '', standplaetze: [''] as string[], zeitVon: '', zeitBis: '', gebuehrensatzId: '' }
+export const EMPTY_BESCHEID_FORM = { kind: 'bescheid_strassenmusik' as InnendienstRecordKind, personId: null as string | null, subject: '', reference: '', note: '', relatedBescheidId: '', standplaetze: [''] as string[], zeitVon: '', zeitBis: '', gebuehrensatzId: '', planbeilage: false }
 export type BescheidFormState = typeof EMPTY_BESCHEID_FORM

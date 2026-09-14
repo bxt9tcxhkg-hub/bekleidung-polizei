@@ -1063,6 +1063,8 @@ export interface InnendienstRecord {
   zeit_bis: string | null
   /** Nur bei Bescheiden: Kostenaufstellung im PDF wird live aus diesem Gebührensatz nachgeschlagen, kein gespeicherter Betrag. */
   gebuehrensatz_id: string | null
+  /** Nur bei Bescheiden: Planbeilage (Luftbild+Kataster Marktplatz-Standplätze a)/b)) an das PDF anhängen - explizite Auswahl, da nicht jeder Bescheid diese Location betrifft. */
+  planbeilage: boolean
   created_by: string
   created_at: string
   updated_at: string

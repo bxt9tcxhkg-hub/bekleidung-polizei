@@ -5,10 +5,11 @@
  * feste Textbausteine je Bescheid-Art (identisch mit der offiziellen
  * Vorlage) - nur die tatsächlich variablen Angaben (Person, Standplätze,
  * Zeitfenster, Kosten) kommen aus dem jeweiligen innendienst_records-Eintrag.
- * Als letzte Seite wird die Planbeilage (Luftbild + Katasterplan der
- * Marktplatz-Standplätze a)/b)) angehängt - aktuell die einzigen bewilligten
- * Standplätze, daher fix hinterlegt statt dynamisch aus den Standplatz-Texten
- * erzeugt; bei künftig weiteren Standorten muss das erweitert werden.
+ * Optional wird als letzte Seite die Planbeilage (Luftbild + Katasterplan
+ * der Marktplatz-Standplätze a)/b)) angehängt - nur wenn planbeilage=true
+ * gesetzt ist (explizite Auswahl im Formular, da nicht jeder Bescheid diese
+ * Location betrifft; aktuell die einzige mit Planbeilage hinterlegte
+ * Location, bei künftig weiteren Standorten muss das erweitert werden).
  */
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
 import { fmtEUR } from './format'
@@ -31,6 +32,8 @@ export interface BescheidPdfInput {
   kostenPositionen: { name: string; betrag: number }[]
   /** Ausstellungsdatum (YYYY-MM-DD) - dient zugleich als Bewilligungsdatum bei Straßenkunst. */
   issuedDate: string
+  /** Planbeilage (Luftbild+Kataster Marktplatz-Standplätze a)/b)) als letzte Seite anhängen - nur wenn die Standplätze tatsächlich diese Location betreffen. */
+  planbeilage: boolean
   now?: Date
 }
 
@@ -169,13 +172,13 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
     <span>DVR 0036030</span>
   </div>
 
-  <div class="planbeilage">
+  ${input.planbeilage ? `<div class="planbeilage">
     <h2>Planbeilage – Standplätze a) und b), Marktplatz</h2>
     <img src="${PLANBEILAGE_LUFTBILD}" alt="Planbeilage Luftbild">
     <p class="bildtitel">Luftbild mit markierten Standplätzen a) und b)</p>
     <img src="${PLANBEILAGE_KATASTER}" alt="Planbeilage Katasterplan">
     <p class="bildtitel">Katasterplan mit markierten Standplätzen a) und b)</p>
-  </div>
+  </div>` : ''}
 </body></html>`
 }
 
