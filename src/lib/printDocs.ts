@@ -26,6 +26,22 @@ function dateShort(now: Date): string {
   return `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`
 }
 
+// Gemeinsamer Briefkopf aller Dornbirn-Polizei-Dokumente (Kurzbrief,
+// Straßenzustandsbericht, Bescheide, Überstundenmeldung, ...) - linksbündig,
+// "Polizei" fett, optional eine Sachbearbeiter/in-Zeile darunter (bei den
+// Bescheid-/Überstunden-Vorlagen vorhanden, beim Straßenzustandsbericht nicht).
+// Jedes generierte Dokument ist ein eigenständiges HTML (siehe openPrintHtml),
+// daher muss auch das CSS pro Dokument mitgegeben werden - LETTERHEAD_CSS dort einbinden.
+export const LETTERHEAD_CSS = `.lh{font-size:8pt;line-height:1.6;margin-bottom:5mm}.lh strong{font-weight:bold}`
+export function letterheadBlock(sachbearbeiter?: string | null): string {
+  return `<div class="lh">
+  STADT DORNBIRN &nbsp;<strong>Polizei</strong><br>
+  Rathausplatz 2 &nbsp;A 6850 Dornbirn<br>
+  ${sachbearbeiter ? `${escHtml(sachbearbeiter)}<br>` : ''}
+  T +43 5572 222 00 &nbsp;&nbsp; F +43 5572 330 08 &nbsp;&nbsp; polizei@dornbirn.at
+</div>`
+}
+
 export type KurzbriefItem = { artNr: string; productName: string; size: string; totalQty: number }
 
 export function generateKurzbrief(items: KurzbriefItem[], senderName: string, now = new Date()): void {
@@ -38,8 +54,7 @@ export function generateKurzbrief(items: KurzbriefItem[], senderName: string, no
   @page{size:A4;margin:20mm 25mm 20mm 25mm}
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Calibri,Arial,sans-serif;font-size:12pt;color:#000;line-height:1.4}
-  .lh{font-size:8pt;line-height:1.6;margin-bottom:5mm}
-  .lh strong{font-weight:bold}
+  ${LETTERHEAD_CSS}
   .ra{font-size:8pt;border-bottom:1px solid #666;padding-bottom:1mm;margin-bottom:4mm;color:#333}
   .ad{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6mm}
   .rc{font-size:12pt;line-height:1.7}
@@ -62,12 +77,7 @@ export function generateKurzbrief(items: KurzbriefItem[], senderName: string, no
   .sn td{font-size:11pt}
   @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
-<div class="lh">
-  STADT DORNBIRN &nbsp;<strong>Polizei</strong><br>
-  Rathausplatz 2 &nbsp;A 6850 Dornbirn<br>
-  ${userName}<br>
-  T +43 5572 222 00 &nbsp;&nbsp; F +43 5572 330 08 &nbsp;&nbsp; polizei@dornbirn.at
-</div>
+${letterheadBlock(senderName || '–')}
 <div class="ra">STADT DORNBIRN Polizei, Rathausplatz 2, A-6850 Dornbirn</div>
 <div class="ad">
   <div class="rc">An<br>Bundesministerium für Inneres<br>Bekleidungswirtschaftsfonds der Exekutive<br>Liesinger Flur-Gasse 8<br>1230 Wien</div>

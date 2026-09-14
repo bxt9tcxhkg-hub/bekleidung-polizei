@@ -1056,12 +1056,20 @@ export interface InnendienstRecord {
   issued_date: string
   /** Nur bei kind='verstoss': der Bescheid (Straßenmusik/-kunst), gegen dessen Auflagen verstoßen wurde. Pflichtfeld für Verstöße. */
   related_bescheid_id: string | null
+  /** Nur bei Bescheiden: zugewiesene Standplätze (a), b), ... in der Vorlage) - für den PDF-Export, siehe lib/innendienstBescheidPdf.ts. */
+  standplaetze: string[] | null
+  /** Nur bei Bescheiden mit Zeitfenster (z. B. Straßenkunst) - bei Straßenmusik ungenutzt (feste Zeittabelle in der Textvorlage). */
+  zeit_von: string | null
+  zeit_bis: string | null
+  /** Nur bei Bescheiden: Kostenaufstellung im PDF wird live aus diesem Gebührensatz nachgeschlagen, kein gespeicherter Betrag. */
+  gebuehrensatz_id: string | null
   created_by: string
   created_at: string
   updated_at: string
   creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
-  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> & { home_object?: Pick<OperationalObject, 'address' | 'strasse' | 'hausnummer' | 'plz' | 'ort'> | null } | null
   related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
+  gebuehrensatz?: Pick<InnendienstGebuehrensatz, 'id' | 'name'> | null
 }
 
 /**
@@ -1254,7 +1262,7 @@ type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
 type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
-type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid'>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid' | 'gebuehrensatz'>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
 type StrassenzustandStrasseRow = Omit<StrassenzustandStrasse, never>
 type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>

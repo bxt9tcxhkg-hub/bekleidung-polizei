@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { X } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
 import { Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { PersonPicker } from '../../components/RegisterPickers'
-import { personDisplayName, usePersons } from '../../lib/register'
+import { composeObjectAddress, personDisplayName, usePersons } from '../../lib/register'
 import { supabase } from '../../lib/supabase'
-import type { CashDenominations, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../../lib/types'
+import type { CashDenominations, InnendienstGebuehrensatz, InnendienstGebuehrensatzPosition, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
+import { generateBescheidPdf, type BescheidKind } from '../../lib/innendienstBescheidPdf'
 import { BESCHEID_KINDS, DENOMINATIONS, EMPTY_BESCHEID_FORM, KIND_LABEL, countedTotalCents, formatEuro, inputClass, todayLocal, type BescheidFormState } from './innendienstShared'
 
 // Innendienst ist in eigenständige Sidebar-Seiten aufgeteilt (Übersicht,
@@ -28,11 +29,14 @@ export interface InnendienstContext {
   openViolations: InnendienstRecord[]
   handovers: ZentraleEntry[]
   canManageZentrale: boolean
+  gebuehrensaetze: InnendienstGebuehrensatz[]
   openKasseWizard: () => void
   openNewBescheid: (kind: InnendienstRecordKind) => void
+  openEditBescheid: (item: InnendienstRecord) => void
   openNewViolation: (bescheid?: InnendienstRecord) => void
   toggleStatus: (item: InnendienstRecord) => Promise<void>
   removeRecord: (item: InnendienstRecord) => Promise<void>
+  printBescheid: (item: InnendienstRecord) => void
   openNewHandover: () => void
   openEditHandover: (item: ZentraleEntry) => void
 }
@@ -45,10 +49,13 @@ export default function InnendienstShell() {
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
   const [records, setRecords] = useState<InnendienstRecord[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
+  const [gebuehrensaetze, setGebuehrensaetze] = useState<InnendienstGebuehrensatz[]>([])
+  const [gebuehrensatzPositionen, setGebuehrensatzPositionen] = useState<InnendienstGebuehrensatzPosition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const [editingBescheid, setEditingBescheid] = useState<InnendienstRecord | null>(null)
   const [form, setForm] = useState<BescheidFormState>(EMPTY_BESCHEID_FORM)
   const [showHandoverForm, setShowHandoverForm] = useState(false)
   const [editingHandover, setEditingHandover] = useState<ZentraleEntry | null>(null)
@@ -63,9 +70,12 @@ export default function InnendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [recordResult, entryResult] = await Promise.all([
-      supabase.from('innendienst_records').select('*, person:operational_persons(id,vorname,nachname,birth_date)').order('issued_date', { ascending: false }).order('created_at', { ascending: false }),
+    const [recordResult, entryResult, gebuehrensatzResult, gebuehrensatzPositionResult] = await Promise.all([
+      // home_object mit strukturierter Adresse zusätzlich geladen - für "whft. ..." im Bescheid-PDF.
+      supabase.from('innendienst_records').select('*, person:operational_persons(id,vorname,nachname,birth_date,home_object:operational_objects(address,strasse,hausnummer,plz,ort)), gebuehrensatz:innendienst_gebuehrensaetze(id,name)').order('issued_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('zentrale_entries').select('*').order('updated_at', { ascending: false }),
+      supabase.from('innendienst_gebuehrensaetze').select('*').eq('active', true).order('name'),
+      supabase.from('innendienst_gebuehrensatz_positionen').select('*, position:innendienst_gebuehrenpositionen(id,name,betrag,active)'),
     ])
     const taskResult = userId ? await supabase.from('innendienst_shift_tasks').select('*').eq('user_id', userId).eq('duty_date', today).eq('shift', shift).maybeSingle() : null
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
@@ -73,6 +83,8 @@ export default function InnendienstShell() {
     setOwnTask((taskResult?.data ?? null) as InnendienstShiftTask | null)
     setRecords((recordResult.data ?? []) as unknown as InnendienstRecord[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
+    setGebuehrensaetze(gebuehrensatzResult.error ? [] : (gebuehrensatzResult.data ?? []) as InnendienstGebuehrensatz[])
+    setGebuehrensatzPositionen(gebuehrensatzPositionResult.error ? [] : (gebuehrensatzPositionResult.data ?? []) as unknown as InnendienstGebuehrensatzPosition[])
     setLoading(false)
   }, [userId, shift])
   useEffect(() => { void load() }, [load])
@@ -137,8 +149,21 @@ export default function InnendienstShell() {
     await load()
   }
 
-  function openNewBescheid(kind: InnendienstRecordKind) { setForm({ kind, personId: null, subject: '', reference: '', note: '', relatedBescheidId: '' }); setShowForm(true); setError('') }
-  function openNewViolation(bescheid?: InnendienstRecord) { setForm({ kind: 'verstoss', personId: null, subject: '', reference: '', note: '', relatedBescheidId: bescheid?.id ?? '' }); setShowForm(true); setError('') }
+  function openNewBescheid(kind: InnendienstRecordKind) { setEditingBescheid(null); setForm({ ...EMPTY_BESCHEID_FORM, kind }); setShowForm(true); setError('') }
+  // Standplätze/Zeitfenster/Gebührensatz lassen sich nachträglich ergänzen
+  // (z. B. wenn beim Erfassen noch nicht alles feststand) - dieselbe Maske
+  // wie beim Anlegen, nur mit vorbefüllten Werten und Update statt Insert.
+  function openEditBescheid(item: InnendienstRecord) {
+    setEditingBescheid(item)
+    setForm({
+      kind: item.kind, personId: item.person_id, subject: item.subject, reference: item.reference ?? '', note: item.note ?? '', relatedBescheidId: '',
+      standplaetze: item.standplaetze && item.standplaetze.length > 0 ? item.standplaetze : [''],
+      zeitVon: item.zeit_von?.slice(0, 5) ?? '', zeitBis: item.zeit_bis?.slice(0, 5) ?? '',
+      gebuehrensatzId: item.gebuehrensatz_id ?? '',
+    })
+    setShowForm(true); setError('')
+  }
+  function openNewViolation(bescheid?: InnendienstRecord) { setEditingBescheid(null); setForm({ ...EMPTY_BESCHEID_FORM, kind: 'verstoss', relatedBescheidId: bescheid?.id ?? '' }); setShowForm(true); setError('') }
   async function saveRecord() {
     if (!profile?.id) return
     setSaving(true)
@@ -159,14 +184,43 @@ export default function InnendienstShell() {
       // zum Personen-Register statt Namens-Freitext.
       if (!form.personId) { setSaving(false); setError('Bitte die Person auswählen, für die der Bescheid ausgestellt wird.'); return }
       const person = persons.find(item => item.id === form.personId)
-      const { error: insertError } = await supabase.from('innendienst_records').insert({
+      const standplaetze = form.standplaetze.map(item => item.trim()).filter(Boolean)
+      const payload = {
         kind: form.kind, subject: person ? personDisplayName(person) : '', person_id: form.personId,
-        reference: form.reference.trim() || null, note: form.note.trim() || null, created_by: profile.id,
-      })
+        reference: form.reference.trim() || null, note: form.note.trim() || null,
+        standplaetze: standplaetze.length > 0 ? standplaetze : null,
+        zeit_von: form.zeitVon || null, zeit_bis: form.zeitBis || null,
+        gebuehrensatz_id: form.gebuehrensatzId || null,
+      }
+      const { error: saveError } = editingBescheid
+        ? await supabase.from('innendienst_records').update(payload).eq('id', editingBescheid.id)
+        : await supabase.from('innendienst_records').insert({ ...payload, created_by: profile.id })
       setSaving(false)
-      if (insertError) { setError('Der Eintrag konnte nicht gespeichert werden.'); return }
+      if (saveError) { setError('Der Eintrag konnte nicht gespeichert werden.'); return }
     }
-    setShowForm(false); navigate('/innendienst/bescheide'); await load()
+    setShowForm(false); setEditingBescheid(null); navigate('/innendienst/bescheide'); await load()
+  }
+  // Kostenaufstellung wird live aus dem verknüpften Gebührensatz gebildet
+  // (keine gespeicherten Beträge, siehe Migration) - eine Position, die seit
+  // Ausstellung deaktiviert wurde, taucht im PDF bewusst nicht mehr auf.
+  function printBescheid(item: InnendienstRecord) {
+    const positionen = gebuehrensatzPositionen
+      .filter(row => row.gebuehrensatz_id === item.gebuehrensatz_id && row.position?.active !== false)
+      .map(row => ({ name: row.position?.name ?? '–', betrag: row.position?.betrag ?? 0 }))
+    const address = item.person?.home_object ? (composeObjectAddress(item.person.home_object) ?? item.person.home_object.address) : null
+    generateBescheidPdf({
+      kind: item.kind as BescheidKind,
+      aktenzahl: item.reference,
+      bearbeiterName: profile?.name ?? '',
+      personName: item.person ? personDisplayName(item.person) : item.subject,
+      personBirthDate: item.person?.birth_date ?? null,
+      personAddress: address,
+      standplaetze: item.standplaetze ?? [],
+      zeitVon: item.zeit_von?.slice(0, 5) ?? null,
+      zeitBis: item.zeit_bis?.slice(0, 5) ?? null,
+      kostenPositionen: positionen,
+      issuedDate: item.issued_date,
+    })
   }
   async function toggleStatus(item: InnendienstRecord) {
     // "entzogen" wird ausschließlich automatisch beim Erfassen eines
@@ -206,8 +260,8 @@ export default function InnendienstShell() {
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
   const ctx: InnendienstContext = {
-    loading, shift, ownTask, bescheide, violationsByBescheid, violationCountByPerson, todaysBescheide, openViolations, handovers, canManageZentrale,
-    openKasseWizard, openNewBescheid, openNewViolation, toggleStatus, removeRecord, openNewHandover, openEditHandover,
+    loading, shift, ownTask, bescheide, violationsByBescheid, violationCountByPerson, todaysBescheide, openViolations, handovers, canManageZentrale, gebuehrensaetze,
+    openKasseWizard, openNewBescheid, openEditBescheid, openNewViolation, toggleStatus, removeRecord, printBescheid, openNewHandover, openEditHandover,
   }
 
   return <div>
@@ -215,8 +269,8 @@ export default function InnendienstShell() {
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
 
-    {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">{form.kind === 'verstoss' ? 'Verstoß gegen Auflagen melden' : 'Neuer Bescheid'}</h2><button type="button" onClick={() => setShowForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
-      <label className="block text-xs font-medium text-gray-600">Art<select className={inputClass} value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value as InnendienstRecordKind, relatedBescheidId: event.target.value === 'verstoss' ? current.relatedBescheidId : '' }))}>{Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+    {showForm ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[94vh] overflow-y-auto"><div className="sticky top-0 bg-white z-10 flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">{form.kind === 'verstoss' ? 'Verstoß gegen Auflagen melden' : editingBescheid ? 'Bescheid bearbeiten' : 'Neuer Bescheid'}</h2><button type="button" onClick={() => { setShowForm(false); setEditingBescheid(null) }} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
+      <label className="block text-xs font-medium text-gray-600">Art<select className={inputClass} disabled={!!editingBescheid} value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value as InnendienstRecordKind, relatedBescheidId: event.target.value === 'verstoss' ? current.relatedBescheidId : '' }))}>{Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       {form.kind === 'verstoss' ? <>
         <label className="block text-xs font-medium text-gray-600">Zugehöriger Bescheid *{bescheide.length === 0 ? <p className="mt-1 text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">Zuerst einen Bescheid erfassen – ein Verstoß bezieht sich immer auf dessen Auflagen.</p> : <select className={inputClass} value={form.relatedBescheidId} onChange={event => setForm(current => ({ ...current, relatedBescheidId: event.target.value }))}><option value="">Bitte wählen</option>{bescheide.map(item => <option key={item.id} value={item.id}>{KIND_LABEL[item.kind]} · {item.subject} ({new Date(item.issued_date).toLocaleDateString('de-AT')})</option>)}</select>}</label>
         <p className="text-xs text-gray-500 -mt-2">Der Bescheid wird beim Speichern automatisch entzogen.</p>
@@ -224,11 +278,28 @@ export default function InnendienstShell() {
       </> : <>
         <PersonPicker label="Person, für die der Bescheid ausgestellt wird" persons={persons} value={form.personId} onChange={value => setForm(current => ({ ...current, personId: value }))} createdBy={profile?.id ?? null} onCreated={person => setPersons(current => [...current, person])} required />
         {form.personId && (violationCountByPerson.get(form.personId) ?? 0) > 0 ? <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">Diese Person hat bereits {violationCountByPerson.get(form.personId)} Verstoß/Verstöße erfasst.</p> : null}
-        <label className="block text-xs font-medium text-gray-600">Bezug / Geschäftszahl<input className={inputClass} value={form.reference} onChange={event => setForm(current => ({ ...current, reference: event.target.value }))} /></label>
+        <label className="block text-xs font-medium text-gray-600">Bezug / Geschäftszahl (Aktenzahl)<input className={inputClass} value={form.reference} onChange={event => setForm(current => ({ ...current, reference: event.target.value }))} /></label>
+        {/* Nur für den PDF-Export relevant (siehe lib/innendienstBescheidPdf.ts) - optional, ein Bescheid lässt sich auch ohne diese Angaben erfassen. */}
+        <div className="rounded-xl border border-gray-200 p-3 space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Für den PDF-Export (optional)</p>
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1">Standplätze</p>
+            {form.standplaetze.map((value, index) => <div key={index} className="flex items-center gap-2 mb-1.5">
+              <input className={`${inputClass} mt-0`} value={value} placeholder={`Standplatz ${String.fromCharCode(97 + index)})`} onChange={event => setForm(current => ({ ...current, standplaetze: current.standplaetze.map((item, i) => i === index ? event.target.value : item) }))} />
+              {form.standplaetze.length > 1 ? <button type="button" onClick={() => setForm(current => ({ ...current, standplaetze: current.standplaetze.filter((_, i) => i !== index) }))} className="p-2 text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0" aria-label="Standplatz entfernen"><Trash2 className="w-4 h-4" /></button> : null}
+            </div>)}
+            <button type="button" onClick={() => setForm(current => ({ ...current, standplaetze: [...current.standplaetze, ''] }))} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700"><Plus className="w-3.5 h-3.5" /> Weiterer Standplatz</button>
+          </div>
+          {form.kind === 'bescheid_strassenkunst' ? <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs font-medium text-gray-600">Zeit von<input type="time" className={inputClass} value={form.zeitVon} onChange={event => setForm(current => ({ ...current, zeitVon: event.target.value }))} /></label>
+            <label className="block text-xs font-medium text-gray-600">Zeit bis<input type="time" className={inputClass} value={form.zeitBis} onChange={event => setForm(current => ({ ...current, zeitBis: event.target.value }))} /></label>
+          </div> : null}
+          <label className="block text-xs font-medium text-gray-600">Gebührensatz (Kostenaufstellung im PDF)<select className={inputClass} value={form.gebuehrensatzId} onChange={event => setForm(current => ({ ...current, gebuehrensatzId: event.target.value }))}><option value="">Keiner</option>{gebuehrensaetze.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        </div>
       </>}
       <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-24 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>
       {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
-      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving || (form.kind === 'verstoss' && bescheide.length === 0)} onClick={() => void saveRecord()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
+      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => { setShowForm(false); setEditingBescheid(null) }} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" disabled={saving || (form.kind === 'verstoss' && bescheide.length === 0)} onClick={() => void saveRecord()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
     </div></div></div> : null}
 
     {showHandoverForm ? <EntryModal entry={handoverForm} setEntry={setHandoverForm} editing={editingHandover} category="uebergabe" saving={saving} error={handoverError} close={() => setShowHandoverForm(false)} save={saveHandover} remove={deleteHandover} /> : null}

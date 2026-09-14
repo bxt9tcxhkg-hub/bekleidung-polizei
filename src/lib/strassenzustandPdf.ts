@@ -7,7 +7,7 @@
  * exakt die Vorgabe aus dem alten Makro), Anmerkungen, Verteiler-Hinweis,
  * Bearbeiter/in-Zeile und Fußzeile mit DVR-Nummer.
  */
-import { escHtml, openPrintHtml } from './printDocs'
+import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
 import { MELDUNGSART_LABEL, ZUSTAND_LABEL, formatZeitraum, strassenName } from './strassenzustand'
 import type { StrassenzustandBerichtzeile } from './types'
 
@@ -62,8 +62,8 @@ export function buildStrassenzustandPdfHtml(input: StrassenzustandPdfInput): str
   @page { size: A4; margin: 20mm 20mm 20mm 20mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Calibri, sans-serif; font-size: 10pt; color: #000; line-height: 1.4; }
-  .lh { font-size: 8pt; line-height: 1.6; margin-bottom: 8mm; text-align: center; }
-  .title { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 0.5px; margin-bottom: 3mm; }
+  ${LETTERHEAD_CSS}
+  .title { text-align: center; font-size: 14pt; font-weight: bold; letter-spacing: 0.5px; margin: 12mm 0 3mm; }
   .meta { text-align: center; font-size: 9pt; color: #333; margin-bottom: 8mm; }
   .section { margin-bottom: 6mm; break-inside: avoid; }
   .section h2 { font-size: 11pt; font-weight: bold; margin-bottom: 2mm; }
@@ -81,11 +81,7 @@ export function buildStrassenzustandPdfHtml(input: StrassenzustandPdfInput): str
   .foot { margin-top: 16mm; font-size: 8pt; color: #444; display: flex; justify-content: space-between; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
-  <div class="lh">
-    STADT DORNBIRN&nbsp;&nbsp;<strong>Polizei</strong><br>
-    Rathausplatz 2&nbsp;&nbsp;A 6850 Dornbirn<br>
-    T +43 5572 222 00&nbsp;&nbsp;&nbsp;F +43 5572 330 08&nbsp;&nbsp;&nbsp;polizei@dornbirn.at
-  </div>
+  ${letterheadBlock()}
   <div class="title">STRASSENZUSTANDSBERICHT</div>
   <div class="meta">Bericht Nr. ${input.nummer} · Erstellt: ${escHtml(dateTimeLong(now))}</div>
 
