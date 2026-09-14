@@ -41,6 +41,7 @@ export default function LeafletMap({
   height = 220,
   zoom,
   onMapClick,
+  fitLines = true,
 }: {
   markers: readonly MapMarker[]
   lines?: readonly MapLine[]
@@ -48,6 +49,8 @@ export default function LeafletMap({
   zoom?: number
   /** Wird bei jedem Klick auf die Karte mit den geklickten Koordinaten aufgerufen - z. B. zum Einzeichnen eines Streckenabschnitts. */
   onMapClick?: (lat: number, lng: number) => void
+  /** Ob Linien (z. B. Baustellen) den automatischen Kartenausschnitt mitbestimmen. Default true (z. B. beim Einzeichnen einer Baustelle gewünscht) - false, wenn Linien nur Hintergrundinfo sind und die Ansicht nicht verschieben sollen (z. B. "Aktive Einsätze"-Karte). */
+  fitLines?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -95,7 +98,7 @@ export default function LeafletMap({
     })
     const allPoints: [number, number][] = [
       ...markers.map(marker => [marker.lat, marker.lng] as [number, number]),
-      ...(lines ?? []).flatMap(line => line.points as [number, number][]),
+      ...(fitLines ? (lines ?? []).flatMap(line => line.points as [number, number][]) : []),
     ]
     if (allPoints.length > 0) {
       const bounds = L.latLngBounds(allPoints)
@@ -104,7 +107,7 @@ export default function LeafletMap({
       map.setView(DORNBIRN_CENTER, zoom ?? 13)
     }
     return () => { layerGroup.remove() }
-  }, [markers, lines, zoom])
+  }, [markers, lines, zoom, fitLines])
 
   // isolate: Leaflets interne Ebenen (Zoom-Controls, Marker, Popups) haben
   // von Haus aus hohe z-index-Werte (bis 1000). Ohne eigenen Stacking-
