@@ -1056,12 +1056,20 @@ export interface InnendienstRecord {
   issued_date: string
   /** Nur bei kind='verstoss': der Bescheid (Straßenmusik/-kunst), gegen dessen Auflagen verstoßen wurde. Pflichtfeld für Verstöße. */
   related_bescheid_id: string | null
+  /** Nur bei Bescheiden: zugewiesene Standplätze (a), b), ... in der Vorlage) - für den PDF-Export, siehe lib/innendienstBescheidPdf.ts. */
+  standplaetze: string[] | null
+  /** Nur bei Bescheiden mit Zeitfenster (z. B. Straßenkunst) - bei Straßenmusik ungenutzt (feste Zeittabelle in der Textvorlage). */
+  zeit_von: string | null
+  zeit_bis: string | null
+  /** Nur bei Bescheiden: Kostenaufstellung im PDF wird live aus diesem Gebührensatz nachgeschlagen, kein gespeicherter Betrag. */
+  gebuehrensatz_id: string | null
   created_by: string
   created_at: string
   updated_at: string
   creator?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
-  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> & { home_object?: Pick<OperationalObject, 'address' | 'strasse' | 'hausnummer' | 'plz' | 'ort'> | null } | null
   related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
+  gebuehrensatz?: Pick<InnendienstGebuehrensatz, 'id' | 'name'> | null
 }
 
 /**
@@ -1095,6 +1103,40 @@ export interface InnendienstGebuehrensatzPosition {
   position_id: string
   created_at: string
   position?: Pick<InnendienstGebuehrenposition, 'id' | 'name' | 'betrag' | 'active'>
+}
+
+// Überstundenmeldung: self-service - jede/r Bedienstete erfasst die eigenen
+// Überstunden und reicht sie ein, der Genehmiger entscheidet (siehe
+// enforce_ueberstunden_update() für die Feld-Einschränkung je Rolle).
+export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt'
+
+export interface UeberstundenMeldung {
+  id: string
+  beamter_id: string
+  datum: string
+  zeit_von: string | null
+  zeit_bis: string | null
+  grund: string
+  /** Werktage Mo 06-19 Uhr, 50 % (LA 3250). */
+  std_werktag_50: number
+  /** Sonn-/Feiertage bis 8 Std, 100 % (LA 3520). */
+  std_sonn_100: number
+  /** Zeit 19-22 Uhr, 50 % (LA 3500). */
+  std_19_22: number
+  /** Zeit 22-06 Uhr, 100 % (LA 3510). */
+  std_22_06: number
+  /** Sonn-/Feiertage ab 8 Std, 200 % (LA 3530). */
+  std_sonn_200: number
+  status: UeberstundenStatus
+  eingereicht_at: string | null
+  genehmiger_id: string | null
+  genehmigt_at: string | null
+  genehmiger_note: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  beamter?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
+  genehmiger?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
 }
 
 /**
@@ -1216,6 +1258,7 @@ type SchulungAssignmentRow = Omit<SchulungAssignment, 'officer' | 'module' | 'se
 type InnendienstGebuehrenpositionRow = Omit<InnendienstGebuehrenposition, never>
 type InnendienstGebuehrensatzRow = Omit<InnendienstGebuehrensatz, never>
 type InnendienstGebuehrensatzPositionRow = Omit<InnendienstGebuehrensatzPosition, 'position'>
+type UeberstundenMeldungRow = Omit<UeberstundenMeldung, 'beamter' | 'genehmiger'>
 type PersonalEinsatzmittelRequestRow = Omit<PersonalEinsatzmittelRequest, 'requester'>
 type PoolEinsatzmittelRow = Omit<PoolEinsatzmittel, never>
 type PoolEinsatzmittelRequestRow = Omit<PoolEinsatzmittelRequest, 'requester'>
@@ -1254,7 +1297,7 @@ type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
 type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
-type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid'>
+type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid' | 'gebuehrensatz'>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
 type StrassenzustandStrasseRow = Omit<StrassenzustandStrasse, never>
 type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>
@@ -1516,6 +1559,11 @@ export type Database = {
       innendienst_gebuehrensatz_positionen: { Row: InnendienstGebuehrensatzPositionRow; Insert: Pick<InnendienstGebuehrensatzPositionRow, 'gebuehrensatz_id' | 'position_id'> & Partial<Omit<InnendienstGebuehrensatzPositionRow, 'gebuehrensatz_id' | 'position_id'>>; Update: Partial<Omit<InnendienstGebuehrensatzPositionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_gebuehrensatz_id_fkey'; columns: ['gebuehrensatz_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrensaetze'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_position_id_fkey'; columns: ['position_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrenpositionen'; referencedColumns: ['id'] },
+      ] }
+      ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'datum' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'datum' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'ueberstunden_meldungen_beamter_id_fkey'; columns: ['beamter_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ueberstunden_meldungen_genehmiger_id_fkey'; columns: ['genehmiger_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ueberstunden_meldungen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       schulungen_module: { Row: SchulungModuleRow; Insert: Pick<SchulungModuleRow, 'name'> & Partial<Omit<SchulungModuleRow, 'name'>>; Update: Partial<Omit<SchulungModuleRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'schulungen_module_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

@@ -38,7 +38,7 @@ const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
 const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const Schulungen = lazy(() => import('./pages/Schulungen'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
-const PlannedArea = lazy(() => import('./pages/PlannedArea'))
+const Ueberstunden = lazy(() => import('./pages/Ueberstunden'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
@@ -213,7 +213,8 @@ export default function App() {
           </Route>
           <Route path="/planung/fuhrpark" element={<Navigate to="/fuhrpark" replace />} />
           <Route path="/planung/fuhrpark/:vehicleId" element={<Navigate to="/fuhrpark" replace />} />
-          <Route path="/planung/ueberstunden" element={<ProtectedRoute adminOnly><PlannedArea area="ueberstunden" /></ProtectedRoute>} />
+          <Route path="/ueberstunden" element={<ProtectedRoute><Ueberstunden /></ProtectedRoute>} />
+          <Route path="/planung/ueberstunden" element={<Navigate to="/ueberstunden" replace />} />
           <Route
             path="/profil"
             element={
