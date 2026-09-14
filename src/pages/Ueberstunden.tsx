@@ -179,11 +179,13 @@ export default function Ueberstunden() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-200 bg-gray-50 text-left text-xs text-gray-500">
               <th className="px-3 py-2 font-medium">Beamter/in</th>
+              <th className="px-3 py-2 font-medium">Vergütung</th>
               {KATEGORIEN.map(kat => <th key={kat.key} className="px-3 py-2 font-medium text-right whitespace-nowrap">{kat.code}</th>)}
               <th className="px-3 py-2 font-medium text-right">Gesamt</th>
             </tr></thead>
-            <tbody>{uebersicht.map(zeile => <tr key={zeile.beamterId} className="border-b border-gray-100 last:border-0">
+            <tbody>{uebersicht.map(zeile => <tr key={`${zeile.beamterId}:${zeile.verguetung}`} className="border-b border-gray-100 last:border-0">
               <td className="px-3 py-2 font-medium text-gray-800">{zeile.beamterName}{zeile.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {zeile.dienstnummer})</span> : null}</td>
+              <td className="px-3 py-2 text-gray-600">{VERGUETUNG_LABEL[zeile.verguetung]}</td>
               {KATEGORIEN.map(kat => <td key={kat.key} className="px-3 py-2 text-right tabular-nums">{zeile.stunden[kat.key] ? formatStunden(zeile.stunden[kat.key]) : '–'}</td>)}
               <td className="px-3 py-2 text-right font-bold tabular-nums">{formatStunden(zeile.gesamt)}</td>
             </tr>)}</tbody>

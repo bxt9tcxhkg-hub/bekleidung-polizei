@@ -126,30 +126,35 @@ export interface MonatsZeile {
   beamterId: string
   beamterName: string
   dienstnummer: string | null
+  verguetung: UeberstundenVerguetung
   stunden: Record<UeberstundenKategorieKey, number>
   gesamt: number
 }
 
 /**
  * Genehmiger-Übersicht: alle genehmigten Meldungen eines Monats (nach
- * von_datum), je Beamten/-in zu einer Zeile aufsummiert - Grundlage für die
- * Sammelansicht zur Weiterleitung an die Lohnberechnung. Eine über
- * Mitternacht in den Folgemonat reichende Meldung zählt dabei komplett zum
- * Monat ihres von_datum.
+ * von_datum), je Beamten/-in UND Vergütungsart zu einer Zeile aufsummiert -
+ * Grundlage für die Sammelansicht zur Weiterleitung an die Lohnberechnung.
+ * Eigene Zeile je Vergütungsart, damit Auszahlung und Stundenersatz nicht
+ * vermischt werden (die Lohnberechnung muss unterscheiden können, welche
+ * Stunden ausbezahlt und welche als Zeitausgleich zu verbuchen sind). Eine
+ * über Mitternacht in den Folgemonat reichende Meldung zählt dabei komplett
+ * zum Monat ihres von_datum.
  */
 export function monatsUebersicht(meldungen: readonly UeberstundenMeldung[], monat: string): MonatsZeile[] {
-  const zeilenByBeamter = new Map<string, MonatsZeile>()
+  const zeilenByKey = new Map<string, MonatsZeile>()
   for (const item of meldungen) {
     if (item.status !== 'genehmigt' || !item.von_datum.startsWith(monat)) continue
-    let zeile = zeilenByBeamter.get(item.beamter_id)
+    const key = `${item.beamter_id}:${item.verguetung}`
+    let zeile = zeilenByKey.get(key)
     if (!zeile) {
-      zeile = { beamterId: item.beamter_id, beamterName: item.beamter?.name ?? '–', dienstnummer: item.beamter?.dienstnummer ?? null, stunden: { ...LEERE_AUFSCHLUESSELUNG }, gesamt: 0 }
-      zeilenByBeamter.set(item.beamter_id, zeile)
+      zeile = { beamterId: item.beamter_id, beamterName: item.beamter?.name ?? '–', dienstnummer: item.beamter?.dienstnummer ?? null, verguetung: item.verguetung, stunden: { ...LEERE_AUFSCHLUESSELUNG }, gesamt: 0 }
+      zeilenByKey.set(key, zeile)
     }
     for (const kat of KATEGORIEN) zeile.stunden[kat.key] += item[kat.key] || 0
     zeile.gesamt += totalStunden(item)
   }
-  return Array.from(zeilenByBeamter.values()).sort((a, b) => a.beamterName.localeCompare(b.beamterName, 'de-AT'))
+  return Array.from(zeilenByKey.values()).sort((a, b) => a.beamterName.localeCompare(b.beamterName, 'de-AT') || a.verguetung.localeCompare(b.verguetung))
 }
 
 export function thisMonthLocal(): string { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` }

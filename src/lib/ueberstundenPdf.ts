@@ -95,8 +95,10 @@ export interface UeberstundenSammelPdfInput {
 
 /**
  * Sammelansicht für den Genehmiger: alle im gewählten Monat genehmigten
- * Meldungen, je Beamten/-in zu einer Zeile aufsummiert - zur Weiterleitung
- * an die Lohnberechnung (siehe lib/ueberstunden.ts::monatsUebersicht).
+ * Meldungen, je Beamten/-in UND Vergütungsart zu einer Zeile aufsummiert -
+ * zur Weiterleitung an die Lohnberechnung (siehe
+ * lib/ueberstunden.ts::monatsUebersicht). Eigene Zeile je Vergütungsart,
+ * damit Auszahlung und Stundenersatz nicht vermischt werden.
  */
 export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput): string {
   const gesamtProKategorie: Record<UeberstundenKategorieKey, number> = { std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }
@@ -106,12 +108,14 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
     gesamtGesamt += zeile.gesamt
     return `<tr>
       <td>${escHtml(zeile.beamterName)}${zeile.dienstnummer ? ` <span class="klein">(DNr. ${escHtml(zeile.dienstnummer)})</span>` : ''}</td>
+      <td>${escHtml(VERGUETUNG_LABEL[zeile.verguetung])}</td>
       ${KATEGORIEN.map(kat => `<td class="r">${zeile.stunden[kat.key] ? formatStunden(zeile.stunden[kat.key]) : '–'}</td>`).join('')}
       <td class="r b">${formatStunden(zeile.gesamt)}</td>
     </tr>`
   }).join('')
   const summeRow = `<tr class="summe">
     <td>Gesamt</td>
+    <td></td>
     ${KATEGORIEN.map(kat => `<td class="r">${gesamtProKategorie[kat.key] ? formatStunden(gesamtProKategorie[kat.key]) : '–'}</td>`).join('')}
     <td class="r b">${formatStunden(gesamtGesamt)}</td>
   </tr>`
@@ -142,10 +146,11 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
   <table class="sammel">
     <thead><tr>
       <th>Beamter/in</th>
+      <th>Vergütung</th>
       ${KATEGORIEN.map(kat => `<th class="r">${escHtml(kat.code)}<br><span class="klein">${escHtml(kat.satz)}</span></th>`).join('')}
       <th class="r">Gesamt</th>
     </tr></thead>
-    <tbody>${rows || `<tr><td colspan="${KATEGORIEN.length + 2}">Keine genehmigten Meldungen in diesem Monat.</td></tr>`}${input.zeilen.length ? summeRow : ''}</tbody>
+    <tbody>${rows || `<tr><td colspan="${KATEGORIEN.length + 3}">Keine genehmigten Meldungen in diesem Monat.</td></tr>`}${input.zeilen.length ? summeRow : ''}</tbody>
   </table>
   <div class="foot"><span>Überstundenmeldung · Sammelansicht</span><span>DVR 0036030</span></div>
 </body></html>`

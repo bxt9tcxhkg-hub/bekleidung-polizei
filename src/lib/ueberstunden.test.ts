@@ -106,4 +106,16 @@ describe('monatsUebersicht', () => {
     ], '2026-09')
     expect(result.map(z => z.beamterName)).toEqual(['Anna Adler', 'Zora Zach'])
   })
+
+  it('trennt Auszahlung und Stundenersatz desselben Beamten in eigene Zeilen', () => {
+    const result = monatsUebersicht([
+      meldung({ id: '1', verguetung: 'auszahlung', std_werktag_50: 4 }),
+      meldung({ id: '2', verguetung: 'stundenersatz', std_werktag_50: 3 }),
+    ], '2026-09')
+    expect(result).toHaveLength(2)
+    const auszahlung = result.find(z => z.verguetung === 'auszahlung')
+    const stundenersatz = result.find(z => z.verguetung === 'stundenersatz')
+    expect(auszahlung?.gesamt).toBe(4)
+    expect(stundenersatz?.gesamt).toBe(3)
+  })
 })
