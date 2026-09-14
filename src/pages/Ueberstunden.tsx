@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, KATEGORIEN, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
 const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
@@ -90,6 +90,7 @@ export default function Ueberstunden() {
     if (!profile?.id) return
     if (!form.grund.trim()) { setError('Bitte den Grund der Überstunde(n) angeben.'); return }
     if (!zeitraum) { setError('Bitte einen gültigen Zeitraum angeben (Von/Bis vollständig ausfüllen, Ende muss nach Beginn liegen).'); return }
+    if (!istViertelstundenRaster(form.vonZeit) || !istViertelstundenRaster(form.bisZeit)) { setError('Bitte Uhrzeiten in Viertelstunden-Schritten angeben (z. B. 08:00, 08:15, 08:30, 08:45).'); return }
     const payload = formToPayload(form)
     setSaving(true)
     const response = editing

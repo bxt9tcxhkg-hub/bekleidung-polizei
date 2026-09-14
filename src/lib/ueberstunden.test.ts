@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { berechneAufschluesselung, monatsUebersicht } from './ueberstunden'
+import { berechneAufschluesselung, istViertelstundenRaster, monatsUebersicht } from './ueberstunden'
 import type { UeberstundenMeldung } from './types'
 
 // Montag, 14.09.2026 - ein gewöhnlicher Werktag (siehe austrianHolidays.test.ts).
@@ -117,5 +117,14 @@ describe('monatsUebersicht', () => {
     const stundenersatz = result.find(z => z.verguetung === 'stundenersatz')
     expect(auszahlung?.gesamt).toBe(4)
     expect(stundenersatz?.gesamt).toBe(3)
+  })
+})
+
+describe('istViertelstundenRaster', () => {
+  it('akzeptiert Zeiten auf dem Viertelstunden-Raster', () => {
+    for (const zeit of ['08:00', '08:15', '08:30', '08:45', '00:00', '23:45']) expect(istViertelstundenRaster(zeit)).toBe(true)
+  })
+  it('lehnt Zeiten außerhalb des Rasters ab', () => {
+    for (const zeit of ['18:55', '19:05', '08:01', '08:10']) expect(istViertelstundenRaster(zeit)).toBe(false)
   })
 })

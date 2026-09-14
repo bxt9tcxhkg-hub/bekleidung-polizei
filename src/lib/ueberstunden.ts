@@ -91,6 +91,16 @@ function parseZeitpunkt(datum: string, zeit: string): Date | null {
   return new Date(year, month - 1, day, hours, minutes)
 }
 
+// Das step=900 auf den Zeit-Inputs ist nur ein Browser-Hinweis (die Maske
+// wird nicht als natives Formular abgeschickt) - vor dem Speichern wird das
+// Viertelstunden-Raster deshalb explizit geprüft (siehe auch die DB-Checks
+// ueberstunden_meldungen_von/bis_zeit_raster, die das serverseitig ebenfalls
+// erzwingen - Grundlage für die rundungsfreie Lohnarten-Kategorisierung).
+export function istViertelstundenRaster(zeit: string): boolean {
+  const minuten = Number(zeit.split(':')[1])
+  return !Number.isNaN(minuten) && minuten % 15 === 0
+}
+
 /** Liefert den gültigen Zeitraum aus dem Formular, oder null solange er unvollständig/ungültig ist (bis muss nach von liegen). */
 export function meldungZeitraum(form: Pick<MeldungFormState, 'vonDatum' | 'vonZeit' | 'bisDatum' | 'bisZeit'>): { von: Date; bis: Date } | null {
   const von = parseZeitpunkt(form.vonDatum, form.vonZeit)
