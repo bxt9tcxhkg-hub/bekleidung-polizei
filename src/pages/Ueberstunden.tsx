@@ -58,11 +58,17 @@ export default function Ueberstunden() {
   const [deciding, setDeciding] = useState<{ item: UeberstundenMeldung; status: 'abgelehnt' | 'rueckfrage' } | null>(null)
   const [decideNote, setDecideNote] = useState('')
   const [monat, setMonat] = useState(thisMonthLocal())
+  const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
     // RLS liefert automatisch die eigenen Meldungen (jeder Status) plus - nur
     // für Genehmiger - alle übrigen, siehe Policy "Überstundenmeldungen lesen".
+    // Absichtlich ohne .limit()/Pagination - für "Zu entscheiden" und "Meine
+    // Meldungen" reicht die (von Supabase serverseitig gedeckelte) Standard-
+    // Seitengröße; für die Monatsübersicht/Sammelansicht (die ALLE
+    // genehmigten Meldungen eines Monats braucht, nicht nur die neuesten
+    // Zeilen) gibt es unten eine eigene, gezielt gefilterte Abfrage.
     const result = await supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
       .order('von_datum', { ascending: false }).order('created_at', { ascending: false })
@@ -73,6 +79,23 @@ export default function Ueberstunden() {
   }, [])
   useEffect(() => { void load() }, [load])
 
+  // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage statt die
+  // (potenziell paginierte) meldungen-Liste zu verwenden - sonst könnten bei
+  // wachsender Tabelle ältere Monate unvollständige Sammelansichten liefern.
+  const loadUebersicht = useCallback(async () => {
+    if (!isGenehmiger) { setUebersichtMeldungen([]); return }
+    const [jahr, monatNr] = monat.split('-').map(Number)
+    if (!jahr || !monatNr) return
+    const vonDatum = `${monat}-01`
+    const bisDatum = monatNr === 12 ? `${jahr + 1}-01-01` : `${jahr}-${String(monatNr + 1).padStart(2, '0')}-01`
+    const result = await supabase.from('ueberstunden_meldungen')
+      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+      .eq('status', 'genehmigt').gte('von_datum', vonDatum).lt('von_datum', bisDatum)
+    if (result.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
+    setUebersichtMeldungen((result.data ?? []) as unknown as UeberstundenMeldung[])
+  }, [monat, isGenehmiger])
+  useEffect(() => { void loadUebersicht() }, [loadUebersicht])
+
   const eigene = useMemo(() => meldungen.filter(item => item.beamter_id === profile?.id), [meldungen, profile?.id])
   const zuEntscheiden = useMemo(() => meldungen.filter(item => item.status === 'eingereicht' && item.beamter_id !== profile?.id), [meldungen, profile?.id])
   // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt wird.
@@ -81,7 +104,7 @@ export default function Ueberstunden() {
   // Genehmiger-Monatsübersicht: alle genehmigten Meldungen aller Bediensteten
   // im gewählten Monat, je Beamten/-in aufsummiert - Grundlage für die
   // Sammelansicht zur Weiterleitung an die Lohnberechnung.
-  const uebersicht = useMemo(() => monatsUebersicht(meldungen, monat), [meldungen, monat])
+  const uebersicht = useMemo(() => monatsUebersicht(uebersichtMeldungen, monat), [uebersichtMeldungen, monat])
 
   function openNew() { setEditing(null); setForm(EMPTY_MELDUNG_FORM); setShowForm(true); setError('') }
   function openEdit(item: UeberstundenMeldung) { setEditing(item); setForm(meldungToForm(item)); setShowForm(true); setError('') }
@@ -124,7 +147,7 @@ export default function Ueberstunden() {
     logAudit(`Überstundenmeldung ${STATUS_LABEL[status].toLowerCase()}`, `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`)
     setDeciding(null); setDecideNote('')
     setNotice(status === 'genehmigt' ? 'Meldung wurde genehmigt.' : status === 'abgelehnt' ? 'Meldung wurde abgelehnt.' : 'Meldung wurde zur Rückfrage zurückgelegt.')
-    await load()
+    await Promise.all([load(), loadUebersicht()])
   }
 
   function printMeldung(item: UeberstundenMeldung) {
