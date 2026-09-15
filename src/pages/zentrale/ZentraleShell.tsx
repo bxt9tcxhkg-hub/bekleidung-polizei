@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
+import { parseKilometerLocation } from '../../lib/roadKilometer'
 import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
@@ -386,14 +387,24 @@ export default function ZentraleShell() {
   }
   function openEditIncident(item: IncidentReport) {
     const reportedAt = new Date(item.reported_at)
-    const { street, houseNumber } = incidentLocationParts(item.location)
+    const kilometerLocation = parseKilometerLocation(item.location)
+    const { street, houseNumber } = kilometerLocation
+      ? { street: kilometerLocation.roadName, houseNumber: '' }
+      : incidentLocationParts(item.location)
     setEditingIncident(item)
     setIncident({
       callerPhone: item.caller_phone ?? '',
       callerPersonId: item.caller_person_id,
+      locationMode: kilometerLocation ? 'kilometer' : 'address',
       street,
       houseNumber,
-      houseNumberUnknown: Boolean(street && !houseNumber),
+      houseNumberUnknown: Boolean(!kilometerLocation && street && !houseNumber),
+      roadQuery: kilometerLocation ? `${kilometerLocation.roadName} (${kilometerLocation.roadNumber})` : '',
+      roadNumber: kilometerLocation?.roadNumber ?? '',
+      roadName: kilometerLocation?.roadName ?? '',
+      kilometer: kilometerLocation?.kilometer ?? '',
+      kilometerFrom: null,
+      kilometerTo: null,
       location: item.location ?? '',
       summary: item.summary,
       involvedPersonId: item.involved_person_id,
@@ -423,6 +434,10 @@ export default function ZentraleShell() {
   }
   async function saveIncident() {
     if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
+    if (incident.locationMode === 'kilometer' && (!incident.roadNumber || !incident.kilometer || incident.lat === null || incident.lng === null || !incident.coordsPrecise)) {
+      setError('Bitte Landesstraße und Kilometer auswählen und den amtlichen Kartenpunkt ermitteln.')
+      return
+    }
     // Melder/beteiligte Person sind über das Personen-Register verknüpft;
     // Name/Geburtsdatum stecken abwärtskompatibel für bestehende Anzeigen
     // (z. B. IncidentCards) zusätzlich als Freitext auf der Meldung, aus der

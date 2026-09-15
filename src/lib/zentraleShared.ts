@@ -47,5 +47,33 @@ export type BaustelleFormState = typeof EMPTY_BAUSTELLE_FORM
 // Formulars (siehe openIncident() in ZentraleShell.tsx), aber änderbar - eine
 // Meldung kommt nicht immer erst in dem Moment herein, in dem sie erfasst
 // wird. Immer für den heutigen Tag (kein Datumsfeld), wie bisher.
-export type IncidentFormState = { callerPhone: string; callerPersonId: string | null; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPersonId: string | null; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean; reportedTime: string }
-export const EMPTY_INCIDENT_FORM: IncidentFormState = { callerPhone: '', callerPersonId: null, street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '', lat: null, lng: null, coordsPrecise: false, reportedTime: '' }
+export type IncidentFormState = {
+  callerPhone: string
+  callerPersonId: string | null
+  locationMode: 'address' | 'kilometer'
+  street: string
+  houseNumber: string
+  houseNumberUnknown: boolean
+  roadQuery: string
+  roadNumber: string
+  roadName: string
+  kilometer: string
+  kilometerFrom: number | null
+  kilometerTo: number | null
+  location: string
+  summary: string
+  involvedPersonId: string | null
+  disposition: IncidentDisposition
+  note: string
+  lat: number | null
+  lng: number | null
+  coordsPrecise: boolean
+  reportedTime: string
+}
+export const EMPTY_INCIDENT_FORM: IncidentFormState = {
+  callerPhone: '', callerPersonId: null, locationMode: 'address',
+  street: '', houseNumber: '', houseNumberUnknown: false,
+  roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null,
+  location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '',
+  lat: null, lng: null, coordsPrecise: false, reportedTime: '',
+}
