@@ -437,13 +437,14 @@ export default function ZentraleShell() {
     if (baustelleForm.startLat === null || baustelleForm.startLng === null || baustelleForm.endLat === null || baustelleForm.endLng === null) { setBaustelleError('Bitte Start- und Endpunkt festlegen (Adresse suchen oder auf der Karte klicken).'); return }
     setBaustelleSaving(true)
     const payload = { titel: baustelleForm.titel.trim(), start_lat: baustelleForm.startLat, start_lng: baustelleForm.startLng, end_lat: baustelleForm.endLat, end_lng: baustelleForm.endLng, path: baustelleForm.path, note: baustelleForm.note.trim() || null, gueltig_bis: baustelleForm.gueltigBis || null }
-    // Ohne Verwaltungsrecht entsteht die Meldung immer als "gemeldet" (ungeprüft) -
-    // die Bestätigung erfolgt separat durch Sachbearbeiter/Genehmiger (RLS erzwingt das zusätzlich).
-    const response = editingBaustelle ? await supabase.from('zentrale_baustellen').update(payload).eq('id', editingBaustelle.id) : await supabase.from('zentrale_baustellen').insert({ ...payload, created_by: profile.id, status: canManage ? 'offen' : 'gemeldet' })
+    // Ohne canOperateZentrale (Verwaltung oder diensthabender Zentralist/
+    // Innendienst) entsteht die Meldung immer als "gemeldet" (ungeprüft) -
+    // die Bestätigung erfolgt separat (RLS erzwingt das zusätzlich).
+    const response = editingBaustelle ? await supabase.from('zentrale_baustellen').update(payload).eq('id', editingBaustelle.id) : await supabase.from('zentrale_baustellen').insert({ ...payload, created_by: profile.id, status: canOperateZentrale ? 'offen' : 'gemeldet' })
     setBaustelleSaving(false)
     if (response.error) { setBaustelleError('Baustelle konnte nicht gespeichert werden.'); return }
     logAudit(editingBaustelle ? 'Baustelle bearbeitet' : 'Baustelle gemeldet', baustelleForm.titel.trim())
-    setShowBaustelleForm(false); setNotice(editingBaustelle ? 'Baustelle wurde aktualisiert.' : (canManage ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung.')); await load()
+    setShowBaustelleForm(false); setNotice(editingBaustelle ? 'Baustelle wurde aktualisiert.' : (canOperateZentrale ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung.')); await load()
   }
   async function confirmBaustelle(item: ZentraleBaustelle) {
     if (!profile?.id) return
@@ -480,6 +481,6 @@ export default function ZentraleShell() {
 
     {showIncidentForm ? <IncidentModal incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} baustellen={baustellen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => setShowIncidentForm(false)} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
-    {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canManage={canManage} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
+    {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canOperate={canOperateZentrale} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
   </div>
 }

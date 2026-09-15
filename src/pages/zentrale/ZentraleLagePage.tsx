@@ -8,7 +8,7 @@ export default function ZentraleLagePage() {
     title="Operative Lage"
     description='Ereignisse, Sperren, Gefahren- und Lagehinweise – wird aus einem Einsatz auf der Seite „Einsätze" erklärt.'
     entries={ctx.lageEntries}
-    canManage={ctx.canManage}
+    canManage={ctx.canOperateZentrale}
     // Entsteht ausschließlich über die Aktion an einem Einsatz - kein eigenständiges "Neu" hier.
     openNew={() => {}}
     openEdit={ctx.openEditEntry}
