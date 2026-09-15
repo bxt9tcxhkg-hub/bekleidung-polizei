@@ -35,9 +35,20 @@ export interface MapLine {
   dashed?: boolean
 }
 
+export interface MapCircle {
+  lat: number
+  lng: number
+  radiusMeters: number
+  popup?: string
+  color?: string
+  fillColor?: string
+  fillOpacity?: number
+}
+
 export default function LeafletMap({
   markers,
   lines,
+  circles,
   height = 220,
   zoom,
   onMapClick,
@@ -45,6 +56,7 @@ export default function LeafletMap({
 }: {
   markers: readonly MapMarker[]
   lines?: readonly MapLine[]
+  circles?: readonly MapCircle[]
   height?: number
   zoom?: number
   /** Wird bei jedem Klick auf die Karte mit den geklickten Koordinaten aufgerufen - z. B. zum Einzeichnen eines Streckenabschnitts. */
@@ -96,18 +108,39 @@ export default function LeafletMap({
         placed.bindPopup(popupEl)
       }
     })
+    const circleBounds: L.LatLngBounds[] = []
+    ;(circles ?? []).forEach(circle => {
+      const placed = L.circle([circle.lat, circle.lng], {
+        radius: circle.radiusMeters,
+        color: circle.color ?? '#dc2626',
+        fillColor: circle.fillColor ?? circle.color ?? '#ef4444',
+        fillOpacity: circle.fillOpacity ?? 0.14,
+        weight: 2,
+      }).addTo(layerGroup)
+      circleBounds.push(placed.getBounds())
+      if (circle.popup) {
+        const popupEl = document.createElement('div')
+        popupEl.textContent = circle.popup
+        placed.bindPopup(popupEl)
+      }
+    })
     const allPoints: [number, number][] = [
       ...markers.map(marker => [marker.lat, marker.lng] as [number, number]),
       ...(fitLines ? (lines ?? []).flatMap(line => line.points as [number, number][]) : []),
     ]
     if (allPoints.length > 0) {
       const bounds = L.latLngBounds(allPoints)
+      circleBounds.forEach(circle => bounds.extend(circle))
+      map.fitBounds(bounds.pad(0.25), { maxZoom: zoom ?? 16 })
+    } else if (circleBounds.length > 0) {
+      const bounds = circleBounds[0]
+      circleBounds.slice(1).forEach(circle => bounds.extend(circle))
       map.fitBounds(bounds.pad(0.25), { maxZoom: zoom ?? 16 })
     } else {
       map.setView(DORNBIRN_CENTER, zoom ?? 13)
     }
     return () => { layerGroup.remove() }
-  }, [markers, lines, zoom, fitLines])
+  }, [markers, lines, circles, zoom, fitLines])
 
   // isolate: Leaflets interne Ebenen (Zoom-Controls, Marker, Popups) haben
   // von Haus aus hohe z-index-Werte (bis 1000). Ohne eigenen Stacking-

@@ -15,7 +15,7 @@ export default function ZentraleLayout() {
       { to: '/zentrale', label: 'Zentrale', icon: Radio },
       { to: '/zentrale/einsaetze', label: 'Einsätze', icon: ClipboardList },
       { to: '/zentrale/lage', label: 'Operative Lage', icon: AlertTriangle },
-      { to: '/zentrale/av-bv-ev', label: 'AV/BV & EV', icon: ShieldAlert },
+      { to: '/zentrale/av-bv-ev', label: 'BV/AV & EV', icon: ShieldAlert },
       { to: '/zentrale/personenhinweise', label: 'Personenhinweise', icon: UserRoundCheck },
       { to: '/zentrale/fahndungen', label: 'Fahndungen', icon: Search },
       // Dieselbe Seite wie unter Außendienst/Innendienst - keine eigene Kopie mehr (siehe ZentraleRsaRsb-Entfernung).

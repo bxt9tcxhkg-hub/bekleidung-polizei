@@ -69,6 +69,7 @@ const AussendienstEinsaetze = lazy(() => import('./pages/aussendienst/Aussendien
 const AussendienstKontrollauftraege = lazy(() => import('./pages/aussendienst/AussendienstKontrollauftraege'))
 const AussendienstHinweise = lazy(() => import('./pages/aussendienst/AussendienstHinweise'))
 const AussendienstFahrzeug = lazy(() => import('./pages/aussendienst/AussendienstFahrzeug'))
+const AussendienstSchutzmassnahmen = lazy(() => import('./pages/aussendienst/AussendienstSchutzmassnahmen'))
 const InnendienstShell = lazy(() => import('./pages/innendienst/InnendienstShell'))
 const InnendienstUebersicht = lazy(() => import('./pages/innendienst/InnendienstUebersicht'))
 const InnendienstBescheide = lazy(() => import('./pages/innendienst/InnendienstBescheide'))
@@ -171,6 +172,7 @@ export default function App() {
               <Route path="/aussendienst/kontrollauftraege" element={<AussendienstKontrollauftraege />} />
               <Route path="/aussendienst/hinweise" element={<AussendienstHinweise />} />
               <Route path="/aussendienst/fahrzeug" element={<AussendienstFahrzeug />} />
+              <Route path="/aussendienst/schutzmassnahmen" element={<AussendienstSchutzmassnahmen />} />
             </Route>
           </Route>
           <Route
