@@ -147,6 +147,17 @@ export function istViertelstundenRaster(zeit: string): boolean {
   return !Number.isNaN(minuten) && minuten % 15 === 0
 }
 
+/**
+ * Obergrenze für den Zeitraum einer einzelnen Meldung in Tagen - großzügig
+ * für eine reale zusammenhängende Überstunden-Meldung, verhindert aber, dass
+ * ein Tippfehler bei der Jahreszahl (z. B. "9999") die tageweise Schleife in
+ * berechneAufschluesselung/ueberstunden_berechne_aufschluesselung über
+ * Millionen Iterationen laufen lässt und Browser bzw. Datenbank blockiert.
+ * Muss mit dem DB-CHECK ueberstunden_meldungen_zeitraum_maximal (Migration
+ * Runde 15) übereinstimmen.
+ */
+export const MAX_MELDUNG_DAUER_TAGE = 31
+
 /** Letzter Sonntag im März eines Jahres (Kalendertag 1-31) - Beginn der Sommerzeit in Europe/Vienna (wie in der ganzen EU). */
 function letzterMaerzSonntag(jahr: number): number {
   const einunddreissigsterMaerz = new Date(jahr, 2, 31)

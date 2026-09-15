@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, monatsUebersicht } from './ueberstunden'
+import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, MAX_MELDUNG_DAUER_TAGE, monatsUebersicht } from './ueberstunden'
 import type { UeberstundenMeldung } from './types'
 
 // Montag, 14.09.2026 - ein gewöhnlicher Werktag (siehe austrianHolidays.test.ts).
@@ -220,5 +220,11 @@ describe('istViertelstundenRaster', () => {
   })
   it('lehnt Zeiten außerhalb des Rasters ab', () => {
     for (const zeit of ['18:55', '19:05', '08:01', '08:10']) expect(istViertelstundenRaster(zeit)).toBe(false)
+  })
+})
+
+describe('MAX_MELDUNG_DAUER_TAGE', () => {
+  it('stimmt mit dem DB-CHECK ueberstunden_meldungen_zeitraum_maximal überein (31 Tage)', () => {
+    expect(MAX_MELDUNG_DAUER_TAGE).toBe(31)
   })
 })

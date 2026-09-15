@@ -6,7 +6,7 @@ import { fetchAllPages, supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, KATEGORIEN, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
 const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
@@ -135,14 +135,19 @@ export default function Ueberstunden() {
   // berechneten Aufteilung abweicht (fremde Meldungen anderer Beamter
   // fließen bewusst nicht ein - die sieht die Vorschau nicht).
   const zeitraum = useMemo(() => meldungZeitraum(form), [form])
+  // Obergrenze (siehe MAX_MELDUNG_DAUER_TAGE) auch hier prüfen, nicht erst
+  // beim Speichern - sonst würde ein Tippfehler bei der Jahreszahl die
+  // tageweise Schleife in berechneAufschluesselung schon bei jedem
+  // Tastendruck im Formular durchlaufen und den Browser einfrieren.
+  const zeitraumZuLang = zeitraum ? (zeitraum.bis.getTime() - zeitraum.von.getTime()) > MAX_MELDUNG_DAUER_TAGE * 24 * 60 * 60 * 1000 : false
   const vorschau = useMemo(() => {
-    if (!zeitraum) return null
+    if (!zeitraum || zeitraumZuLang) return null
     const andereEigene = eigene
       .filter(item => POOL_STATUS.includes(item.status) && item.id !== editing?.id)
       .map(item => meldungZeitraum(meldungToForm(item)))
       .filter((z): z is { von: Date; bis: Date } => z !== null)
     return berechneAufschluesselung(zeitraum.von, zeitraum.bis, bereitsVerwendeteFeiertagsstunden(andereEigene, zeitraum.von))
-  }, [zeitraum, eigene, editing?.id])
+  }, [zeitraum, zeitraumZuLang, eigene, editing?.id])
   // Genehmiger-Monatsübersicht: alle genehmigten Meldungen aller Bediensteten
   // im gewählten Monat, je Beamten/-in aufsummiert - Grundlage für die
   // Sammelansicht zur Weiterleitung an die Lohnberechnung.
@@ -157,6 +162,7 @@ export default function Ueberstunden() {
     if (!zeitraum) { setError('Bitte einen gültigen Zeitraum angeben (Von/Bis vollständig ausfüllen, Ende muss nach Beginn liegen).'); return }
     if (!istViertelstundenRaster(form.vonZeit) || !istViertelstundenRaster(form.bisZeit)) { setError('Bitte Uhrzeiten in Viertelstunden-Schritten angeben (z. B. 08:00, 08:15, 08:30, 08:45).'); return }
     if (istUebersprungeneSommerzeitStunde(form.vonDatum, form.vonZeit) || istUebersprungeneSommerzeitStunde(form.bisDatum, form.bisZeit)) { setError('Die Uhrzeit 02:00-03:00 Uhr existiert am Tag der Sommerzeit-Umstellung (letzter Sonntag im März) nicht - bitte eine andere Uhrzeit wählen.'); return }
+    if ((zeitraum.bis.getTime() - zeitraum.von.getTime()) > MAX_MELDUNG_DAUER_TAGE * 24 * 60 * 60 * 1000) { setError(`Der Zeitraum einer einzelnen Meldung darf höchstens ${MAX_MELDUNG_DAUER_TAGE} Tage umfassen.`); return }
     const payload = formToPayload(form)
     setSaving(true)
     const response = editing
@@ -280,7 +286,7 @@ export default function Ueberstunden() {
                 <button type="button" onClick={() => void submitMeldung(item)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-2 rounded-lg"><Send className="w-3.5 h-3.5" /> Einreichen</button>
                 {item.status === 'entwurf' ? <button type="button" onClick={() => void deleteMeldung(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Löschen"><Trash2 className="w-4 h-4" /></button> : null}
               </> : null}
-              {item.status === 'eingereicht' ? <button type="button" onClick={() => void withdrawMeldung(item)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><RotateCcw className="w-3.5 h-3.5" /> Zurückziehen</button> : null}
+              {item.status === 'eingereicht' || item.status === 'rueckfrage' ? <button type="button" onClick={() => void withdrawMeldung(item)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><RotateCcw className="w-3.5 h-3.5" /> Zurückziehen</button> : null}
             </div>
           </div>
         </article>)}</div>}
@@ -299,6 +305,7 @@ export default function Ueberstunden() {
         </div>
       </div>
       {!zeitraum ? <p className="text-xs text-amber-700 -mt-2">Bitte Von/Bis vollständig angeben – das Ende muss nach dem Beginn liegen.</p> : null}
+      {zeitraum && zeitraumZuLang ? <p className="text-xs text-amber-700 -mt-2">Der Zeitraum einer einzelnen Meldung darf höchstens {MAX_MELDUNG_DAUER_TAGE} Tage umfassen.</p> : null}
       <Area label="Grund der Überstunde(n) *" value={form.grund} onChange={value => setForm(current => ({ ...current, grund: value }))} />
       <div>
         <p className="text-xs font-medium text-gray-600 mb-2">Vergütung *</p>
