@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FocusEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import { composeObjectAddress, objectLabel, personDisplayName, personLabel } from '../lib/register'
 import type { OperationalObject, OperationalPerson } from '../lib/types'
@@ -106,9 +106,13 @@ export function PersonNameAutocomplete({ persons, value, onChange, createdBy, on
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState('')
 
-  // Wird die Auswahl von außen zurückgesetzt (z. B. Formular geleert), Felder synchron halten.
+  // Wird von außen eine bestehende Person zugewiesen (z. B. Formular mit
+  // vorhandenem Melder geöffnet), Felder synchron halten. Ein Wechsel auf
+  // null (z. B. weil editName() selbst gerade onChange(null) ausgelöst hat)
+  // wird hier bewusst NICHT übernommen - sonst würde das lokale Tippen im
+  // jeweils anderen Feld (Vorname/Nachname) durch diesen Effekt überschrieben.
   useEffect(() => {
-    if (value === null) { setVorname(''); setNachname(''); return }
+    if (value === null) return
     const person = persons.find(item => item.id === value)
     if (person) { setVorname(person.vorname ?? ''); setNachname(person.nachname ?? '') }
   }, [value, persons])
@@ -153,11 +157,21 @@ export function PersonNameAutocomplete({ persons, value, onChange, createdBy, on
     })() }, 150)
   }
 
-  return <div className="relative">
+  // Container-weites onBlur statt je Feld: sonst löst resolve() schon beim
+  // Wechsel von Vorname zu Nachname aus (Fokus verlässt nur das erste Feld,
+  // nicht das ganze Widget) und legt verfrüht eine Person mit fehlendem
+  // Nachnamen an. relatedTarget zeigt das Element, das den Fokus erhält -
+  // liegt es noch innerhalb dieses Containers, war es nur ein Feldwechsel.
+  function handleBlur(event: FocusEvent<HTMLDivElement>) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    resolve()
+  }
+
+  return <div className="relative" onBlur={handleBlur}>
     <p className="block text-xs font-medium text-gray-600 mb-1">{label}{required ? ' *' : ''}</p>
     <div className="grid grid-cols-2 gap-2">
-      <input className={inputClass} placeholder="Vorname" value={vorname} onChange={event => editName(event.target.value, nachname)} onFocus={() => setOpen(true)} onBlur={resolve} />
-      <input className={inputClass} placeholder="Nachname" value={nachname} onChange={event => editName(vorname, event.target.value)} onFocus={() => setOpen(true)} onBlur={resolve} />
+      <input className={inputClass} placeholder="Vorname" value={vorname} onChange={event => editName(event.target.value, nachname)} onFocus={() => setOpen(true)} />
+      <input className={inputClass} placeholder="Nachname" value={nachname} onChange={event => editName(vorname, event.target.value)} onFocus={() => setOpen(true)} />
     </div>
     {value ? <p className="text-xs text-green-700 mt-1">✓ {personDisplayName(selected)} - bestehende Person verknüpft</p> : resolving ? <p className="text-xs text-gray-500 mt-1">Wird geprüft…</p> : null}
     {error ? <p className="text-xs text-red-700 mt-1">{error}</p> : null}

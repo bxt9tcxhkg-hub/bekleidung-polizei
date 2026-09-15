@@ -80,6 +80,36 @@ export async function routeAlongRoad(start: { lat: number; lng: number }, end: {
   return points.length >= 2 ? points : null
 }
 
+export interface ReverseGeocodeResult {
+  street: string
+  houseNumber: string
+  displayName: string
+}
+
+/**
+ * Löst einen Kartenpunkt (Klick auf die Karte) in eine Adresse auf - als
+ * Alternative zur Texteingabe von Straße/Hausnummer beim Erfassen eines
+ * Einsatzortes. Wie bei den übrigen Nominatim-Aufrufen nur bei einer
+ * expliziten Nutzeraktion (Klick), nicht laufend während des Bewegens.
+ */
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeResult | null> {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`
+  let response: Response
+  try {
+    response = await fetch(url, { headers: { 'Accept-Language': 'de-AT' } })
+  } catch {
+    return null
+  }
+  if (!response.ok) return null
+  const result = await response.json().catch(() => null) as { display_name?: string; address?: { road?: string; house_number?: string } } | null
+  if (!result?.address) return null
+  return {
+    street: result.address.road ?? '',
+    houseNumber: result.address.house_number ?? '',
+    displayName: result.display_name ?? '',
+  }
+}
+
 export async function geocodeLocation(query: string): Promise<GeocodeResult | null> {
   const trimmed = query.trim()
   if (!trimmed) return null
