@@ -130,12 +130,20 @@ export default function Ueberstunden() {
       // eine rein client-seitige Rekonstruktion aus den gespeicherten
       // Gesamtsummen kann die 100%/200%-Sonn-/Feiertags-Schwelle nicht exakt
       // zurückrechnen, sobald an einem betroffenen Tag auch andere Meldungen
-      // desselben Beamten zum Topf beitrugen.
-      supabase.rpc('ueberstunden_monatsanteile', { p_monat_start: vonDatum, p_monat_ende: bisDatum }),
+      // desselben Beamten zum Topf beitrugen. fetchAllPages wie bei der
+      // Meldungen-Abfrage oben - ohne Paginierung würde ein Monat mit mehr
+      // genehmigten Meldungen als die von PostgREST gedeckelte Standard-
+      // Seitengröße nur einen Teil der Anteile liefern, und monatsUebersicht
+      // würde die fehlenden Meldungen (kein Eintrag in der Map) still-
+      // schweigend aus der Sammelansicht/dem PDF weglassen (Migration
+      // Runde 17 sorgt mit ORDER BY meldung_id für die dafür nötige
+      // deterministische Reihenfolge über mehrere Seiten hinweg).
+      fetchAllPages<MonatsAnteilRow>((from, to) => supabase.rpc('ueberstunden_monatsanteile', { p_monat_start: vonDatum, p_monat_ende: bisDatum })
+        .range(from, to) as unknown as PromiseLike<{ data: MonatsAnteilRow[] | null; error: { message: string } | null }>),
     ])
     if (result.error || anteileResult.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
     setUebersichtMeldungen(result.data)
-    setUebersichtAnteile(monatsAnteileMap((anteileResult.data ?? []) as MonatsAnteilRow[]))
+    setUebersichtAnteile(monatsAnteileMap(anteileResult.data))
   }, [monat, isGenehmiger])
   useEffect(() => { void loadUebersicht() }, [loadUebersicht])
 
