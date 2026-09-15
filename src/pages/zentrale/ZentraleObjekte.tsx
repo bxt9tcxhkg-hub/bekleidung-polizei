@@ -19,9 +19,12 @@ type LinkCounts = { avBv: number; fahndungen: number; schluessel: number; kontak
 const emptyForm = { strasse: '', hausnummer: '', plz: '', ort: '', label: '', note: '' }
 
 export default function ZentraleObjekte() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  // Diensthabende Zentralisten dürfen Objekte erfassen/bearbeiten, auch ohne
+  // eigene Sachbearbeiter/Genehmiger-Rolle - Löschen bleibt Verwaltung vorbehalten.
+  const canOperate = canManage || isZentralistOnDuty
   const [objects, setObjects] = useState<OperationalObject[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
   const [loading, setLoading] = useState(true)
@@ -122,7 +125,7 @@ export default function ZentraleObjekte() {
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b bg-gray-50 flex items-center justify-between gap-3">
           <div><h2 className="font-bold text-gray-900">Objekte-Register</h2><p className="text-sm text-gray-500">{objects.length} Objekte erfasst.</p></div>
-          {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Objekt</button> : null}
+          {canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Objekt</button> : null}
         </div>
         {objects.length === 0 ? <Empty text="Noch keine Objekte erfasst." /> : <div className="divide-y divide-gray-100">{objects.map(item => {
           const count = links[item.id]
@@ -137,7 +140,7 @@ export default function ZentraleObjekte() {
                 {count.kontakte ? <span className="text-xs font-medium bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{count.kontakte}× Kontakt</span> : null}
               </div> : null}
             </div>
-            {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Objekt bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
+            {canOperate ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Objekt bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
           </article>
         })}</div>}
       </section>
@@ -155,7 +158,7 @@ export default function ZentraleObjekte() {
       <label className="block text-xs font-medium text-gray-600">Notiz<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>
       {error ? <ErrorMessage text={error} /> : null}
       <div className="flex flex-wrap gap-3 pt-2">
-        {editing ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}
+        {editing && canManage ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}
         <button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button>
         <button type="button" disabled={saving} onClick={() => void save()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button>
       </div>

@@ -13,9 +13,12 @@ const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infek
 const emptyPerson = { personId: null as string | null, location: '', category: 'aggressiv' as OperationalPersonNoteCategory, description: '', guidance: '', source: '', validUntil: '' }
 
 export default function ZentralePersonenhinweise() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  // Diensthabende Zentralisten dürfen Personenhinweise erfassen, auch ohne
+  // eigene Sachbearbeiter/Genehmiger-Rolle - Löschen bleibt Verwaltung vorbehalten.
+  const canOperate = canManage || isZentralistOnDuty
   const { persons, setPersons } = usePersons()
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [loading, setLoading] = useState(true)
@@ -63,7 +66,7 @@ export default function ZentralePersonenhinweise() {
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b bg-gray-50 flex items-center justify-between gap-3">
           <div><h2 className="font-bold text-gray-900">Operative Personenhinweise</h2><p className="text-sm text-gray-500">Nur sachliche und aktuell erforderliche Sicherheitsinformationen.</p></div>
-          {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Hinweis</button> : null}
+          {canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Hinweis</button> : null}
         </div>
         {personNotes.length === 0 ? <Empty text="Keine für dich sichtbaren aktiven Hinweise vorhanden." /> : <div className="divide-y">{personNotes.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-gray-900">{personDisplayName(item.person)}</h3><span className="text-xs font-semibold bg-red-100 text-red-800 px-2 py-1 rounded-full">{PERSON_NOTE_LABEL[item.category]}</span></div><p className="text-sm text-gray-700 mt-2">{item.note}</p>{item.action_guidance ? <p className="text-sm font-medium text-gray-900 mt-2">Hinweis: {item.action_guidance}</p> : null}<div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-2">{item.person?.birth_date ? <span>Geb.: {new Date(item.person.birth_date).toLocaleDateString('de-AT')}</span> : null}{item.person?.phone ? <span>TEL: {item.person.phone}</span> : null}{item.location ? <span>Adresse: {item.location}</span> : null}{item.valid_until ? <span>Gültig bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{item.source_reference ? <span>Grundlage: {item.source_reference}</span> : null}</div></div>{canManage ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Personenhinweis löschen"><Trash2 className="w-4 h-4" /></button> : null}</article>)}</div>}
       </section>
