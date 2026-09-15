@@ -16,8 +16,9 @@ export default function ZentraleFahndungenPage() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
-  // Diensthabende Zentralisten dürfen Einträge erfassen/bearbeiten, auch ohne
-  // eigene Sachbearbeiter/Genehmiger-Rolle - Löschen bleibt Verwaltung vorbehalten.
+  // Diensthabende Zentralisten (Zentrale oder Innendienst) dürfen Einträge
+  // auch ohne eigene Sachbearbeiter/Genehmiger-Rolle erfassen, bearbeiten
+  // und endgültig löschen (RLS erzwingt das zusätzlich).
   const canOperate = canManage || isZentralistOnDuty
   const { persons, setPersons } = usePersons()
   const { objects, setObjects } = useObjects()
@@ -109,7 +110,7 @@ export default function ZentraleFahndungenPage() {
       <label className="flex items-start gap-2.5 text-sm text-gray-700"><input type="checkbox" className="mt-0.5 rounded" checked={form.restricted} onChange={event => setForm(current => ({ ...current, restricted: event.target.checked }))} /><span><strong>Vertraulich</strong><br /><span className="text-xs text-gray-500">Nur Zentralisten, zuständige Sachbearbeiter und Admins können den Eintrag sehen.</span></span></label>
       {error ? <ErrorMessage text={error} /> : null}
       <div className="flex flex-wrap gap-3 pt-2">
-        {editing && canManage ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}
+        {editing && canOperate ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}
         <button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button>
         <button type="button" disabled={saving} onClick={() => void save()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button>
       </div>

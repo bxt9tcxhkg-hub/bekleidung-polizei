@@ -9,6 +9,6 @@ export default function ZentraleEinsaetze() {
   const ctx = useOutletContext<ZentraleContext>()
   return <section>
     <div className="mb-3"><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-sm text-gray-500">Kurze interne Koordination, keine Aktenbearbeitung.</p></div>
-    <IncidentCards visibleIncidents={ctx.visibleIncidents} lageByIncidentId={ctx.lageByIncidentId} baustellen={ctx.baustellen} canManage={ctx.canManage} canOperateZentrale={ctx.canOperateZentrale} openLageForIncident={ctx.openLageForIncident} completeIncident={ctx.completeIncident} deleteIncident={ctx.deleteIncident} />
+    <IncidentCards visibleIncidents={ctx.visibleIncidents} lageByIncidentId={ctx.lageByIncidentId} baustellen={ctx.baustellen} canOperateZentrale={ctx.canOperateZentrale} openLageForIncident={ctx.openLageForIncident} completeIncident={ctx.completeIncident} deleteIncident={ctx.deleteIncident} />
   </section>
 }

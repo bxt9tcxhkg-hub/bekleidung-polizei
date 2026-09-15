@@ -16,6 +16,6 @@ export default function ZentraleBaustellenPage() {
       <div><h1 className="text-2xl font-bold text-gray-900">Baustellen</h1><p className="text-sm text-gray-500 mt-1">Für die Streife: Streckenkenntnis, falls ein Einsatzort über eine gesperrte Straße nicht erreichbar ist.</p></div>
       <button type="button" onClick={ctx.openNewBaustelle} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg flex-shrink-0">+ Baustelle melden</button>
     </div>
-    {ctx.baustellen.length > 0 ? <BaustellenList items={ctx.baustellen} canManage={ctx.canManage} onConfirm={ctx.confirmBaustelle} onEdit={ctx.openEditBaustelle} onClose={ctx.closeBaustelle} onDelete={ctx.deleteBaustelle} /> : <Empty text="Keine Baustellen gemeldet." />}
+    {ctx.baustellen.length > 0 ? <BaustellenList items={ctx.baustellen} canOperate={ctx.canOperateZentrale} onConfirm={ctx.confirmBaustelle} onEdit={ctx.openEditBaustelle} onClose={ctx.closeBaustelle} onDelete={ctx.deleteBaustelle} /> : <Empty text="Keine Baustellen gemeldet." />}
   </div>
 }
