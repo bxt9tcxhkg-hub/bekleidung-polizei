@@ -436,7 +436,7 @@ export default function ZentraleShell() {
       const [hours, minutes] = incident.reportedTime.split(':').map(Number)
       if (!Number.isNaN(hours) && !Number.isNaN(minutes)) reportedAt.setHours(hours, minutes, 0, 0)
     }
-    const status = incident.disposition === 'bp'
+    const status: IncidentReport['status'] = incident.disposition === 'bp'
       ? 'weitergegeben'
       : editingIncident?.status === 'erledigt' ? 'erledigt' : 'offen'
     const payload = {
