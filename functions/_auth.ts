@@ -81,6 +81,22 @@ export async function canManageZentrale(request: Request, env: AuthEnv): Promise
   }
 }
 
+export async function isZentralistOnDuty(request: Request, env: AuthEnv): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/is_zentralist_on_duty`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })
+    return response.ok && await response.json() === true
+  } catch {
+    return false
+  }
+}
+
 /** Archivierte Straßenzustandsberichte: Leserecht folgt RLS auf strassenzustand_berichte (has_portal_area_access('zentrale')). */
 export async function canReadStrassenzustandBericht(request: Request, env: AuthEnv, key: string): Promise<boolean> {
   if (!env.SUPABASE_URL) return false

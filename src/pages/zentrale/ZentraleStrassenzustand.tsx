@@ -72,9 +72,13 @@ const MELDUNGSART_BADGE: Record<StrassenzustandMeldungsart, string> = {
 }
 
 export default function ZentraleStrassenzustand() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  // Diensthabende Zentralisten dürfen Straßenzustandsberichte erfassen,
+  // bearbeiten und löschen, auch ohne eigene Sachbearbeiter/Genehmiger-Rolle -
+  // die Stammdaten (Straßen/Auftraggeber/Meldende) bleiben Verwaltung vorbehalten.
+  const canOperate = canManage || isZentralistOnDuty
   const [strassen, setStrassen] = useState<StrassenzustandStrasse[]>([])
   const [auftraggeber, setAuftraggeber] = useState<StrassenzustandStammdatum[]>([])
   const [melder, setMelder] = useState<StrassenzustandStammdatum[]>([])
@@ -373,7 +377,7 @@ export default function ZentraleStrassenzustand() {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-gray-900">Aktive Sperren / Meldungen</h2>
-          {canManage ? <button type="button" onClick={openNewForm} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Bericht erfassen</button> : null}
+          {canOperate ? <button type="button" onClick={openNewForm} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Bericht erfassen</button> : null}
         </div>
         {aktive.length === 0 ? <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-2 text-sm text-green-800"><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Alle Straßen frei befahrbar.</div>
         : <div className="space-y-2">{aktive.map(zeile => <div key={zeile.id} className="rounded-2xl border-2 border-red-300 bg-red-50 px-4 py-3"><div className="flex flex-wrap items-center gap-2"><p className="font-bold text-red-900">{strassenName(zeile)}</p><span className="text-xs font-semibold bg-white px-2 py-0.5 rounded-full text-red-800">{ZUSTAND_LABEL[zeile.zustand]}</span></div><p className="text-sm text-red-800 mt-1">{formatZeitraum(zeile)}</p>{zeile.zustand_freitext ? <p className="text-sm text-red-800">{zeile.zustand_freitext}</p> : null}</div>)}</div>}
@@ -391,7 +395,7 @@ export default function ZentraleStrassenzustand() {
             </div>
             <div className="flex flex-wrap gap-1.5 mt-2">{berichtZeilen.map(zeile => <span key={zeile.id} className={`text-xs font-medium px-2 py-0.5 rounded-full ${MELDUNGSART_BADGE[zeile.meldungsart]}`}>{strassenName(zeile)} · {MELDUNGSART_LABEL[zeile.meldungsart]}</span>)}</div>
             {bericht.anmerkung ? <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{bericht.anmerkung}</p> : null}
-            {canManage ? <div className="flex flex-wrap gap-2 mt-3">
+            {canOperate ? <div className="flex flex-wrap gap-2 mt-3">
               <button type="button" onClick={() => exportPdf(bericht)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Als PDF exportieren</button>
               {bericht.pdf_file_key
                 ? <button type="button" onClick={() => void openArchivedPdf(bericht)} className="text-xs font-semibold text-green-700 border border-green-200 px-3 py-1.5 rounded-lg">Archiviertes PDF öffnen</button>

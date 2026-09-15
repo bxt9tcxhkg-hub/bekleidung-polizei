@@ -1063,6 +1063,8 @@ export interface InnendienstRecord {
   zeit_bis: string | null
   /** Nur bei Bescheiden: Kostenaufstellung im PDF wird live aus diesem Gebührensatz nachgeschlagen, kein gespeicherter Betrag. */
   gebuehrensatz_id: string | null
+  /** Nur bei Bescheiden: Planbeilage (Luftbild+Kataster Marktplatz-Standplätze a)/b)) an das PDF anhängen - explizite Auswahl, da nicht jeder Bescheid diese Location betrifft. */
+  planbeilage: boolean
   created_by: string
   created_at: string
   updated_at: string
@@ -1108,15 +1110,20 @@ export interface InnendienstGebuehrensatzPosition {
 // Überstundenmeldung: self-service - jede/r Bedienstete erfasst die eigenen
 // Überstunden und reicht sie ein, der Genehmiger entscheidet (siehe
 // enforce_ueberstunden_update() für die Feld-Einschränkung je Rolle).
-export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt'
+export type UeberstundenStatus = 'entwurf' | 'eingereicht' | 'genehmigt' | 'abgelehnt' | 'rueckfrage'
+export type UeberstundenVerguetung = 'auszahlung' | 'stundenersatz'
 
 export interface UeberstundenMeldung {
   id: string
   beamter_id: string
-  datum: string
-  zeit_von: string | null
-  zeit_bis: string | null
+  /** Beginn des Zeitraums, aus dem die Lohnarten-Aufschlüsselung automatisch berechnet wird (siehe lib/ueberstunden.ts berechneAufschluesselung()). */
+  von_datum: string
+  von_zeit: string
+  /** Ende des Zeitraums - kann an einem späteren Tag liegen als von_datum (mehrtägiger Dienst). */
+  bis_datum: string
+  bis_zeit: string
   grund: string
+  verguetung: UeberstundenVerguetung
   /** Werktage Mo 06-19 Uhr, 50 % (LA 3250). */
   std_werktag_50: number
   /** Sonn-/Feiertage bis 8 Std, 100 % (LA 3520). */
@@ -1560,7 +1567,7 @@ export type Database = {
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_gebuehrensatz_id_fkey'; columns: ['gebuehrensatz_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrensaetze'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_gebuehrensatz_positionen_position_id_fkey'; columns: ['position_id']; isOneToOne: false; referencedRelation: 'innendienst_gebuehrenpositionen'; referencedColumns: ['id'] },
       ] }
-      ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'datum' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'datum' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
+      ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'ueberstunden_meldungen_beamter_id_fkey'; columns: ['beamter_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'ueberstunden_meldungen_genehmiger_id_fkey'; columns: ['genehmiger_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'ueberstunden_meldungen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
@@ -1626,6 +1633,7 @@ export type Database = {
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }
       decide_schulung_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       strassenzustand_bericht_ersetzen: { Args: { p_bericht_id: string; p_anmerkung: string | null; p_zeilen: Record<string, unknown>[] }; Returns: undefined }
+      ueberstunden_monatsanteile: { Args: { p_monat_start: string; p_monat_ende: string }; Returns: { meldung_id: string; beamter_id: string; verguetung: string; std_werktag_50: number; std_sonn_100: number; std_19_22: number; std_22_06: number; std_sonn_200: number }[] }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

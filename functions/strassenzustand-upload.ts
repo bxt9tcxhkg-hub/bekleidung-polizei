@@ -1,4 +1,4 @@
-import { canManageZentrale, isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { canManageZentrale, isAuthenticated, isZentralistOnDuty, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 import { countUploadBytes, uploadSize } from './_upload'
 
 interface Env extends AuthEnv {
@@ -11,7 +11,11 @@ const ALLOWED_TYPES = new Set(['application/pdf'])
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
-  if (!(await canManageZentrale(context.request, context.env))) {
+  // Erlaubt wie das Erfassen/Bearbeiten der Berichte selbst (siehe
+  // ZentraleStrassenzustand.tsx canOperate): Verwaltung ODER diensthabende/r
+  // Zentralist/in - sonst wäre die dort freigeschaltete "PDF archivieren"-
+  // Aktion für diese Benutzer immer mit 403 fehlgeschlagen.
+  if (!(await canManageZentrale(context.request, context.env)) && !(await isZentralistOnDuty(context.request, context.env))) {
     return new Response(JSON.stringify({ error: 'Nur Zentralisten, Sachbearbeiter, Genehmiger oder Admins dürfen Berichte archivieren.' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },

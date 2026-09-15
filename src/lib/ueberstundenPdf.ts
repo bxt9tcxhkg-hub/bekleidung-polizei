@@ -4,17 +4,20 @@
  * Bearbeiter/in- und Genehmiger-Zeile).
  */
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
-import { KATEGORIEN, formatStunden } from './ueberstunden'
-import type { UeberstundenKategorieKey } from './ueberstunden'
+import { KATEGORIEN, VERGUETUNG_LABEL, formatStunden } from './ueberstunden'
+import type { MonatsZeile, UeberstundenKategorieKey } from './ueberstunden'
+import type { UeberstundenVerguetung } from './types'
 
 export interface UeberstundenPdfInput {
   beamterName: string
   bearbeiterName: string
   genehmigerName: string | null
-  datum: string
-  zeitVon: string | null
-  zeitBis: string | null
+  vonDatum: string
+  vonZeit: string
+  bisDatum: string
+  bisZeit: string
   grund: string
+  verguetung: UeberstundenVerguetung
   stunden: Record<UeberstundenKategorieKey, number>
 }
 
@@ -25,7 +28,9 @@ function formatDateShort(isoDate: string): string {
 }
 
 export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
-  const zeit = input.zeitVon && input.zeitBis ? `${input.zeitVon} bis ${input.zeitBis} Uhr` : '–'
+  const mehrtaegig = input.vonDatum !== input.bisDatum
+  const datumText = mehrtaegig ? `${formatDateShort(input.vonDatum)} bis ${formatDateShort(input.bisDatum)}` : formatDateShort(input.vonDatum)
+  const zeit = `${input.vonZeit} bis ${input.bisZeit} Uhr`
   const cols = KATEGORIEN.map(kat => {
     const value = input.stunden[kat.key]
     return `<td>
@@ -62,9 +67,10 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
   <div class="kt">Überstundenmeldung</div>
   <table class="meta">
     <tr><td>Name des Beamten:</td><td>${escHtml(input.beamterName)}</td></tr>
-    <tr><td>Datum:</td><td>${escHtml(formatDateShort(input.datum))}</td></tr>
+    <tr><td>Datum:</td><td>${escHtml(datumText)}</td></tr>
     <tr><td>Uhrzeit:</td><td>${escHtml(zeit)}</td></tr>
     <tr><td>Grund der Überstunde(n):</td><td>${escHtml(input.grund)}</td></tr>
+    <tr><td>Vergütung:</td><td>${escHtml(VERGUETUNG_LABEL[input.verguetung])}</td></tr>
   </table>
   <table class="grid"><tr>${cols}</tr></table>
   <table class="unterschrift">
@@ -79,4 +85,77 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
 
 export function generateUeberstundenPdf(input: UeberstundenPdfInput): void {
   openPrintHtml(buildUeberstundenPdfHtml(input))
+}
+
+export interface UeberstundenSammelPdfInput {
+  monatLabel: string
+  bearbeiterName: string
+  zeilen: MonatsZeile[]
+}
+
+/**
+ * Sammelansicht für den Genehmiger: alle im gewählten Monat genehmigten
+ * Meldungen, je Beamten/-in UND Vergütungsart zu einer Zeile aufsummiert -
+ * zur Weiterleitung an die Lohnberechnung (siehe
+ * lib/ueberstunden.ts::monatsUebersicht). Eigene Zeile je Vergütungsart,
+ * damit Auszahlung und Stundenersatz nicht vermischt werden.
+ */
+export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput): string {
+  const gesamtProKategorie: Record<UeberstundenKategorieKey, number> = { std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }
+  let gesamtGesamt = 0
+  const rows = input.zeilen.map(zeile => {
+    for (const kat of KATEGORIEN) gesamtProKategorie[kat.key] += zeile.stunden[kat.key]
+    gesamtGesamt += zeile.gesamt
+    return `<tr>
+      <td>${escHtml(zeile.beamterName)}${zeile.dienstnummer ? ` <span class="klein">(DNr. ${escHtml(zeile.dienstnummer)})</span>` : ''}</td>
+      <td>${escHtml(VERGUETUNG_LABEL[zeile.verguetung])}</td>
+      ${KATEGORIEN.map(kat => `<td class="r">${zeile.stunden[kat.key] ? formatStunden(zeile.stunden[kat.key]) : '–'}</td>`).join('')}
+      <td class="r b">${formatStunden(zeile.gesamt)}</td>
+    </tr>`
+  }).join('')
+  const summeRow = `<tr class="summe">
+    <td>Gesamt</td>
+    <td></td>
+    ${KATEGORIEN.map(kat => `<td class="r">${gesamtProKategorie[kat.key] ? formatStunden(gesamtProKategorie[kat.key]) : '–'}</td>`).join('')}
+    <td class="r b">${formatStunden(gesamtGesamt)}</td>
+  </tr>`
+
+  return `<!DOCTYPE html>
+<html lang="de"><head><meta charset="UTF-8"><title>Überstunden Sammelansicht ${escHtml(input.monatLabel)}</title><style>
+  @page { size: A4 landscape; margin: 16mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Calibri, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.4; }
+  ${LETTERHEAD_CSS}
+  .ra { font-size: 8pt; border-bottom: 1px solid #666; padding-bottom: 1mm; margin-bottom: 6mm; color: #333; }
+  .kt { font-size: 15pt; font-weight: bold; margin-bottom: 1mm; }
+  .ut { font-size: 10pt; margin-bottom: 6mm; color: #333; }
+  table.sammel { width: 100%; border-collapse: collapse; margin-bottom: 8mm; }
+  table.sammel th, table.sammel td { border: 1px solid #999; padding: 1.5mm 2.5mm; }
+  table.sammel th { background: #f2f2f2; font-size: 8pt; text-align: left; vertical-align: bottom; }
+  table.sammel td.r, table.sammel th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  table.sammel td.b { font-weight: bold; }
+  table.sammel tr.summe td { border-top: 2px solid #000; font-weight: bold; background: #f7f7f7; }
+  .klein { font-size: 8pt; color: #555; font-weight: normal; }
+  .foot { margin-top: 10mm; font-size: 8pt; color: #444; display: flex; justify-content: space-between; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style></head><body>
+  ${letterheadBlock(input.bearbeiterName)}
+  <div class="ra">Stadt Dornbirn Rathausplatz 2 A 6850 Dornbirn</div>
+  <div class="kt">Überstunden – Sammelansicht ${escHtml(input.monatLabel)}</div>
+  <div class="ut">Genehmigte Überstunden aller Bediensteten, aufgeschlüsselt nach Lohnart – zur Weiterleitung an die Lohnberechnung.</div>
+  <table class="sammel">
+    <thead><tr>
+      <th>Beamter/in</th>
+      <th>Vergütung</th>
+      ${KATEGORIEN.map(kat => `<th class="r">${escHtml(kat.code)}<br><span class="klein">${escHtml(kat.satz)}</span></th>`).join('')}
+      <th class="r">Gesamt</th>
+    </tr></thead>
+    <tbody>${rows || `<tr><td colspan="${KATEGORIEN.length + 3}">Keine genehmigten Meldungen in diesem Monat.</td></tr>`}${input.zeilen.length ? summeRow : ''}</tbody>
+  </table>
+  <div class="foot"><span>Überstundenmeldung · Sammelansicht</span><span>DVR 0036030</span></div>
+</body></html>`
+}
+
+export function generateUeberstundenSammelPdf(input: UeberstundenSammelPdfInput): void {
+  openPrintHtml(buildUeberstundenSammelPdfHtml(input))
 }

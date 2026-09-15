@@ -5,12 +5,15 @@
  * feste Textbausteine je Bescheid-Art (identisch mit der offiziellen
  * Vorlage) - nur die tatsächlich variablen Angaben (Person, Standplätze,
  * Zeitfenster, Kosten) kommen aus dem jeweiligen innendienst_records-Eintrag.
- * Eine Planbeilage (Lageplan mit markierten Standplätzen) erzeugt dieses
- * Tool bewusst nicht - die Standplätze werden stattdessen als Textliste
- * ausgegeben.
+ * Optional wird als letzte Seite die Planbeilage (Luftbild + Katasterplan
+ * der Marktplatz-Standplätze a)/b)) angehängt - nur wenn planbeilage=true
+ * gesetzt ist (explizite Auswahl im Formular, da nicht jeder Bescheid diese
+ * Location betrifft; aktuell die einzige mit Planbeilage hinterlegte
+ * Location, bei künftig weiteren Standorten muss das erweitert werden).
  */
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
 import { fmtEUR } from './format'
+import { PLANBEILAGE_KATASTER, PLANBEILAGE_LUFTBILD } from './planbeilageAssets'
 import type { InnendienstRecordKind } from './types'
 
 export type BescheidKind = Extract<InnendienstRecordKind, 'bescheid_strassenmusik' | 'bescheid_strassenkunst'>
@@ -29,6 +32,8 @@ export interface BescheidPdfInput {
   kostenPositionen: { name: string; betrag: number }[]
   /** Ausstellungsdatum (YYYY-MM-DD) - dient zugleich als Bewilligungsdatum bei Straßenkunst. */
   issuedDate: string
+  /** Planbeilage (Luftbild+Kataster Marktplatz-Standplätze a)/b)) als letzte Seite anhängen - nur wenn die Standplätze tatsächlich diese Location betreffen. */
+  planbeilage: boolean
   now?: Date
 }
 
@@ -119,6 +124,10 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
   .unterschrift { margin-top: 12mm; }
   .unterschrift p { margin-bottom: 1mm; }
   .foot { margin-top: 16mm; font-size: 8pt; color: #444; display: flex; justify-content: space-between; }
+  .planbeilage { page-break-before: always; }
+  .planbeilage h2 { margin-bottom: 4mm; }
+  .planbeilage img { width: 100%; max-height: 110mm; object-fit: contain; border: 1px solid #999; margin-bottom: 3mm; }
+  .planbeilage .bildtitel { font-size: 8.5pt; color: #444; margin: -2mm 0 5mm; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   ${letterheadBlock(input.bearbeiterName)}
@@ -162,6 +171,14 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
     <span>${input.kind === 'bescheid_strassenmusik' ? 'Straßenmusik' : 'Straßenkunst'}</span>
     <span>DVR 0036030</span>
   </div>
+
+  ${input.planbeilage ? `<div class="planbeilage">
+    <h2>Planbeilage – Standplätze a) und b), Marktplatz</h2>
+    <img src="${PLANBEILAGE_LUFTBILD}" alt="Planbeilage Luftbild">
+    <p class="bildtitel">Luftbild mit markierten Standplätzen a) und b)</p>
+    <img src="${PLANBEILAGE_KATASTER}" alt="Planbeilage Katasterplan">
+    <p class="bildtitel">Katasterplan mit markierten Standplätzen a) und b)</p>
+  </div>` : ''}
 </body></html>`
 }
 

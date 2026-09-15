@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, FileOutput, Pencil, Plus, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { CheckCircle2, FileOutput, HelpCircle, Pencil, Plus, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
-import { supabase } from '../lib/supabase'
+import { fetchAllPages, supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
-import { generateUeberstundenPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, FORM_FIELD_BY_KATEGORIE, KATEGORIEN, STATUS_COLOR, STATUS_LABEL, formToPayload, formatStunden, meldungToForm, totalStunden, type MeldungFormState } from '../lib/ueberstunden'
-import type { UeberstundenMeldung } from '../lib/types'
+import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsAnteileMap, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type MonatsAnteilRow, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
+
+const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
 
 // Überstundenmeldung: self-service - jede/r Bedienstete erfasst die eigenen
-// Überstunden (siehe lib/ueberstunden.ts für Kategorien/Kodierung),
-// verwaltet sie als Entwurf und reicht sie ein; der Genehmiger entscheidet
-// darüber (Abschnitt "Zu entscheiden", nur für Genehmiger sichtbar). Kein
-// eigener Bereichs-Layout/Sidebar nötig, dafür ist die Seite zu klein -
-// eine einzelne Seite wie z. B. Hilfe.tsx.
+// Überstunden über einen Zeitraum (von Datum/Uhrzeit bis Datum/Uhrzeit); die
+// Aufschlüsselung nach Lohnarten (siehe lib/ueberstunden.ts) wird daraus
+// automatisch berechnet, nicht manuell eingegeben. Verwaltet als Entwurf,
+// dann eingereicht; der Genehmiger entscheidet (Abschnitt "Zu entscheiden",
+// nur für Genehmiger sichtbar). Kein eigener Bereichs-Layout/Sidebar nötig,
+// dafür ist die Seite zu klein - eine einzelne Seite wie z. B. Hilfe.tsx.
 
 function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
 
@@ -24,9 +27,27 @@ function StundenBreakdown({ item }: { item: UeberstundenMeldung }) {
   return <p className="text-xs text-gray-500 mt-1">{parts.join(' · ')}</p>
 }
 
+// Tabellarische Aufschlüsselung nach Lohnarten - einheitlich formatierte
+// Zeilen (Label + Hinweis/Satz/Code + rechtsbündiger Wert) statt einzelner
+// Kacheln, die je nach Kategorie unterschiedlich viel Text enthielten.
+function AufschluesselungTabelle({ werte }: { werte: Record<UeberstundenKategorieKey, number> | null }) {
+  const gesamt = werte ? KATEGORIEN.reduce((sum, kat) => sum + werte[kat.key], 0) : null
+  return <div className="rounded-lg border border-gray-200 overflow-hidden">
+    <table className="w-full text-sm">
+      <tbody>
+        {KATEGORIEN.map(kat => <tr key={kat.key} className="border-b border-gray-100 last:border-0">
+          <td className="px-3 py-2 align-top"><p className="font-medium text-gray-800">{kat.label}</p><p className="text-xs text-gray-400 mt-0.5">{kat.hinweis} · {kat.satz} · {kat.code}</p></td>
+          <td className="px-3 py-2 text-right align-top font-semibold text-gray-900 tabular-nums whitespace-nowrap">{werte ? formatStunden(werte[kat.key]) : '–'} Std.</td>
+        </tr>)}
+        <tr className="bg-gray-50"><td className="px-3 py-2 font-bold text-gray-900">Gesamt</td><td className="px-3 py-2 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">{gesamt !== null ? formatStunden(gesamt) : '–'} Std.</td></tr>
+      </tbody>
+    </table>
+  </div>
+}
+
 export default function Ueberstunden() {
   const { profile, isGenehmiger } = useAuth()
-  const [meldungen, setMeldungen] = useState<UeberstundenMeldung[]>([])
+  const [eigene, setEigene] = useState<UeberstundenMeldung[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -34,25 +55,122 @@ export default function Ueberstunden() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<UeberstundenMeldung | null>(null)
   const [form, setForm] = useState<MeldungFormState>(EMPTY_MELDUNG_FORM)
-  const [rejecting, setRejecting] = useState<UeberstundenMeldung | null>(null)
-  const [rejectNote, setRejectNote] = useState('')
+  const [deciding, setDeciding] = useState<{ item: UeberstundenMeldung; status: 'abgelehnt' | 'rueckfrage' } | null>(null)
+  const [decideNote, setDecideNote] = useState('')
+  const [monat, setMonat] = useState(thisMonthLocal())
+  const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
+  const [uebersichtAnteile, setUebersichtAnteile] = useState<Map<string, Record<UeberstundenKategorieKey, number>>>(new Map())
+  const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
 
+  // "Meine Meldungen" - explizit nach beamter_id gefiltert (nicht nur
+  // clientseitig aus einer allgemeinen Liste herausgefiltert): die RLS-
+  // Policy zeigt einem Genehmiger nämlich ALLE Meldungen aller Beamten, eine
+  // unfilterte Abfrage würde bei wachsender Tabelle also schon von fremden
+  // Zeilen gedeckelt, bevor überhaupt nach den eigenen gefiltert wird - eine
+  // eigene ältere Meldung könnte dadurch für einen Genehmiger unsichtbar und
+  // unbearbeitbar werden. Zusätzlich mit fetchAllPages, falls ein Beamter
+  // selbst mehr Meldungen hat als eine einzelne Seite fasst.
+  const profileId = profile?.id
   const load = useCallback(async () => {
+    if (!profileId) return
     setLoading(true)
-    // RLS liefert automatisch die eigenen Meldungen (jeder Status) plus - nur
-    // für Genehmiger - alle übrigen, siehe Policy "Überstundenmeldungen lesen".
-    const result = await supabase.from('ueberstunden_meldungen')
+    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
-      .order('datum', { ascending: false }).order('created_at', { ascending: false })
+      .eq('beamter_id', profileId)
+      .order('von_datum', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) setError('Die Überstundenmeldungen konnten nicht geladen werden.')
     else setError('')
-    setMeldungen((result.data ?? []) as unknown as UeberstundenMeldung[])
+    setEigene(result.data)
     setLoading(false)
-  }, [])
+  }, [profileId])
   useEffect(() => { void load() }, [load])
 
-  const eigene = useMemo(() => meldungen.filter(item => item.beamter_id === profile?.id), [meldungen, profile?.id])
-  const zuEntscheiden = useMemo(() => meldungen.filter(item => item.status === 'eingereicht' && item.beamter_id !== profile?.id), [meldungen, profile?.id])
+  const loadZuEntscheiden = useCallback(async () => {
+    if (!isGenehmiger) { setZuEntscheiden([]); return }
+    // fetchAllPages statt einer einzelnen Abfrage - sonst würde eine ältere
+    // eingereichte Meldung bei einer sehr großen Tabelle aus der von
+    // PostgREST gedeckelten Standard-Seite fallen und für den Genehmiger
+    // unsichtbar bleiben.
+    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
+      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+      .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true }).order('id', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
+    if (result.error) { setError('Die zu entscheidenden Meldungen konnten nicht geladen werden.'); return }
+    setZuEntscheiden(result.data.filter(item => item.beamter_id !== profile?.id))
+  }, [isGenehmiger, profile?.id])
+  useEffect(() => { void loadZuEntscheiden() }, [loadZuEntscheiden])
+
+  // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage (alle
+  // Beamten, nicht nur der aktuelle) für die Genehmiger-Monatsübersicht.
+  const loadUebersicht = useCallback(async () => {
+    if (!isGenehmiger) { setUebersichtMeldungen([]); setUebersichtAnteile(new Map()); return }
+    const [jahr, monatNr] = monat.split('-').map(Number)
+    if (!jahr || !monatNr) return
+    const vonDatum = `${monat}-01`
+    const bisDatum = monatNr === 12 ? `${jahr + 1}-01-01` : `${jahr}-${String(monatNr + 1).padStart(2, '0')}-01`
+    // Meldungen, die den Monat BERÜHREN, nicht nur solche, deren von_datum
+    // darin liegt - eine über Mitternacht in den Folgemonat reichende
+    // Meldung (z. B. 30.09. 23:00 - 01.10. 02:00) hat sonst für Oktober keine
+    // Zeile, obwohl monatsUebersicht (siehe lib/ueberstunden.ts) ihr
+    // anteiliges Kontingent diesem Monat zurechnet.
+    //
+    // fetchAllPages statt einer einzelnen Abfrage - ein Monat mit mehr
+    // genehmigten Meldungen als die von PostgREST gedeckelte Standard-
+    // Seitengröße würde sonst eine unvollständige (aber unauffällig falsche)
+    // Sammelansicht/Monatsübersicht liefern.
+    const [result, anteileResult] = await Promise.all([
+      fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
+        .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+        .eq('status', 'genehmigt').lt('von_datum', bisDatum).gte('bis_datum', vonDatum)
+        .order('id', { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>),
+      // Exakte, serverseitig je Kalendertag berechnete Aufteilung auf den
+      // gewählten Monat (RPC ueberstunden_monatsanteile, Migration Runde 16) -
+      // eine rein client-seitige Rekonstruktion aus den gespeicherten
+      // Gesamtsummen kann die 100%/200%-Sonn-/Feiertags-Schwelle nicht exakt
+      // zurückrechnen, sobald an einem betroffenen Tag auch andere Meldungen
+      // desselben Beamten zum Topf beitrugen. fetchAllPages wie bei der
+      // Meldungen-Abfrage oben - ohne Paginierung würde ein Monat mit mehr
+      // genehmigten Meldungen als die von PostgREST gedeckelte Standard-
+      // Seitengröße nur einen Teil der Anteile liefern, und monatsUebersicht
+      // würde die fehlenden Meldungen (kein Eintrag in der Map) still-
+      // schweigend aus der Sammelansicht/dem PDF weglassen (Migration
+      // Runde 17 sorgt mit ORDER BY meldung_id für die dafür nötige
+      // deterministische Reihenfolge über mehrere Seiten hinweg).
+      fetchAllPages<MonatsAnteilRow>((from, to) => supabase.rpc('ueberstunden_monatsanteile', { p_monat_start: vonDatum, p_monat_ende: bisDatum })
+        .range(from, to) as unknown as PromiseLike<{ data: MonatsAnteilRow[] | null; error: { message: string } | null }>),
+    ])
+    if (result.error || anteileResult.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
+    setUebersichtMeldungen(result.data)
+    setUebersichtAnteile(monatsAnteileMap(anteileResult.data))
+  }, [monat, isGenehmiger])
+  useEffect(() => { void loadUebersicht() }, [loadUebersicht])
+
+  // Live-Vorschau der Aufschlüsselung, während im Formular an Von/Bis getippt
+  // wird - berücksichtigt dabei die eigenen, bereits im Feiertags-Topf
+  // zählenden Meldungen (eingereicht/genehmigt/Rückfrage, siehe
+  // POOL_STATUS), damit sie nicht von der serverseitig beim Speichern
+  // berechneten Aufteilung abweicht (fremde Meldungen anderer Beamter
+  // fließen bewusst nicht ein - die sieht die Vorschau nicht).
+  const zeitraum = useMemo(() => meldungZeitraum(form), [form])
+  // Obergrenze (siehe MAX_MELDUNG_DAUER_TAGE) auch hier prüfen, nicht erst
+  // beim Speichern - sonst würde ein Tippfehler bei der Jahreszahl die
+  // tageweise Schleife in berechneAufschluesselung schon bei jedem
+  // Tastendruck im Formular durchlaufen und den Browser einfrieren.
+  const zeitraumZuLang = zeitraum ? (zeitraum.bis.getTime() - zeitraum.von.getTime()) > MAX_MELDUNG_DAUER_TAGE * 24 * 60 * 60 * 1000 : false
+  const vorschau = useMemo(() => {
+    if (!zeitraum || zeitraumZuLang) return null
+    const andereEigene = eigene
+      .filter(item => POOL_STATUS.includes(item.status) && item.id !== editing?.id)
+      .map(item => meldungZeitraum(meldungToForm(item)))
+      .filter((z): z is { von: Date; bis: Date } => z !== null)
+    return berechneAufschluesselung(zeitraum.von, zeitraum.bis, bereitsVerwendeteFeiertagsstunden(andereEigene, zeitraum.von))
+  }, [zeitraum, zeitraumZuLang, eigene, editing?.id])
+  // Genehmiger-Monatsübersicht: alle genehmigten Meldungen aller Bediensteten
+  // im gewählten Monat, je Beamten/-in aufsummiert - Grundlage für die
+  // Sammelansicht zur Weiterleitung an die Lohnberechnung.
+  const uebersicht = useMemo(() => monatsUebersicht(uebersichtMeldungen, uebersichtAnteile), [uebersichtMeldungen, uebersichtAnteile])
 
   function openNew() { setEditing(null); setForm(EMPTY_MELDUNG_FORM); setShowForm(true); setError('') }
   function openEdit(item: UeberstundenMeldung) { setEditing(item); setForm(meldungToForm(item)); setShowForm(true); setError('') }
@@ -60,26 +178,29 @@ export default function Ueberstunden() {
   async function saveDraft() {
     if (!profile?.id) return
     if (!form.grund.trim()) { setError('Bitte den Grund der Überstunde(n) angeben.'); return }
+    if (!zeitraum) { setError('Bitte einen gültigen Zeitraum angeben (Von/Bis vollständig ausfüllen, Ende muss nach Beginn liegen).'); return }
+    if (!istViertelstundenRaster(form.vonZeit) || !istViertelstundenRaster(form.bisZeit)) { setError('Bitte Uhrzeiten in Viertelstunden-Schritten angeben (z. B. 08:00, 08:15, 08:30, 08:45).'); return }
+    if (istUebersprungeneSommerzeitStunde(form.vonDatum, form.vonZeit) || istUebersprungeneSommerzeitStunde(form.bisDatum, form.bisZeit)) { setError('Die Uhrzeit 02:00-03:00 Uhr existiert am Tag der Sommerzeit-Umstellung (letzter Sonntag im März) nicht - bitte eine andere Uhrzeit wählen.'); return }
+    if ((zeitraum.bis.getTime() - zeitraum.von.getTime()) > MAX_MELDUNG_DAUER_TAGE * 24 * 60 * 60 * 1000) { setError(`Der Zeitraum einer einzelnen Meldung darf höchstens ${MAX_MELDUNG_DAUER_TAGE} Tage umfassen.`); return }
     const payload = formToPayload(form)
-    if (totalStunden(payload) <= 0) { setError('Bitte mindestens eine Stundenkategorie ausfüllen.'); return }
     setSaving(true)
     const response = editing
       ? await supabase.from('ueberstunden_meldungen').update(payload).eq('id', editing.id)
       : await supabase.from('ueberstunden_meldungen').insert({ ...payload, beamter_id: profile.id, created_by: profile.id })
     setSaving(false)
     if (response.error) { setError('Die Meldung konnte nicht gespeichert werden.'); return }
-    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await load()
+    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
   async function submitMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'eingereicht', eingereicht_at: new Date().toISOString() }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht eingereicht werden.'); return }
-    logAudit('Überstundenmeldung eingereicht', `${item.datum} · ${formatStunden(totalStunden(item))} Std.`)
-    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await load()
+    logAudit('Überstundenmeldung eingereicht', `${formatZeitraum(item)} · ${formatStunden(totalStunden(item))} Std.`)
+    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
   async function withdrawMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'entwurf' }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht zurückgezogen werden.'); return }
-    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await load()
+    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
   async function deleteMeldung(item: UeberstundenMeldung) {
     if (!window.confirm('Diesen Entwurf endgültig löschen?')) return
@@ -87,20 +208,29 @@ export default function Ueberstunden() {
     if (result.error) { setError('Die Meldung konnte nicht gelöscht werden.'); return }
     setNotice('Entwurf wurde gelöscht.'); await load()
   }
-  async function decide(item: UeberstundenMeldung, status: 'genehmigt' | 'abgelehnt', note: string) {
+  async function decide(item: UeberstundenMeldung, status: 'genehmigt' | 'abgelehnt' | 'rueckfrage', note: string) {
     if (!profile?.id) return
     const result = await supabase.from('ueberstunden_meldungen').update({ status, genehmiger_id: profile.id, genehmigt_at: new Date().toISOString(), genehmiger_note: note.trim() || null }).eq('id', item.id)
     if (result.error) { setError('Die Entscheidung konnte nicht gespeichert werden.'); return }
-    logAudit(status === 'genehmigt' ? 'Überstundenmeldung genehmigt' : 'Überstundenmeldung abgelehnt', `${item.beamter?.name ?? '–'} · ${item.datum}`)
-    setRejecting(null); setRejectNote(''); setNotice(status === 'genehmigt' ? 'Meldung wurde genehmigt.' : 'Meldung wurde abgelehnt.'); await load()
+    logAudit(`Überstundenmeldung ${STATUS_LABEL[status].toLowerCase()}`, `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`)
+    setDeciding(null); setDecideNote('')
+    setNotice(status === 'genehmigt' ? 'Meldung wurde genehmigt.' : status === 'abgelehnt' ? 'Meldung wurde abgelehnt.' : 'Meldung wurde zur Rückfrage zurückgelegt.')
+    await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
 
   function printMeldung(item: UeberstundenMeldung) {
     generateUeberstundenPdf({
       beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName: item.genehmiger?.name ?? null,
-      datum: item.datum, zeitVon: item.zeit_von?.slice(0, 5) ?? null, zeitBis: item.zeit_bis?.slice(0, 5) ?? null, grund: item.grund,
+      vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
+      verguetung: item.verguetung,
       stunden: { std_werktag_50: item.std_werktag_50, std_sonn_100: item.std_sonn_100, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_200: item.std_sonn_200 },
     })
+  }
+
+  function printSammelansicht() {
+    const [jahr, monatNr] = monat.split('-').map(Number)
+    const monatLabel = new Date(jahr, (monatNr || 1) - 1, 1).toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })
+    generateUeberstundenSammelPdf({ monatLabel, bearbeiterName: profile?.name ?? '–', zeilen: uebersicht })
   }
 
   return <PortalChrome wide>
@@ -114,18 +244,45 @@ export default function Ueberstunden() {
         {zuEntscheiden.length === 0 ? <Empty text="Keine eingereichten Meldungen zu entscheiden." /> : <div className="space-y-3">{zuEntscheiden.map(item => <article key={item.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{new Date(item.datum).toLocaleDateString('de-AT')}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{formatZeitraum(item)}</span></div>
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
             </div>
-            <div className="flex gap-1.5 flex-shrink-0">
+            <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
               <button type="button" onClick={() => printMeldung(item)} className="p-2 text-blue-700 hover:bg-white rounded-lg" aria-label="Als PDF ausgeben"><FileOutput className="w-4 h-4" /></button>
               <button type="button" onClick={() => void decide(item, 'genehmigt', '')} className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 border border-green-300 bg-white px-3 py-2 rounded-lg"><ThumbsUp className="w-3.5 h-3.5" /> Genehmigen</button>
-              <button type="button" onClick={() => { setRejecting(item); setRejectNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-300 bg-white px-3 py-2 rounded-lg"><ThumbsDown className="w-3.5 h-3.5" /> Ablehnen</button>
+              <button type="button" onClick={() => { setDeciding({ item, status: 'rueckfrage' }); setDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-300 bg-white px-3 py-2 rounded-lg"><HelpCircle className="w-3.5 h-3.5" /> Rückfrage</button>
+              <button type="button" onClick={() => { setDeciding({ item, status: 'abgelehnt' }); setDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-300 bg-white px-3 py-2 rounded-lg"><ThumbsDown className="w-3.5 h-3.5" /> Ablehnen</button>
             </div>
           </div>
         </article>)}</div>}
+      </section> : null}
+
+      {isGenehmiger ? <section>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="font-bold text-gray-900">Monatsübersicht – genehmigte Überstunden</h2>
+          <div className="flex items-center gap-2">
+            <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} w-auto`} />
+            <button type="button" onClick={printSammelansicht} disabled={uebersicht.length === 0} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"><FileOutput className="w-3.5 h-3.5" /> Sammelansicht drucken</button>
+          </div>
+        </div>
+        {uebersicht.length === 0 ? <Empty text="Keine genehmigten Meldungen in diesem Monat." /> : <div className="rounded-lg border border-gray-200 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-gray-200 bg-gray-50 text-left text-xs text-gray-500">
+              <th className="px-3 py-2 font-medium">Beamter/in</th>
+              <th className="px-3 py-2 font-medium">Vergütung</th>
+              {KATEGORIEN.map(kat => <th key={kat.key} className="px-3 py-2 font-medium text-right whitespace-nowrap">{kat.code}</th>)}
+              <th className="px-3 py-2 font-medium text-right">Gesamt</th>
+            </tr></thead>
+            <tbody>{uebersicht.map(zeile => <tr key={`${zeile.beamterId}:${zeile.verguetung}`} className="border-b border-gray-100 last:border-0">
+              <td className="px-3 py-2 font-medium text-gray-800">{zeile.beamterName}{zeile.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {zeile.dienstnummer})</span> : null}</td>
+              <td className="px-3 py-2 text-gray-600">{VERGUETUNG_LABEL[zeile.verguetung]}</td>
+              {KATEGORIEN.map(kat => <td key={kat.key} className="px-3 py-2 text-right tabular-nums">{zeile.stunden[kat.key] ? formatStunden(zeile.stunden[kat.key]) : '–'}</td>)}
+              <td className="px-3 py-2 text-right font-bold tabular-nums">{formatStunden(zeile.gesamt)}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
       </section> : null}
 
       <section>
@@ -133,21 +290,22 @@ export default function Ueberstunden() {
         {eigene.length === 0 ? <Empty text="Noch keine Überstundenmeldung erfasst." /> : <div className="space-y-3">{eigene.map(item => <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{new Date(item.datum).toLocaleDateString('de-AT')}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatZeitraum(item)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div>
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
-              {item.status === 'abgelehnt' && item.genehmiger_note ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg mt-2">Rückfrage/Begründung: {item.genehmiger_note}</p> : null}
+              {item.status === 'abgelehnt' && item.genehmiger_note ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg mt-2">Begründung: {item.genehmiger_note}</p> : null}
+              {item.status === 'rueckfrage' ? <p className="text-sm text-blue-700 bg-blue-50 px-3 py-2 rounded-lg mt-2">Rückfrage{item.genehmiger ? ` von ${item.genehmiger.name}` : ''}{item.genehmiger_note ? `: ${item.genehmiger_note}` : ' – bitte prüfen, ergänzen und erneut einreichen.'}</p> : null}
               {item.status === 'genehmigt' && item.genehmiger ? <p className="text-xs text-green-700 mt-1">Genehmigt von {item.genehmiger.name}</p> : null}
             </div>
             <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
               <button type="button" onClick={() => printMeldung(item)} className="p-2 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Als PDF ausgeben"><FileOutput className="w-4 h-4" /></button>
-              {item.status === 'entwurf' ? <>
+              {OFFEN_STATUS.includes(item.status) ? <>
                 <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg" aria-label="Bearbeiten"><Pencil className="w-4 h-4" /></button>
                 <button type="button" onClick={() => void submitMeldung(item)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-2 rounded-lg"><Send className="w-3.5 h-3.5" /> Einreichen</button>
-                <button type="button" onClick={() => void deleteMeldung(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Löschen"><Trash2 className="w-4 h-4" /></button>
+                {item.status === 'entwurf' ? <button type="button" onClick={() => void deleteMeldung(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Löschen"><Trash2 className="w-4 h-4" /></button> : null}
               </> : null}
-              {item.status === 'eingereicht' ? <button type="button" onClick={() => void withdrawMeldung(item)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><RotateCcw className="w-3.5 h-3.5" /> Zurückziehen</button> : null}
+              {item.status === 'eingereicht' || item.status === 'rueckfrage' ? <button type="button" onClick={() => void withdrawMeldung(item)} className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><RotateCcw className="w-3.5 h-3.5" /> Zurückziehen</button> : null}
             </div>
           </div>
         </article>)}</div>}
@@ -155,23 +313,39 @@ export default function Ueberstunden() {
     </div>}
 
     {showForm ? <Modal title={editing ? 'Überstundenmeldung bearbeiten' : 'Neue Überstundenmeldung'} close={() => setShowForm(false)}>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Field label="Datum *" type="date" value={form.datum} onChange={value => setForm(current => ({ ...current, datum: value }))} />
-        <Field label="Uhrzeit von" type="time" value={form.zeitVon} onChange={value => setForm(current => ({ ...current, zeitVon: value }))} />
-        <Field label="Uhrzeit bis" type="time" value={form.zeitBis} onChange={value => setForm(current => ({ ...current, zeitBis: value }))} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Von – Datum *" type="date" value={form.vonDatum} onChange={value => setForm(current => ({ ...current, vonDatum: value }))} />
+          <Field label="Von – Uhrzeit *" type="time" step={900} value={form.vonZeit} onChange={value => setForm(current => ({ ...current, vonZeit: value }))} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Bis – Datum *" type="date" value={form.bisDatum} onChange={value => setForm(current => ({ ...current, bisDatum: value }))} />
+          <Field label="Bis – Uhrzeit *" type="time" step={900} value={form.bisZeit} onChange={value => setForm(current => ({ ...current, bisZeit: value }))} />
+        </div>
       </div>
+      {!zeitraum ? <p className="text-xs text-amber-700 -mt-2">Bitte Von/Bis vollständig angeben – das Ende muss nach dem Beginn liegen.</p> : null}
+      {zeitraum && zeitraumZuLang ? <p className="text-xs text-amber-700 -mt-2">Der Zeitraum einer einzelnen Meldung darf höchstens {MAX_MELDUNG_DAUER_TAGE} Tage umfassen.</p> : null}
       <Area label="Grund der Überstunde(n) *" value={form.grund} onChange={value => setForm(current => ({ ...current, grund: value }))} />
       <div>
-        <p className="text-xs font-medium text-gray-600 mb-2">Ü-Std aufgeschlüsselt</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{KATEGORIEN.map(kat => { const field = FORM_FIELD_BY_KATEGORIE[kat.key]; return <label key={kat.key} className="block text-xs font-medium text-gray-600 rounded-lg border border-gray-200 p-2.5">{kat.label}{kat.hinweis ? <span className="block text-[11px] font-normal text-gray-400 mt-0.5">{kat.hinweis}</span> : null}<span className="block text-[11px] font-normal text-gray-400 mt-0.5">{kat.satz} · {kat.code}</span><input inputMode="decimal" className={inputClass} placeholder="0" value={form[field]} onChange={event => setForm(current => ({ ...current, [field]: event.target.value }))} /></label> })}</div>
+        <p className="text-xs font-medium text-gray-600 mb-2">Vergütung *</p>
+        <div className="flex gap-4">
+          {(['auszahlung', 'stundenersatz'] as UeberstundenVerguetung[]).map(option => <label key={option} className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+            <input type="radio" name="verguetung" checked={form.verguetung === option} onChange={() => setForm(current => ({ ...current, verguetung: option }))} className="text-blue-700 focus:ring-blue-700" />
+            {VERGUETUNG_LABEL[option]}
+          </label>)}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-gray-600 mb-2">Ü-Std aufgeschlüsselt <span className="font-normal text-gray-400">– wird automatisch aus dem Zeitraum berechnet (österreichische Feiertage berücksichtigt)</span></p>
+        <AufschluesselungTabelle werte={vorschau} />
       </div>
       {error ? <ErrorMessage text={error} /> : null}
       <Actions saving={saving} close={() => setShowForm(false)} save={saveDraft} />
     </Modal> : null}
 
-    {rejecting ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-md"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">Meldung ablehnen</h2><button type="button" onClick={() => setRejecting(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
-      <label className="block text-xs font-medium text-gray-600">Rückfrage/Begründung (optional)<textarea className={`${inputClass} min-h-24 resize-y`} value={rejectNote} onChange={event => setRejectNote(event.target.value)} /></label>
-      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setRejecting(null)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" onClick={() => void decide(rejecting, 'abgelehnt', rejectNote)} className="bg-red-700 hover:bg-red-800 text-white text-sm font-medium px-4 py-2.5 rounded-lg">Ablehnen</button></div>
+    {deciding ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-md"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">{deciding.status === 'abgelehnt' ? 'Meldung ablehnen' : 'Zur Rückfrage zurücklegen'}</h2><button type="button" onClick={() => setDeciding(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
+      <label className="block text-xs font-medium text-gray-600">{deciding.status === 'abgelehnt' ? 'Begründung (optional)' : 'Was soll geklärt/ergänzt werden? (optional)'}<textarea className={`${inputClass} min-h-24 resize-y`} value={decideNote} onChange={event => setDecideNote(event.target.value)} /></label>
+      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setDeciding(null)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" onClick={() => void decide(deciding.item, deciding.status, decideNote)} className={`${deciding.status === 'abgelehnt' ? 'bg-red-700 hover:bg-red-800' : 'bg-blue-700 hover:bg-blue-800'} text-white text-sm font-medium px-4 py-2.5 rounded-lg`}>{deciding.status === 'abgelehnt' ? 'Ablehnen' : 'Zur Rückfrage zurücklegen'}</button></div>
     </div></div></div> : null}
   </PortalChrome>
 }

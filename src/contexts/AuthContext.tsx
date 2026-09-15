@@ -47,6 +47,13 @@ interface AuthContextType {
   /** null = Tabelle nicht lesbar (Migration fehlt). */
   areaRoles: AreaRoleSnapshot[] | null
   hasAreaAccess: (area: PortalArea) => boolean
+  // Ist die Person laut Diensteinteilung HEUTE als Zentralist(in) eingeteilt
+  // (duty_assignments.function='zentrale')? Unabhängig von operativeModeActive
+  // und von Sachbearbeiter/Genehmiger-Rollen: ein diensthabender Zentralist
+  // erfasst operative Einträge (Meldungen, Personen/Objekte, Straßenzustand
+  // usw.) auch ohne eigene erweiterte Rolle - siehe is_zentralist_on_duty() in
+  // der Datenbank, dieselbe Regel gilt bereits für Einsatzmeldungen.
+  isZentralistOnDuty: boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -69,16 +76,19 @@ const AuthContext = createContext<AuthContextType>({
   authError: '',
   areaRoles: null,
   hasAreaAccess: () => false,
+  isZentralistOnDuty: false,
   refreshProfile: async () => {},
   signOut: async () => {},
 })
 
 function operativeModeStorageKey(userId: string) { return `operativeMode:${userId}` }
+function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [areaRoles, setAreaRoles] = useState<AreaRoleSnapshot[] | null>(null)
+  const [isZentralistOnDuty, setIsZentralistOnDuty] = useState(false)
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState('')
   const [operativeModeActive, setOperativeModeActiveState] = useState(false)
@@ -112,6 +122,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (data ?? []).map(row => ({ area: row.area, roles: row.roles }))
   }
 
+  // Spiegelt is_zentralist_on_duty() in der Datenbank (dort maßgeblich, hier
+  // nur für die UI-Gate). Serverseitiger CURRENT_DATE-Vergleich vs. lokales
+  // Browserdatum kann in seltenen Randfällen minimal auseinanderlaufen - wie
+  // beim bestehenden ownAssignment-Abgleich in ZentraleShell.tsx, dort schon
+  // ebenso in Kauf genommen.
+  async function loadZentralistOnDuty(userId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('duty_assignments')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('duty_date', todayLocal())
+      .eq('function', 'zentrale')
+      .limit(1)
+    if (error) {
+      console.error('Diensteinteilung konnte nicht geladen werden:', error.message)
+      return false
+    }
+    return (data ?? []).length > 0
+  }
+
   async function applyProfile(userId: string): Promise<boolean> {
     const requestId = ++profileRequestIdRef.current
     const { data, error } = await supabase
@@ -127,6 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null)
       setProfile(null)
       setAreaRoles(null)
+      setIsZentralistOnDuty(false)
       return false
     }
     if (!data.active) {
@@ -135,13 +166,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null)
       setProfile(null)
       setAreaRoles(null)
+      setIsZentralistOnDuty(false)
       return false
     }
-    const areas = await loadAreaRoles(userId)
+    const [areas, onDuty] = await Promise.all([loadAreaRoles(userId), loadZentralistOnDuty(userId)])
     if (requestId !== profileRequestIdRef.current) return false
     setAuthError('')
     setProfile(data)
     setAreaRoles(areas)
+    setIsZentralistOnDuty(onDuty)
     restoreOperativeMode(userId)
     return true
   }
@@ -185,6 +218,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loadedForUserId = null
         setProfile(null)
         setAreaRoles(null)
+        setIsZentralistOnDuty(false)
         setOperativeModeActiveState(false)
         return
       }
@@ -239,6 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     setProfile(null)
     setAreaRoles(null)
+    setIsZentralistOnDuty(false)
     setOperativeModeActiveState(false)
   }
 
@@ -250,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasAreaEntitlement({ area, isStrictAdmin, isGenehmiger: rawIsGenehmiger, rows: areaRoles })
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, isGenehmigerEntitlement: rawIsGenehmiger, operativeModeActive, setOperativeModeActive, hasElevatedRole, mustChangePassword, mustSetUsername, availableRoles, authError, areaRoles, hasAreaAccess, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, isGenehmigerEntitlement: rawIsGenehmiger, operativeModeActive, setOperativeModeActive, hasElevatedRole, mustChangePassword, mustSetUsername, availableRoles, authError, areaRoles, hasAreaAccess, isZentralistOnDuty, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -191,6 +191,7 @@ const headerActionClass =
 
 function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: boolean }) {
   const navigate = useNavigate()
+  const { refreshProfile } = useAuth()
   const [allAssignments, setAllAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
@@ -241,6 +242,10 @@ function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: b
     setMessage(`${config?.label ?? DEFAULT_DUTY_LABEL[code] ?? code} wurde für heute eingetragen.`)
     setPickerOpen(false)
     await load()
+    // isZentralistOnDuty im AuthContext ist sonst erst nach einem vollen
+    // Neuladen aktuell - die frisch freigeschalteten Erfassen/Bearbeiten-
+    // Aktionen in der Zentrale blieben sonst bis dahin ausgeblendet.
+    await refreshProfile()
     // Nach der Auswahl direkt ins passende Dienstcockpit.
     if (code === 'zentrale') navigate('/zentrale')
     else if (code === 'innendienst') navigate('/innendienst')
@@ -251,7 +256,7 @@ function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: b
     if (!selected) return
     setSaving(true); const { error } = await supabase.from('duty_assignments').delete().eq('id', selected.id); setSaving(false)
     if (error) { setMessage('Die Auswahl konnte nicht entfernt werden.'); return }
-    setMessage('Die Auswahl wurde entfernt. Das Portal bleibt normal nutzbar.'); await load()
+    setMessage('Die Auswahl wurde entfernt. Das Portal bleibt normal nutzbar.'); await load(); await refreshProfile()
   }
   async function setVehicle(id: string) {
     setVehicleId(id)
