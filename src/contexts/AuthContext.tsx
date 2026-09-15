@@ -47,12 +47,15 @@ interface AuthContextType {
   /** null = Tabelle nicht lesbar (Migration fehlt). */
   areaRoles: AreaRoleSnapshot[] | null
   hasAreaAccess: (area: PortalArea) => boolean
-  // Ist die Person laut Diensteinteilung HEUTE als Zentralist(in) eingeteilt
-  // (duty_assignments.function='zentrale')? Unabhängig von operativeModeActive
-  // und von Sachbearbeiter/Genehmiger-Rollen: ein diensthabender Zentralist
+  // Ist die Person laut Diensteinteilung HEUTE als Zentralist(in) ODER
+  // Innendienst eingeteilt (duty_assignments.function in 'zentrale',
+  // 'innendienst')? Unabhängig von operativeModeActive und von
+  // Sachbearbeiter/Genehmiger-Rollen: an ruhigeren Tagen deckt dieselbe
+  // Person beide Posten ab, ein diensthabender Zentralist ODER Innendienst
   // erfasst operative Einträge (Meldungen, Personen/Objekte, Straßenzustand
-  // usw.) auch ohne eigene erweiterte Rolle - siehe is_zentralist_on_duty() in
-  // der Datenbank, dieselbe Regel gilt bereits für Einsatzmeldungen.
+  // usw.) auch ohne eigene erweiterte Rolle - siehe is_zentralist_on_duty()
+  // in der Datenbank, dieselbe Regel gilt bereits für Einsatzmeldungen. Name
+  // bewusst unverändert (an vielen Stellen referenziert).
   isZentralistOnDuty: boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
@@ -133,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('id')
       .eq('user_id', userId)
       .eq('duty_date', todayLocal())
-      .eq('function', 'zentrale')
+      .in('function', ['zentrale', 'innendienst'])
       .limit(1)
     if (error) {
       console.error('Diensteinteilung konnte nicht geladen werden:', error.message)

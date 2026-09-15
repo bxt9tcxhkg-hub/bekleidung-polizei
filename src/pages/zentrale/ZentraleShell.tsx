@@ -128,7 +128,10 @@ export default function ZentraleShell() {
   const baustelleRouteRequestRef = useRef(0)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
-  const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
+  // Diensthabender Zentralist ODER Innendienst - an ruhigeren Tagen deckt
+  // dieselbe Person beide Posten ab (siehe is_zentralist_on_duty() in der
+  // Datenbank, dieselbe Regel dort maßgeblich).
+  const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale' || ownAssignment?.function === 'innendienst'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -200,10 +203,16 @@ export default function ZentraleShell() {
   const uebergabeIncidents = openIncidentsAllDays
   const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
   const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
+  // Innendienst filtert NICHT mehr auf disposition==='keine_anfahrt' - seit
+  // die Diensteinteilung "Innendienst" dieselben operativen Zentrale-Rechte
+  // wie ein diensthabender Zentralist gibt (isZentralistOnDuty), muss diese
+  // Person auch alle Meldungen sehen können, um selbst erfasste JD/VD/BP-
+  // Meldungen abzuschließen bzw. auf sie zu reagieren - sonst würde eine
+  // gerade erfasste, an eine Streife weitergegebene Meldung sofort aus der
+  // eigenen Ansicht verschwinden.
   const visibleIncidents = useMemo(() => {
     if (ownAssignment?.function === 'jd') return incidents.filter(item => item.disposition === 'jd')
     if (ownAssignment?.function === 'vd') return incidents.filter(item => item.disposition === 'vd')
-    if (ownAssignment?.function === 'innendienst') return incidents.filter(item => item.disposition === 'keine_anfahrt')
     return incidents
   }, [incidents, ownAssignment?.function])
   // Für die Lage-Auswahl/-Anzeige: heutige UND über Mitternacht hinaus offene
