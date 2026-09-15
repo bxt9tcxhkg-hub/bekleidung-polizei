@@ -1,8 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { AlertTriangle, CheckCircle2, MapPin, Pencil, Trash2, UsersRound } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Pencil, Trash2, UsersRound } from 'lucide-react'
 import LeafletMap, { type MapLine, type MapMarker } from '../../components/LeafletMap'
 import StreetAutocomplete from '../../components/StreetAutocomplete'
-import { PersonPicker } from '../../components/RegisterPickers'
+import { PersonNameAutocomplete } from '../../components/RegisterPickers'
 import { Actions, Area, Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { type StreetSuggestion } from '../../lib/geocode'
 import { personDisplayName } from '../../lib/register'
@@ -56,15 +56,25 @@ export function IncidentCards({ visibleIncidents, lageByIncidentId, baustellen, 
     : visibleIncidents.map(item => { const lage = lageByIncidentId[item.id]; const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null; return <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p><div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">{item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}{item.caller_name ? <span>Melder: {item.caller_name}</span> : null}<span>{DISPOSITION_LABEL[item.disposition]}</span>{item.note ? <span>Bemerkung: {item.note}</span> : null}</div><NearbyBaustellenHint point={point} baustellen={baustellen} />{canOperateZentrale ? <button type="button" onClick={() => openLageForIncident(item)} className={`inline-flex items-center gap-1.5 text-xs font-semibold mt-3 ${lage ? 'text-red-700' : 'text-blue-700'}`}>{lage ? <><AlertTriangle className="w-3.5 h-3.5" /> Operative Lage ansehen</> : 'Als Operative Lage erfassen'}</button> : null}</div><div className="flex gap-2">{canOperateZentrale && item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}{canOperateZentrale ? <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button> : null}</div></div></article> })}</div>
 }
 
-export function IncidentModal({ incident, setIncident, vdAvailable, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, baustellen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: () => Promise<void>; close: () => void; save: () => Promise<void> }) {
+export function IncidentModal({ incident, setIncident, vdAvailable, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, baustellen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<IncidentFormState>) => setIncident(current => ({ ...current, ...values }))
-  return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders (dieser Anruf)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><PersonPicker label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} /></div><div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700"><span className="font-medium">Meldezeit:</span> {new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
+  return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders (dieser Anruf)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} /></div>
+    <label className="block text-xs font-medium text-gray-600 sm:w-48">Meldezeit<input type="time" className={inputClass} value={incident.reportedTime} onChange={event => patch({ reportedTime: event.target.value })} /></label>
     <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
       <StreetAutocomplete
         label="Straße"
         value={incident.street}
         onChange={value => patch({ street: value, lat: null, lng: null, coordsPrecise: false, location: composeIncidentLocation(value, incident.houseNumber, incident.houseNumberUnknown) })}
-        onSelect={(suggestion: StreetSuggestion) => patch({ street: suggestion.street, lat: suggestion.lat, lng: suggestion.lng, coordsPrecise: false, location: composeIncidentLocation(suggestion.street, incident.houseNumber, incident.houseNumberUnknown) })}
+        onSelect={(suggestion: StreetSuggestion) => {
+          const composed = composeIncidentLocation(suggestion.street, incident.houseNumber, incident.houseNumberUnknown)
+          patch({ street: suggestion.street, lat: suggestion.lat, lng: suggestion.lng, coordsPrecise: false, location: composed })
+          // Ist die Hausnummer schon bekannt, gleich mit ihr die präzise
+          // Adresse suchen, statt nur die (ungenaueren) Straßen-Koordinaten
+          // zu übernehmen - composed statt incident.location, weil der
+          // State-Wert hier im selben Tick noch den alten Stand hätte.
+          if (incident.houseNumber.trim() && !incident.houseNumberUnknown) void locate(composed)
+        }}
+        onSearch={() => { if (incident.location.trim()) void locate() }}
       />
       <div>
         <Field
@@ -76,6 +86,8 @@ export function IncidentModal({ incident, setIncident, vdAvailable, persons, onP
             location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown),
             lat: null, lng: null, coordsPrecise: false,
           })}
+          onBlur={() => { if (incident.street.trim() && incident.houseNumber.trim()) void locate() }}
+          onKeyDown={event => { if (event.key === 'Enter' && incident.street.trim()) { event.preventDefault(); void locate() } }}
         />
         <button
           type="button"
@@ -86,8 +98,12 @@ export function IncidentModal({ incident, setIncident, vdAvailable, persons, onP
         </button>
       </div>
     </div>
-    <div><button type="button" disabled={!incident.location.trim() || locating} onClick={() => void locate()} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 disabled:opacity-50"><MapPin className="w-3.5 h-3.5" /> {locating ? 'Suche…' : 'Auf Karte anzeigen'}</button>{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}</p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
-    <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><PersonPicker label="Beteiligte Person" persons={persons} value={incident.involvedPersonId} onChange={value => patch({ involvedPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} /><ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} fahndungen={contextFahndungen} baustellen={nearbyByLine(incident.lat !== null && incident.lng !== null ? { lat: incident.lat, lng: incident.lng } : null, baustellen)} priorIncidents={priorIncidents} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
+    {/* Die Karte erscheint automatisch, sobald eine Adresse gefunden wurde
+        (Straßenauswahl, Verlassen des Hausnummer-Felds oder Enter) - kein
+        eigener "Auf Karte anzeigen"-Klick mehr nötig. Der Button bleibt als
+        manueller Ausweg, falls die automatische Suche fehlschlägt. */}
+    <div>{locating ? <p className="text-xs text-gray-500">Suche…</p> : null}{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}<button type="button" onClick={() => void locate()} className="ml-2 font-semibold text-blue-700">Erneut versuchen</button></p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
+    <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><PersonNameAutocomplete label="Beteiligte Person" persons={persons} value={incident.involvedPersonId} onChange={value => patch({ involvedPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} /><ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} fahndungen={contextFahndungen} baustellen={nearbyByLine(incident.lat !== null && incident.lng !== null ? { lat: incident.lat, lng: incident.lng } : null, baustellen)} priorIncidents={priorIncidents} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
 }
 
 function ContextHints({ entries, personNotes, avBv, fahndungen, baustellen, priorIncidents }: { entries: ZentraleEntry[]; personNotes: OperationalPersonNote[]; avBv: ZentraleAvBv[]; fahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[] }) {

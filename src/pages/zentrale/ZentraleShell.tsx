@@ -368,9 +368,18 @@ export default function ZentraleShell() {
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
-  function openIncident() { setIncident({ ...EMPTY_INCIDENT_FORM, disposition: vdAvailable ? 'vd' : 'jd' }); setLocateError(''); setShowIncidentForm(true); setError('') }
-  async function locateIncident() {
-    const queried = incident.location.trim()
+  function openIncident() {
+    const now = new Date()
+    setIncident({ ...EMPTY_INCIDENT_FORM, disposition: vdAvailable ? 'vd' : 'jd', reportedTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
+    setLocateError(''); setShowIncidentForm(true); setError('')
+  }
+  // queryOverride: für den Fall, dass eine Straßenauswahl und die
+  // Adresssuche im selben Klick/Tastendruck ausgelöst werden (siehe
+  // IncidentModal) - patch() aktualisiert incident.location erst beim
+  // nächsten Render, ein sofortiger Aufruf ohne Override würde also noch
+  // die alte Adresse verwenden.
+  async function locateIncident(queryOverride?: string) {
+    const queried = (queryOverride ?? incident.location).trim()
     if (!queried) return
     setLocating(true); setLocateError('')
     const result = await geocodeLocation(queried)
@@ -387,11 +396,19 @@ export default function ZentraleShell() {
     // verknüpften Person abgeleitet statt separat einzugeben.
     const callerPerson = persons.find(item => item.id === incident.callerPersonId) ?? null
     const involvedPerson = persons.find(item => item.id === incident.involvedPersonId) ?? null
+    // Meldezeit: heutiges Datum + die im Formular gesetzte (änderbare, aber
+    // standardmäßig aktuelle) Uhrzeit - siehe openIncident().
+    const reportedAt = new Date()
+    if (incident.reportedTime) {
+      const [hours, minutes] = incident.reportedTime.split(':').map(Number)
+      if (!Number.isNaN(hours) && !Number.isNaN(minutes)) reportedAt.setHours(hours, minutes, 0, 0)
+    }
     setSaving(true); const result = await supabase.from('incident_reports').insert({
       caller_phone: incident.callerPhone.trim() || null, caller_person_id: incident.callerPersonId, caller_name: callerPerson ? personDisplayName(callerPerson) : null,
       location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(),
       involved_person_id: incident.involvedPersonId, involved_person: involvedPerson ? personDisplayName(involvedPerson) : null, involved_birth_date: involvedPerson?.birth_date ?? null,
       disposition: incident.disposition, note: incident.note.trim() || null, status: incident.disposition === 'bp' ? 'weitergegeben' : 'offen', created_by: profile.id,
+      reported_at: reportedAt.toISOString(),
     }); setSaving(false)
     if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
     logAudit('Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`); setShowIncidentForm(false); navigate('/zentrale/einsaetze'); setNotice('Meldung wurde gespeichert.'); await load()

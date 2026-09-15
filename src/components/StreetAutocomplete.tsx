@@ -14,7 +14,7 @@ const fieldClass = inputClass.replace('mt-1 ', '')
  * Stattdessen löst der Zentralist die Suche gezielt per Enter oder Button
  * aus, wie bei einer normalen Suche.
  */
-export default function StreetAutocomplete({ label, value, onChange, onSelect }: { label: string; value: string; onChange: (value: string) => void; onSelect: (suggestion: StreetSuggestion) => void }) {
+export default function StreetAutocomplete({ label, value, onChange, onSelect, onSearch }: { label: string; value: string; onChange: (value: string) => void; onSelect: (suggestion: StreetSuggestion) => void; onSearch?: () => void }) {
   const [suggestions, setSuggestions] = useState<StreetSuggestion[]>([])
   const [open, setOpen] = useState(false)
   const [searching, setSearching] = useState(false)
@@ -33,6 +33,7 @@ export default function StreetAutocomplete({ label, value, onChange, onSelect }:
     setSearching(false)
     setSuggestions(result)
     setOpen(result.length > 0)
+    onSearch?.()
   }
 
   return (
