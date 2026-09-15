@@ -13,13 +13,10 @@ const STATUS_LABEL: Record<SchluesselStatus, string> = { verfuegbar: 'Verfügbar
 type Colleague = Pick<Profile, 'id' | 'name' | 'dienstnummer'>
 const emptyForm = { schluesselNummer: '', objectId: null as string | null, verwahrort: '', heldBy: '', note: '', status: 'verfuegbar' as SchluesselStatus, restricted: false }
 
-export default function ZentraleSchluesselPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
-  const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
-  // Diensthabende Zentralisten dürfen Einträge erfassen/bearbeiten, auch ohne
-  // eigene Sachbearbeiter/Genehmiger-Rolle - Löschen bleibt Verwaltung vorbehalten.
-  const canOperate = canManage || isZentralistOnDuty
+export default function StammdatenSchluesselPage() {
+  const { profile, hasAreaAccess, isStrictAdmin } = useAuth()
+  // Die Register sind für die Zentrale lesbar; ihre Pflege ist ausschließlich Aufgabe der Administration.
+  const canManage = isStrictAdmin
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleSchluessel[]>([])
   const [colleagues, setColleagues] = useState<Colleague[]>([])
@@ -67,15 +64,16 @@ export default function ZentraleSchluesselPage() {
   }
 
   return <div>
-    <Link to="/zentrale" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Zentrale</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Schlüssel</h1><p className="text-sm text-gray-500 mt-1">Hinterlegte Schlüssel und Zutrittshinweise.</p></div>
+    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Schlüssel</h1><p className="text-sm text-gray-500 mt-1">Hinterlegte Schlüssel und Zutrittshinweise.</p></div>
+    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führt ausschließlich die Administration durch.</div> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b bg-gray-50 flex items-center justify-between gap-3">
           <div><h2 className="font-bold text-gray-900">Schlüssel</h2><p className="text-sm text-gray-500">{items.length} Einträge.</p></div>
-          {canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Schlüssel</button> : null}
+          {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Schlüssel</button> : null}
         </div>
         {items.length === 0 ? <Empty text="Keine Schlüssel erfasst." /> : <div className="divide-y divide-gray-100">{items.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -91,7 +89,7 @@ export default function ZentraleSchluesselPage() {
             </div>
             {item.note ? <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{item.note}</p> : null}
           </div>
-          {canOperate ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Schlüssel bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
+          {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Schlüssel bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
         </article>)}</div>}
       </section>
     )}

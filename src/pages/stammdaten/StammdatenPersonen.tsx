@@ -20,13 +20,10 @@ type PhoneEntry = { id: string; number: string; erhoben_am: string }
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', phoneErhobenAm: '', phoneNumberId: null as string | null, homeObjectId: null as string | null, note: '' }
 
-export default function ZentralePersonen() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
-  const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
-  // Diensthabende Zentralisten dürfen Personen erfassen/bearbeiten, auch ohne
-  // eigene Sachbearbeiter/Genehmiger-Rolle - Löschen bleibt Verwaltung vorbehalten.
-  const canOperate = canManage || isZentralistOnDuty
+export default function StammdatenPersonen() {
+  const { profile, hasAreaAccess, isStrictAdmin } = useAuth()
+  // Die Register sind für die Zentrale lesbar; ihre Pflege ist ausschließlich Aufgabe der Administration.
+  const canManage = isStrictAdmin
   const [persons, setPersons] = useState<OperationalPerson[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
   const [phoneByPerson, setPhoneByPerson] = useState<Record<string, PhoneEntry>>({})
@@ -151,15 +148,16 @@ export default function ZentralePersonen() {
   }
 
   return <div>
-    <Link to="/zentrale" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Zentrale</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Personen</h1><p className="text-sm text-gray-500 mt-1">Zentrales Register - wird von Personenhinweisen, RSa/RSb, AV/BV & EV und Fahndungen als Verknüpfung genutzt.</p></div>
+    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Personen</h1><p className="text-sm text-gray-500 mt-1">Zentrales Register - wird von Personenhinweisen, RSa/RSb, AV/BV & EV und Fahndungen als Verknüpfung genutzt.</p></div>
+    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führt ausschließlich die Administration durch.</div> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b bg-gray-50 flex items-center justify-between gap-3">
           <div><h2 className="font-bold text-gray-900">Personen-Register</h2><p className="text-sm text-gray-500">{persons.length} Personen erfasst.</p></div>
-          {canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Person</button> : null}
+          {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Person</button> : null}
         </div>
         {persons.length === 0 ? <Empty text="Noch keine Personen erfasst." /> : <div className="divide-y divide-gray-100">{persons.map(item => {
           const count = links[item.id]
@@ -180,7 +178,7 @@ export default function ZentralePersonen() {
                 {count.fahndungen ? <span className="text-xs font-medium bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">{count.fahndungen}× Fahndung</span> : null}
               </div> : null}
             </div>
-            {canOperate ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Person bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
+            {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Person bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
           </article>
         })}</div>}
       </section>

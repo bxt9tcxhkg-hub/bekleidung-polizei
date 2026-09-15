@@ -6,6 +6,7 @@ import {
   Car,
   ClipboardList,
   Clock3,
+  Database,
   GraduationCap,
   LifeBuoy,
   Mail,
@@ -483,6 +484,16 @@ export default function Portal() {
       </PortalSection>
 
       <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">
+        {hasAreaAccess('zentrale') ? (
+          <NavTile
+            to="/stammdaten"
+            label="Stammdaten & Nachschlagewerke"
+            description={isStrictAdmin
+              ? 'Schlüssel, Kontakte, Personen und Objekte zentral verwalten'
+              : 'Schlüssel, Kontakte, Personen und Objekte nachschlagen'}
+            icon={Database}
+          />
+        ) : null}
         {apps.map(app => <AppTile key={app.id} app={app} />)}
         {hasAreaAccess('schulungen') ? (
           <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} />

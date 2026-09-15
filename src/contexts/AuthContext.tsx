@@ -52,8 +52,8 @@ interface AuthContextType {
   // 'innendienst')? Unabhängig von operativeModeActive und von
   // Sachbearbeiter/Genehmiger-Rollen: an ruhigeren Tagen deckt dieselbe
   // Person beide Posten ab, ein diensthabender Zentralist ODER Innendienst
-  // erfasst operative Einträge (Meldungen, Personen/Objekte, Straßenzustand
-  // usw.) auch ohne eigene erweiterte Rolle - siehe is_zentralist_on_duty()
+  // erfasst operative Einträge (Meldungen, Straßenzustand usw.) auch ohne
+  // eigene erweiterte Rolle - siehe is_zentralist_on_duty()
   // in der Datenbank, dieselbe Regel gilt bereits für Einsatzmeldungen. Name
   // bewusst unverändert (an vielen Stellen referenziert).
   isZentralistOnDuty: boolean

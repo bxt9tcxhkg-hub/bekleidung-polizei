@@ -18,13 +18,10 @@ import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/
 type LinkCounts = { avBv: number; fahndungen: number; schluessel: number; kontakte: number }
 const emptyForm = { strasse: '', hausnummer: '', plz: '', ort: '', label: '', note: '' }
 
-export default function ZentraleObjekte() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
-  const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
-  // Diensthabende Zentralisten dürfen Objekte erfassen/bearbeiten, auch ohne
-  // eigene Sachbearbeiter/Genehmiger-Rolle - Löschen bleibt Verwaltung vorbehalten.
-  const canOperate = canManage || isZentralistOnDuty
+export default function StammdatenObjekte() {
+  const { profile, hasAreaAccess, isStrictAdmin } = useAuth()
+  // Die Register sind für die Zentrale lesbar; ihre Pflege ist ausschließlich Aufgabe der Administration.
+  const canManage = isStrictAdmin
   const [objects, setObjects] = useState<OperationalObject[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
   const [loading, setLoading] = useState(true)
@@ -117,15 +114,16 @@ export default function ZentraleObjekte() {
   }
 
   return <div>
-    <Link to="/zentrale" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Zentrale</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Objekte</h1><p className="text-sm text-gray-500 mt-1">Adressen/Gebäude - wird von AV/BV & EV, Fahndungen, Schlüsseln und Kontakten als Verknüpfung genutzt.</p></div>
+    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Objekte</h1><p className="text-sm text-gray-500 mt-1">Adressen/Gebäude - wird von AV/BV & EV, Fahndungen, Schlüsseln und Kontakten als Verknüpfung genutzt.</p></div>
+    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führt ausschließlich die Administration durch.</div> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b bg-gray-50 flex items-center justify-between gap-3">
           <div><h2 className="font-bold text-gray-900">Objekte-Register</h2><p className="text-sm text-gray-500">{objects.length} Objekte erfasst.</p></div>
-          {canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Objekt</button> : null}
+          {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Objekt</button> : null}
         </div>
         {objects.length === 0 ? <Empty text="Noch keine Objekte erfasst." /> : <div className="divide-y divide-gray-100">{objects.map(item => {
           const count = links[item.id]
@@ -140,7 +138,7 @@ export default function ZentraleObjekte() {
                 {count.kontakte ? <span className="text-xs font-medium bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{count.kontakte}× Kontakt</span> : null}
               </div> : null}
             </div>
-            {canOperate ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Objekt bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
+            {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Objekt bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
           </article>
         })}</div>}
       </section>

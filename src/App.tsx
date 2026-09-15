@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import EinsatzLayout from './components/EinsatzLayout'
 import ZentraleLayout from './components/ZentraleLayout'
+import StammdatenLayout from './components/StammdatenLayout'
 import AussendienstLayout from './components/AussendienstLayout'
 import InnendienstLayout from './components/InnendienstLayout'
 import RsaRsbLayout from './components/RsaRsbLayout'
@@ -54,11 +55,11 @@ const ZentraleLagePage = lazy(() => import('./pages/zentrale/ZentraleLagePage'))
 const ZentraleBaustellenPage = lazy(() => import('./pages/zentrale/ZentraleBaustellenPage'))
 const ZentraleAvBv = lazy(() => import('./pages/zentrale/ZentraleAvBv'))
 const ZentralePersonenhinweise = lazy(() => import('./pages/zentrale/ZentralePersonenhinweise'))
-const ZentralePersonen = lazy(() => import('./pages/zentrale/ZentralePersonen'))
-const ZentraleObjekte = lazy(() => import('./pages/zentrale/ZentraleObjekte'))
+const StammdatenPersonen = lazy(() => import('./pages/stammdaten/StammdatenPersonen'))
+const StammdatenObjekte = lazy(() => import('./pages/stammdaten/StammdatenObjekte'))
 const ZentraleFahndungen = lazy(() => import('./pages/zentrale/ZentraleFahndungen'))
-const ZentraleSchluessel = lazy(() => import('./pages/zentrale/ZentraleSchluessel'))
-const ZentraleKontakte = lazy(() => import('./pages/zentrale/ZentraleKontakte'))
+const StammdatenSchluessel = lazy(() => import('./pages/stammdaten/StammdatenSchluessel'))
+const StammdatenKontakte = lazy(() => import('./pages/stammdaten/StammdatenKontakte'))
 const ZentraleAlarmierung = lazy(() => import('./pages/zentrale/ZentraleAlarmierung'))
 const ZentraleUnterlagen = lazy(() => import('./pages/zentrale/ZentraleUnterlagen'))
 const ZentraleStrassenzustand = lazy(() => import('./pages/zentrale/ZentraleStrassenzustand'))
@@ -135,14 +136,27 @@ export default function App() {
             </Route>
             <Route path="/zentrale/av-bv-ev" element={<ZentraleAvBv />} />
             <Route path="/zentrale/personenhinweise" element={<ZentralePersonenhinweise />} />
-            <Route path="/zentrale/personen" element={<ZentralePersonen />} />
-            <Route path="/zentrale/objekte" element={<ZentraleObjekte />} />
             <Route path="/zentrale/fahndungen" element={<ZentraleFahndungen />} />
-            <Route path="/zentrale/schluessel" element={<ZentraleSchluessel />} />
-            <Route path="/zentrale/kontakte" element={<ZentraleKontakte />} />
             <Route path="/zentrale/alarmierung" element={<ZentraleAlarmierung />} />
             <Route path="/zentrale/unterlagen" element={<ZentraleUnterlagen />} />
             <Route path="/zentrale/strassenzustand" element={<ZentraleStrassenzustand />} />
+          </Route>
+          <Route path="/zentrale/schluessel" element={<Navigate to="/stammdaten/schluessel" replace />} />
+          <Route path="/zentrale/kontakte" element={<Navigate to="/stammdaten/kontakte" replace />} />
+          <Route path="/zentrale/personen" element={<Navigate to="/stammdaten/personen" replace />} />
+          <Route path="/zentrale/objekte" element={<Navigate to="/stammdaten/objekte" replace />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <StammdatenLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/stammdaten" element={<Navigate to="/stammdaten/schluessel" replace />} />
+            <Route path="/stammdaten/schluessel" element={<StammdatenSchluessel />} />
+            <Route path="/stammdaten/kontakte" element={<StammdatenKontakte />} />
+            <Route path="/stammdaten/personen" element={<StammdatenPersonen />} />
+            <Route path="/stammdaten/objekte" element={<StammdatenObjekte />} />
           </Route>
           <Route
             element={
