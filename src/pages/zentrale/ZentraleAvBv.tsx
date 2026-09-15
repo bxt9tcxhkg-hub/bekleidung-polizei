@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, CheckCircle2, MapPin, Pencil, Plus, ShieldAlert, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, MapPin, Pencil, Plus, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import LeafletMap from '../../components/LeafletMap'
@@ -52,6 +52,7 @@ export default function ZentraleAvBvPage() {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [areas, setAreas] = useState<AreaForm[]>([newArea()])
   const [locatingKey, setLocatingKey] = useState<string | null>(null)
+  const [now] = useState(() => new Date().getTime())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -62,12 +63,12 @@ export default function ZentraleAvBvPage() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  const mapCircles = useMemo(() => items.filter(item => item.status === 'aktiv' && new Date(item.ende).getTime() > Date.now()).flatMap(item => (item.bereiche ?? []).map(area => ({
+  const mapCircles = useMemo(() => items.filter(item => item.status === 'aktiv' && new Date(item.ende).getTime() > now).flatMap(item => (item.bereiche ?? []).map(area => ({
     lat: area.lat, lng: area.lng, radiusMeters: area.radius_m,
     popup: `${MASSNAHME_LABEL[item.massnahme]} · ${area.bezeichnung} · PAD ${item.pad_aktenzahl}`,
     color: item.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed',
     fillColor: item.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
-  }))), [items])
+  }))), [items, now])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
@@ -152,7 +153,7 @@ export default function ZentraleAvBvPage() {
     <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="font-bold text-gray-900">Aktive Schutzbereiche</h2><p className="text-xs text-gray-500">Rot: polizeiliches BV/AV (fix 100 m um die Wohnung) · Violett: gerichtliche EV.</p></div>{canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white"><Plus className="h-4 w-4" /> Schutzfall</button> : null}</div><LeafletMap height={400} markers={[]} circles={mapCircles} /></section>
     {loading ? <div className="py-10 text-center text-sm text-gray-500">Schutzmaßnahmen werden geladen…</div> : items.length === 0 ? <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">Noch keine Schutzmaßnahmen erfasst.</div> : <section className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{items.map(item => {
       const initialDone = hasInitialControl(item)
-      const overdue = item.massnahme === 'bv_av' && !initialDone && firstControlDeadline(item).getTime() < Date.now()
+      const overdue = item.massnahme === 'bv_av' && !initialDone && firstControlDeadline(item).getTime() < now
       const dueSoon = item.massnahme === 'bv_av' && !initialDone && !overdue
       return <article key={item.id} className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.massnahme === 'bv_av' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{MASSNAHME_LABEL[item.massnahme]}</span><span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{item.status}</span>{overdue ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"><AlertTriangle className="mr-1 inline h-3 w-3" />Erstkontrolle überfällig</span> : dueSoon ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Erstkontrolle bis {firstControlDeadline(item).toLocaleString('de-AT')}</span> : item.massnahme === 'bv_av' ? <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800"><CheckCircle2 className="mr-1 inline h-3 w-3" />Erstkontrolle erfasst</span> : null}</div>

@@ -20,6 +20,7 @@ export default function ZentraleUebersicht() {
   const navigate = useNavigate()
   const [schutzfaelle, setSchutzfaelle] = useState<Schutzfall[]>([])
   const [schutzError, setSchutzError] = useState(false)
+  const [now] = useState(() => new Date().getTime())
   useEffect(() => {
     void supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende').then(result => {
       setSchutzError(Boolean(result.error))
@@ -27,9 +28,9 @@ export default function ZentraleUebersicht() {
     })
   }, [])
   const schutzWarnings = useMemo(() => schutzfaelle.filter(item =>
-    (item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < Date.now())
-    || new Date(item.ende).getTime() - Date.now() < 24 * 60 * 60 * 1000
-  ), [schutzfaelle])
+    (item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now)
+    || new Date(item.ende).getTime() - now < 24 * 60 * 60 * 1000
+  ), [schutzfaelle, now])
   const schutzCircles = useMemo(() => schutzfaelle.flatMap(item => (item.bereiche ?? []).map(area => ({
     lat: area.lat, lng: area.lng, radiusMeters: area.radius_m,
     popup: `${MASSNAHME_LABEL[item.massnahme]} · ${area.bezeichnung} · PAD ${item.pad_aktenzahl}`,
@@ -51,7 +52,7 @@ export default function ZentraleUebersicht() {
           else { const route = CATEGORY_ROUTE[item.category]; if (route) navigate(route) }
         },
       })),
-      ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < Date.now() ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
+      ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
       ...ctx.criticalFahndungen.map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung, onOpen: () => navigate('/zentrale/fahndungen') })),
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
