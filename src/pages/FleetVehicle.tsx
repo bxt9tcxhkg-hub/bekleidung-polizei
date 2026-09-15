@@ -302,7 +302,7 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
   const [sollMenge, setSollMenge] = useState('1')
   const [unit, setUnit] = useState('Stück')
   const [checking, setChecking] = useState(false)
-  const [draft, setDraft] = useState<Record<string, { menge: string; status: FleetEquipmentStatusValue; note: string }>>({})
+  const [draft, setDraft] = useState<Record<string, { passt: boolean; menge: string; status: FleetEquipmentStatusValue; note: string }>>({})
   const [saving, setSaving] = useState(false)
 
   function openItemForm() { setItemName(''); setSollMenge('1'); setUnit('Stück'); setShowItemForm(true) }
@@ -321,18 +321,33 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
     onSaved('Position wurde entfernt.')
   }
 
+  // Checkliste: pro Position wird standardmäßig NICHT als "passt" vorbelegt -
+  // jede Kontrolle verlangt eine aktive Bestätigung (Abhaken), statt den
+  // zuletzt gespeicherten Zustand stillschweigend zu übernehmen. Menge/Status/
+  // Bemerkung werden nur als Ausgangswert für den Fall vorbefüllt, dass die
+  // Position weiterhin nicht passt (z. B. ein chronischer Mangel).
   function startCheck() {
-    const next: Record<string, { menge: string; status: FleetEquipmentStatusValue; note: string }> = {}
+    const next: Record<string, { passt: boolean; menge: string; status: FleetEquipmentStatusValue; note: string }> = {}
     for (const item of items) {
       const current = statusByItem.get(item.id)
-      next[item.id] = { menge: String(current?.ist_menge ?? item.soll_menge), status: current?.status ?? 'vollstaendig', note: current?.note ?? '' }
+      next[item.id] = { passt: false, menge: String(current?.ist_menge ?? item.soll_menge), status: current && current.status !== 'vollstaendig' ? current.status : 'fehlend', note: current?.note ?? '' }
     }
     setDraft(next); setChecking(true)
   }
+  function togglePasst(itemId: string, passt: boolean) {
+    setDraft(current => ({ ...current, [itemId]: { ...current[itemId], passt } }))
+  }
   async function submitCheck() {
     if (!profile?.id) return
+    const fehlendeAngabe = items.some(item => !draft[item.id]?.passt && !draft[item.id]?.menge.trim())
+    if (fehlendeAngabe) { onError('Bitte für jede nicht abgehakte Position die tatsächlich vorhandene Menge angeben.'); return }
     setSaving(true)
-    const rows = items.map(item => ({ item_id: item.id, vehicle_id: vehicleId, ist_menge: Number(draft[item.id]?.menge) || 0, status: draft[item.id]?.status ?? 'vollstaendig', note: draft[item.id]?.note.trim() || null, checked_by: profile.id, checked_at: new Date().toISOString() }))
+    const rows = items.map(item => {
+      const d = draft[item.id]
+      return d?.passt
+        ? { item_id: item.id, vehicle_id: vehicleId, ist_menge: item.soll_menge, status: 'vollstaendig' as FleetEquipmentStatusValue, note: null, checked_by: profile.id, checked_at: new Date().toISOString() }
+        : { item_id: item.id, vehicle_id: vehicleId, ist_menge: Number(d?.menge) || 0, status: d?.status ?? 'fehlend', note: d?.note.trim() || null, checked_by: profile.id, checked_at: new Date().toISOString() }
+    })
     const { error } = await supabase.from('fleet_equipment_status').upsert(rows, { onConflict: 'item_id' })
     setSaving(false)
     if (error) { onError('Die Kontrolle konnte nicht gespeichert werden.'); return }
@@ -349,8 +364,18 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
     </Modal> : null}
 
     {checking ? <Modal title="Bestand kontrollieren" close={() => setChecking(false)} wide>
-      <p className="text-sm text-gray-600">Jede Position prüfen und bei Bedarf anpassen, dann gesammelt speichern.</p>
-      <div className="space-y-3">{items.map(item => <div key={item.id} className="rounded-xl border border-gray-200 p-3"><p className="text-sm font-semibold text-gray-900">{item.name} <span className="text-xs font-normal text-gray-500">(Soll {item.soll_menge} {item.unit})</span></p><div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2"><label className="block text-xs font-medium text-gray-600">Ist-Menge<input type="number" min={0} className={inputClass} value={draft[item.id]?.menge ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], menge: event.target.value } }))} /></label><label className="block text-xs font-medium text-gray-600">Status<select className={inputClass} value={draft[item.id]?.status ?? 'vollstaendig'} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], status: event.target.value as FleetEquipmentStatusValue } }))}>{Object.entries(STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="block text-xs font-medium text-gray-600">Bemerkung<input className={inputClass} value={draft[item.id]?.note ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} /></label></div></div>)}</div>
+      <p className="text-sm text-gray-600">Jede Position abhaken, wenn der Sollbestand passt. Passt er nicht, die tatsächlich vorhandene Menge eintragen.</p>
+      <div className="space-y-3">{items.map(item => { const d = draft[item.id]; const passt = d?.passt ?? false; return <div key={item.id} className={`rounded-xl border p-3 ${passt ? 'border-green-200 bg-green-50' : 'border-gray-200'}`}>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-blue-700 focus:ring-blue-700" checked={passt} onChange={event => togglePasst(item.id, event.target.checked)} />
+          <span className="flex-1 min-w-0"><span className="text-sm font-semibold text-gray-900 block">{item.name}</span><span className="text-xs text-gray-500">Soll: {item.soll_menge} {item.unit} {passt ? '· passt' : ''}</span></span>
+        </label>
+        {!passt ? <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 pl-7">
+          <label className="block text-xs font-medium text-gray-600">Tatsächliche Menge *<input type="number" min={0} className={inputClass} value={d?.menge ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], menge: event.target.value } }))} /></label>
+          <label className="block text-xs font-medium text-gray-600">Was ist der Fall?<select className={inputClass} value={d?.status ?? 'fehlend'} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], status: event.target.value as FleetEquipmentStatusValue } }))}>{Object.entries(STATUS_LABEL).filter(([value]) => value !== 'vollstaendig').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          <label className="block text-xs font-medium text-gray-600">Bemerkung<input className={inputClass} value={d?.note ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} /></label>
+        </div> : null}
+      </div> })}</div>
       <Actions saving={saving} close={() => setChecking(false)} save={submitCheck} label="Kontrolle abschließen" />
     </Modal> : null}
   </TabShell>
