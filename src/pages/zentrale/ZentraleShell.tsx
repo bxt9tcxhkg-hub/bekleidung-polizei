@@ -57,6 +57,7 @@ export interface ZentraleContext {
   lageByIncidentId: Record<string, ZentraleEntry>
   incidentsById: Record<string, Pick<IncidentReport, 'reported_at' | 'location' | 'summary'>>
   visibleIncidents: IncidentReport[]
+  openIncidents: IncidentReport[]
   uebergabeIncidents: IncidentReport[]
   openIncidentMarkers: { lat: number; lng: number; popup: string }[]
   baustellen: ZentraleBaustelle[]
@@ -156,7 +157,7 @@ export default function ZentraleShell() {
       supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       // Für die Übersichtskarte unabhängig vom Tagesfilter: Einsätze bleiben
       // teils über Mitternacht hinaus offen und müssen dort weiter auftauchen.
-      supabase.from('incident_reports').select('*').eq('status', 'offen'),
+      supabase.from('incident_reports').select('*').eq('status', 'offen').order('reported_at', { ascending: true }),
       supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false }),
       // Offene AV/BV & EV sowie Fahndungen kommen jetzt aus eigenen Tabellen
       // (siehe ZentraleAvBv/ZentraleFahndungen) statt aus zentrale_entries -
@@ -226,6 +227,11 @@ export default function ZentraleShell() {
     if (ownAssignment?.function === 'vd') return incidents.filter(item => item.disposition === 'vd')
     return incidents
   }, [incidents, ownAssignment?.function])
+  const openIncidents = useMemo(() => {
+    if (ownAssignment?.function === 'jd') return openIncidentsAllDays.filter(item => item.disposition === 'jd')
+    if (ownAssignment?.function === 'vd') return openIncidentsAllDays.filter(item => item.disposition === 'vd')
+    return openIncidentsAllDays
+  }, [openIncidentsAllDays, ownAssignment?.function])
   // Für die Lage-Auswahl/-Anzeige: heutige UND über Mitternacht hinaus offene
   // Einsätze (sonst wählbar/sichtbar nur bis Mitternacht), plus - falls beim
   // Bearbeiten benötigt - eine gezielt nachgeladene, bereits geschlossene
@@ -540,7 +546,7 @@ export default function ZentraleShell() {
 
   const ctx: ZentraleContext = {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
-    visibleIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines, sperrenLines,
+    visibleIncidents, openIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines, sperrenLines,
     assignments, dutyFunctions, shiftAssignments, dutyShift, setDutyShift,
     criticalEntries, criticalAvBv, criticalFahndungen, criticalStrassensperren, criticalSourcesError,
     openIncident, openEditIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,

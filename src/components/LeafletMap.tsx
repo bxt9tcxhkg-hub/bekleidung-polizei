@@ -24,6 +24,14 @@ export interface MapMarker {
   lat: number
   lng: number
   popup?: string
+  /** Optional eindeutige Farbe, z. B. zur Zuordnung eines Einsatzes zur Karte. */
+  color?: string
+  /** Kurze sichtbare Kennzeichnung im Marker (z. B. Einsatznummer). */
+  label?: string
+  /** Hebt den aktuell ausgewählten Marker gegenüber den übrigen hervor. */
+  selected?: boolean
+  /** Optionaler Klick-Handler, z. B. um die zugehörige Einsatzkarte zu öffnen. */
+  onClick?: () => void
 }
 
 export interface MapLine {
@@ -51,6 +59,7 @@ export default function LeafletMap({
   circles,
   height = 220,
   zoom,
+  focus,
   onMapClick,
   fitLines = true,
 }: {
@@ -59,6 +68,8 @@ export default function LeafletMap({
   circles?: readonly MapCircle[]
   height?: number
   zoom?: number
+  /** Zentriert die Karte bewusst auf einen ausgewählten Punkt, statt alle Ebenen einzupassen. */
+  focus?: { lat: number; lng: number; zoom?: number } | null
   /** Wird bei jedem Klick auf die Karte mit den geklickten Koordinaten aufgerufen - z. B. zum Einzeichnen eines Streckenabschnitts. */
   onMapClick?: (lat: number, lng: number) => void
   /** Ob Linien (z. B. Baustellen) den automatischen Kartenausschnitt mitbestimmen. Default true (z. B. beim Einzeichnen einer Baustelle gewünscht) - false, wenn Linien nur Hintergrundinfo sind und die Ansicht nicht verschieben sollen (z. B. "Aktive Einsätze"-Karte). */
@@ -86,7 +97,38 @@ export default function LeafletMap({
     if (!map) return
     const layerGroup = L.layerGroup().addTo(map)
     markers.forEach(marker => {
-      const placed = L.marker([marker.lat, marker.lng], { icon: markerIcon }).addTo(layerGroup)
+      let icon: L.Icon | L.DivIcon = markerIcon
+      if (marker.color || marker.label) {
+        const size = marker.selected ? 42 : 34
+        const pin = document.createElement('div')
+        pin.style.width = `${size}px`
+        pin.style.height = `${size}px`
+        pin.style.borderRadius = '50% 50% 50% 0'
+        pin.style.transform = 'rotate(-45deg)'
+        pin.style.background = marker.color ?? '#2563eb'
+        pin.style.border = marker.selected ? '4px solid #ffffff' : '3px solid #ffffff'
+        pin.style.boxShadow = marker.selected ? '0 0 0 3px #111827, 0 4px 10px rgb(0 0 0 / 35%)' : '0 2px 7px rgb(0 0 0 / 30%)'
+        pin.style.display = 'flex'
+        pin.style.alignItems = 'center'
+        pin.style.justifyContent = 'center'
+        const label = document.createElement('span')
+        label.textContent = marker.label ?? ''
+        label.style.transform = 'rotate(45deg)'
+        label.style.color = '#ffffff'
+        label.style.fontSize = marker.selected ? '14px' : '12px'
+        label.style.fontWeight = '800'
+        label.style.lineHeight = '1'
+        pin.appendChild(label)
+        icon = L.divIcon({
+          html: pin,
+          className: '',
+          iconSize: [size, size],
+          iconAnchor: [Math.round(size / 2), size],
+          popupAnchor: [0, -size],
+        })
+      }
+      const placed = L.marker([marker.lat, marker.lng], { icon, zIndexOffset: marker.selected ? 1000 : 0 }).addTo(layerGroup)
+      if (marker.onClick) placed.on('click', marker.onClick)
       if (marker.popup) {
         // bindPopup rendert einen String als HTML - Ortsangaben/Sachverhalte
         // sind Freitext von Nutzern, deshalb hier als reiner Text statt als
@@ -128,7 +170,9 @@ export default function LeafletMap({
       ...markers.map(marker => [marker.lat, marker.lng] as [number, number]),
       ...(fitLines ? (lines ?? []).flatMap(line => line.points as [number, number][]) : []),
     ]
-    if (allPoints.length > 0) {
+    if (focus) {
+      map.setView([focus.lat, focus.lng], focus.zoom ?? zoom ?? 16)
+    } else if (allPoints.length > 0) {
       const bounds = L.latLngBounds(allPoints)
       circleBounds.forEach(circle => bounds.extend(circle))
       map.fitBounds(bounds.pad(0.25), { maxZoom: zoom ?? 16 })
@@ -140,7 +184,7 @@ export default function LeafletMap({
       map.setView(DORNBIRN_CENTER, zoom ?? 13)
     }
     return () => { layerGroup.remove() }
-  }, [markers, lines, circles, zoom, fitLines])
+  }, [markers, lines, circles, zoom, focus, fitLines])
 
   // isolate: Leaflets interne Ebenen (Zoom-Controls, Marker, Popups) haben
   // von Haus aus hohe z-index-Werte (bis 1000). Ohne eigenen Stacking-
