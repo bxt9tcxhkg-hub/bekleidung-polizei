@@ -1,4 +1,0 @@
--- Portalweite Loeschregel: Elemente werden gezielt einzeln geloescht.
--- Keine Kettenloeschung von Modulen; bestehende Referenzen schuetzen historische Daten.
--- Trainingstage loeschen nur ihre unmittelbar zugeordneten Anmeldungen,
--- Anwesenheiten, Teilnahmen und Abschluesse (bestehende ON DELETE CASCADE-Regeln).

@@ -1,0 +1,1 @@
+ALTER TABLE powder_settings ADD COLUMN IF NOT EXISTS powders JSONB DEFAULT '[]';

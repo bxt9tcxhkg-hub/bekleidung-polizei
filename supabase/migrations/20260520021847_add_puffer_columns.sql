@@ -1,0 +1,3 @@
+
+ALTER TABLE bean_settings ADD COLUMN IF NOT EXISTS strich_puffer NUMERIC DEFAULT 0;
+ALTER TABLE bean_settings ADD COLUMN IF NOT EXISTS pfand_puffer  NUMERIC DEFAULT 0;

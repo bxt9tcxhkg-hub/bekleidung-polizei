@@ -1,0 +1,1 @@
+ALTER TABLE powder_settings ADD COLUMN IF NOT EXISTS vk_aufschlag NUMERIC DEFAULT 0.50;

@@ -1,3 +1,4 @@
+
 ALTER TABLE public.portal_area_roles DROP CONSTRAINT IF EXISTS portal_area_roles_area_check;
 ALTER TABLE public.portal_area_roles ADD CONSTRAINT portal_area_roles_area_check CHECK (area IN ('bekleidung','einsatz_mt','schulungen'));
 ALTER TABLE public.portal_area_roles DROP CONSTRAINT IF EXISTS portal_area_roles_roles_valid;

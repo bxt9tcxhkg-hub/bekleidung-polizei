@@ -1,3 +1,5 @@
+GRANT EXECUTE ON FUNCTION public.book_order_inventory(uuid,timestamptz,text,integer) TO authenticated;
+
 -- Restrict FK parent deletion as well: child inserts racing a deletion must not be cascaded away.
 DO $$
 DECLARE fk record;

@@ -1,0 +1,1 @@
+ALTER TABLE products ADD COLUMN min_quantity INTEGER NOT NULL DEFAULT 0;
