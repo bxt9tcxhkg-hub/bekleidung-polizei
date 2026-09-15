@@ -43,5 +43,9 @@ export type BaustelleFormState = typeof EMPTY_BAUSTELLE_FORM
 // Name, Geburtsdatum und Telefonnummer stecken in der Person selbst.
 // callerPhone bleibt eigenständig: die Nummer, von der dieser Anruf kam, kann
 // von der im Personen-Register hinterlegten Nummer abweichen.
-export type IncidentFormState = { callerPhone: string; callerPersonId: string | null; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPersonId: string | null; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean }
-export const EMPTY_INCIDENT_FORM: IncidentFormState = { callerPhone: '', callerPersonId: null, street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '', lat: null, lng: null, coordsPrecise: false }
+// reportedTime (HH:MM) ist standardmäßig die aktuelle Uhrzeit beim Öffnen des
+// Formulars (siehe openIncident() in ZentraleShell.tsx), aber änderbar - eine
+// Meldung kommt nicht immer erst in dem Moment herein, in dem sie erfasst
+// wird. Immer für den heutigen Tag (kein Datumsfeld), wie bisher.
+export type IncidentFormState = { callerPhone: string; callerPersonId: string | null; street: string; houseNumber: string; houseNumberUnknown: boolean; location: string; summary: string; involvedPersonId: string | null; disposition: IncidentDisposition; note: string; lat: number | null; lng: number | null; coordsPrecise: boolean; reportedTime: string }
+export const EMPTY_INCIDENT_FORM: IncidentFormState = { callerPhone: '', callerPersonId: null, street: '', houseNumber: '', houseNumberUnknown: false, location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '', lat: null, lng: null, coordsPrecise: false, reportedTime: '' }

@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { composeObjectAddress, objectLabel, personLabel } from '../lib/register'
+import { composeObjectAddress, objectLabel, personDisplayName, personLabel } from '../lib/register'
 import type { OperationalObject, OperationalPerson } from '../lib/types'
 import { inputClass } from './ZentraleEntryEditor'
 
@@ -72,6 +72,99 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
         <button type="button" onClick={() => { setShowCreate(false); setError('') }} className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg">Abbrechen</button>
         <button type="button" disabled={saving} onClick={() => void create()} className="text-xs px-3 py-1.5 bg-blue-800 hover:bg-blue-900 text-white rounded-lg disabled:opacity-60">{saving ? 'Anlegen…' : 'Anlegen'}</button>
       </div>
+    </div> : null}
+  </div>
+}
+
+function normalizePhoneDigits(value: string) { return value.replace(/\D/g, '') }
+
+/**
+ * Wie PersonPicker, aber ohne separaten "Neue Person anlegen"-Klick: Vor-
+ * und Nachname werden direkt als Textfelder eingegeben, während getippt
+ * wird erscheinen passende bestehende Personen als Vorschlag (und, sofern
+ * phone übergeben ist, auch Personen mit passender Telefonnummer - z. B.
+ * die TEL-Nr. des Melders). Wählt man keinen Vorschlag, wird beim Verlassen
+ * der Felder automatisch geprüft, ob eine Person mit exakt diesem Namen
+ * bereits existiert (dann wird sie verknüpft) oder ob eine neue Person
+ * angelegt werden muss (dann geschieht das automatisch, ohne weiteren Klick).
+ */
+export function PersonNameAutocomplete({ persons, value, onChange, createdBy, onCreated, label = 'Person', required = false, phone }: {
+  persons: OperationalPerson[]
+  value: string | null
+  onChange: (id: string | null) => void
+  createdBy: string | null
+  onCreated: (person: OperationalPerson) => void
+  label?: string
+  required?: boolean
+  /** Aktuell eingegebene Telefonnummer (z. B. TEL-Nr. des Melders) - liefert zusätzliche Vorschläge nach Nummer und wird bei einer neu angelegten Person übernommen. */
+  phone?: string
+}) {
+  const selected = persons.find(person => person.id === value) ?? null
+  const [vorname, setVorname] = useState(selected?.vorname ?? '')
+  const [nachname, setNachname] = useState(selected?.nachname ?? '')
+  const [open, setOpen] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  const [error, setError] = useState('')
+
+  // Wird die Auswahl von außen zurückgesetzt (z. B. Formular geleert), Felder synchron halten.
+  useEffect(() => {
+    if (value === null) { setVorname(''); setNachname(''); return }
+    const person = persons.find(item => item.id === value)
+    if (person) { setVorname(person.vorname ?? ''); setNachname(person.nachname ?? '') }
+  }, [value, persons])
+
+  const vornameQuery = vorname.trim().toLowerCase()
+  const nachnameQuery = nachname.trim().toLowerCase()
+  const phoneDigits = normalizePhoneDigits(phone ?? '')
+  const suggestions = value ? [] : (vornameQuery || nachnameQuery
+    ? persons.filter(person =>
+        (vornameQuery && (person.vorname ?? '').toLowerCase().includes(vornameQuery))
+        || (nachnameQuery && (person.nachname ?? '').toLowerCase().includes(nachnameQuery)),
+      ).slice(0, 8)
+    : (phoneDigits.length >= 4 ? persons.filter(person => person.phone && normalizePhoneDigits(person.phone) === phoneDigits).slice(0, 5) : []))
+
+  function selectPerson(person: OperationalPerson) {
+    setVorname(person.vorname ?? ''); setNachname(person.nachname ?? ''); onChange(person.id); setOpen(false); setError('')
+  }
+  function editName(nextVorname: string, nextNachname: string) {
+    if (value) onChange(null)
+    setVorname(nextVorname); setNachname(nextNachname); setOpen(true)
+  }
+  function resolve() {
+    // Kurze Verzögerung, damit ein Klick auf einen Vorschlag (onMouseDown)
+    // zuerst greift - sonst schließt das onBlur die Liste vorher.
+    setTimeout(() => { void (async () => {
+      setOpen(false)
+      if (value) return
+      if (!vorname.trim() && !nachname.trim()) return
+      const exact = persons.find(person => (person.vorname ?? '').toLowerCase() === vorname.trim().toLowerCase() && (person.nachname ?? '').toLowerCase() === nachname.trim().toLowerCase())
+      if (exact) { selectPerson(exact); return }
+      setResolving(true)
+      const result = await supabase.from('operational_persons').insert({ vorname: vorname.trim() || null, nachname: nachname.trim() || null, created_by: createdBy }).select('*').single()
+      if (result.error || !result.data) { setResolving(false); setError('Person konnte nicht angelegt werden.'); return }
+      if (phone?.trim()) {
+        const today = new Date()
+        const erhobenAm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        await supabase.from('operational_phone_numbers').insert({ person_id: result.data.id, number: phone.trim(), erhoben_am: erhobenAm, created_by: createdBy })
+      }
+      setResolving(false)
+      onCreated(result.data as OperationalPerson)
+      onChange(result.data.id)
+    })() }, 150)
+  }
+
+  return <div className="relative">
+    <p className="block text-xs font-medium text-gray-600 mb-1">{label}{required ? ' *' : ''}</p>
+    <div className="grid grid-cols-2 gap-2">
+      <input className={inputClass} placeholder="Vorname" value={vorname} onChange={event => editName(event.target.value, nachname)} onFocus={() => setOpen(true)} onBlur={resolve} />
+      <input className={inputClass} placeholder="Nachname" value={nachname} onChange={event => editName(vorname, event.target.value)} onFocus={() => setOpen(true)} onBlur={resolve} />
+    </div>
+    {value ? <p className="text-xs text-green-700 mt-1">✓ {personDisplayName(selected)} - bestehende Person verknüpft</p> : resolving ? <p className="text-xs text-gray-500 mt-1">Wird geprüft…</p> : null}
+    {error ? <p className="text-xs text-red-700 mt-1">{error}</p> : null}
+    {open && suggestions.length > 0 ? <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+      {suggestions.map(person => <button key={person.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => selectPerson(person)} className="block w-full text-left px-3 py-2 text-sm hover:bg-blue-50">
+        {personLabel(person)}{person.phone ? <span className="text-gray-400"> · {person.phone}</span> : null}
+      </button>)}
     </div> : null}
   </div>
 }
