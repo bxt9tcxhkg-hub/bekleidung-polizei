@@ -128,7 +128,10 @@ export default function ZentraleShell() {
   const baustelleRouteRequestRef = useRef(0)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
-  const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale'
+  // Diensthabender Zentralist ODER Innendienst - an ruhigeren Tagen deckt
+  // dieselbe Person beide Posten ab (siehe is_zentralist_on_duty() in der
+  // Datenbank, dieselbe Regel dort maßgeblich).
+  const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale' || ownAssignment?.function === 'innendienst'
 
   const load = useCallback(async () => {
     setLoading(true)
