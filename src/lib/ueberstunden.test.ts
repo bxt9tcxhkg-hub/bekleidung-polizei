@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, MAX_MELDUNG_DAUER_TAGE, monatsUebersicht } from './ueberstunden'
+import type { UeberstundenKategorieKey } from './ueberstunden'
 import type { UeberstundenMeldung } from './types'
 
 // Montag, 14.09.2026 - ein gewöhnlicher Werktag (siehe austrianHolidays.test.ts).
@@ -77,12 +78,29 @@ function meldung(overrides: Partial<UeberstundenMeldung>): UeberstundenMeldung {
   }
 }
 
+/**
+ * Baut aus Meldungen eine anteile-Map, deren Werte den vollen gespeicherten
+ * Kategorien der jeweiligen Meldung entsprechen - der Regelfall für
+ * monatsUebersicht() (Zeitraum ganz im gewählten Monat, kein monatsgrenzen-
+ * übergreifender Anteil). Das eigentliche monatsgrenzenübergreifende Splitten
+ * (inkl. der exakten 100%/200%-Sonn-/Feiertags-Aufteilung bei mehreren
+ * Meldungen am selben Tag) übernimmt seit Migration Runde 16 serverseitig das
+ * RPC ueberstunden_monatsanteile - das ist SQL und wird live gegen Supabase
+ * verifiziert, nicht hier (siehe die Fix-Kommentare in der Migration).
+ */
+function anteileVon(...items: readonly UeberstundenMeldung[]): Map<string, Record<UeberstundenKategorieKey, number>> {
+  const map = new Map<string, Record<UeberstundenKategorieKey, number>>()
+  for (const item of items) map.set(item.id, { std_werktag_50: item.std_werktag_50, std_sonn_100: item.std_sonn_100, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_200: item.std_sonn_200 })
+  return map
+}
+
 describe('monatsUebersicht', () => {
-  it('summiert genehmigte Meldungen je Beamten für den gewählten Monat', () => {
-    const result = monatsUebersicht([
+  it('summiert genehmigte Meldungen je Beamten anhand der anteile-Map', () => {
+    const items = [
       meldung({ id: '1', std_werktag_50: 4 }),
       meldung({ id: '2', std_werktag_50: 2, std_19_22: 1 }),
-    ], '2026-09')
+    ]
+    const result = monatsUebersicht(items, anteileVon(...items))
     expect(result).toHaveLength(1)
     expect(result[0].beamterName).toBe('Max Muster')
     expect(result[0].stunden.std_werktag_50).toBe(6)
@@ -90,28 +108,29 @@ describe('monatsUebersicht', () => {
     expect(result[0].gesamt).toBe(7)
   })
 
-  it('ignoriert nicht genehmigte Meldungen und andere Monate', () => {
-    const result = monatsUebersicht([
-      meldung({ id: '1', status: 'eingereicht' }),
-      meldung({ id: '2', status: 'abgelehnt' }),
-      meldung({ id: '3', von_datum: '2026-08-31', bis_datum: '2026-08-31' }),
-    ], '2026-09')
+  it('ignoriert nicht genehmigte Meldungen und Meldungen ohne Eintrag in der anteile-Map', () => {
+    const eingereicht = meldung({ id: '1', status: 'eingereicht' })
+    const abgelehnt = meldung({ id: '2', status: 'abgelehnt' })
+    const ohneAnteil = meldung({ id: '3' }) // genehmigt, aber nicht in der Map - berührt den gewählten Monat laut RPC nicht
+    const result = monatsUebersicht([eingereicht, abgelehnt, ohneAnteil], anteileVon(eingereicht, abgelehnt))
     expect(result).toEqual([])
   })
 
   it('gruppiert mehrere Beamte getrennt und sortiert alphabetisch', () => {
-    const result = monatsUebersicht([
+    const items = [
       meldung({ id: '1', beamter_id: 'b2', beamter: { id: 'b2', name: 'Zora Zach', dienstnummer: null } }),
       meldung({ id: '2', beamter_id: 'b1', beamter: { id: 'b1', name: 'Anna Adler', dienstnummer: null } }),
-    ], '2026-09')
+    ]
+    const result = monatsUebersicht(items, anteileVon(...items))
     expect(result.map(z => z.beamterName)).toEqual(['Anna Adler', 'Zora Zach'])
   })
 
   it('trennt Auszahlung und Stundenersatz desselben Beamten in eigene Zeilen', () => {
-    const result = monatsUebersicht([
+    const items = [
       meldung({ id: '1', verguetung: 'auszahlung', std_werktag_50: 4 }),
       meldung({ id: '2', verguetung: 'stundenersatz', std_werktag_50: 3 }),
-    ], '2026-09')
+    ]
+    const result = monatsUebersicht(items, anteileVon(...items))
     expect(result).toHaveLength(2)
     const auszahlung = result.find(z => z.verguetung === 'auszahlung')
     const stundenersatz = result.find(z => z.verguetung === 'stundenersatz')
@@ -119,60 +138,17 @@ describe('monatsUebersicht', () => {
     expect(stundenersatz?.gesamt).toBe(3)
   })
 
-  it('teilt eine über eine Monatsgrenze reichende Meldung an der Grenze auf, statt sie komplett dem Startmonat zuzurechnen', () => {
-    // Mittwoch 30.09.2026 22:00 bis Donnerstag 01.10.2026 02:00 - reine
-    // Werktags-Nachtstunden (22-06), exakt zur Hälfte auf beide Monate
-    // aufteilbar (je 2 von insgesamt 4 Stunden).
-    const item = meldung({ id: '1', von_datum: '2026-09-30', von_zeit: '22:00', bis_datum: '2026-10-01', bis_zeit: '02:00', std_werktag_50: 0, std_22_06: 4 })
-    const september = monatsUebersicht([item], '2026-09')
-    const oktober = monatsUebersicht([item], '2026-10')
-    expect(september).toHaveLength(1)
-    expect(september[0].stunden.std_22_06).toBe(2)
-    expect(september[0].gesamt).toBe(2)
-    expect(oktober).toHaveLength(1)
-    expect(oktober[0].stunden.std_22_06).toBe(2)
-    expect(oktober[0].gesamt).toBe(2)
-  })
-
-  it('teilt bei einer Monatsgrenze, die zugleich in einen Sonn-/Feiertag reicht, die Sonn-/Feiertagsstunden im Verhältnis der tatsächlichen Stunden auf', () => {
-    // Samstag 31.10.2026 23:00 (Werktag) bis Sonntag 01.11.2026 01:00
-    // (Sonn-/Feiertag, Allerheiligen) - je eine Stunde auf jeder Seite,
-    // sowohl der Monatsgrenze als auch der Sonn-/Feiertagsgrenze.
-    const item = meldung({ id: '1', von_datum: '2026-10-31', von_zeit: '23:00', bis_datum: '2026-11-01', bis_zeit: '01:00', std_werktag_50: 0, std_22_06: 1, std_sonn_100: 1 })
-    const oktober = monatsUebersicht([item], '2026-10')
-    const november = monatsUebersicht([item], '2026-11')
-    expect(oktober).toHaveLength(1)
-    expect(oktober[0].stunden.std_22_06).toBe(1)
-    expect(oktober[0].stunden.std_sonn_100).toBe(0)
-    expect(oktober[0].gesamt).toBe(1)
-    expect(november).toHaveLength(1)
-    expect(november[0].stunden.std_22_06).toBe(0)
-    expect(november[0].stunden.std_sonn_100).toBe(1)
-    expect(november[0].gesamt).toBe(1)
-  })
-
-  it('vermischt bei einer Monatsgrenze zwischen zwei benachbarten Sonn-/Feiertagen (je eigene 8-Std.-Schwelle) nicht deren 100%/200%-Aufteilung', () => {
-    // Sonntag 30.04.2028 14:00 bis Montag 01.05.2028 02:00 (Staatsfeiertag) -
-    // 10 Std. am Sonntag (8 zu 100 %, 2 zu 200 %), 2 Std. am Feiertag (beide
-    // zu 100 %, eigene Schwelle) - korrekt wäre April 8/2, Mai 2/0, NICHT ein
-    // einziges gemeinsames Verhältnis über beide Tage hinweg.
-    const item = meldung({ id: '1', von_datum: '2028-04-30', von_zeit: '14:00', bis_datum: '2028-05-01', bis_zeit: '02:00', std_werktag_50: 0, std_sonn_100: 10, std_sonn_200: 2 })
-    const april = monatsUebersicht([item], '2028-04')
-    const mai = monatsUebersicht([item], '2028-05')
-    expect(april).toHaveLength(1)
-    expect(april[0].stunden.std_sonn_100).toBe(8)
-    expect(april[0].stunden.std_sonn_200).toBe(2)
-    expect(april[0].gesamt).toBe(10)
-    expect(mai).toHaveLength(1)
-    expect(mai[0].stunden.std_sonn_100).toBe(2)
-    expect(mai[0].stunden.std_sonn_200).toBe(0)
-    expect(mai[0].gesamt).toBe(2)
-  })
-
-  it('rechnet eine Meldung ganz außerhalb des gewählten Monats keinem der beiden Monate zu', () => {
-    const item = meldung({ id: '1', von_datum: '2026-09-30', von_zeit: '22:00', bis_datum: '2026-10-01', bis_zeit: '02:00', std_werktag_50: 0, std_22_06: 4 })
-    expect(monatsUebersicht([item], '2026-08')).toEqual([])
-    expect(monatsUebersicht([item], '2026-11')).toEqual([])
+  it('verwendet die geclippten Stunden aus der anteile-Map, nicht die vollen gespeicherten Summen der Meldung', () => {
+    // Simuliert eine monatsgrenzenübergreifende Meldung: die volle Meldung
+    // hätte 10 Std., das RPC liefert für den gewählten Monat aber nur den
+    // geclippten Anteil (2 Std.) - monatsUebersicht muss den Map-Wert
+    // übernehmen, nicht die gespeicherten std_*-Felder der Meldung selbst.
+    const item = meldung({ id: '1', std_werktag_50: 10 })
+    const anteile = new Map([['1', { std_werktag_50: 2, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }]])
+    const result = monatsUebersicht([item], anteile)
+    expect(result).toHaveLength(1)
+    expect(result[0].stunden.std_werktag_50).toBe(2)
+    expect(result[0].gesamt).toBe(2)
   })
 })
 

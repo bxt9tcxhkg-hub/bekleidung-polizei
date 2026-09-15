@@ -222,118 +222,28 @@ export interface MonatsZeile {
   gesamt: number
 }
 
-/** [Beginn, Ende) als Date für einen "YYYY-MM"-String. */
-function monatsGrenzen(monat: string): { beginn: Date; ende: Date } {
-  const [jahr, monatNr] = monat.split('-').map(Number)
-  return { beginn: new Date(jahr, monatNr - 1, 1), ende: new Date(jahr, monatNr, 1) }
+/** Zeile aus dem RPC ueberstunden_monatsanteile (siehe Migration Runde 16) -
+ * exakter, serverseitig aus der tageweisen Aufschlüsselung berechneter Anteil
+ * einer genehmigten Meldung an einem bestimmten Monat. Wird für monatsgrenzen-
+ * übergreifende Meldungen benötigt: eine rein client-seitige Rekonstruktion
+ * aus den gespeicherten Gesamtsummen der Meldung kann die 100%/200%-Sonn-/
+ * Feiertags-Aufteilung nicht exakt zurückrechnen, sobald an einem der
+ * betroffenen Tage AUCH andere Meldungen desselben Beamten zum 8-Std.-Topf
+ * beigetragen haben - nur die Datenbank kennt (über dieselbe Prioritäts-
+ * logik wie beim ursprünglichen Speichern) die tatsächliche Tages-Aufteilung. */
+export interface MonatsAnteilRow extends Record<UeberstundenKategorieKey, number> {
+  meldung_id: string
+  beamter_id: string
+  verguetung: UeberstundenVerguetung
 }
 
-/**
- * Wie berechneAufschluesselung, aber ohne 100%/200%-Aufteilung an Sonn-/
- * Feiertagen (reine Zeitfenster-Zerlegung, unabhängig vom Feiertags-Topf) -
- * Sonn-/Feiertagsstunden werden hier je Kalendertag geführt (Map: Tagesbeginn
- * in ms -> Stunden), nicht als eine einzige Gesamtsumme, damit die 8-Std.-
- * Schwelle für die monatsweise Aufteilung (siehe anteilFuerMonat) pro Tag
- * statt über mehrere Sonn-/Feiertage hinweg verrechnet werden kann - sonst
- * würde ein Zeitraum, der zwei unabhängige Sonn-/Feiertage überspannt (z. B.
- * Sonntag-Abend bis Feiertag-Nacht am Monatsersten), die beiden getrennten
- * 8-Std.-Schwellen zu einer gemeinsamen vermischen.
- */
-function rohStundenOhneFeiertagssplit(von: Date, bis: Date): { std_werktag_50: number; std_19_22: number; std_22_06: number; sonnProTag: Map<number, number> } {
-  const result = { std_werktag_50: 0, std_19_22: 0, std_22_06: 0, sonnProTag: new Map<number, number>() }
-  if (!(bis > von)) return result
-  let cursor = new Date(von)
-  while (cursor < bis) {
-    const tagesbeginn = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
-    const naechsterTag = new Date(tagesbeginn.getFullYear(), tagesbeginn.getMonth(), tagesbeginn.getDate() + 1)
-    const abschnittsende = bis < naechsterTag ? bis : naechsterTag
-    const dauerStunden = (abschnittsende.getTime() - cursor.getTime()) / 3_600_000
-    if (isSonnOderFeiertag(tagesbeginn)) {
-      const key = tagesbeginn.getTime()
-      result.sonnProTag.set(key, (result.sonnProTag.get(key) ?? 0) + dauerStunden)
-    } else {
-      const fenster: [number, number, 'std_werktag_50' | 'std_19_22' | 'std_22_06'][] = [
-        [0, 6, 'std_22_06'], [6, 19, 'std_werktag_50'], [19, 22, 'std_19_22'], [22, 24, 'std_22_06'],
-      ]
-      for (const [vonStunde, bisStunde, kategorie] of fenster) {
-        const fensterStart = new Date(tagesbeginn.getTime() + vonStunde * 3_600_000)
-        const fensterEnde = new Date(tagesbeginn.getTime() + bisStunde * 3_600_000)
-        const ueberlappStart = cursor > fensterStart ? cursor : fensterStart
-        const ueberlappEnde = abschnittsende < fensterEnde ? abschnittsende : fensterEnde
-        if (ueberlappEnde > ueberlappStart) result[kategorie] += (ueberlappEnde.getTime() - ueberlappStart.getTime()) / 3_600_000
-      }
-    }
-    cursor = abschnittsende
+/** Baut aus den RPC-Zeilen eine Nachschlage-Map meldung_id -> Aufschlüsselung für monatsUebersicht(). */
+export function monatsAnteileMap(rows: readonly MonatsAnteilRow[]): Map<string, Record<UeberstundenKategorieKey, number>> {
+  const map = new Map<string, Record<UeberstundenKategorieKey, number>>()
+  for (const row of rows) {
+    map.set(row.meldung_id, { std_werktag_50: row.std_werktag_50, std_sonn_100: row.std_sonn_100, std_19_22: row.std_19_22, std_22_06: row.std_22_06, std_sonn_200: row.std_sonn_200 })
   }
-  return result
-}
-
-/**
- * Naive 100%/200%-Aufteilung je Sonn-/Feiertag, ausschließlich aus den
- * eigenen Stunden DIESER Meldung an diesem Tag (ohne Berücksichtigung
- * anderweitig an diesem Tag bereits verwendeter Stunden). Dient nur als
- * GEWICHT für die monatsweise Aufteilung der tatsächlich gespeicherten
- * std_sonn_100/std_sonn_200 (siehe anteilFuerMonat) - für einen Tag, an dem
- * ausschließlich diese Meldung zum Topf beiträgt, ist das Ergebnis exakt;
- * tragen mehrere Meldungen desselben Beamten zum selben Tag bei, bleibt es
- * eine Näherung (die ursprüngliche Reihenfolge ist nachträglich nicht mehr
- * rekonstruierbar), aber unverändert korrekt in der Summe über alle Monate.
- */
-function naiveSonnSplit(sonnProTag: ReadonlyMap<number, number>): { naiv100: number; naiv200: number } {
-  let naiv100 = 0
-  let naiv200 = 0
-  for (const stunden of sonnProTag.values()) {
-    naiv100 += Math.min(8, stunden)
-    naiv200 += Math.max(0, stunden - 8)
-  }
-  return { naiv100, naiv200 }
-}
-
-/**
- * Anteil der gespeicherten Aufschlüsselung einer Meldung, der auf den
- * angegebenen Monat entfällt - null, wenn die Meldung diesen Monat gar nicht
- * berührt. Der Regelfall (Zeitraum ganz in einem Monat) liefert unverändert
- * die volle gespeicherte Aufschlüsselung. Reicht der Zeitraum über eine
- * Monatsgrenze (z. B. 30.09. 23:00 - 01.10. 02:00), wird an der Grenze
- * geteilt: std_werktag_50/std_19_22/std_22_06 lassen sich rein aus der
- * Uhrzeit exakt aufteilen (Monatsgrenzen fallen immer auf Tagesgrenzen, ein
- * einzelner Kalendertag wird also nie durch die Monatsgrenze selbst
- * zerschnitten). Für die Sonn-/Feiertags-100%/200%-Schwelle ist die
- * ursprüngliche Aufteilung nachträglich nicht mehr exakt rekonstruierbar,
- * wenn an einem der betroffenen Tage AUCH andere Meldungen desselben Beamten
- * zum Topf beitrugen (siehe ueberstunden_berechne_aufschluesselung) - die
- * gespeicherten std_sonn_100/std_sonn_200 werden deshalb je Kategorie
- * getrennt im Verhältnis der naiven Tages-Aufteilung (siehe naiveSonnSplit)
- * auf die betroffenen Monate verteilt, statt beide Kategorien mit einem
- * gemeinsamen Stundenverhältnis zu vermischen - das wäre falsch, sobald zwei
- * an der Monatsgrenze benachbarte Sonn-/Feiertage (z. B. Sonntag/Feiertag am
- * Monatsersten) je eine EIGENE 8-Std.-Schwelle haben.
- */
-function anteilFuerMonat(item: UeberstundenMeldung, monat: string): Record<UeberstundenKategorieKey, number> | null {
-  if (item.von_datum.slice(0, 7) === item.bis_datum.slice(0, 7)) {
-    if (item.von_datum.slice(0, 7) !== monat) return null
-    return { std_werktag_50: item.std_werktag_50, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_100: item.std_sonn_100, std_sonn_200: item.std_sonn_200 }
-  }
-  const von = parseZeitpunkt(item.von_datum, item.von_zeit.slice(0, 5))
-  const bis = parseZeitpunkt(item.bis_datum, item.bis_zeit.slice(0, 5))
-  if (!von || !bis) return null
-  const { beginn: monatsBeginn, ende: monatsEnde } = monatsGrenzen(monat)
-  const clipVon = von > monatsBeginn ? von : monatsBeginn
-  const clipBis = bis < monatsEnde ? bis : monatsEnde
-  if (!(clipBis > clipVon)) return null
-  const anteil = rohStundenOhneFeiertagssplit(clipVon, clipBis)
-  const gesamt = rohStundenOhneFeiertagssplit(von, bis)
-  const naivAnteil = naiveSonnSplit(anteil.sonnProTag)
-  const naivGesamt = naiveSonnSplit(gesamt.sonnProTag)
-  const anteil100 = naivGesamt.naiv100 > 0 ? naivAnteil.naiv100 / naivGesamt.naiv100 : 0
-  const anteil200 = naivGesamt.naiv200 > 0 ? naivAnteil.naiv200 / naivGesamt.naiv200 : 0
-  return {
-    std_werktag_50: anteil.std_werktag_50,
-    std_19_22: anteil.std_19_22,
-    std_22_06: anteil.std_22_06,
-    std_sonn_100: item.std_sonn_100 * anteil100,
-    std_sonn_200: item.std_sonn_200 * anteil200,
-  }
+  return map
 }
 
 /**
@@ -342,17 +252,16 @@ function anteilFuerMonat(item: UeberstundenMeldung, monat: string): Record<Ueber
  * die Sammelansicht zur Weiterleitung an die Lohnberechnung. Eigene Zeile je
  * Vergütungsart, damit Auszahlung und Stundenersatz nicht vermischt werden
  * (die Lohnberechnung muss unterscheiden können, welche Stunden ausbezahlt
- * und welche als Zeitausgleich zu verbuchen sind). Eine über eine
- * Monatsgrenze reichende Meldung wird an der Grenze aufgeteilt (siehe
- * anteilFuerMonat) statt komplett dem Monat ihres von_datum zugerechnet zu
- * werden - der Aufrufer muss dafür auch Meldungen liefern, deren bis_datum
- * (nicht nur von_datum) in den gewählten Monat fällt.
+ * und welche als Zeitausgleich zu verbuchen sind). anteile liefert je Meldung
+ * den bereits exakt auf den gewählten Monat geclippten Anteil (RPC
+ * ueberstunden_monatsanteile, siehe monatsAnteileMap) - eine Meldung ohne
+ * Eintrag in anteile berührt den gewählten Monat nicht und wird ignoriert.
  */
-export function monatsUebersicht(meldungen: readonly UeberstundenMeldung[], monat: string): MonatsZeile[] {
+export function monatsUebersicht(meldungen: readonly UeberstundenMeldung[], anteile: ReadonlyMap<string, Record<UeberstundenKategorieKey, number>>): MonatsZeile[] {
   const zeilenByKey = new Map<string, MonatsZeile>()
   for (const item of meldungen) {
     if (item.status !== 'genehmigt') continue
-    const anteil = anteilFuerMonat(item, monat)
+    const anteil = anteile.get(item.id)
     if (!anteil) continue
     const key = `${item.beamter_id}:${item.verguetung}`
     let zeile = zeilenByKey.get(key)

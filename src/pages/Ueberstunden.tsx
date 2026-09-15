@@ -6,7 +6,7 @@ import { fetchAllPages, supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsAnteileMap, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type MonatsAnteilRow, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
 const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
@@ -59,6 +59,7 @@ export default function Ueberstunden() {
   const [decideNote, setDecideNote] = useState('')
   const [monat, setMonat] = useState(thisMonthLocal())
   const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
+  const [uebersichtAnteile, setUebersichtAnteile] = useState<Map<string, Record<UeberstundenKategorieKey, number>>>(new Map())
   const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
 
   // "Meine Meldungen" - explizit nach beamter_id gefiltert (nicht nur
@@ -103,7 +104,7 @@ export default function Ueberstunden() {
   // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage (alle
   // Beamten, nicht nur der aktuelle) für die Genehmiger-Monatsübersicht.
   const loadUebersicht = useCallback(async () => {
-    if (!isGenehmiger) { setUebersichtMeldungen([]); return }
+    if (!isGenehmiger) { setUebersichtMeldungen([]); setUebersichtAnteile(new Map()); return }
     const [jahr, monatNr] = monat.split('-').map(Number)
     if (!jahr || !monatNr) return
     const vonDatum = `${monat}-01`
@@ -118,13 +119,23 @@ export default function Ueberstunden() {
     // genehmigten Meldungen als die von PostgREST gedeckelte Standard-
     // Seitengröße würde sonst eine unvollständige (aber unauffällig falsche)
     // Sammelansicht/Monatsübersicht liefern.
-    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
-      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
-      .eq('status', 'genehmigt').lt('von_datum', bisDatum).gte('bis_datum', vonDatum)
-      .order('id', { ascending: true })
-      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
-    if (result.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
+    const [result, anteileResult] = await Promise.all([
+      fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
+        .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+        .eq('status', 'genehmigt').lt('von_datum', bisDatum).gte('bis_datum', vonDatum)
+        .order('id', { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>),
+      // Exakte, serverseitig je Kalendertag berechnete Aufteilung auf den
+      // gewählten Monat (RPC ueberstunden_monatsanteile, Migration Runde 16) -
+      // eine rein client-seitige Rekonstruktion aus den gespeicherten
+      // Gesamtsummen kann die 100%/200%-Sonn-/Feiertags-Schwelle nicht exakt
+      // zurückrechnen, sobald an einem betroffenen Tag auch andere Meldungen
+      // desselben Beamten zum Topf beitrugen.
+      supabase.rpc('ueberstunden_monatsanteile', { p_monat_start: vonDatum, p_monat_ende: bisDatum }),
+    ])
+    if (result.error || anteileResult.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
     setUebersichtMeldungen(result.data)
+    setUebersichtAnteile(monatsAnteileMap((anteileResult.data ?? []) as MonatsAnteilRow[]))
   }, [monat, isGenehmiger])
   useEffect(() => { void loadUebersicht() }, [loadUebersicht])
 
@@ -151,7 +162,7 @@ export default function Ueberstunden() {
   // Genehmiger-Monatsübersicht: alle genehmigten Meldungen aller Bediensteten
   // im gewählten Monat, je Beamten/-in aufsummiert - Grundlage für die
   // Sammelansicht zur Weiterleitung an die Lohnberechnung.
-  const uebersicht = useMemo(() => monatsUebersicht(uebersichtMeldungen, monat), [uebersichtMeldungen, monat])
+  const uebersicht = useMemo(() => monatsUebersicht(uebersichtMeldungen, uebersichtAnteile), [uebersichtMeldungen, uebersichtAnteile])
 
   function openNew() { setEditing(null); setForm(EMPTY_MELDUNG_FORM); setShowForm(true); setError('') }
   function openEdit(item: UeberstundenMeldung) { setEditing(item); setForm(meldungToForm(item)); setShowForm(true); setError('') }
