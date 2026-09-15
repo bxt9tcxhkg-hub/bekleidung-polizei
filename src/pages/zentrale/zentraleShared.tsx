@@ -1,10 +1,10 @@
-import type { Dispatch, SetStateAction } from 'react'
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { AlertTriangle, CheckCircle2, Pencil, Trash2, UsersRound } from 'lucide-react'
 import LeafletMap, { type MapLine, type MapMarker } from '../../components/LeafletMap'
-import StreetAutocomplete from '../../components/StreetAutocomplete'
+import StreetAutocomplete, { type StreetAutocompleteHandle } from '../../components/StreetAutocomplete'
 import { PersonNameAutocomplete } from '../../components/RegisterPickers'
 import { Actions, Area, Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
-import { type StreetSuggestion } from '../../lib/geocode'
+import { reverseGeocode, type StreetSuggestion } from '../../lib/geocode'
 import { personDisplayName } from '../../lib/register'
 import { AV_BV_ART_LABEL, DISPOSITION_LABEL, FAHNDUNG_ART_LABEL, PERSON_NOTE_LABEL, composeIncidentLocation, formatTime, type BaustelleFormState, type IncidentFormState, type StrasseGeometrieFormState } from '../../lib/zentraleShared'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
@@ -58,52 +58,94 @@ export function IncidentCards({ visibleIncidents, lageByIncidentId, baustellen, 
 
 export function IncidentModal({ incident, setIncident, vdAvailable, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, baustellen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<IncidentFormState>) => setIncident(current => ({ ...current, ...values }))
-  return <Modal title="Neue Meldung" close={close}><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders (dieser Anruf)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} /></div>
-    <label className="block text-xs font-medium text-gray-600 sm:w-48">Meldezeit<input type="time" className={inputClass} value={incident.reportedTime} onChange={event => patch({ reportedTime: event.target.value })} /></label>
-    <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-4">
-      <StreetAutocomplete
-        label="Straße"
-        value={incident.street}
-        onChange={value => patch({ street: value, lat: null, lng: null, coordsPrecise: false, location: composeIncidentLocation(value, incident.houseNumber, incident.houseNumberUnknown) })}
-        onSelect={(suggestion: StreetSuggestion) => {
-          const composed = composeIncidentLocation(suggestion.street, incident.houseNumber, incident.houseNumberUnknown)
-          patch({ street: suggestion.street, lat: suggestion.lat, lng: suggestion.lng, coordsPrecise: false, location: composed })
-          // Ist die Hausnummer schon bekannt, gleich mit ihr die präzise
-          // Adresse suchen, statt nur die (ungenaueren) Straßen-Koordinaten
-          // zu übernehmen - composed statt incident.location, weil der
-          // State-Wert hier im selben Tick noch den alten Stand hätte.
-          if (incident.houseNumber.trim() && !incident.houseNumberUnknown) void locate(composed)
-        }}
-        onSearch={() => { if (incident.location.trim()) void locate() }}
-      />
-      <div>
-        <Field
-          label="Hausnummer"
-          value={incident.houseNumber}
-          disabled={incident.houseNumberUnknown}
-          onChange={value => patch({
-            houseNumber: value,
-            location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown),
-            lat: null, lng: null, coordsPrecise: false,
-          })}
-          onBlur={() => { if (incident.street.trim() && incident.houseNumber.trim()) void locate() }}
-          onKeyDown={event => { if (event.key === 'Enter' && incident.street.trim()) { event.preventDefault(); void locate() } }}
+  const streetRef = useRef<StreetAutocompleteHandle>(null)
+  const [mapResolving, setMapResolving] = useState(false)
+  const [mapError, setMapError] = useState('')
+
+  // Alternative zur Texteingabe: Klick auf die Karte übernimmt die Koordinate
+  // sofort und löst per Reverse-Geocoding Straße/Hausnummer auf, damit die
+  // Textfelder konsistent bleiben (z. B. für spätere Suche/Anzeige).
+  async function handleMapClick(lat: number, lng: number) {
+    patch({ lat, lng, coordsPrecise: true })
+    setMapError('')
+    setMapResolving(true)
+    const result = await reverseGeocode(lat, lng)
+    setMapResolving(false)
+    if (!result || (!result.street && !result.houseNumber)) { setMapError('Adresse zum gewählten Punkt konnte nicht ermittelt werden - Koordinate wurde trotzdem übernommen.'); return }
+    const street = result.street || incident.street
+    patch({ street, houseNumber: result.houseNumber, houseNumberUnknown: false, location: composeIncidentLocation(street, result.houseNumber, false) })
+  }
+
+  return <Modal title="Neue Meldung" close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="TEL-Nr. des Melders (dieser Anruf)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} /><PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} /></div>
+      <label className="block text-xs font-medium text-gray-600 sm:w-48">Meldezeit<input type="time" className={inputClass} value={incident.reportedTime} onChange={event => patch({ reportedTime: event.target.value })} /></label>
+      <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_auto] gap-4 items-start">
+        <StreetAutocomplete
+          ref={streetRef}
+          label="Straße"
+          value={incident.street}
+          onChange={value => patch({ street: value, lat: null, lng: null, coordsPrecise: false, location: composeIncidentLocation(value, incident.houseNumber, incident.houseNumberUnknown) })}
+          onSelect={(suggestion: StreetSuggestion) => {
+            const composed = composeIncidentLocation(suggestion.street, incident.houseNumber, incident.houseNumberUnknown)
+            patch({ street: suggestion.street, lat: suggestion.lat, lng: suggestion.lng, coordsPrecise: false, location: composed })
+            // Ist die Hausnummer schon bekannt, gleich mit ihr die präzise
+            // Adresse suchen, statt nur die (ungenaueren) Straßen-Koordinaten
+            // zu übernehmen - composed statt incident.location, weil der
+            // State-Wert hier im selben Tick noch den alten Stand hätte.
+            if (incident.houseNumber.trim() && !incident.houseNumberUnknown) void locate(composed)
+          }}
         />
+        <div>
+          <Field
+            label="Hausnummer"
+            value={incident.houseNumber}
+            disabled={incident.houseNumberUnknown}
+            onChange={value => patch({
+              houseNumber: value,
+              location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown),
+              lat: null, lng: null, coordsPrecise: false,
+            })}
+            onBlur={() => { if (incident.street.trim() && incident.houseNumber.trim()) void locate() }}
+            onKeyDown={event => { if (event.key === 'Enter' && incident.street.trim()) { event.preventDefault(); void locate() } }}
+          />
+          <button
+            type="button"
+            onClick={() => { const nextUnknown = !incident.houseNumberUnknown; patch({ houseNumberUnknown: nextUnknown, houseNumber: '', location: composeIncidentLocation(incident.street, '', nextUnknown), lat: null, lng: null, coordsPrecise: false }) }}
+            className={`mt-2 text-xs font-semibold ${incident.houseNumberUnknown ? 'text-blue-700' : 'text-gray-500'}`}
+          >
+            {incident.houseNumberUnknown ? '✓ HNr unbekannt' : 'HNr unbekannt'}
+          </button>
+        </div>
+        {/* Sucht wahlweise nach Straße (Vorschlagsliste) oder, ist die
+            Hausnummer bereits ausgefüllt, direkt die präzise Adresse -
+            bewusst nach der Hausnummer platziert statt zwischen Straße und
+            Hausnummer, damit beide Felder zuerst befüllt werden können. */}
         <button
           type="button"
-          onClick={() => { const nextUnknown = !incident.houseNumberUnknown; patch({ houseNumberUnknown: nextUnknown, houseNumber: '', location: composeIncidentLocation(incident.street, '', nextUnknown), lat: null, lng: null, coordsPrecise: false }) }}
-          className={`mt-2 text-xs font-semibold ${incident.houseNumberUnknown ? 'text-blue-700' : 'text-gray-500'}`}
+          onClick={() => { if (incident.houseNumber.trim() && !incident.houseNumberUnknown) void locate(); else streetRef.current?.search() }}
+          disabled={incident.street.trim().length < 3}
+          className="mt-5 shrink-0 px-3 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 disabled:opacity-50"
         >
-          {incident.houseNumberUnknown ? '✓ HNr unbekannt' : 'HNr unbekannt'}
+          Suchen
         </button>
       </div>
+      {locating ? <p className="text-xs text-gray-500">Suche…</p> : null}
+      {locateError ? <p className="text-xs text-red-700 mt-1">{locateError}<button type="button" onClick={() => void locate()} className="ml-2 font-semibold text-blue-700">Erneut versuchen</button></p> : null}
+      <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><PersonNameAutocomplete label="Beteiligte Person" persons={persons} value={incident.involvedPersonId} onChange={value => patch({ involvedPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} /><ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} fahndungen={contextFahndungen} baustellen={nearbyByLine(incident.lat !== null && incident.lng !== null ? { lat: incident.lat, lng: incident.lng } : null, baustellen)} priorIncidents={priorIncidents} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} />
     </div>
-    {/* Die Karte erscheint automatisch, sobald eine Adresse gefunden wurde
-        (Straßenauswahl, Verlassen des Hausnummer-Felds oder Enter) - kein
-        eigener "Auf Karte anzeigen"-Klick mehr nötig. Der Button bleibt als
-        manueller Ausweg, falls die automatische Suche fehlschlägt. */}
-    <div>{locating ? <p className="text-xs text-gray-500">Suche…</p> : null}{locateError ? <p className="text-xs text-red-700 mt-1">{locateError}<button type="button" onClick={() => void locate()} className="ml-2 font-semibold text-blue-700">Erneut versuchen</button></p> : null}{incident.lat !== null && incident.lng !== null ? <div className="mt-2"><LeafletMap markers={[{ lat: incident.lat, lng: incident.lng, popup: incident.location }]} height={180} /></div> : null}</div>
-    <Area label="Kurzer Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} /><PersonNameAutocomplete label="Beteiligte Person" persons={persons} value={incident.involvedPersonId} onChange={value => patch({ involvedPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} /><ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} fahndungen={contextFahndungen} baustellen={nearbyByLine(incident.lat !== null && incident.lng !== null ? { lat: incident.lat, lng: incident.lng } : null, baustellen)} priorIncidents={priorIncidents} /><label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label><Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />{error ? <ErrorMessage text={error} /> : null}<Actions saving={saving} close={close} save={save} /></Modal>
+    <div>
+      <p className="text-xs font-medium text-gray-600 mb-1">Einsatzort auf der Karte</p>
+      <LeafletMap
+        markers={incident.lat !== null && incident.lng !== null ? [{ lat: incident.lat, lng: incident.lng, popup: incident.location || 'Einsatzort' }] : []}
+        onMapClick={(lat, lng) => void handleMapClick(lat, lng)}
+        height={420}
+      />
+      <p className="text-xs text-gray-500 mt-1.5">Alternativ zur Eingabe: auf die Karte klicken, um den Einsatzort direkt dort zu setzen.</p>
+      {mapResolving ? <p className="text-xs text-gray-500 mt-1">Adresse wird ermittelt…</p> : null}
+      {mapError ? <p className="text-xs text-amber-700 mt-1">{mapError}</p> : null}
+    </div>
+  </div></Modal>
 }
 
 function ContextHints({ entries, personNotes, avBv, fahndungen, baustellen, priorIncidents }: { entries: ZentraleEntry[]; personNotes: OperationalPersonNote[]; avBv: ZentraleAvBv[]; fahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[] }) {
