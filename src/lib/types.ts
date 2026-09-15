@@ -1297,6 +1297,29 @@ type OperationalPersonNoteRow = Omit<OperationalPersonNote, 'person'>
 type VehicleCheckRow = Omit<VehicleCheck, 'fleet_vehicles' | 'checker'>
 type MailDeliveryRow = Omit<MailDelivery, 'akteneigentuemer' | 'person'>
 type ZentraleAvBvRow = Omit<ZentraleAvBv, 'person' | 'object'>
+type SchutzfallRow = {
+  id: string
+  massnahme: 'bv_av' | 'ev'
+  ev_rechtsgrundlage: '382b' | '382c' | 'kombiniert' | null
+  gefaehrder_id: string
+  pad_aktenzahl: string
+  externe_aktenzahl: string | null
+  ausstellende_stelle: string | null
+  beginn: string
+  ende: string
+  status: 'aktiv' | 'aufgehoben' | 'abgelaufen'
+  waffenverbot: boolean
+  schluessel_status: 'nicht_erfasst' | 'abgenommen' | 'verwahrt' | 'gericht' | 'ausgefolgt'
+  schluessel_verwahrort: string | null
+  ausnahmen: string | null
+  hinweise: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+type SchutzfallPersonRow = { schutzfall_id: string; person_id: string; created_at: string }
+type SchutzbereichRow = { id: string; schutzfall_id: string; art: 'wohnung' | 'ort'; object_id: string | null; bezeichnung: string; lat: number; lng: number; radius_m: number; position_bestaetigt: boolean; sort_order: number; created_at: string; updated_at: string }
+type SchutzkontrolleRow = { id: string; schutzfall_id: string; kontrolliert_am: string; notiz: string | null; created_by: string; created_at: string; updated_at: string }
 type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
 type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
 type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
@@ -1509,6 +1532,22 @@ export type Database = {
       operational_person_notes: { Row: OperationalPersonNoteRow; Insert: Pick<OperationalPersonNoteRow, 'person_id' | 'category' | 'note' | 'created_by'> & Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'updated_at' | 'person_id' | 'category' | 'note' | 'created_by'>>; Update: Partial<Omit<OperationalPersonNoteRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'operational_person_notes_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'operational_person_notes_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+      ] }
+      schutzfaelle: { Row: SchutzfallRow; Insert: Pick<SchutzfallRow, 'massnahme' | 'gefaehrder_id' | 'pad_aktenzahl' | 'beginn' | 'ende' | 'created_by'> & Partial<Omit<SchutzfallRow, 'id' | 'created_at' | 'updated_at' | 'massnahme' | 'gefaehrder_id' | 'pad_aktenzahl' | 'beginn' | 'ende' | 'created_by'>>; Update: Partial<Omit<SchutzfallRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'schutzfaelle_gefaehrder_id_fkey'; columns: ['gefaehrder_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schutzfaelle_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      schutzfall_personen: { Row: SchutzfallPersonRow; Insert: Pick<SchutzfallPersonRow, 'schutzfall_id' | 'person_id'> & Partial<Pick<SchutzfallPersonRow, 'created_at'>>; Update: Partial<SchutzfallPersonRow>; Relationships: [
+        { foreignKeyName: 'schutzfall_personen_schutzfall_id_fkey'; columns: ['schutzfall_id']; isOneToOne: false; referencedRelation: 'schutzfaelle'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schutzfall_personen_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+      ] }
+      schutzbereiche: { Row: SchutzbereichRow; Insert: Pick<SchutzbereichRow, 'schutzfall_id' | 'art' | 'bezeichnung' | 'lat' | 'lng' | 'radius_m'> & Partial<Omit<SchutzbereichRow, 'id' | 'created_at' | 'updated_at' | 'schutzfall_id' | 'art' | 'bezeichnung' | 'lat' | 'lng' | 'radius_m'>>; Update: Partial<Omit<SchutzbereichRow, 'id' | 'created_at'>>; Relationships: [
+        { foreignKeyName: 'schutzbereiche_schutzfall_id_fkey'; columns: ['schutzfall_id']; isOneToOne: false; referencedRelation: 'schutzfaelle'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schutzbereiche_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
+      ] }
+      schutzkontrollen: { Row: SchutzkontrolleRow; Insert: Pick<SchutzkontrolleRow, 'schutzfall_id' | 'created_by'> & Partial<Omit<SchutzkontrolleRow, 'id' | 'created_at' | 'updated_at' | 'schutzfall_id' | 'created_by'>>; Update: Partial<Omit<SchutzkontrolleRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'schutzkontrollen_schutzfall_id_fkey'; columns: ['schutzfall_id']; isOneToOne: false; referencedRelation: 'schutzfaelle'; referencedColumns: ['id'] },
+        { foreignKeyName: 'schutzkontrollen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       zentrale_av_bv: { Row: ZentraleAvBvRow; Insert: Pick<ZentraleAvBvRow, 'art' | 'grund' | 'created_by'> & Partial<Omit<ZentraleAvBvRow, 'id' | 'created_at' | 'updated_at' | 'art' | 'grund' | 'created_by'>>; Update: Partial<Omit<ZentraleAvBvRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_av_bv_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
