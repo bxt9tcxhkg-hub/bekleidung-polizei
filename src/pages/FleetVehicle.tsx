@@ -304,6 +304,7 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
   const [checking, setChecking] = useState(false)
   const [draft, setDraft] = useState<Record<string, { passt: boolean; menge: string; status: FleetEquipmentStatusValue; note: string }>>({})
   const [saving, setSaving] = useState(false)
+  const [checkError, setCheckError] = useState('')
 
   function openItemForm() { setItemName(''); setSollMenge('1'); setUnit('Stück'); setShowItemForm(true) }
   async function saveItem() {
@@ -323,16 +324,21 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
 
   // Checkliste: pro Position wird standardmäßig NICHT als "passt" vorbelegt -
   // jede Kontrolle verlangt eine aktive Bestätigung (Abhaken), statt den
-  // zuletzt gespeicherten Zustand stillschweigend zu übernehmen. Menge/Status/
-  // Bemerkung werden nur als Ausgangswert für den Fall vorbefüllt, dass die
-  // Position weiterhin nicht passt (z. B. ein chronischer Mangel).
+  // zuletzt gespeicherten Zustand stillschweigend zu übernehmen. Die Menge
+  // wird nur vorbefüllt, wenn bereits eine ECHTE Abweichung bekannt ist (ein
+  // chronischer Mangel) - für eine bisher vollständige oder noch nie
+  // geprüfte Position bleibt sie leer. Sonst würde ein sofortiges "Kontrolle
+  // abschließen" ohne jede Interaktion die Validierung unten (nicht
+  // abgehakt + leere Menge blockiert) umgehen und jede ungeprüfte Position
+  // stillschweigend als "Fehlend" markieren.
   function startCheck() {
     const next: Record<string, { passt: boolean; menge: string; status: FleetEquipmentStatusValue; note: string }> = {}
     for (const item of items) {
       const current = statusByItem.get(item.id)
-      next[item.id] = { passt: false, menge: String(current?.ist_menge ?? item.soll_menge), status: current && current.status !== 'vollstaendig' ? current.status : 'fehlend', note: current?.note ?? '' }
+      const bekannteAbweichung = current && current.status !== 'vollstaendig'
+      next[item.id] = { passt: false, menge: bekannteAbweichung ? String(current.ist_menge ?? '') : '', status: bekannteAbweichung ? current.status : 'fehlend', note: current?.note ?? '' }
     }
-    setDraft(next); setChecking(true)
+    setCheckError(''); setDraft(next); setChecking(true)
   }
   function togglePasst(itemId: string, passt: boolean) {
     setDraft(current => ({ ...current, [itemId]: { ...current[itemId], passt } }))
@@ -340,8 +346,8 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
   async function submitCheck() {
     if (!profile?.id) return
     const fehlendeAngabe = items.some(item => !draft[item.id]?.passt && !draft[item.id]?.menge.trim())
-    if (fehlendeAngabe) { onError('Bitte für jede nicht abgehakte Position die tatsächlich vorhandene Menge angeben.'); return }
-    setSaving(true)
+    if (fehlendeAngabe) { setCheckError('Bitte für jede nicht abgehakte Position die tatsächlich vorhandene Menge angeben.'); return }
+    setCheckError(''); setSaving(true)
     const rows = items.map(item => {
       const d = draft[item.id]
       return d?.passt
@@ -350,7 +356,7 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
     })
     const { error } = await supabase.from('fleet_equipment_status').upsert(rows, { onConflict: 'item_id' })
     setSaving(false)
-    if (error) { onError('Die Kontrolle konnte nicht gespeichert werden.'); return }
+    if (error) { setCheckError('Die Kontrolle konnte nicht gespeichert werden.'); return }
     setChecking(false); onSaved('Bestand wurde kontrolliert.')
   }
 
@@ -376,6 +382,7 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
           <label className="block text-xs font-medium text-gray-600">Bemerkung<input className={inputClass} value={d?.note ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} /></label>
         </div> : null}
       </div> })}</div>
+      {checkError ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{checkError}</p> : null}
       <Actions saving={saving} close={() => setChecking(false)} save={submitCheck} label="Kontrolle abschließen" />
     </Modal> : null}
   </TabShell>
