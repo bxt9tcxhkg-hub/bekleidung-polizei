@@ -76,7 +76,7 @@ export default function Ueberstunden() {
     const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
       .eq('beamter_id', profileId)
-      .order('von_datum', { ascending: false }).order('created_at', { ascending: false })
+      .order('von_datum', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: false })
       .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) setError('Die Überstundenmeldungen konnten nicht geladen werden.')
     else setError('')
@@ -93,7 +93,7 @@ export default function Ueberstunden() {
     // unsichtbar bleiben.
     const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
-      .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true })
+      .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true }).order('id', { ascending: true })
       .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) { setError('Die zu entscheidenden Meldungen konnten nicht geladen werden.'); return }
     setZuEntscheiden(result.data.filter(item => item.beamter_id !== profile?.id))
@@ -115,6 +115,7 @@ export default function Ueberstunden() {
     const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
       .eq('status', 'genehmigt').gte('von_datum', vonDatum).lt('von_datum', bisDatum)
+      .order('id', { ascending: true })
       .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }
     setUebersichtMeldungen(result.data)

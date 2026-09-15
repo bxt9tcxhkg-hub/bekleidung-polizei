@@ -24,7 +24,17 @@ const PAGE_SIZE = 1000
  * wachsenden Tabellen sonst unbemerkt nur die erste Seite liefert, z. B.
  * bei der Überstunden-Genehmiger-Warteschlange oder der Monatsübersicht).
  * `queryFor(from, to)` muss bei jedem Aufruf eine FRISCHE Query liefern -
- * Supabase-Query-Builder sind nicht wiederverwendbar.
+ * Supabase-Query-Builder sind nicht wiederverwendbar - und für stabile
+ * Seitengrenzen eine eindeutige Sortierung (z. B. bis auf die id) haben,
+ * sonst kann Postgres zwischen zwei .range()-Aufrufen Zeilen doppelt
+ * liefern oder überspringen.
+ *
+ * Bricht erst bei einer LEEREN Seite ab, nicht wenn weniger als PAGE_SIZE
+ * Zeilen zurückkommen - liegt der von PostgREST selbst konfigurierte
+ * Zeilen-Cap unter PAGE_SIZE, käme sonst schon die erste (unvollständige)
+ * Seite kleiner als angefragt zurück und würde fälschlich als letzte Seite
+ * gewertet. Der nächste Range-Start folgt deshalb der TATSÄCHLICH
+ * zurückgegebenen Zeilenzahl, nicht der angefragten.
  */
 export async function fetchAllPages<T>(
   queryFor: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
@@ -35,9 +45,9 @@ export async function fetchAllPages<T>(
     const { data, error } = await queryFor(from, from + PAGE_SIZE - 1)
     if (error) return { data: all, error }
     const rows = data ?? []
+    if (rows.length === 0) break
     all.push(...rows)
-    if (rows.length < PAGE_SIZE) break
-    from += PAGE_SIZE
+    from += rows.length
   }
   return { data: all, error: null }
 }
