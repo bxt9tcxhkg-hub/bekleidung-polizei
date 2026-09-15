@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapPin, ShieldAlert, UsersRound } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import LeafletMap from '../../components/LeafletMap'
@@ -14,12 +14,15 @@ import { FAHNDUNG_ART_LABEL, formatTime } from '../../lib/zentraleShared'
 // Wohin ein Klick auf einen "Sofort wichtig"-Eintrag führt, dessen Kategorie
 // eine eigene Sidebar-Seite ist.
 const CATEGORY_ROUTE: Partial<Record<ZentraleEntryCategory, string>> = { brief: '/rsa-rsb' }
+const INCIDENT_COLORS = ['#2563eb', '#ea580c', '#7c3aed', '#0f766e', '#be185d', '#4d7c0f', '#0891b2', '#92400e']
 
 export default function ZentraleUebersicht() {
   const ctx = useOutletContext<ZentraleContext>()
   const navigate = useNavigate()
   const [schutzfaelle, setSchutzfaelle] = useState<Schutzfall[]>([])
   const [schutzError, setSchutzError] = useState(false)
+  const [expandedIncidentId, setExpandedIncidentId] = useState<string | null>(null)
+  const previousOpenCountRef = useRef(0)
   const [now] = useState(() => new Date().getTime())
   useEffect(() => {
     void supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende').then(result => {
@@ -37,6 +40,42 @@ export default function ZentraleUebersicht() {
     color: item.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed',
     fillColor: item.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
   }))), [schutzfaelle])
+  const incidentVisuals = useMemo(() => Object.fromEntries(ctx.openIncidents.map((item, index) => [item.id, {
+    color: INCIDENT_COLORS[index % INCIDENT_COLORS.length],
+    label: String(index + 1),
+  }])), [ctx.openIncidents])
+  const incidentMarkers = useMemo(() => ctx.openIncidents
+    .filter(item => item.location_lat !== null && item.location_lng !== null)
+    .map(item => {
+      const visual = incidentVisuals[item.id]
+      const selected = expandedIncidentId === item.id
+      return {
+        lat: item.location_lat as number,
+        lng: item.location_lng as number,
+        color: visual.color,
+        label: visual.label,
+        selected,
+        popup: selected ? `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 80)}` : undefined,
+        onClick: () => setExpandedIncidentId(item.id),
+      }
+    }), [ctx.openIncidents, expandedIncidentId, incidentVisuals])
+  const focusedIncident = useMemo(() => ctx.openIncidents.find(item =>
+    item.id === expandedIncidentId && item.location_lat !== null && item.location_lng !== null
+  ) ?? null, [ctx.openIncidents, expandedIncidentId])
+
+  // Ein einzelner Einsatz ist vollständig sichtbar. Kommt ein zweiter hinzu,
+  // werden beide zunächst reduziert; eine danach bewusste Auswahl bleibt bei
+  // normalen Datenaktualisierungen bestehen.
+  useEffect(() => {
+    const previousCount = previousOpenCountRef.current
+    previousOpenCountRef.current = ctx.openIncidents.length
+    setExpandedIncidentId(current => {
+      if (ctx.openIncidents.length === 1) return ctx.openIncidents[0].id
+      if (ctx.openIncidents.length > 1 && previousCount <= 1) return null
+      if (current && ctx.openIncidents.some(item => item.id === current)) return current
+      return null
+    })
+  }, [ctx.openIncidents])
 
   return <div className="space-y-6">
     {/* Priorität nach Zustand, nicht nach Kategorie: nur was gerade aktiv
@@ -61,8 +100,41 @@ export default function ZentraleUebersicht() {
         Blick sichtbar ist, statt lange untereinander zu scrollen - auf
         schmalen Bildschirmen weiterhin gestapelt (Meldungen zuerst). */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <section><div className="flex items-center justify-between mb-3"><h2 className="font-bold text-gray-900">Heutige Meldungen</h2>{ctx.canOperateZentrale ? <button type="button" onClick={ctx.openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}</div><IncidentCards visibleIncidents={ctx.visibleIncidents} lageByIncidentId={ctx.lageByIncidentId} baustellen={ctx.baustellen} canOperateZentrale={ctx.canOperateZentrale} openEditIncident={ctx.openEditIncident} openLageForIncident={ctx.openLageForIncident} completeIncident={ctx.completeIncident} deleteIncident={ctx.deleteIncident} /></section>
-      <section><h2 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><MapPin className="w-4 h-4 text-blue-700" /> Einsatz- und Schutzlage – Gemeindegebiet Dornbirn</h2><LeafletMap height={420} markers={ctx.openIncidentMarkers} lines={[...ctx.baustellenLines, ...ctx.sperrenLines]} circles={schutzCircles} fitLines={false} /><p className="mt-2 text-xs text-gray-500">Rot: BV/AV-Wohnungsschutzbereich · Violett: Bereich einer gerichtlichen EV.</p></section>
+      <section>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div><h2 className="font-bold text-gray-900">Offene Einsätze</h2><p className="text-xs text-gray-500">{ctx.openIncidents.length} offen</p></div>
+          <div className="flex items-center gap-3">
+            {ctx.openIncidents.length > 1 && expandedIncidentId ? <button type="button" onClick={() => setExpandedIncidentId(null)} className="text-xs font-semibold text-gray-600">Alle zuklappen</button> : null}
+            {ctx.canOperateZentrale ? <button type="button" onClick={ctx.openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}
+          </div>
+        </div>
+        <IncidentCards
+          visibleIncidents={ctx.openIncidents}
+          lageByIncidentId={ctx.lageByIncidentId}
+          baustellen={ctx.baustellen}
+          canOperateZentrale={ctx.canOperateZentrale}
+          openEditIncident={ctx.openEditIncident}
+          openLageForIncident={ctx.openLageForIncident}
+          completeIncident={ctx.completeIncident}
+          deleteIncident={ctx.deleteIncident}
+          accordion
+          expandedIncidentId={expandedIncidentId}
+          onToggleIncident={item => setExpandedIncidentId(current => ctx.openIncidents.length === 1 ? item.id : current === item.id ? null : item.id)}
+          visualByIncidentId={incidentVisuals}
+        />
+      </section>
+      <section>
+        <h2 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><MapPin className="w-4 h-4 text-blue-700" /> Einsatzkarte – Gemeindegebiet Dornbirn</h2>
+        <LeafletMap
+          height={420}
+          markers={incidentMarkers}
+          lines={focusedIncident ? [...ctx.baustellenLines, ...ctx.sperrenLines] : []}
+          circles={focusedIncident ? schutzCircles : []}
+          focus={focusedIncident ? { lat: focusedIncident.location_lat as number, lng: focusedIncident.location_lng as number, zoom: 16 } : null}
+          fitLines={false}
+        />
+        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert · relevante Zusatzebenen eingeblendet.' : 'Nur offene Einsatzorte. Einsatz aufklappen oder Pin auswählen, um Details einzublenden.'}</p>
+      </section>
     </div>
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
       <h2 className="font-bold text-amber-900 flex items-center gap-2"><UsersRound className="w-4 h-4" /> Schichtübergabe</h2>
