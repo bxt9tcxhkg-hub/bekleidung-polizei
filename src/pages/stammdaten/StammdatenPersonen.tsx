@@ -15,7 +15,7 @@ import { objectLabel, personDisplayName, useObjects } from '../../lib/register'
 // echte Verknüpfung zum Objekte-Register (home_object_id), keine erneute
 // Freitext-Eingabe der Adresse.
 
-type LinkCounts = { hinweise: number; rsaRsb: number; avBv: number; fahndungen: number }
+type LinkCounts = { hinweise: number; rsaRsb: number; avBv: number; fahndungen: number; schutzGefaehrder: number; schutzPerson: number }
 type PhoneEntry = { id: string; number: string; erhoben_am: string }
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', phoneErhobenAm: '', phoneNumberId: null as string | null, homeObjectId: null as string | null, note: '' }
@@ -38,7 +38,7 @@ export default function StammdatenPersonen() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [personResult, noteResult, mailResult, avBvResult, fahndungResult, phoneResult] = await Promise.all([
+    const [personResult, noteResult, mailResult, avBvResult, fahndungResult, schutzfallResult, schutzPersonResult, phoneResult] = await Promise.all([
       supabase.from('operational_persons').select('*, home_object:operational_objects(id, address, label, strasse, hausnummer, plz, ort)').order('nachname').order('vorname'),
       // Für die Löschsperre absichtlich ALLE Hinweise/Zustellungen zählen,
       // nicht nur aktive/offene: person_id ist hier ON DELETE CASCADE, ein
@@ -48,6 +48,8 @@ export default function StammdatenPersonen() {
       supabase.from('mail_deliveries').select('person_id'),
       supabase.from('zentrale_av_bv').select('person_id').not('person_id', 'is', null),
       supabase.from('zentrale_fahndungen').select('person_id').not('person_id', 'is', null),
+      supabase.from('schutzfaelle').select('gefaehrder_id').not('gefaehrder_id', 'is', null),
+      supabase.from('schutzfall_personen').select('person_id'),
       // Eine Person hat höchstens eine Telefonnummer im gemeinsamen Register
       // (von dieser Seite so gepflegt, keine DB-Eindeutigkeit erzwungen).
       supabase.from('operational_phone_numbers').select('id, person_id, number, erhoben_am').not('person_id', 'is', null),
@@ -55,7 +57,7 @@ export default function StammdatenPersonen() {
     // Diese Zähler dienen nur der Anzeige (Badges je Person) - remove() prüft
     // die tatsächliche Löschsperre separat per exact-count, unabhängig von
     // Ladefehlern oder API-Seitenlimits hier.
-    const linksFailed = Boolean(noteResult.error || mailResult.error || avBvResult.error || fahndungResult.error || phoneResult.error)
+    const linksFailed = Boolean(noteResult.error || mailResult.error || avBvResult.error || fahndungResult.error || schutzfallResult.error || schutzPersonResult.error || phoneResult.error)
     if (personResult.error) setError('Das Personen-Register konnte nicht geladen werden.')
     else if (linksFailed) setError('Verknüpfungszahlen konnten nicht vollständig geladen werden (Anzeige ggf. unvollständig).')
     else setError('')
@@ -63,7 +65,7 @@ export default function StammdatenPersonen() {
     const counts: Record<string, LinkCounts> = {}
     const bump = (personId: string | null, key: keyof LinkCounts) => {
       if (!personId) return
-      const current = counts[personId] ?? { hinweise: 0, rsaRsb: 0, avBv: 0, fahndungen: 0 }
+      const current = counts[personId] ?? { hinweise: 0, rsaRsb: 0, avBv: 0, fahndungen: 0, schutzGefaehrder: 0, schutzPerson: 0 }
       current[key] += 1
       counts[personId] = current
     }
@@ -71,6 +73,8 @@ export default function StammdatenPersonen() {
     for (const row of mailResult.data ?? []) bump(row.person_id, 'rsaRsb')
     for (const row of avBvResult.data ?? []) bump(row.person_id, 'avBv')
     for (const row of fahndungResult.data ?? []) bump(row.person_id, 'fahndungen')
+    for (const row of schutzfallResult.data ?? []) bump(row.gefaehrder_id, 'schutzGefaehrder')
+    for (const row of schutzPersonResult.data ?? []) bump(row.person_id, 'schutzPerson')
     setLinks(counts)
     const phones: Record<string, PhoneEntry> = {}
     for (const row of phoneResult.data ?? []) { if (row.person_id) phones[row.person_id] = { id: row.id, number: row.number, erhoben_am: row.erhoben_am } }
@@ -122,29 +126,46 @@ export default function StammdatenPersonen() {
     // unvollständig - ein außerhalb der geladenen Seite liegender Hinweis
     // würde die Person fälschlich als unverknüpft erscheinen lassen. Ein
     // exact-count ist dagegen unabhängig von der Tabellengröße korrekt.
-    const [noteCount, mailCount, avBvCount, fahndungCount] = await Promise.all([
+    const [noteCount, mailCount, avBvCount, fahndungCount, schutzGefaehrderCount, schutzPersonCount] = await Promise.all([
       supabase.from('operational_person_notes').select('id', { count: 'exact', head: true }).eq('person_id', personId),
       supabase.from('mail_deliveries').select('id', { count: 'exact', head: true }).eq('person_id', personId),
       supabase.from('zentrale_av_bv').select('id', { count: 'exact', head: true }).eq('person_id', personId),
       supabase.from('zentrale_fahndungen').select('id', { count: 'exact', head: true }).eq('person_id', personId),
+      supabase.from('schutzfaelle').select('id', { count: 'exact', head: true }).eq('gefaehrder_id', personId),
+      supabase.from('schutzfall_personen').select('id', { count: 'exact', head: true }).eq('person_id', personId),
     ])
-    if (noteCount.error || mailCount.error || avBvCount.error || fahndungCount.error) {
+    if (noteCount.error || mailCount.error || avBvCount.error || fahndungCount.error || schutzGefaehrderCount.error || schutzPersonCount.error) {
       setError('Verknüpfungen konnten nicht geprüft werden - Löschen abgebrochen.')
       return
     }
-    const total = (noteCount.count ?? 0) + (mailCount.count ?? 0) + (avBvCount.count ?? 0) + (fahndungCount.count ?? 0)
+    const total = (noteCount.count ?? 0) + (mailCount.count ?? 0) + (avBvCount.count ?? 0) + (fahndungCount.count ?? 0) + (schutzGefaehrderCount.count ?? 0) + (schutzPersonCount.count ?? 0)
     if (total > 0) {
-      setError('Diese Person ist noch mit Einträgen verknüpft (Personenhinweise, RSa/RSb, AV/BV oder Fahndungen) und kann daher nicht gelöscht werden.')
+      const references = [
+        (schutzGefaehrderCount.count ?? 0) > 0 || (schutzPersonCount.count ?? 0) > 0 ? 'Schutzmaßnahmen' : null,
+        (noteCount.count ?? 0) > 0 ? 'Personenhinweise' : null,
+        (mailCount.count ?? 0) > 0 ? 'RSa/RSb' : null,
+        (avBvCount.count ?? 0) > 0 ? 'Altbestand AV/BV & EV' : null,
+        (fahndungCount.count ?? 0) > 0 ? 'Fahndungen' : null,
+      ].filter(Boolean).join(', ')
+      setError(`Diese Person ist noch verknüpft mit: ${references}. Zum Schutz der Einsatzhistorie ist das endgültige Löschen gesperrt.`)
       return
     }
     if (!window.confirm(`Person „${personDisplayName(editing)}“ endgültig löschen?`)) return
-    // Verknüpfte Telefonnummer gehört zur Person und wird mitgelöscht (kein
-    // eigenständiger Datensatz wie Personenhinweise/RSa-RSb/AV-BV/Fahndungen,
-    // die den Löschvorgang oben blockieren).
-    if (form.phoneNumberId) await supabase.from('operational_phone_numbers').delete().eq('id', form.phoneNumberId)
-    const result = await supabase.from('operational_persons').delete().eq('id', personId)
-    if (result.error) { setError('Person konnte nicht gelöscht werden.'); return }
-    logAudit('Person endgültig gelöscht', personDisplayName(editing)); setShowForm(false); setNotice('Person wurde endgültig gelöscht.'); await load()
+    // IDs vorab merken: Der FK setzt person_id beim Löschen auf NULL. Die
+    // Telefonnummern werden erst NACH erfolgreicher Personenlöschung entfernt,
+    // damit bei einer Rechte- oder Datenbankblockade keine Telefonnummer verloren geht.
+    const phoneRows = await supabase.from('operational_phone_numbers').select('id').eq('person_id', personId)
+    if (phoneRows.error) { setError('Telefonnummern konnten nicht geprüft werden - Person wurde nicht gelöscht.'); return }
+    const result = await supabase.from('operational_persons').delete().eq('id', personId).select('id').maybeSingle()
+    if (result.error) { setError(`Person konnte nicht gelöscht werden: ${result.error.message}`); return }
+    if (!result.data) { setError('Person wurde nicht gelöscht. Bitte Admin-Berechtigung und Benutzerstatus prüfen.'); return }
+    const phoneIds = (phoneRows.data ?? []).map(row => row.id)
+    let cleanupWarning = false
+    if (phoneIds.length > 0) {
+      const phoneDelete = await supabase.from('operational_phone_numbers').delete().in('id', phoneIds)
+      cleanupWarning = Boolean(phoneDelete.error)
+    }
+    logAudit('Person endgültig gelöscht', personDisplayName(editing)); setShowForm(false); setNotice(cleanupWarning ? 'Person wurde gelöscht; verwaiste Telefonnummern konnten nicht vollständig bereinigt werden.' : 'Person wurde endgültig gelöscht.'); await load()
   }
 
   return <div>
@@ -176,6 +197,8 @@ export default function StammdatenPersonen() {
                 {count.rsaRsb ? <span className="text-xs font-medium bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{count.rsaRsb}× RSa/RSb</span> : null}
                 {count.avBv ? <span className="text-xs font-medium bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">{count.avBv}× AV/BV & EV</span> : null}
                 {count.fahndungen ? <span className="text-xs font-medium bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">{count.fahndungen}× Fahndung</span> : null}
+                {count.schutzGefaehrder ? <span className="text-xs font-medium bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full">{count.schutzGefaehrder}× Schutzfall (Gefährder)</span> : null}
+                {count.schutzPerson ? <span className="text-xs font-medium bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full">{count.schutzPerson}× Schutzfall (geschützte Person)</span> : null}
               </div> : null}
             </div>
             {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Person bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
