@@ -302,8 +302,9 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
   const [sollMenge, setSollMenge] = useState('1')
   const [unit, setUnit] = useState('Stück')
   const [checking, setChecking] = useState(false)
-  const [draft, setDraft] = useState<Record<string, { menge: string; status: FleetEquipmentStatusValue; note: string }>>({})
+  const [draft, setDraft] = useState<Record<string, { passt: boolean; reviewed: boolean; menge: string; status: FleetEquipmentStatusValue; note: string }>>({})
   const [saving, setSaving] = useState(false)
+  const [checkError, setCheckError] = useState('')
 
   function openItemForm() { setItemName(''); setSollMenge('1'); setUnit('Stück'); setShowItemForm(true) }
   async function saveItem() {
@@ -321,21 +322,47 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
     onSaved('Position wurde entfernt.')
   }
 
+  // Checkliste: pro Position wird standardmäßig weder als "passt" noch als
+  // "bestätigt" vorbelegt - jede Kontrolle verlangt eine aktive Bestätigung
+  // JEDER Position, auch wenn schon eine bekannte Abweichung (ein
+  // chronischer Mangel) vorbefüllt ist. Ohne dieses reviewed-Flag würde eine
+  // vorbefüllte, aber unangetastete Abweichung die Validierung stillschweigend
+  // passieren und checked_at/checked_by so überschreiben, als hätte die
+  // aktuelle Person sie gerade tatsächlich geprüft - hat sie aber nicht.
   function startCheck() {
-    const next: Record<string, { menge: string; status: FleetEquipmentStatusValue; note: string }> = {}
+    const next: Record<string, { passt: boolean; reviewed: boolean; menge: string; status: FleetEquipmentStatusValue; note: string }> = {}
     for (const item of items) {
       const current = statusByItem.get(item.id)
-      next[item.id] = { menge: String(current?.ist_menge ?? item.soll_menge), status: current?.status ?? 'vollstaendig', note: current?.note ?? '' }
+      const bekannteAbweichung = current && current.status !== 'vollstaendig'
+      next[item.id] = { passt: false, reviewed: false, menge: bekannteAbweichung ? String(current.ist_menge ?? '') : '', status: bekannteAbweichung ? current.status : 'fehlend', note: current?.note ?? '' }
     }
-    setDraft(next); setChecking(true)
+    setCheckError(''); setDraft(next); setChecking(true)
+  }
+  // Das Abhaken selbst ist die Bestätigung für "passt". Für eine Abweichung
+  // reicht das Ausfüllen der Felder allein nicht (siehe oben) - dafür gibt es
+  // die separate "geprüft und bestätigt"-Checkbox (toggleReviewed).
+  function togglePasst(itemId: string, passt: boolean) {
+    setDraft(current => ({ ...current, [itemId]: { ...current[itemId], passt, reviewed: passt || current[itemId]?.reviewed } }))
+  }
+  function toggleReviewed(itemId: string, reviewed: boolean) {
+    setDraft(current => ({ ...current, [itemId]: { ...current[itemId], reviewed } }))
   }
   async function submitCheck() {
     if (!profile?.id) return
-    setSaving(true)
-    const rows = items.map(item => ({ item_id: item.id, vehicle_id: vehicleId, ist_menge: Number(draft[item.id]?.menge) || 0, status: draft[item.id]?.status ?? 'vollstaendig', note: draft[item.id]?.note.trim() || null, checked_by: profile.id, checked_at: new Date().toISOString() }))
+    const nichtBestaetigt = items.some(item => !draft[item.id]?.reviewed)
+    if (nichtBestaetigt) { setCheckError('Bitte jede Position abhaken (passt) oder als geprüft bestätigen.'); return }
+    const fehlendeAngabe = items.some(item => !draft[item.id]?.passt && !draft[item.id]?.menge.trim())
+    if (fehlendeAngabe) { setCheckError('Bitte für jede nicht abgehakte Position die tatsächlich vorhandene Menge angeben.'); return }
+    setCheckError(''); setSaving(true)
+    const rows = items.map(item => {
+      const d = draft[item.id]
+      return d?.passt
+        ? { item_id: item.id, vehicle_id: vehicleId, ist_menge: item.soll_menge, status: 'vollstaendig' as FleetEquipmentStatusValue, note: null, checked_by: profile.id, checked_at: new Date().toISOString() }
+        : { item_id: item.id, vehicle_id: vehicleId, ist_menge: Number(d?.menge) || 0, status: d?.status ?? 'fehlend', note: d?.note.trim() || null, checked_by: profile.id, checked_at: new Date().toISOString() }
+    })
     const { error } = await supabase.from('fleet_equipment_status').upsert(rows, { onConflict: 'item_id' })
     setSaving(false)
-    if (error) { onError('Die Kontrolle konnte nicht gespeichert werden.'); return }
+    if (error) { setCheckError('Die Kontrolle konnte nicht gespeichert werden.'); return }
     setChecking(false); onSaved('Bestand wurde kontrolliert.')
   }
 
@@ -349,8 +376,25 @@ function FuelllisteTab({ vehicleId, items, statusByItem, canEdit, onSaved, onErr
     </Modal> : null}
 
     {checking ? <Modal title="Bestand kontrollieren" close={() => setChecking(false)} wide>
-      <p className="text-sm text-gray-600">Jede Position prüfen und bei Bedarf anpassen, dann gesammelt speichern.</p>
-      <div className="space-y-3">{items.map(item => <div key={item.id} className="rounded-xl border border-gray-200 p-3"><p className="text-sm font-semibold text-gray-900">{item.name} <span className="text-xs font-normal text-gray-500">(Soll {item.soll_menge} {item.unit})</span></p><div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2"><label className="block text-xs font-medium text-gray-600">Ist-Menge<input type="number" min={0} className={inputClass} value={draft[item.id]?.menge ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], menge: event.target.value } }))} /></label><label className="block text-xs font-medium text-gray-600">Status<select className={inputClass} value={draft[item.id]?.status ?? 'vollstaendig'} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], status: event.target.value as FleetEquipmentStatusValue } }))}>{Object.entries(STATUS_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="block text-xs font-medium text-gray-600">Bemerkung<input className={inputClass} value={draft[item.id]?.note ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} /></label></div></div>)}</div>
+      <p className="text-sm text-gray-600">Jede Position abhaken, wenn der Sollbestand passt. Passt er nicht, die tatsächlich vorhandene Menge eintragen und bestätigen.</p>
+      <div className="space-y-3">{items.map(item => { const d = draft[item.id]; const passt = d?.passt ?? false; const reviewed = d?.reviewed ?? false; return <div key={item.id} className={`rounded-xl border p-3 ${passt ? 'border-green-200 bg-green-50' : reviewed ? 'border-amber-200 bg-amber-50' : 'border-gray-200'}`}>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-blue-700 focus:ring-blue-700" checked={passt} onChange={event => togglePasst(item.id, event.target.checked)} />
+          <span className="flex-1 min-w-0"><span className="text-sm font-semibold text-gray-900 block">{item.name}</span><span className="text-xs text-gray-500">Soll: {item.soll_menge} {item.unit} {passt ? '· passt' : ''}</span></span>
+        </label>
+        {!passt ? <div className="pl-7">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3">
+            <label className="block text-xs font-medium text-gray-600">Tatsächliche Menge *<input type="number" min={0} className={inputClass} value={d?.menge ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], menge: event.target.value } }))} /></label>
+            <label className="block text-xs font-medium text-gray-600">Was ist der Fall?<select className={inputClass} value={d?.status ?? 'fehlend'} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], status: event.target.value as FleetEquipmentStatusValue } }))}>{Object.entries(STATUS_LABEL).filter(([value]) => value !== 'vollstaendig').map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <label className="block text-xs font-medium text-gray-600">Bemerkung<input className={inputClass} value={d?.note ?? ''} onChange={event => setDraft(current => ({ ...current, [item.id]: { ...current[item.id], note: event.target.value } }))} /></label>
+          </div>
+          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+            <input type="checkbox" className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-amber-700 focus:ring-amber-700" checked={reviewed} onChange={event => toggleReviewed(item.id, event.target.checked)} />
+            <span className="text-xs font-medium text-gray-700">Angabe geprüft und bestätigt</span>
+          </label>
+        </div> : null}
+      </div> })}</div>
+      {checkError ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{checkError}</p> : null}
       <Actions saving={saving} close={() => setChecking(false)} save={submitCheck} label="Kontrolle abschließen" />
     </Modal> : null}
   </TabShell>
