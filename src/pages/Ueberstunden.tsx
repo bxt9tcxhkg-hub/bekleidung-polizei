@@ -6,7 +6,7 @@ import { fetchAllPages, supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
-import { EMPTY_MELDUNG_FORM, KATEGORIEN, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
 const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
@@ -156,6 +156,7 @@ export default function Ueberstunden() {
     if (!form.grund.trim()) { setError('Bitte den Grund der Überstunde(n) angeben.'); return }
     if (!zeitraum) { setError('Bitte einen gültigen Zeitraum angeben (Von/Bis vollständig ausfüllen, Ende muss nach Beginn liegen).'); return }
     if (!istViertelstundenRaster(form.vonZeit) || !istViertelstundenRaster(form.bisZeit)) { setError('Bitte Uhrzeiten in Viertelstunden-Schritten angeben (z. B. 08:00, 08:15, 08:30, 08:45).'); return }
+    if (istUebersprungeneSommerzeitStunde(form.vonDatum, form.vonZeit) || istUebersprungeneSommerzeitStunde(form.bisDatum, form.bisZeit)) { setError('Die Uhrzeit 02:00-03:00 Uhr existiert am Tag der Sommerzeit-Umstellung (letzter Sonntag im März) nicht - bitte eine andere Uhrzeit wählen.'); return }
     const payload = formToPayload(form)
     setSaving(true)
     const response = editing

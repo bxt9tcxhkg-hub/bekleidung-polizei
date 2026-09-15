@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istViertelstundenRaster, monatsUebersicht } from './ueberstunden'
+import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, monatsUebersicht } from './ueberstunden'
 import type { UeberstundenMeldung } from './types'
 
 // Montag, 14.09.2026 - ein gewöhnlicher Werktag (siehe austrianHolidays.test.ts).
@@ -151,10 +151,45 @@ describe('monatsUebersicht', () => {
     expect(november[0].gesamt).toBe(1)
   })
 
+  it('vermischt bei einer Monatsgrenze zwischen zwei benachbarten Sonn-/Feiertagen (je eigene 8-Std.-Schwelle) nicht deren 100%/200%-Aufteilung', () => {
+    // Sonntag 30.04.2028 14:00 bis Montag 01.05.2028 02:00 (Staatsfeiertag) -
+    // 10 Std. am Sonntag (8 zu 100 %, 2 zu 200 %), 2 Std. am Feiertag (beide
+    // zu 100 %, eigene Schwelle) - korrekt wäre April 8/2, Mai 2/0, NICHT ein
+    // einziges gemeinsames Verhältnis über beide Tage hinweg.
+    const item = meldung({ id: '1', von_datum: '2028-04-30', von_zeit: '14:00', bis_datum: '2028-05-01', bis_zeit: '02:00', std_werktag_50: 0, std_sonn_100: 10, std_sonn_200: 2 })
+    const april = monatsUebersicht([item], '2028-04')
+    const mai = monatsUebersicht([item], '2028-05')
+    expect(april).toHaveLength(1)
+    expect(april[0].stunden.std_sonn_100).toBe(8)
+    expect(april[0].stunden.std_sonn_200).toBe(2)
+    expect(april[0].gesamt).toBe(10)
+    expect(mai).toHaveLength(1)
+    expect(mai[0].stunden.std_sonn_100).toBe(2)
+    expect(mai[0].stunden.std_sonn_200).toBe(0)
+    expect(mai[0].gesamt).toBe(2)
+  })
+
   it('rechnet eine Meldung ganz außerhalb des gewählten Monats keinem der beiden Monate zu', () => {
     const item = meldung({ id: '1', von_datum: '2026-09-30', von_zeit: '22:00', bis_datum: '2026-10-01', bis_zeit: '02:00', std_werktag_50: 0, std_22_06: 4 })
     expect(monatsUebersicht([item], '2026-08')).toEqual([])
     expect(monatsUebersicht([item], '2026-11')).toEqual([])
+  })
+})
+
+describe('istUebersprungeneSommerzeitStunde', () => {
+  it('erkennt die übersprungene Stunde am letzten Sonntag im März (Frühjahrsumstellung)', () => {
+    // Letzter Sonntag im März: 29.03.2026, 28.03.2027, 26.03.2028.
+    for (const zeit of ['02:00', '02:15', '02:30', '02:45']) expect(istUebersprungeneSommerzeitStunde('2026-03-29', zeit)).toBe(true)
+    expect(istUebersprungeneSommerzeitStunde('2027-03-28', '02:30')).toBe(true)
+    expect(istUebersprungeneSommerzeitStunde('2028-03-26', '02:30')).toBe(true)
+  })
+
+  it('lehnt andere Uhrzeiten, Tage und Monate ab', () => {
+    expect(istUebersprungeneSommerzeitStunde('2026-03-29', '01:45')).toBe(false)
+    expect(istUebersprungeneSommerzeitStunde('2026-03-29', '03:00')).toBe(false)
+    expect(istUebersprungeneSommerzeitStunde('2026-03-22', '02:15')).toBe(false) // vorletzter Sonntag
+    expect(istUebersprungeneSommerzeitStunde('2026-10-25', '02:15')).toBe(false) // Herbstumstellung - dort mehrdeutig, nicht übersprungen
+    expect(istUebersprungeneSommerzeitStunde('2026-09-14', '02:15')).toBe(false)
   })
 })
 

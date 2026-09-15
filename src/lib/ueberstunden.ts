@@ -147,6 +147,30 @@ export function istViertelstundenRaster(zeit: string): boolean {
   return !Number.isNaN(minuten) && minuten % 15 === 0
 }
 
+/** Letzter Sonntag im März eines Jahres (Kalendertag 1-31) - Beginn der Sommerzeit in Europe/Vienna (wie in der ganzen EU). */
+function letzterMaerzSonntag(jahr: number): number {
+  const einunddreissigsterMaerz = new Date(jahr, 2, 31)
+  return 31 - einunddreissigsterMaerz.getDay()
+}
+
+/**
+ * true, wenn diese Datum/Uhrzeit-Kombination durch die Sommerzeit-Umstellung
+ * in Europe/Vienna übersprungen wird (letzter Sonntag im März, 02:00-02:59
+ * Uhr existiert an diesem Tag nicht - die Wanduhr springt direkt von 02:00
+ * auf 03:00). Rein kalendarisch berechnet (wie lib/austrianHolidays.ts),
+ * unabhängig von der Zeitzone des ausführenden Rechners/Browsers - client-
+ * seitige Vorabprüfung zum serverseitigen Rundreise-Test in
+ * ueberstunden_vienna_diff_hours (Migration Runde 14), die eine solche
+ * Meldung ohnehin ablehnen würde, aber erst nach einem Speicherversuch.
+ */
+export function istUebersprungeneSommerzeitStunde(datum: string, zeit: string): boolean {
+  const [jahr, monat, tag] = datum.split('-').map(Number)
+  const [stunde] = zeit.split(':').map(Number)
+  if ([jahr, monat, tag, stunde].some(n => Number.isNaN(n))) return false
+  if (monat !== 3 || tag !== letzterMaerzSonntag(jahr)) return false
+  return stunde === 2
+}
+
 /** Liefert den gültigen Zeitraum aus dem Formular, oder null solange er unvollständig/ungültig ist (bis muss nach von liegen). */
 export function meldungZeitraum(form: Pick<MeldungFormState, 'vonDatum' | 'vonZeit' | 'bisDatum' | 'bisZeit'>): { von: Date; bis: Date } | null {
   const von = parseZeitpunkt(form.vonDatum, form.vonZeit)
@@ -196,13 +220,16 @@ function monatsGrenzen(monat: string): { beginn: Date; ende: Date } {
 /**
  * Wie berechneAufschluesselung, aber ohne 100%/200%-Aufteilung an Sonn-/
  * Feiertagen (reine Zeitfenster-Zerlegung, unabhängig vom Feiertags-Topf) -
- * Sonn-/Feiertagsstunden werden hier nur als Gesamtsumme geführt. Grundlage
- * für die monatsweise Aufteilung einer über eine Monatsgrenze reichenden
- * Meldung (siehe anteilFuerMonat): welcher Stundenanteil fällt rein nach der
- * Uhrzeit vor bzw. nach der Grenze an.
+ * Sonn-/Feiertagsstunden werden hier je Kalendertag geführt (Map: Tagesbeginn
+ * in ms -> Stunden), nicht als eine einzige Gesamtsumme, damit die 8-Std.-
+ * Schwelle für die monatsweise Aufteilung (siehe anteilFuerMonat) pro Tag
+ * statt über mehrere Sonn-/Feiertage hinweg verrechnet werden kann - sonst
+ * würde ein Zeitraum, der zwei unabhängige Sonn-/Feiertage überspannt (z. B.
+ * Sonntag-Abend bis Feiertag-Nacht am Monatsersten), die beiden getrennten
+ * 8-Std.-Schwellen zu einer gemeinsamen vermischen.
  */
-function rohStundenOhneFeiertagssplit(von: Date, bis: Date): { std_werktag_50: number; std_19_22: number; std_22_06: number; sonnGesamt: number } {
-  const result = { std_werktag_50: 0, std_19_22: 0, std_22_06: 0, sonnGesamt: 0 }
+function rohStundenOhneFeiertagssplit(von: Date, bis: Date): { std_werktag_50: number; std_19_22: number; std_22_06: number; sonnProTag: Map<number, number> } {
+  const result = { std_werktag_50: 0, std_19_22: 0, std_22_06: 0, sonnProTag: new Map<number, number>() }
   if (!(bis > von)) return result
   let cursor = new Date(von)
   while (cursor < bis) {
@@ -211,7 +238,8 @@ function rohStundenOhneFeiertagssplit(von: Date, bis: Date): { std_werktag_50: n
     const abschnittsende = bis < naechsterTag ? bis : naechsterTag
     const dauerStunden = (abschnittsende.getTime() - cursor.getTime()) / 3_600_000
     if (isSonnOderFeiertag(tagesbeginn)) {
-      result.sonnGesamt += dauerStunden
+      const key = tagesbeginn.getTime()
+      result.sonnProTag.set(key, (result.sonnProTag.get(key) ?? 0) + dauerStunden)
     } else {
       const fenster: [number, number, 'std_werktag_50' | 'std_19_22' | 'std_22_06'][] = [
         [0, 6, 'std_22_06'], [6, 19, 'std_werktag_50'], [19, 22, 'std_19_22'], [22, 24, 'std_22_06'],
@@ -230,18 +258,45 @@ function rohStundenOhneFeiertagssplit(von: Date, bis: Date): { std_werktag_50: n
 }
 
 /**
+ * Naive 100%/200%-Aufteilung je Sonn-/Feiertag, ausschließlich aus den
+ * eigenen Stunden DIESER Meldung an diesem Tag (ohne Berücksichtigung
+ * anderweitig an diesem Tag bereits verwendeter Stunden). Dient nur als
+ * GEWICHT für die monatsweise Aufteilung der tatsächlich gespeicherten
+ * std_sonn_100/std_sonn_200 (siehe anteilFuerMonat) - für einen Tag, an dem
+ * ausschließlich diese Meldung zum Topf beiträgt, ist das Ergebnis exakt;
+ * tragen mehrere Meldungen desselben Beamten zum selben Tag bei, bleibt es
+ * eine Näherung (die ursprüngliche Reihenfolge ist nachträglich nicht mehr
+ * rekonstruierbar), aber unverändert korrekt in der Summe über alle Monate.
+ */
+function naiveSonnSplit(sonnProTag: ReadonlyMap<number, number>): { naiv100: number; naiv200: number } {
+  let naiv100 = 0
+  let naiv200 = 0
+  for (const stunden of sonnProTag.values()) {
+    naiv100 += Math.min(8, stunden)
+    naiv200 += Math.max(0, stunden - 8)
+  }
+  return { naiv100, naiv200 }
+}
+
+/**
  * Anteil der gespeicherten Aufschlüsselung einer Meldung, der auf den
  * angegebenen Monat entfällt - null, wenn die Meldung diesen Monat gar nicht
  * berührt. Der Regelfall (Zeitraum ganz in einem Monat) liefert unverändert
  * die volle gespeicherte Aufschlüsselung. Reicht der Zeitraum über eine
  * Monatsgrenze (z. B. 30.09. 23:00 - 01.10. 02:00), wird an der Grenze
  * geteilt: std_werktag_50/std_19_22/std_22_06 lassen sich rein aus der
- * Uhrzeit exakt aufteilen. Für die Sonn-/Feiertags-100%/200%-Schwelle ist die
- * ursprüngliche Tag-für-Tag-Aufteilung nachträglich nicht mehr exakt
- * rekonstruierbar (sie hing beim Speichern vom damaligen Stand anderer
- * Meldungen desselben Tages ab, siehe ueberstunden_berechne_aufschluesselung)
- * - die gespeicherten std_sonn_100/std_sonn_200 werden deshalb im Verhältnis
- * der tatsächlichen Sonn-/Feiertagsstunden vor/nach der Grenze aufgeteilt.
+ * Uhrzeit exakt aufteilen (Monatsgrenzen fallen immer auf Tagesgrenzen, ein
+ * einzelner Kalendertag wird also nie durch die Monatsgrenze selbst
+ * zerschnitten). Für die Sonn-/Feiertags-100%/200%-Schwelle ist die
+ * ursprüngliche Aufteilung nachträglich nicht mehr exakt rekonstruierbar,
+ * wenn an einem der betroffenen Tage AUCH andere Meldungen desselben Beamten
+ * zum Topf beitrugen (siehe ueberstunden_berechne_aufschluesselung) - die
+ * gespeicherten std_sonn_100/std_sonn_200 werden deshalb je Kategorie
+ * getrennt im Verhältnis der naiven Tages-Aufteilung (siehe naiveSonnSplit)
+ * auf die betroffenen Monate verteilt, statt beide Kategorien mit einem
+ * gemeinsamen Stundenverhältnis zu vermischen - das wäre falsch, sobald zwei
+ * an der Monatsgrenze benachbarte Sonn-/Feiertage (z. B. Sonntag/Feiertag am
+ * Monatsersten) je eine EIGENE 8-Std.-Schwelle haben.
  */
 function anteilFuerMonat(item: UeberstundenMeldung, monat: string): Record<UeberstundenKategorieKey, number> | null {
   if (item.von_datum.slice(0, 7) === item.bis_datum.slice(0, 7)) {
@@ -257,13 +312,16 @@ function anteilFuerMonat(item: UeberstundenMeldung, monat: string): Record<Ueber
   if (!(clipBis > clipVon)) return null
   const anteil = rohStundenOhneFeiertagssplit(clipVon, clipBis)
   const gesamt = rohStundenOhneFeiertagssplit(von, bis)
-  const sonnAnteil = gesamt.sonnGesamt > 0 ? anteil.sonnGesamt / gesamt.sonnGesamt : 0
+  const naivAnteil = naiveSonnSplit(anteil.sonnProTag)
+  const naivGesamt = naiveSonnSplit(gesamt.sonnProTag)
+  const anteil100 = naivGesamt.naiv100 > 0 ? naivAnteil.naiv100 / naivGesamt.naiv100 : 0
+  const anteil200 = naivGesamt.naiv200 > 0 ? naivAnteil.naiv200 / naivGesamt.naiv200 : 0
   return {
     std_werktag_50: anteil.std_werktag_50,
     std_19_22: anteil.std_19_22,
     std_22_06: anteil.std_22_06,
-    std_sonn_100: item.std_sonn_100 * sonnAnteil,
-    std_sonn_200: item.std_sonn_200 * sonnAnteil,
+    std_sonn_100: item.std_sonn_100 * anteil100,
+    std_sonn_200: item.std_sonn_200 * anteil200,
   }
 }
 
