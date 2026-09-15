@@ -108,13 +108,19 @@ export default function Ueberstunden() {
     if (!jahr || !monatNr) return
     const vonDatum = `${monat}-01`
     const bisDatum = monatNr === 12 ? `${jahr + 1}-01-01` : `${jahr}-${String(monatNr + 1).padStart(2, '0')}-01`
+    // Meldungen, die den Monat BERÜHREN, nicht nur solche, deren von_datum
+    // darin liegt - eine über Mitternacht in den Folgemonat reichende
+    // Meldung (z. B. 30.09. 23:00 - 01.10. 02:00) hat sonst für Oktober keine
+    // Zeile, obwohl monatsUebersicht (siehe lib/ueberstunden.ts) ihr
+    // anteiliges Kontingent diesem Monat zurechnet.
+    //
     // fetchAllPages statt einer einzelnen Abfrage - ein Monat mit mehr
     // genehmigten Meldungen als die von PostgREST gedeckelte Standard-
     // Seitengröße würde sonst eine unvollständige (aber unauffällig falsche)
     // Sammelansicht/Monatsübersicht liefern.
     const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
       .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
-      .eq('status', 'genehmigt').gte('von_datum', vonDatum).lt('von_datum', bisDatum)
+      .eq('status', 'genehmigt').lt('von_datum', bisDatum).gte('bis_datum', vonDatum)
       .order('id', { ascending: true })
       .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
     if (result.error) { setError('Die Monatsübersicht konnte nicht geladen werden.'); return }

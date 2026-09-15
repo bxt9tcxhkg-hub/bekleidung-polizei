@@ -118,6 +118,44 @@ describe('monatsUebersicht', () => {
     expect(auszahlung?.gesamt).toBe(4)
     expect(stundenersatz?.gesamt).toBe(3)
   })
+
+  it('teilt eine über eine Monatsgrenze reichende Meldung an der Grenze auf, statt sie komplett dem Startmonat zuzurechnen', () => {
+    // Mittwoch 30.09.2026 22:00 bis Donnerstag 01.10.2026 02:00 - reine
+    // Werktags-Nachtstunden (22-06), exakt zur Hälfte auf beide Monate
+    // aufteilbar (je 2 von insgesamt 4 Stunden).
+    const item = meldung({ id: '1', von_datum: '2026-09-30', von_zeit: '22:00', bis_datum: '2026-10-01', bis_zeit: '02:00', std_werktag_50: 0, std_22_06: 4 })
+    const september = monatsUebersicht([item], '2026-09')
+    const oktober = monatsUebersicht([item], '2026-10')
+    expect(september).toHaveLength(1)
+    expect(september[0].stunden.std_22_06).toBe(2)
+    expect(september[0].gesamt).toBe(2)
+    expect(oktober).toHaveLength(1)
+    expect(oktober[0].stunden.std_22_06).toBe(2)
+    expect(oktober[0].gesamt).toBe(2)
+  })
+
+  it('teilt bei einer Monatsgrenze, die zugleich in einen Sonn-/Feiertag reicht, die Sonn-/Feiertagsstunden im Verhältnis der tatsächlichen Stunden auf', () => {
+    // Samstag 31.10.2026 23:00 (Werktag) bis Sonntag 01.11.2026 01:00
+    // (Sonn-/Feiertag, Allerheiligen) - je eine Stunde auf jeder Seite,
+    // sowohl der Monatsgrenze als auch der Sonn-/Feiertagsgrenze.
+    const item = meldung({ id: '1', von_datum: '2026-10-31', von_zeit: '23:00', bis_datum: '2026-11-01', bis_zeit: '01:00', std_werktag_50: 0, std_22_06: 1, std_sonn_100: 1 })
+    const oktober = monatsUebersicht([item], '2026-10')
+    const november = monatsUebersicht([item], '2026-11')
+    expect(oktober).toHaveLength(1)
+    expect(oktober[0].stunden.std_22_06).toBe(1)
+    expect(oktober[0].stunden.std_sonn_100).toBe(0)
+    expect(oktober[0].gesamt).toBe(1)
+    expect(november).toHaveLength(1)
+    expect(november[0].stunden.std_22_06).toBe(0)
+    expect(november[0].stunden.std_sonn_100).toBe(1)
+    expect(november[0].gesamt).toBe(1)
+  })
+
+  it('rechnet eine Meldung ganz außerhalb des gewählten Monats keinem der beiden Monate zu', () => {
+    const item = meldung({ id: '1', von_datum: '2026-09-30', von_zeit: '22:00', bis_datum: '2026-10-01', bis_zeit: '02:00', std_werktag_50: 0, std_22_06: 4 })
+    expect(monatsUebersicht([item], '2026-08')).toEqual([])
+    expect(monatsUebersicht([item], '2026-11')).toEqual([])
+  })
 })
 
 describe('bereitsVerwendeteFeiertagsstunden (Vorschau-Kontext)', () => {
