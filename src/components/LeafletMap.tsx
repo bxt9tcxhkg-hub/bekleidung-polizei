@@ -254,9 +254,14 @@ export default function LeafletMap({
         ))}
       </div>
       <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
-      {parcelLabel ? (
-        <p className="mt-1.5 text-xs font-medium text-gray-700 px-1">{parcelLabel}</p>
-      ) : null}
+      <div className="mt-1.5 px-1 text-xs text-gray-600">
+        {parcelLabel ? <p className="font-medium text-gray-800">{parcelLabel}</p> : null}
+        <p>
+          <span className="font-medium text-gray-700">KG</span> Katastralgemeinde
+          <span className="mx-2 text-gray-300">|</span>
+          <span className="font-medium text-gray-700">GST</span> Grundstücksnummer
+        </p>
+      </div>
     </div>
   )
 }
