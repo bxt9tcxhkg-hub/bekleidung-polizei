@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { AppErrorSource, Database } from './types'
+import type { AppErrorInsert, AppErrorSource } from './appErrorTypes'
 
 export type { AppErrorSource }
 
@@ -10,8 +10,6 @@ export const APP_ERROR_USER_AGENT_MAX = 300
 
 const REDACTED = '[REDACTED]'
 const DEDUP_MS = 2000
-
-type AppErrorInsert = Database['public']['Tables']['app_errors']['Insert']
 
 let reportedObjects = new WeakSet<object>()
 const recentKeys = new Map<string, number>()
@@ -124,17 +122,13 @@ async function persistAppError(input: {
       userId: user.id,
       roleSnapshot,
     })
-    const { error } = await supabase.from('app_errors').insert(row)
+    const { error } = await supabase.from('app_errors' as never).insert(row as never)
     if (error) console.error('Fehlerprotokoll fehlgeschlagen:', error.message)
   } catch {
     // Fire-and-forget: Protokoll darf die UI nie blockieren.
   }
 }
 
-/**
- * Schreibt einen Laufzeitfehler nach public.app_errors (nur eigenes Supabase).
- * Fire-and-forget: niemals awaiten, niemals die UI blockieren.
- */
 export function reportAppError(input: {
   message: string
   stack?: string | null
@@ -155,7 +149,6 @@ export function reportAppError(input: {
   })
 }
 
-/** Installiert window.onerror und unhandledrejection genau einmal. */
 export function installGlobalErrorHandlers(): void {
   if (handlersInstalled || typeof window === 'undefined') return
   handlersInstalled = true
