@@ -253,7 +253,7 @@ export default function LeafletMap({
           </button>
         ))}
       </div>
-      <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
+      <div ref={containerRef} style={{ height: height === 420 ? 560 : height }} className="rounded-xl overflow-hidden border border-gray-200" />
       <div className="mt-1.5 px-1 text-xs text-gray-600">
         {parcelLabel ? <p className="font-medium text-gray-800">{parcelLabel}</p> : null}
         <p>
