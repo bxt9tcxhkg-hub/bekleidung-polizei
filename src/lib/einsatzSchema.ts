@@ -1,11 +1,39 @@
 export const EREIGNISSTUFEN = ['klein', 'mittel', 'gross', 'katastrophe'] as const
 export type Ereignisstufe = (typeof EREIGNISSTUFEN)[number]
 
-export const STUFE_META: Record<Ereignisstufe, { label: string; color: string; bg: string; hint: string; dienstbetrieb: string }> = {
-  klein: { label: 'Kleinereignis', color: '#166534', bg: '#dcfce7', hint: 'z. B. Brand PKW, Wasser im Keller, Rettung, Polizeieinsatz', dienstbetrieb: 'normaler Dienstbetrieb' },
-  mittel: { label: 'Mittelereignis', color: '#854d0e', bg: '#fef08a', hint: 'Gewisse Betroffenheit in der Bevölkerung', dienstbetrieb: 'Information per Telefon' },
-  gross: { label: 'Großereignis', color: '#9a3412', bg: '#fdba74', hint: 'Große Betroffenheit in der Bevölkerung', dienstbetrieb: 'Koordinierung notwendig' },
-  katastrophe: { label: 'Katastrophe', color: '#991b1b', bg: '#fecaca', hint: 'Ausserordentlich große Betroffenheit, überörtliche Zusammenarbeit', dienstbetrieb: 'Koordinierung notwendig' },
+export const STUFE_META: Record<Ereignisstufe, { label: string; color: string; bg: string; hint: string; dienstbetrieb: string; wann: string }> = {
+  klein: {
+    label: 'Kleinereignis',
+    color: '#166534',
+    bg: '#dcfce7',
+    hint: 'Brand PKW, Wasser im Keller, Rettung, üblicher Polizeieinsatz',
+    dienstbetrieb: 'Normaler Dienstbetrieb – keine Telefonkette',
+    wann: 'Keine oder nur einzelne Betroffene. Alltag für die Zentrale.',
+  },
+  mittel: {
+    label: 'Mittelereignis',
+    color: '#854d0e',
+    bg: '#fef08a',
+    hint: 'Mehrere Haushalte, Straße, sichtbares Ereignis',
+    dienstbetrieb: 'Information per Telefon',
+    wann: 'Gewisse Betroffenheit in der Bevölkerung. Stadt muss informiert werden.',
+  },
+  gross: {
+    label: 'Großereignis',
+    color: '#9a3412',
+    bg: '#fdba74',
+    hint: 'Ortsteil, viele Personen, Evakuierung denkbar',
+    dienstbetrieb: 'Koordinierung notwendig',
+    wann: 'Große Betroffenheit. Einsatzleitung und Entscheidungen nötig.',
+  },
+  katastrophe: {
+    label: 'Katastrophe',
+    color: '#991b1b',
+    bg: '#fecaca',
+    hint: 'Über Dornbirn hinaus, Großschaden, überörtliche Hilfe',
+    dienstbetrieb: 'Koordinierung notwendig',
+    wann: 'Ausserordentlich große Betroffenheit, Zusammenarbeit über die Stadt hinaus.',
+  },
 }
 
 export const TELEFONKETTE = [
@@ -24,6 +52,9 @@ export const ENTSCHEIDUNGSPUNKTE = [
   'Zivilschutzalarm',
 ]
 
+export type KetteStatus = { versucht?: string; erreicht?: string }
+export type KetteStand = Record<string, KetteStatus>
+
 const PREFIX = /^STUFE:(klein|mittel|gross|katastrophe)\n?/
 
 export function parseStufe(note: string | null | undefined): Ereignisstufe {
@@ -41,11 +72,12 @@ export function withStufe(note: string | null | undefined, stufe: Ereignisstufe)
   return rest ? `STUFE:${stufe}\n${rest}` : `STUFE:${stufe}`
 }
 
-function storageKey(id: string) { return `einsatz-stufe:${id}` }
+function stufeKey(id: string) { return `einsatz-stufe:${id}` }
+function ketteKey(id: string) { return `einsatz-kette:${id}` }
 
 export function readStoredStufe(id: string, note?: string | null): Ereignisstufe {
   try {
-    const stored = localStorage.getItem(storageKey(id))
+    const stored = localStorage.getItem(stufeKey(id))
     if (stored && EREIGNISSTUFEN.includes(stored as Ereignisstufe)) return stored as Ereignisstufe
   } catch { /* ignore */ }
   return parseStufe(note)
@@ -53,7 +85,30 @@ export function readStoredStufe(id: string, note?: string | null): Ereignisstufe
 
 export function writeStoredStufe(id: string, stufe: Ereignisstufe) {
   try {
-    if (stufe === 'klein') localStorage.removeItem(storageKey(id))
-    else localStorage.setItem(storageKey(id), stufe)
+    if (stufe === 'klein') localStorage.removeItem(stufeKey(id))
+    else localStorage.setItem(stufeKey(id), stufe)
   } catch { /* ignore */ }
+}
+
+export function readKette(id: string): KetteStand {
+  try {
+    const raw = localStorage.getItem(ketteKey(id))
+    if (!raw) return {}
+    return JSON.parse(raw) as KetteStand
+  } catch {
+    return {}
+  }
+}
+
+export function writeKette(id: string, stand: KetteStand) {
+  try {
+    localStorage.setItem(ketteKey(id), JSON.stringify(stand))
+  } catch { /* ignore */ }
+}
+
+export function formatStamp(iso?: string): string {
+  if (!iso) return ''
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
