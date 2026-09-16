@@ -2,11 +2,8 @@ import { AlertTriangle, Car, CheckCircle2, Circle, Construction, ListChecks, Plu
 import { useOutletContext } from 'react-router-dom'
 import { formatTime } from '../../lib/zentraleShared'
 import type { AussendienstContext } from './AussendienstShell'
+import Fuellliste from './Fuellliste'
 
-// Reihenfolge nach dem tatsächlichen Dienstablauf, nicht nach Kategorie:
-// zuerst Warnungen (jederzeit relevant), dann der Dienst beginnt mit dem
-// Fahrzeugcheck, danach folgt die Kontrollauftrags-To-do-Liste - erst dann
-// der Rest (aktive Einsätze, Streifeninfo, Baustelle melden).
 export default function AussendienstUebersicht() {
   const ctx = useOutletContext<AussendienstContext>()
   if (!ctx.ownAssignment) return null
@@ -23,6 +20,8 @@ export default function AussendienstUebersicht() {
       : <div className="mt-2"><p className="text-sm text-amber-700 mb-2">Noch nicht kontrolliert – bitte vor Dienstantritt durchführen (kein Zwang, nur Erinnerung).</p><div className="flex flex-wrap gap-2"><button type="button" disabled={ctx.saving} onClick={() => void ctx.saveVehicleCheck('ok', '')} className="bg-green-700 hover:bg-green-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Kontrolliert – in Ordnung</button><button type="button" onClick={() => ctx.setShowMangelForm(true)} className="border border-amber-300 text-amber-800 text-sm font-medium px-4 py-2 rounded-lg">Mangel melden</button></div>
         {ctx.showMangelForm ? <div className="mt-3 flex flex-col sm:flex-row gap-2"><input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Was fehlt / ist beschädigt?" value={ctx.checkNote} onChange={event => ctx.setCheckNote(event.target.value)} /><button type="button" disabled={ctx.saving} onClick={() => void ctx.saveVehicleCheck('mangel', ctx.checkNote)} className="bg-amber-700 hover:bg-amber-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Melden</button></div> : null}</div>}
     </section>
+
+    {ownVehicle ? <Fuellliste vehicle={ownVehicle} /> : null}
 
     <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
       <div className="p-4 sm:p-5 border-b border-gray-100"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ListChecks className="w-4 h-4 text-blue-700" /> Kontrollaufträge</h2><p className="text-xs text-gray-500 mt-1">Mit Klick erledigt markieren - die Uhrzeit ist nur eine Gedankenstütze für die spätere Protokollierung im PAD, kein Nachweis.</p></div>
