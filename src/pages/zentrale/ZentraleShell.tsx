@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
-import { Navigate, Outlet, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
@@ -14,30 +14,14 @@ import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
 import { BaustelleModal, IncidentModal } from './zentraleShared'
 import { DISPOSITION_LABEL, EMPTY_BAUSTELLE_FORM, EMPTY_INCIDENT_FORM, formatTime, type BaustelleFormState, type IncidentFormState } from '../../lib/zentraleShared'
 
-// Zentrale ist in eigenständige Sidebar-Seiten aufgeteilt (Übersicht, Einsätze,
-// Operative Lage - kein Tab-Streifen mehr, Vorlage ist Bekleidung). Diese
-// Hülle bündelt weiterhin die gemeinsamen Daten/Handler (ein Laden für alle
-// drei Seiten, wie zuvor), rendert Kopfzeile + Meldungen + alle Modals, und
-// reicht den Rest über den Outlet-Context an die jeweilige Unterseite durch.
-
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
 function normalizePhone(value: string | null | undefined) { return (value ?? '').replace(/\D/g, '') }
-// Bestehende Meldungen speichern den Einsatzort noch als gemeinsames Textfeld.
-// Für das Bearbeitungsformular wird eine abschließende Hausnummer best effort
-// getrennt; ungewöhnliche Adressen bleiben vollständig im Straßenfeld erhalten.
 function incidentLocationParts(location: string | null): { street: string; houseNumber: string } {
   const value = (location ?? '').trim()
   const match = value.match(/^(.*\D)\s+(\d+[a-zA-Z]?(?:[/-][\w-]+)?)$/)
   return match ? { street: match[1].trim(), houseNumber: match[2] } : { street: value, houseNumber: '' }
 }
-// Adressabgleich für Kontexthinweise: reiner Teilstringvergleich hätte einen
-// Präfix-Konflikt ("Rohrbach 1" würde fälschlich auch zu "Rohrbach 10"
-// passen) - sicherheitsrelevant, weil so ein AV/BV oder Personenhinweis der
-// falschen Adresse zugeordnet werden könnte. Stattdessen Wortvergleich: jedes
-// Wort der kürzeren Adresse muss als exaktes Wort in der längeren vorkommen -
-// eine Adresse ohne Hausnummer (nur Straße) matcht weiterhin jede Hausnummer
-// auf dieser Straße (bewusster Straßen-Fallback).
 function addressesMatch(a: string, b: string): boolean {
   const wordsA = normalizeText(a).split(' ').filter(Boolean)
   const wordsB = normalizeText(b).split(' ').filter(Boolean)
@@ -45,7 +29,6 @@ function addressesMatch(a: string, b: string): boolean {
   const [shorter, longer] = wordsA.length <= wordsB.length ? [wordsA, wordsB] : [wordsB, wordsA]
   return shorter.every(word => longer.includes(word))
 }
-// Für die Prüfprotokoll-Meldung beim Speichern eines Eintrags.
 const CATEGORY_LABEL: Record<ZentraleEntryCategory, string> = { lage: 'Operative Lage', kontrollauftrag: 'Kontrollauftrag', brief: 'RSa/RSb', uebergabe: 'Schichtübergabe' }
 
 export interface ZentraleContext {
@@ -100,9 +83,6 @@ export default function ZentraleShell() {
   const [avBvOpen, setAvBvOpen] = useState<ZentraleAvBv[]>([])
   const [fahndungenOpen, setFahndungenOpen] = useState<ZentraleFahndung[]>([])
   const [strassenzustandZeilen, setStrassenzustandZeilen] = useState<StrassenzustandBerichtzeile[]>([])
-  // Wenn eine dieser beiden Quellen nicht geladen werden konnte, darf "Sofort
-  // wichtig" NICHT stillschweigend Entwarnung geben - es könnten kritische
-  // Verbote/Fahndungen existieren, die nur nicht geladen werden konnten.
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -120,15 +100,7 @@ export default function ZentraleShell() {
   const [locateError, setLocateError] = useState('')
   const [priorIncidents, setPriorIncidents] = useState<IncidentReport[]>([])
   const priorIncidentsRequestRef = useRef(0)
-  // Falls eine bestehende Lage an eine Einsatzmeldung gekoppelt ist, die weder
-  // heute gemeldet noch mehr offen ist (z. B. Tage später bearbeitet), fehlt
-  // sie in incidents/openIncidentsAllDays - dann gezielt nachladen, damit die
-  // Auswahl und die Anzeige "Aus Einsatz: ..." sie trotzdem zeigen.
   const [editingLinkedIncident, setEditingLinkedIncident] = useState<IncidentReport | null>(null)
-  // Baustellen-Markierungen auf der Karte - unabhängig vom Straßenzustandsbericht.
-  // Jeder mit Zentrale-Zugriff kann eine Wahrnehmung melden; ohne canManage
-  // entsteht sie als "gemeldet" (unbestätigt), bis Sachbearbeiter/Genehmiger
-  // sie prüfen (siehe RLS: nur can_manage_zentrale() darf direkt "offen" anlegen).
   const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
   const [showBaustelleForm, setShowBaustelleForm] = useState(false)
   const [editingBaustelle, setEditingBaustelle] = useState<ZentraleBaustelle | null>(null)
@@ -140,36 +112,21 @@ export default function ZentraleShell() {
   const baustelleRouteRequestRef = useRef(0)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
-  // Diensthabender Zentralist ODER Innendienst - an ruhigeren Tagen deckt
-  // dieselbe Person beide Posten ab (siehe is_zentralist_on_duty() in der
-  // Datenbank, dieselbe Regel dort maßgeblich).
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale' || ownAssignment?.function === 'innendienst'
 
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    // Kontrollaufträge betreffen nur die Streifen (JD/VD) und werden hier
-    // bewusst nicht geladen – weder für die Seiten noch für "Sofort wichtig".
     const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult, strassenzustandResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
       supabase.from('duty_functions').select('*').eq('active', true).order('sort_order').order('label'),
       supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
-      // Für die Übersichtskarte unabhängig vom Tagesfilter: Einsätze bleiben
-      // teils über Mitternacht hinaus offen und müssen dort weiter auftauchen.
       supabase.from('incident_reports').select('*').eq('status', 'offen').order('reported_at', { ascending: true }),
       supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false }),
-      // Offene AV/BV & EV sowie Fahndungen kommen jetzt aus eigenen Tabellen
-      // (siehe ZentraleAvBv/ZentraleFahndungen) statt aus zentrale_entries -
-      // hier für "Sofort wichtig" und den Kontextabgleich beim Erfassen einer
-      // Einsatzmeldung geladen.
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
-      // Erledigte Baustellen werden nicht mehr auf der Karte/Liste gezeigt (wie erledigte Einsätze).
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
-      // Für "Sofort wichtig": eine Straße mit aktueller Sperre/Maßnahme muss
-      // sichtbar sein, solange sie gilt - siehe aktiveSperren() weiter unten.
-      // Geometriefelder zusätzlich für die Kartendarstellung (sperrenLines).
       supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name,start_lat,start_lng,end_lat,end_lng,path)').order('created_at', { ascending: false }),
     ])
     if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
@@ -189,10 +146,6 @@ export default function ZentraleShell() {
   }, [])
   useEffect(() => { void load() }, [load])
   useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
-  // Sobald Start und Ende feststehen, die Luftlinie im Formular durch den
-  // tatsächlichen Straßenverlauf ersetzen (Routing-Dienst, best effort - bei
-  // Fehlschlag bleibt es bei der Luftlinie). Generation-Zähler verhindert,
-  // dass eine spät eintreffende Antwort eine inzwischen geänderte Auswahl überschreibt.
   useEffect(() => {
     const { startLat, startLng, endLat, endLng } = baustelleForm
     if (startLat === null || startLng === null || endLat === null || endLng === null) return
@@ -207,21 +160,9 @@ export default function ZentraleShell() {
 
   const lageEntries = useMemo(() => entries.filter(item => item.category === 'lage'), [entries])
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
-  // Schichtübergabe: kein eigener Eintrag, sondern die am Schichtende noch
-  // offenen Einsatzmeldungen - das ist genau das, was an die nächste
-  // Diensthabende Person weitergegeben werden muss. openIncidentsAllDays
-  // (statt incidents, das auf heute gefiltert ist) verwenden, weil ein
-  // offener Einsatz über Mitternacht hinaus sonst aus der Übergabe fällt.
   const uebergabeIncidents = openIncidentsAllDays
   const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
   const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
-  // Innendienst filtert NICHT mehr auf disposition==='keine_anfahrt' - seit
-  // die Diensteinteilung "Innendienst" dieselben operativen Zentrale-Rechte
-  // wie ein diensthabender Zentralist gibt (isZentralistOnDuty), muss diese
-  // Person auch alle Meldungen sehen können, um selbst erfasste JD/VD/BP-
-  // Meldungen abzuschließen bzw. auf sie zu reagieren - sonst würde eine
-  // gerade erfasste, an eine Streife weitergegebene Meldung sofort aus der
-  // eigenen Ansicht verschwinden.
   const visibleIncidents = useMemo(() => {
     if (ownAssignment?.function === 'jd') return incidents.filter(item => item.disposition === 'jd')
     if (ownAssignment?.function === 'vd') return incidents.filter(item => item.disposition === 'vd')
@@ -232,10 +173,6 @@ export default function ZentraleShell() {
     if (ownAssignment?.function === 'vd') return openIncidentsAllDays.filter(item => item.disposition === 'vd')
     return openIncidentsAllDays
   }, [openIncidentsAllDays, ownAssignment?.function])
-  // Für die Lage-Auswahl/-Anzeige: heutige UND über Mitternacht hinaus offene
-  // Einsätze (sonst wählbar/sichtbar nur bis Mitternacht), plus - falls beim
-  // Bearbeiten benötigt - eine gezielt nachgeladene, bereits geschlossene
-  // Einsatzmeldung aus einem früheren Tag.
   const lageIncidentOptions = useMemo(() => {
     const byId = new Map(incidents.map(item => [item.id, item]))
     for (const item of openIncidentsAllDays) if (!byId.has(item.id)) byId.set(item.id, item)
@@ -243,9 +180,6 @@ export default function ZentraleShell() {
     return [...byId.values()]
   }, [incidents, openIncidentsAllDays, editingLinkedIncident])
   const incidentsById = useMemo(() => Object.fromEntries(lageIncidentOptions.map(item => [item.id, item])), [lageIncidentOptions])
-  // Eine Operative Lage hat immer genau einen auslösenden Einsatz - diese
-  // Zuordnung entscheidet, ob ein Einsatz bereits eine Lage hat (dann öffnet
-  // der Kartenbutton diese zum Bearbeiten) oder noch keine (dann legt er sie an).
   const lageByIncidentId = useMemo(() => {
     const map: Record<string, ZentraleEntry> = {}
     for (const item of entries) if (item.category === 'lage' && item.incident_id) map[item.incident_id] = item
@@ -254,19 +188,12 @@ export default function ZentraleShell() {
   const openIncidentMarkers = useMemo(() => openIncidentsAllDays
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
-  // Unbestätigte Meldungen ("gemeldet") gestrichelt/grau, bestätigte ("offen") durchgezogen/orange.
   const baustellenLines = useMemo(() => baustellen.map(item => ({
-    // path folgt dem tatsächlichen Straßenverlauf (siehe routeAlongRoad) - ohne
-    // berechnete Route (Dienst nicht erreichbar) ersatzweise die Luftlinie.
     points: item.path && item.path.length >= 2 ? item.path : [[item.start_lat, item.start_lng], [item.end_lat, item.end_lng]] as readonly [number, number][],
     popup: `${item.titel}${item.status === 'gemeldet' ? ' (ungeprüft)' : ''}`,
     color: item.status === 'gemeldet' ? '#9ca3af' : '#f97316',
     dashed: item.status === 'gemeldet',
   })), [baustellen])
-  // Melder/beteiligte Person sind jetzt echte Verknüpfungen zum
-  // Personen-Register (person_id-Gleichheit) statt Namens-/Geburtsdatum-
-  // Textabgleich - eindeutig statt fehleranfällig. Der Adressabgleich bleibt
-  // text-basiert (Objekte-Register ist hier noch nicht durchgängig verknüpft).
   const involvedOrCallerPersonIds = useMemo(() => [incident.callerPersonId, incident.involvedPersonId].filter((value): value is string => !!value), [incident.callerPersonId, incident.involvedPersonId])
   const contextEntries = useMemo(() => {
     const place = incident.location.trim(), phone = normalizePhone(incident.callerPhone)
@@ -280,15 +207,8 @@ export default function ZentraleShell() {
     return personNotes.filter(item =>
       (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
       || (phone.length >= 5 && normalizePhone(item.person?.phone) === phone)
-      // Adressabgleich zusätzlich: beim Anlegen einer Meldung ist oft nur der
-      // Einsatzort bekannt, noch keine verknüpfte Person - z. B. "an dieser
-      // Adresse wohnt eine gefährliche Person".
       || (place.length >= 4 && addressesMatch(place, item.location ?? '')))
   }, [incident.callerPhone, incident.location, involvedOrCallerPersonIds, personNotes])
-  // AV/BV & EV und Fahndungen kommen jetzt aus eigenen Tabellen - derselbe
-  // Verknüpfungs-/Adressabgleich wie bei Personenhinweisen, damit ein
-  // Zentralist beim Erfassen einer Einsatzmeldung weiterhin sofort sieht, ob
-  // zur Adresse oder Person bereits ein Verbot oder eine Fahndung vorliegt.
   const contextAvBv = useMemo(() => {
     const place = incident.location.trim()
     return avBvOpen.filter(item => (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
@@ -301,16 +221,7 @@ export default function ZentraleShell() {
   }, [fahndungenOpen, incident.location, involvedOrCallerPersonIds])
   const criticalAvBv = useMemo(() => avBvOpen.filter(item => item.priority === 'kritisch'), [avBvOpen])
   const criticalFahndungen = useMemo(() => fahndungenOpen.filter(item => item.priority === 'kritisch'), [fahndungenOpen])
-  // Straßenzustand ist die meiste Zeit irrelevant und gehört in den
-  // Hintergrund (eigene Sidebar-Seite) - sobald aber eine Sperre/Maßnahme
-  // aktuell aktiv ist, muss sie für jeden sofort sichtbar sein, solange sie
-  // gilt (siehe aktiveSperren()).
   const criticalStrassensperren = useMemo(() => aktiveSperren(strassenzustandZeilen), [strassenzustandZeilen])
-  // Eine "gesperrt"-Sperre erscheint automatisch als Linie auf der Karte,
-  // sofern für ihre Straße bereits eine Position hinterlegt ist (siehe
-  // ZentraleStrassenzustand.tsx) - "frei befahrbar"/"sonstige" sind keine
-  // Sperrung und Freitext-Straßen ("Sonstige") haben keine wiederverwendbare
-  // Geometrie, deshalb hier gefiltert statt wie criticalStrassensperren alles zu zeigen.
   const sperrenLines = useMemo(() => criticalStrassensperren
     .filter(zeile => zeile.zustand === 'gesperrt' && zeile.strassenzustand_strassen?.start_lat != null && zeile.strassenzustand_strassen.start_lng != null && zeile.strassenzustand_strassen.end_lat != null && zeile.strassenzustand_strassen.end_lng != null)
     .map(zeile => {
@@ -321,13 +232,7 @@ export default function ZentraleShell() {
         color: '#dc2626',
       }
     }), [criticalStrassensperren])
-  // Frühere Meldungen an derselben Adresse ("gab es dort schon mal was?") -
-  // gezielte Datenbankabfrage statt Client-Filter, weil incident_reports über
-  // die Zeit groß wird (anders als die überschaubaren zentrale_entries).
   useEffect(() => {
-    // Generation IMMER erhöhen, auch bei frühem Abbruch - sonst könnte eine
-    // noch laufende ältere Anfrage die Liste für die inzwischen geänderte
-    // Straße/Adresse nachträglich wieder überschreiben.
     const requestId = ++priorIncidentsRequestRef.current
     if (!showIncidentForm) { setPriorIncidents([]); return }
     const street = incident.street.trim()
@@ -335,10 +240,6 @@ export default function ZentraleShell() {
     const escaped = street.replace(/[\\%_]/g, char => `\\${char}`)
     const targetAddress = incident.location.trim()
     const timer = setTimeout(() => {
-      // Serverseitig nur grob auf die Straße vorgefiltert (ILIKE kann den
-      // Präfix-Konflikt "Rohrbach 1" vs. "Rohrbach 10" nicht sauber
-      // ausschließen) - hier per addressesMatch exakt auf die eingegebene
-      // Adresse (inkl. Hausnummer, falls bekannt) verfeinert.
       void supabase.from('incident_reports').select('*').ilike('location', `%${escaped}%`).order('reported_at', { ascending: false }).limit(20).then(result => {
         if (priorIncidentsRequestRef.current !== requestId) return
         const candidates = result.error ? [] : (result.data ?? []) as IncidentReport[]
@@ -350,9 +251,6 @@ export default function ZentraleShell() {
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
-  // Einzige Möglichkeit, eine Operative Lage anzulegen: ausgehend von einem
-  // konkreten Einsatz (siehe IncidentCards) - nie unabhängig davon, sonst
-  // wirkt es fälschlich so, als wäre die Lage ein eigenständiger Bereich.
   function openLageForIncident(incidentItem: IncidentReport) {
     const existing = lageByIncidentId[incidentItem.id]
     if (existing) { navigate('/zentrale/lage'); openEditEntry(existing); return }
@@ -373,8 +271,6 @@ export default function ZentraleShell() {
   async function saveEntry() {
     if (!entry.title.trim()) { setError('Bitte eine Bezeichnung eingeben.'); return }
     const category: ZentraleEntryCategory = editing?.category ?? 'lage'
-    // Eine Operative Lage ist kein eigenständiger Bereich - sie ergibt sich
-    // immer aus einer Einsatzmeldung (DB erzwingt das zusätzlich per CHECK).
     if (category === 'lage' && !entry.incidentId) { setError('Bitte die auslösende Einsatzmeldung wählen.'); return }
     setSaving(true)
     const payload = { category, title: entry.title.trim(), description: entry.description.trim() || null, priority: entry.priority, status: entry.status, valid_from: entry.validFrom || null, valid_until: entry.validUntil || null, location: entry.location.trim() || null, responsible: entry.responsible.trim() || null, reference: entry.reference.trim() || null, restricted: entry.restricted, incident_id: category === 'lage' ? entry.incidentId : null }
@@ -423,11 +319,6 @@ export default function ZentraleShell() {
     })
     setLocateError(''); setShowIncidentForm(true); setError('')
   }
-  // queryOverride: für den Fall, dass eine Straßenauswahl und die
-  // Adresssuche im selben Klick/Tastendruck ausgelöst werden (siehe
-  // IncidentModal) - patch() aktualisiert incident.location erst beim
-  // nächsten Render, ein sofortiger Aufruf ohne Override würde also noch
-  // die alte Adresse verwenden.
   async function locateIncident(queryOverride?: string) {
     const queried = (queryOverride ?? incident.location).trim()
     if (!queried) return
@@ -435,7 +326,6 @@ export default function ZentraleShell() {
     const result = await geocodeLocation(queried)
     setLocating(false)
     if (!result) { setLocateError('Ort konnte nicht gefunden werden.'); return }
-    // Falls der Ort während der Anfrage geändert wurde, gehört das Ergebnis nicht mehr dazu.
     setIncident(current => current.location.trim() === queried ? { ...current, lat: result.lat, lng: result.lng, coordsPrecise: true } : current)
   }
   async function saveIncident() {
@@ -444,14 +334,8 @@ export default function ZentraleShell() {
       setError('Bitte Landesstraße und Kilometer auswählen und den amtlichen Kartenpunkt ermitteln.')
       return
     }
-    // Melder/beteiligte Person sind über das Personen-Register verknüpft;
-    // Name/Geburtsdatum stecken abwärtskompatibel für bestehende Anzeigen
-    // (z. B. IncidentCards) zusätzlich als Freitext auf der Meldung, aus der
-    // verknüpften Person abgeleitet statt separat einzugeben.
     const callerPerson = persons.find(item => item.id === incident.callerPersonId) ?? null
     const involvedPerson = persons.find(item => item.id === incident.involvedPersonId) ?? null
-    // Beim Bearbeiten bleibt der ursprüngliche Meldetag erhalten; geändert
-    // wird nur die im Formular sichtbare Uhrzeit.
     const reportedAt = editingIncident ? new Date(editingIncident.reported_at) : new Date()
     if (incident.reportedTime) {
       const [hours, minutes] = incident.reportedTime.split(':').map(Number)
@@ -503,7 +387,6 @@ export default function ZentraleShell() {
     if (!result) { setBaustelleError('Endpunkt konnte nicht gefunden werden.'); return }
     setBaustelleForm(current => current.endAddress.trim() === queried ? { ...current, endLat: result.lat, endLng: result.lng } : current)
   }
-  // Erster Klick setzt (bzw. setzt neu, falls bereits beide Punkte vorhanden) den Startpunkt, der zweite den Endpunkt.
   function handleBaustelleMapClick(lat: number, lng: number) {
     setBaustelleForm(current => {
       if (!current.drawMode) return current
@@ -517,9 +400,6 @@ export default function ZentraleShell() {
     if (baustelleForm.startLat === null || baustelleForm.startLng === null || baustelleForm.endLat === null || baustelleForm.endLng === null) { setBaustelleError('Bitte Start- und Endpunkt festlegen (Adresse suchen oder auf der Karte klicken).'); return }
     setBaustelleSaving(true)
     const payload = { titel: baustelleForm.titel.trim(), start_lat: baustelleForm.startLat, start_lng: baustelleForm.startLng, end_lat: baustelleForm.endLat, end_lng: baustelleForm.endLng, path: baustelleForm.path, note: baustelleForm.note.trim() || null, gueltig_bis: baustelleForm.gueltigBis || null }
-    // Ohne canOperateZentrale (Verwaltung oder diensthabender Zentralist/
-    // Innendienst) entsteht die Meldung immer als "gemeldet" (ungeprüft) -
-    // die Bestätigung erfolgt separat (RLS erzwingt das zusätzlich).
     const response = editingBaustelle ? await supabase.from('zentrale_baustellen').update(payload).eq('id', editingBaustelle.id) : await supabase.from('zentrale_baustellen').insert({ ...payload, created_by: profile.id, status: canOperateZentrale ? 'offen' : 'gemeldet' })
     setBaustelleSaving(false)
     if (response.error) { setBaustelleError('Baustelle konnte nicht gespeichert werden.'); return }
@@ -554,11 +434,10 @@ export default function ZentraleShell() {
   }
 
   return <div>
-    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Zentrale</h1><p className="text-sm text-gray-500 mt-1">Relevante Informationen auf einen Blick – ergänzend zum Aktenprogramm.</p></div>{canOperateZentrale ? <button type="button" onClick={openIncident} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button> : null}</div>
+    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Zentrale</h1><p className="text-sm text-gray-500 mt-1">Relevante Informationen auf einen Blick – ergänzend zum Aktenprogramm.</p></div>{canOperateZentrale ? <div className="flex flex-col gap-2 w-full sm:w-auto"><button type="button" onClick={openIncident} className="inline-flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl"><Plus className="w-4 h-4" /> Neue Meldung</button><Link to="/zentrale/strassenzustand?neu=1" className="inline-flex items-center justify-center gap-2 border border-blue-300 text-blue-800 text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-blue-50">Straßenzustandsbericht</Link></div> : null}</div>
     {error && !showEntryForm && !showIncidentForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
-
     {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} baustellen={baustellen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
     {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canOperate={canOperateZentrale} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
