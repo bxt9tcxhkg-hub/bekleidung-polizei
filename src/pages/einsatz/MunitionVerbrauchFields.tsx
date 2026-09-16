@@ -3,6 +3,7 @@ import {
   type GeschossenAnswer,
   type MunitionVerbrauchInput,
 } from '../../lib/einsatztraining'
+import { MUNITION_ARTEN } from '../../lib/munitionArt'
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -31,23 +32,11 @@ export function GeschossenFrage({
       <legend className="text-xs font-medium text-gray-600">Wurde geschossen? *</legend>
       <div className="flex flex-wrap gap-4 text-sm text-gray-800">
         <label className="inline-flex items-center gap-2">
-          <input
-            type="radio"
-            name={`${idPrefix}-geschossen`}
-            checked={value === 'yes'}
-            disabled={disabled}
-            onChange={() => onChange('yes')}
-          />
+          <input type="radio" name={`${idPrefix}-geschossen`} checked={value === 'yes'} disabled={disabled} onChange={() => onChange('yes')} />
           Ja
         </label>
         <label className="inline-flex items-center gap-2">
-          <input
-            type="radio"
-            name={`${idPrefix}-geschossen`}
-            checked={value === 'no'}
-            disabled={disabled}
-            onChange={() => onChange('no')}
-          />
+          <input type="radio" name={`${idPrefix}-geschossen`} checked={value === 'no'} disabled={disabled} onChange={() => onChange('no')} />
           Nein
         </label>
       </div>
@@ -56,12 +45,7 @@ export function GeschossenFrage({
 }
 
 export default function MunitionVerbrauchFields({
-  value,
-  onChange,
-  poolItems,
-  disabled,
-  idPrefix,
-  requirePool = false,
+  value, onChange, poolItems, disabled, idPrefix, requirePool = false,
 }: {
   value: MunitionVerbrauchInput
   onChange: (next: MunitionVerbrauchInput) => void
@@ -78,92 +62,43 @@ export default function MunitionVerbrauchFields({
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-anzahl`}>
-            Anzahl
-          </label>
-          <input
-            id={`${idPrefix}-anzahl`}
-            className={inputClass}
-            type="number"
-            min={0}
-            step={1}
-            inputMode="numeric"
-            value={value.anzahl}
-            disabled={disabled}
-            onChange={e => set('anzahl', e.target.value)}
-          />
+          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-anzahl`}>Anzahl</label>
+          <input id={`${idPrefix}-anzahl`} className={inputClass} type="number" min={0} step={1} inputMode="numeric" value={value.anzahl} disabled={disabled} onChange={e => set('anzahl', e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-pool`}>
-            {requirePool ? 'Eingebuchte Munition *' : 'Aus Pool-Bestand (optional)'}
-          </label>
-          <select
-            id={`${idPrefix}-pool`}
-            className={inputClass}
-            value={value.poolItemId}
-            disabled={disabled}
-            onChange={e => {
-              const id = e.target.value
-              const item = poolItems.find(row => row.id === id)
-              onChange({
-                ...value,
-                poolItemId: id,
-                marke: item?.marke?.trim() ? item.marke : value.marke,
-                art: item?.art?.trim() ? item.art : value.art,
-              })
-            }}
-          >
+          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-pool`}>{requirePool ? 'Eingebuchte Munition *' : 'Aus Pool-Bestand (optional)'}</label>
+          <select id={`${idPrefix}-pool`} className={inputClass} value={value.poolItemId} disabled={disabled} onChange={e => {
+            const id = e.target.value
+            const item = poolItems.find(row => row.id === id)
+            onChange({ ...value, poolItemId: id, marke: item?.marke?.trim() ? item.marke : value.marke, art: item?.art?.trim() ? item.art : value.art })
+          }}>
             <option value="">{requirePool ? 'Bitte wählen' : 'Nur protokollieren'}</option>
-            {poolItems.map(item => (
-              <option key={item.id} value={item.id}>
-                {poolMunitionOptionLabel(item)}
-              </option>
-            ))}
+            {poolItems.map(item => <option key={item.id} value={item.id}>{poolMunitionOptionLabel(item)}</option>)}
           </select>
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-marke`}>
-            Marke
-          </label>
-          <input
-            id={`${idPrefix}-marke`}
-            className={inputClass}
-            value={value.marke}
-            disabled={disabled}
-            onChange={e => set('marke', e.target.value)}
-          />
+          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-art`}>Art</label>
+          <select id={`${idPrefix}-art`} className={inputClass} value={value.art} disabled={disabled} onChange={e => set('art', e.target.value)}>
+            <option value="">Bitte wählen</option>
+            {MUNITION_ARTEN.map(art => <option key={art} value={art}>{art}</option>)}
+            {value.art && !(MUNITION_ARTEN as readonly string[]).includes(value.art) ? <option value={value.art}>{value.art}</option> : null}
+          </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-kaliber`}>
-            Kaliber
-          </label>
-          <input
-            id={`${idPrefix}-kaliber`}
-            className={inputClass}
-            value={value.kaliber}
-            disabled={disabled}
-            onChange={e => set('kaliber', e.target.value)}
-          />
+          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-marke`}>Marke</label>
+          <input id={`${idPrefix}-marke`} className={inputClass} value={value.marke} disabled={disabled} onChange={e => set('marke', e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-art`}>
-            Art
-          </label>
-          <input
-            id={`${idPrefix}-art`}
-            className={inputClass}
-            value={value.art}
-            disabled={disabled}
-            onChange={e => set('art', e.target.value)}
-          />
+          <label className="block text-xs font-medium text-gray-600 mb-1" htmlFor={`${idPrefix}-kaliber`}>Kaliber</label>
+          <input id={`${idPrefix}-kaliber`} className={inputClass} value={value.kaliber} disabled={disabled} onChange={e => set('kaliber', e.target.value)} />
         </div>
       </div>
       <p className="text-xs text-gray-500">
         {requirePool
-          ? 'Verbrauch wird von der gewählten eingebuchten Pool-Munition abgezogen. Persönliche Patronen bleiben unverändert.'
-          : 'Session-Summe. Pool-Bestand wird nur bei gewählter Munitionszeile verringert. Persönliche Patronen bleiben unverändert.'}
+          ? 'Verbrauch wird von der gewählten Pool-Munition abgezogen. Persönliche Patronen bleiben unverändert.'
+          : 'Session-Summe. Pool-Bestand nur bei gewählter Zeile verringert. Persönliche Patronen bleiben unverändert.'}
       </p>
     </div>
   )
