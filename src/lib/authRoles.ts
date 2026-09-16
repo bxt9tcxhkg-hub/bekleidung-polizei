@@ -23,10 +23,13 @@ export function availableRolesFromFlags(flags: RoleFlags): AppRole[] {
   return out
 }
 
-/** Sidebar-Fußzeile: dieselben Bereiche wie die Nav-Sektionen. Admin blendet Sachbearbeiter nicht aus. */
+/**
+ * Sidebar-Fußzeile: Admin ist eine übergeordnete Rolle, keine Nutzerrolle.
+ * Nav-Sektionen bleiben über die Flags sichtbar (SB-/Genehmiger-Gates).
+ */
 export function sidebarRoleLabels(flags: Pick<RoleFlags, 'isAdmin' | 'isSachbearbeiter' | 'isGenehmiger'>): string[] {
+  if (flags.isAdmin) return ['Admin']
   return [
-    flags.isAdmin ? 'Admin' : null,
     flags.isSachbearbeiter ? 'Sachbearbeiter' : null,
     flags.isGenehmiger ? 'Genehmiger' : null,
     'Benutzer',

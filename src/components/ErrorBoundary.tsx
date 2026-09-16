@@ -1,5 +1,6 @@
-import { Component, type ReactNode } from 'react'
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { reportAppError } from '../lib/appErrors'
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean; message: string }
@@ -9,6 +10,16 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, message: error.message }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    const stackParts = [error.stack, info.componentStack].filter((part): part is string => Boolean(part))
+    reportAppError({
+      message: error.message || 'Unbekannter Fehler',
+      stack: stackParts.length > 0 ? stackParts.join('\n') : null,
+      source: 'boundary',
+      error,
+    })
   }
 
   render() {

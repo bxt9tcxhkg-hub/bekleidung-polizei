@@ -1,5 +1,5 @@
 export type PortalAccountId = 'profil' | 'hilfe'
-export type PortalAdminId = 'auditlog'
+export type PortalAdminId = 'auditlog' | 'fehler'
 
 export type PortalAccountLink = {
   id: PortalAccountId
@@ -44,6 +44,12 @@ export const PORTAL_ADMIN_LINKS: readonly PortalAdminLink[] = [
     to: '/auditlog',
     label: 'Audit-Log',
     description: 'Protokoll aller Systemaktionen',
+  },
+  {
+    id: 'fehler',
+    to: '/fehler',
+    label: 'Fehler',
+    description: 'Laufzeitfehler der Anwendung',
   },
 ]
 
