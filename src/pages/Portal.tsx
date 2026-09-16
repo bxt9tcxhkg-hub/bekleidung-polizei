@@ -140,6 +140,7 @@ export default function Portal() {
 
   return (
     <PortalChrome
+      wide
       actions={
         <>
           {adminLinks.map(link => {
