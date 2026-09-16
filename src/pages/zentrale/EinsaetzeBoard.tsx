@@ -3,12 +3,8 @@ import { Link } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
-import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, noteWithoutStufe, parseStufe, withStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, noteWithoutStufe, readStoredStufe, withStufe, writeStoredStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
 import type { IncidentReport, ZentraleKontakt } from '../../lib/types'
-
-function stufeOf(item: IncidentReport): Ereignisstufe {
-  return parseStufe(item.note)
-}
 
 export default function EinsaetzeBoard({
   title, items, canOperate, onEdit, onComplete, onDelete, showComplete,
@@ -25,12 +21,23 @@ export default function EinsaetzeBoard({
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [kontakte, setKontakte] = useState<ZentraleKontakt[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [levels, setLevels] = useState<Record<string, Ereignisstufe>>({})
 
   useEffect(() => {
     void supabase.from('zentrale_kontakte').select('*').order('name').then(result => {
       setKontakte((result.data ?? []) as ZentraleKontakt[])
     })
   }, [])
+
+  useEffect(() => {
+    setLevels(current => {
+      const next = { ...current }
+      for (const item of items) {
+        if (!next[item.id]) next[item.id] = readStoredStufe(item.id, item.note)
+      }
+      return next
+    })
+  }, [items])
 
   const chosen = useMemo(() => items.filter(item => selected[item.id]), [items, selected])
   function toggle(id: string) { setSelected(current => ({ ...current, [id]: !current[id] })) }
@@ -39,24 +46,29 @@ export default function EinsaetzeBoard({
     else setSelected(Object.fromEntries(items.map(item => [item.id, true])))
   }
 
-  async function setStufe(item: IncidentReport, stufe: Ereignisstufe) {
-    const note = withStufe(item.note, stufe)
-    await supabase.from('incident_reports').update({ note: note || null }).eq('id', item.id)
-    item.note = note || null
+  function stufeOf(item: IncidentReport): Ereignisstufe {
+    return levels[item.id] ?? readStoredStufe(item.id, item.note)
+  }
+
+  async function setStufe(item: IncidentReport, stufe: Ereignisstufe, event: { stopPropagation: () => void }) {
+    event.stopPropagation()
+    writeStoredStufe(item.id, stufe)
+    setLevels(current => ({ ...current, [item.id]: stufe }))
     setExpanded(item.id)
+    const note = withStufe(noteWithoutStufe(item.note), stufe)
+    const result = await supabase.from('incident_reports').update({ note: note || null }).eq('id', item.id)
+    if (!result.error) item.note = note || null
   }
 
   function printSelected() {
     const list = chosen.length ? chosen : (expanded ? items.filter(item => item.id === expanded) : items)
     const html = list.map(item => {
-      const stufe = stufeOf(item)
-      const meta = STUFE_META[stufe]
+      const meta = STUFE_META[stufeOf(item)]
       return `<article style="break-inside:avoid;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #ddd">
         <h2>${formatTime(item.reported_at)} – ${item.location || 'Ohne Ortsangabe'}</h2>
-        <p><strong>${meta.label}</strong> · ${DISPOSITION_LABEL[item.disposition]} · ${item.status}</p>
+        <p><strong>${meta.label}</strong> · ${item.status}</p>
         <p>${item.summary}</p>
         <p>Melder: ${item.caller_name || '–'} · Tel: ${item.caller_phone || '–'}</p>
-        ${noteWithoutStufe(item.note) ? `<p>${noteWithoutStufe(item.note)}</p>` : ''}
       </article>`
     }).join('')
     const popup = window.open('', '_blank')
@@ -109,10 +121,10 @@ export default function EinsaetzeBoard({
               </div>
               {open ? <div className="mt-3 ml-7 space-y-3">
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{item.summary}</p>
-                <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'} · {DISPOSITION_LABEL[item.disposition]}</p>
+                <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
                 {canOperate ? <div className="flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
                   const row = STUFE_META[key]
-                  return <button key={key} type="button" onClick={() => void setStufe(item, key)} className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border" style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}>{row.label}</button>
+                  return <button key={key} type="button" onClick={event => void setStufe(item, key, event)} className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border" style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}>{row.label}</button>
                 })}</div> : null}
                 <p className="text-xs text-gray-600">{meta.hint} · {meta.dienstbetrieb}</p>
                 {stufe !== 'klein' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
