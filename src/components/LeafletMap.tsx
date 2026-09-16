@@ -18,7 +18,7 @@ const markerIcon = L.icon({
 
 const DORNBIRN_CENTER: [number, number] = [47.4125, 9.7417]
 
-export const MAP_BASEMAPS = [
+const MAP_BASEMAPS = [
   { id: 'karte', label: 'Karte' },
   { id: 'luftbild', label: 'Luftbild' },
   { id: 'topo', label: 'Topo' },
@@ -107,7 +107,7 @@ export default function LeafletMap({
   height?: number
   zoom?: number
   focus?: { lat: number; lng: number; zoom?: number } | null
-  onMapClick?: (lat: number, lng: number) => void
+  onMapClick?: (lat: number; lng: number) => void
   fitLines?: boolean
   incidentKey?: string | number | null
 }) {
