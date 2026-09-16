@@ -9,15 +9,6 @@ export interface StreetAutocompleteHandle {
   search: () => void
 }
 
-/**
- * Straßenfeld mit Vorschlägen im Gemeindegebiet Dornbirn (Nominatim,
- * strukturiert auf street/city/country eingegrenzt). Die Suche wird
- * bewusst NICHT bei jedem Tastendruck ausgelöst - Nominatims
- * Nutzungsrichtlinie verbietet Autocomplete-artige Anfragen ausdrücklich
- * ("no auto-complete style searches"), egal wie stark man debounced.
- * Stattdessen löst der Zentralist die Suche gezielt per Enter oder über den
- * (extern platzierten) "Suchen"-Button aus - siehe StreetAutocompleteHandle.
- */
 const StreetAutocomplete = forwardRef<StreetAutocompleteHandle, { label: string; value: string; onChange: (value: string) => void; onSelect: (suggestion: StreetSuggestion) => void; onSearch?: () => void }>(
   function StreetAutocomplete({ label, value, onChange, onSelect, onSearch }, ref) {
     const [suggestions, setSuggestions] = useState<StreetSuggestion[]>([])
@@ -25,14 +16,11 @@ const StreetAutocomplete = forwardRef<StreetAutocompleteHandle, { label: string;
     const requestRef = useRef(0)
 
     async function search() {
-      // Generation zuerst erhöhen, auch bei zu kurzer Eingabe - sonst könnte
-      // eine noch laufende ältere Anfrage die Vorschläge für den inzwischen
-      // geänderten Text nachträglich wieder aufpoppen lassen.
       const requestId = ++requestRef.current
       const query = value.trim()
       if (query.length < MIN_LENGTH) { setSuggestions([]); setOpen(false); return }
       const result = await suggestStreets(query)
-      if (requestRef.current !== requestId) return // veraltete Antwort verwerfen
+      if (requestRef.current !== requestId) return
       setSuggestions(result)
       setOpen(result.length > 0)
       onSearch?.()
@@ -53,14 +41,14 @@ const StreetAutocomplete = forwardRef<StreetAutocompleteHandle, { label: string;
         {open ? (
           <ul className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-52 overflow-y-auto">
             {suggestions.map(suggestion => (
-              <li key={suggestion.street}>
+              <li key={suggestion.label ?? `${suggestion.street}-${suggestion.lat}`}>
                 <button
                   type="button"
                   className="block w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50"
                   onMouseDown={event => event.preventDefault()}
                   onClick={() => { onSelect(suggestion); setOpen(false) }}
                 >
-                  {suggestion.street}
+                  {suggestion.label ?? suggestion.street}
                 </button>
               </li>
             ))}
