@@ -20,12 +20,12 @@ export default function PortalChrome({
 }) {
   const { profile, mustChangePassword, mustSetUsername, signOut } = useAuth()
   const location = useLocation()
-  const width = wide ? 'max-w-6xl' : 'max-w-4xl'
+  const width = wide ? 'max-w-[90rem]' : 'max-w-4xl'
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white border-b border-gray-200">
-        <div className={`${width} mx-auto px-4 py-3 flex items-center justify-between gap-3`}>
+        <div className={`${width} mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3`}>
           <Link to="/" className="flex items-center gap-3 min-w-0">
             <img
               src="/wappen-dornbirn.svg"
@@ -70,7 +70,7 @@ export default function PortalChrome({
         </div>
       </header>
 
-      <main className={`flex-1 ${width} mx-auto w-full px-4 py-8 sm:py-12`}>
+      <main className={`flex-1 ${width} mx-auto w-full px-4 sm:px-6 py-8 sm:py-12`}>
         {children}
       </main>
       {(mustChangePassword || mustSetUsername) && <ChangePasswordModal />}
