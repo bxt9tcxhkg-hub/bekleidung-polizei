@@ -7,6 +7,7 @@ import { formatTime } from '../../lib/zentraleShared'
 import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, formatStamp, noteWithoutStufe, readKette, readStoredStufe, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import type { IncidentReport, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
+import IncidentDocs from './IncidentDocs'
 
 function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; baustellen: readonly ZentraleBaustelle[] }) {
   const nearby = nearbyByLine(point, baustellen)
@@ -107,6 +108,7 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
             return <button key={key} type="button" onClick={() => void setStufe(item, key)} title={row.wann} className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border" style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}>{row.label}</button>
           })}</div> : <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>}
           <p className="text-xs text-gray-600 mt-2"><span className="font-semibold">{meta.label}:</span> {meta.wann} {meta.hint}.</p>
+          <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />
         </div>
         {stufe !== 'klein' ? <div className="mx-3 sm:mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <p className="font-bold">Verständigung telefonisch</p>
@@ -121,16 +123,6 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
               </div>
             </div>
           })}</div>
-          {stufe === 'gross' || stufe === 'katastrophe' ? <div className="mt-3">
-            <p className="font-bold">Entscheidung</p>
-            <div className="mt-1 space-y-2">{ENTSCHEIDUNGSPUNKTE.map(name => {
-              const row = stand[name] ?? {}
-              return <div key={name} className="rounded-lg bg-white/70 px-2 py-2">
-                <p className="font-medium">{name}</p>
-                <button type="button" onClick={() => markKette(item.id, name, 'erreicht')} className={`mt-1 text-xs px-2 py-1 rounded-md border ${row.erreicht ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white'}`}>{row.erreicht ? `Erledigt ${formatStamp(row.erreicht)}` : 'Erledigt markieren'}</button>
-              </div>
-            })}</div>
-          </div> : null}
           <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
         </div> : null}
         {expanded ? <div className="border-t border-gray-100 px-3 pb-4 pt-3 sm:px-4">
