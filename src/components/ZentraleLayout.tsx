@@ -1,4 +1,4 @@
-import { BookOpen, CheckSquare, ClipboardList, Construction, LayoutGrid, Mail, MapPin, Radio, Search, ShieldAlert, UserRoundCheck } from 'lucide-react'
+import { BookOpen, Construction, LayoutGrid, Mail, MapPin, Radio, Search, ShieldAlert, UserRoundCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -13,8 +13,6 @@ export default function ZentraleLayout() {
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/zentrale', label: 'Zentrale', icon: Radio },
-      { to: '/zentrale/einsaetze', label: 'Einsätze', icon: ClipboardList },
-      { to: '/zentrale/einsaetze?liste=abgeschlossen', label: 'Abgeschlossene Einsätze', icon: CheckSquare },
       { to: '/zentrale/av-bv-ev', label: 'BV/AV & EV', icon: ShieldAlert },
       { to: '/zentrale/personenhinweise', label: 'Personenhinweise', icon: UserRoundCheck },
       { to: '/zentrale/fahndungen', label: 'Fahndungen', icon: Search },
