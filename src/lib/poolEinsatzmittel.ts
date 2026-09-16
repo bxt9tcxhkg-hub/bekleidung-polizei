@@ -1,12 +1,5 @@
 /**
  * Pool-Einsatzmittel und Verwahrungsorte (Phase 2b).
- *
- * Eine Tabelle `pool_einsatzmittel` mit category + typisierten nullable
- * Spalten (gleiches Modell wie persönliche EM). Verwahrungsort ist ein
- * festes Lookup (CHECK), keine Extra-Tabelle.
- * Schreiben: einsatz_mt Sachbearbeiter/Admin oder globales profiles.admin.
- * Lesen: SB/Admin alle Kategorien; Benutzer Pool ohne Munition.
- * Lagerbestand ist eine abgeleitete Übersicht, keine eigene Tabelle.
  */
 
 import { parseEinsatzMtRole, rolesForArea } from './portalEntitlements'
@@ -75,14 +68,10 @@ const FIELD_LABELS: Record<PoolEmFieldKey, string> = {
   ablaufdatum: 'Ablauf',
 }
 
-/**
- * Felder je Kategorie laut Owner. Verwahrungsort ist Pflicht für alle
- * Pool-Zeilen (auch Magazine) und liegt außerhalb dieser Liste.
- */
 export const POOL_EM_FIELDS: Record<PoolEmCategory, readonly PoolEmFieldKey[]> = {
   langwaffe_stg77: ['marke', 'typ', 'waffennummer', 'kaliber'],
   magazine: ['anzahl'],
-  munition: ['marke', 'typ', 'art', 'anzahl'],
+  munition: ['art', 'typ', 'marke', 'anzahl'],
   pfefferspray_gross: ['marke', 'anzahl', 'ablaufdatum'],
   schild: ['marke', 'anzahl'],
   ballistischer_helm: ['ablaufdatum', 'anzahl'],
@@ -100,6 +89,7 @@ export function poolEmFieldKind(field: PoolEmFieldKey): PoolEmFieldKind {
 
 export function poolEmFieldLabel(field: PoolEmFieldKey, category: PoolEmCategory): string {
   if (field === 'anzahl' && category === 'munition') return 'Menge'
+  if (field === 'typ' && category === 'munition') return 'Waffe'
   return FIELD_LABELS[field]
 }
 
@@ -154,7 +144,6 @@ function optionalText(raw: string): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
-/** Lager-Notiz nur bei Ort Lager; sonst null (auch leerer Freitext). */
 export function resolveLagerNotiz(verwahrungsort: string, raw: string | null | undefined): string | null {
   if (!isLagerOrt(verwahrungsort)) return null
   return optionalText(raw ?? '')
@@ -275,7 +264,6 @@ export function poolEmDetailText(record: {
   return parts.join(' · ')
 }
 
-/** Langwaffen: eine Zeile = 1 Stück. Übrige: Summe von Anzahl/Menge (fehlend = 0). */
 export function poolEmStockQuantity(item: {
   category: PoolEmCategory
   anzahl: number | null
@@ -324,7 +312,6 @@ export function canManagePoolEinsatzmittel(input: {
   isStrictAdmin: boolean
   isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
-  /** Sachbearbeiter/Genehmiger ist kein Dauerzustand - default true hält bestehende Aufrufe/Tests unverändert. */
   operativeModeActive?: boolean
 }): boolean {
   if (input.isStrictAdmin || input.isGenehmiger) return true
@@ -334,12 +321,6 @@ export function canManagePoolEinsatzmittel(input: {
   return role === 'sachbearbeiter' || role === 'admin'
 }
 
-/**
- * Die eigentliche Beschaffung (neuer Pool-Eintrag = Kauf) ist dem Genehmiger
- * vorbehalten; der Sachbearbeiter trackt weiterhin, was vorhanden ist
- * (Bearbeiten/Ausbuchen über canManagePoolEinsatzmittel), meldet Bedarf aber
- * nur noch als Beschaffungsantrag.
- */
 export function canPurchasePoolEinsatzmittel(input: { isStrictAdmin: boolean; isGenehmiger?: boolean }): boolean {
   return input.isStrictAdmin || Boolean(input.isGenehmiger)
 }
@@ -350,7 +331,6 @@ export function isPoolMunitionCategory(category: string): boolean {
   return category === POOL_EM_RESTRICTED_CATEGORY
 }
 
-/** Benutzer sieht alle Pool-Kategorien außer Munitionsbestand. */
 export function visiblePoolEmCategories(canManage: boolean): readonly PoolEmCategory[] {
   if (canManage) return POOL_EM_CATEGORIES
   return POOL_EM_CATEGORIES.filter(category => category !== POOL_EM_RESTRICTED_CATEGORY)
