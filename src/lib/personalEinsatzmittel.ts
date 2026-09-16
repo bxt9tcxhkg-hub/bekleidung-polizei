@@ -79,7 +79,7 @@ const FIELD_LABELS: Record<PersonalEmFieldKey, string> = {
 export const PERSONAL_EM_FIELDS: Record<PersonalEmCategory, readonly PersonalEmFieldKey[]> = {
   schutzweste: ['groesse', 'ablaufdatum', 'schutzfristen'],
   glock_17: ['marke', 'waffennummer', 'service', 'magazinanzahl'],
-  munition: ['marke', 'kaliber', 'art', 'patronen'],
+  munition: ['art', 'marke', 'kaliber', 'patronen'],
   pfefferspray: ['ablauf_mm_yyyy'],
   schlagstock: ['marke'],
   handfesseln: [],
@@ -385,7 +385,6 @@ export function canManagePersonalEinsatzmittel(input: {
   isStrictAdmin: boolean
   isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
-  /** Sachbearbeiter/Genehmiger ist kein Dauerzustand - default true hält bestehende Aufrufe/Tests unverändert. */
   operativeModeActive?: boolean
 }): boolean {
   if (input.isStrictAdmin || input.isGenehmiger) return true
@@ -441,7 +440,6 @@ export type PersonalEmMatrixRecord = PersonalEmDetailRecord & {
   removed_at?: string | null
 }
 
-/** Erstes Feld aus personalEmDetailText — kurz genug für die Matrixzelle. */
 export function personalEmKeyDetail(record: PersonalEmDetailRecord): string {
   const full = personalEmDetailText(record)
   if (!full) return ''
@@ -497,7 +495,6 @@ export function unassignedActivePersonalEm<T extends {
   return items.filter(item => !item.removed_at && !item.officer_id)
 }
 
-/** Benutzer: nur eigene persönliche Einsatzmittel, keine fremden und keine Lager-ohne-Officer. */
 export function ownPersonalEinsatzmittel<T extends { officer_id?: string | null }>(
   items: readonly T[],
   officerId: string | null | undefined,
