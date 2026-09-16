@@ -9,6 +9,16 @@ export interface StreetAutocompleteHandle {
   search: () => void
 }
 
+function fillNeighbourHouseNumber(from: HTMLElement, houseNumber: string) {
+  const grid = from.closest('.grid')
+  const inputs = grid?.querySelectorAll('input')
+  const houseInput = inputs && inputs.length >= 2 ? inputs[1] : null
+  if (!houseInput || !(houseInput instanceof HTMLInputElement)) return
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setter?.call(houseInput, houseNumber)
+  houseInput.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 const StreetAutocomplete = forwardRef<StreetAutocompleteHandle, { label: string; value: string; onChange: (value: string) => void; onSelect: (suggestion: StreetSuggestion) => void; onSearch?: () => void }>(
   function StreetAutocomplete({ label, value, onChange, onSelect, onSearch }, ref) {
     const [suggestions, setSuggestions] = useState<StreetSuggestion[]>([])
@@ -46,7 +56,11 @@ const StreetAutocomplete = forwardRef<StreetAutocompleteHandle, { label: string;
                   type="button"
                   className="block w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50"
                   onMouseDown={event => event.preventDefault()}
-                  onClick={() => { onSelect(suggestion); setOpen(false) }}
+                  onClick={event => {
+                    onSelect(suggestion)
+                    if (suggestion.houseNumber) fillNeighbourHouseNumber(event.currentTarget, suggestion.houseNumber)
+                    setOpen(false)
+                  }}
                 >
                   {suggestion.label ?? suggestion.street}
                 </button>
