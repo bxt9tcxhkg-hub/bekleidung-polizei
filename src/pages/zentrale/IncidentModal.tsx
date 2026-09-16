@@ -3,16 +3,16 @@ import LeafletMap from '../../components/LeafletMap'
 import StreetAutocomplete, { type StreetAutocompleteHandle } from '../../components/StreetAutocomplete'
 import RoadKilometerPicker from '../../components/RoadKilometerPicker'
 import { PersonNameAutocomplete } from '../../components/RegisterPickers'
-import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
+import { Actions, Area, ErrorMessage, Field, Modal } from '../../components/ZentraleEntryEditor'
 import { reverseGeocode, type StreetSuggestion } from '../../lib/geocode'
 import { lookupParcel } from '../../lib/kataster'
 import { composeKilometerLocation } from '../../lib/roadKilometer'
 import { composeIncidentLocation, type IncidentFormState } from '../../lib/zentraleShared'
 import { nearbyByLine } from '../../lib/geo'
 import { ContextHints } from './ContextHints'
-import type { IncidentDisposition, IncidentReport, OperationalPerson, OperationalPersonNote, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
+import type { IncidentReport, OperationalPerson, OperationalPersonNote, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
 
-export function IncidentModal({ editing, incident, setIncident, vdAvailable, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, baustellen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { editing: boolean; incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
+export function IncidentModal({ editing, incident, setIncident, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, baustellen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { editing: boolean; incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<IncidentFormState>) => setIncident(current => ({ ...current, ...values }))
   const streetRef = useRef<StreetAutocompleteHandle>(null)
   const [mapResolving, setMapResolving] = useState(false)
@@ -48,7 +48,6 @@ export function IncidentModal({ editing, incident, setIncident, vdAvailable, per
         <PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />
         <Field label="Telefonnummer" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
       </div>
-      {editing ? <label className="block text-xs font-medium text-gray-600 sm:w-48">Meldezeit<input type="time" className={inputClass} value={incident.reportedTime} onChange={event => patch({ reportedTime: event.target.value })} /></label> : null}
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Einsatzort</p>
       <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1">
         <button type="button" onClick={() => patch({ locationMode: 'address', roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, location: composeIncidentLocation(incident.street, incident.houseNumber, incident.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${incident.locationMode === 'address' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straße und Hausnummer</button>
@@ -79,11 +78,6 @@ export function IncidentModal({ editing, incident, setIncident, vdAvailable, per
         {locateError ? <p className="text-xs text-red-700 mt-1">{locateError}<button type="button" onClick={() => void locate()} className="ml-2 font-semibold text-blue-700">Erneut versuchen</button></p> : null}
       </> : <RoadKilometerPicker query={incident.roadQuery} roadNumber={incident.roadNumber} roadName={incident.roadName} kilometer={incident.kilometer} kilometerFrom={incident.kilometerFrom} kilometerTo={incident.kilometerTo} onQueryChange={value => patch({ roadQuery: value, roadNumber: '', roadName: '', kilometerFrom: null, kilometerTo: null, street: '', location: '', lat: null, lng: null, coordsPrecise: false })} onRoadSelect={road => patch({ roadQuery: `${road.roadName} (${road.roadNumber})`, roadNumber: road.roadNumber, roadName: road.roadName, kilometerFrom: road.fromKm, kilometerTo: road.toKm, street: road.roadName, location: incident.kilometer ? composeKilometerLocation(road.roadName, road.roadNumber, incident.kilometer) : '', lat: null, lng: null, coordsPrecise: false })} onKilometerChange={value => patch({ kilometer: value, location: incident.roadNumber && value ? composeKilometerLocation(incident.roadName, incident.roadNumber, value) : '', lat: null, lng: null, coordsPrecise: false })} onResolved={point => patch({ kilometer: point.kilometer, location: composeKilometerLocation(incident.roadName, point.roadNumber, point.kilometer), lat: point.lat, lng: point.lng, coordsPrecise: true })} />}
       <Area label="Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} />
-      {editing ? <>
-        <PersonNameAutocomplete label="Beteiligte Person" persons={persons} value={incident.involvedPersonId} onChange={value => patch({ involvedPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} />
-        <label className="block text-xs font-medium text-gray-600">Behandlung der Meldung<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}><option value="jd">JD fährt an</option>{vdAvailable ? <option value="vd">VD fährt an</option> : null}<option value="bp">An Bundespolizei (BP) weitergegeben</option><option value="keine_anfahrt">Keine Anfahrt erforderlich</option></select></label>
-        <Area label="Optionale Bemerkung" value={incident.note} onChange={value => patch({ note: value })} />
-      </> : null}
       <ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} fahndungen={contextFahndungen} baustellen={nearbyByLine(incident.lat !== null && incident.lng !== null ? { lat: incident.lat, lng: incident.lng } : null, baustellen)} priorIncidents={priorIncidents} />
       {error ? <ErrorMessage text={error} /> : null}
       <Actions saving={saving} close={close} save={save} />
