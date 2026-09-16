@@ -11,8 +11,6 @@ import type { ZentraleContext } from './ZentraleShell'
 import { DutyPanel, IncidentCards, SofortWichtig } from './zentraleShared'
 import { FAHNDUNG_ART_LABEL, formatTime } from '../../lib/zentraleShared'
 
-// Wohin ein Klick auf einen "Sofort wichtig"-Eintrag führt, dessen Kategorie
-// eine eigene Sidebar-Seite ist.
 const CATEGORY_ROUTE: Partial<Record<ZentraleEntryCategory, string>> = { brief: '/rsa-rsb' }
 const INCIDENT_COLORS = ['#2563eb', '#ea580c', '#7c3aed', '#0f766e', '#be185d', '#4d7c0f', '#0891b2', '#92400e']
 
@@ -40,6 +38,10 @@ export default function ZentraleUebersicht() {
     color: item.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed',
     fillColor: item.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
   }))), [schutzfaelle])
+  const listIncidents = useMemo(() => [
+    ...ctx.openIncidents,
+    ...ctx.visibleIncidents.filter(item => item.status === 'erledigt' && !ctx.openIncidents.some(open => open.id === item.id)),
+  ], [ctx.openIncidents, ctx.visibleIncidents])
   const incidentVisuals = useMemo(() => Object.fromEntries(ctx.openIncidents.map((item, index) => [item.id, {
     color: INCIDENT_COLORS[index % INCIDENT_COLORS.length],
     label: String(index + 1),
@@ -63,30 +65,23 @@ export default function ZentraleUebersicht() {
     item.id === expandedIncidentId && item.location_lat !== null && item.location_lng !== null
   ) ?? null, [ctx.openIncidents, expandedIncidentId])
 
-  // Ein einzelner Einsatz ist vollständig sichtbar. Kommt ein zweiter hinzu,
-  // werden beide zunächst reduziert; eine danach bewusste Auswahl bleibt bei
-  // normalen Datenaktualisierungen bestehen.
   useEffect(() => {
     const previousCount = previousOpenCountRef.current
     previousOpenCountRef.current = ctx.openIncidents.length
     setExpandedIncidentId(current => {
       if (ctx.openIncidents.length === 1) return ctx.openIncidents[0].id
       if (ctx.openIncidents.length > 1 && previousCount <= 1) return null
-      if (current && ctx.openIncidents.some(item => item.id === current)) return current
+      if (current && listIncidents.some(item => item.id === current)) return current
       return null
     })
-  }, [ctx.openIncidents])
+  }, [ctx.openIncidents, listIncidents])
 
   return <div className="space-y-6">
-    {/* Priorität nach Zustand, nicht nach Kategorie: nur was gerade aktiv
-        ist, steht oben. Straßenzustand ist die meiste Zeit irrelevant und
-        taucht deshalb nur auf, solange eine Sperre/Maßnahme aktuell gilt. */}
     <SofortWichtig items={[
       ...ctx.criticalEntries.map(item => ({
         id: item.id, title: item.title, description: item.description,
         onOpen: () => {
-          if (item.category === 'lage') { navigate('/zentrale/lage'); ctx.openEditEntry(item) }
-          // Übergabepunkte werden jetzt ausschließlich im Innendienst angelegt/bearbeitet.
+          if (item.category === 'lage') { ctx.openEditEntry(item) }
           else if (item.category === 'uebergabe') { navigate('/innendienst') }
           else { const route = CATEGORY_ROUTE[item.category]; if (route) navigate(route) }
         },
@@ -96,44 +91,43 @@ export default function ZentraleUebersicht() {
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
     {schutzfaelle.length > 0 ? <button type="button" onClick={() => navigate('/zentrale/av-bv-ev')} className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left hover:border-blue-400"><span className="flex items-center gap-2 font-bold text-blue-950"><ShieldAlert className="h-5 w-5" />{schutzfaelle.length} aktive Schutzmaßnahme{schutzfaelle.length === 1 ? '' : 'n'}</span><span className="mt-1 block text-sm text-blue-800">Schutzbereiche, Ausnahmen und Kontrollstatus öffnen.</span></button> : null}
-    {/* Meldungen und Karte nebeneinander (ab lg), damit beides auf einen
-        Blick sichtbar ist, statt lange untereinander zu scrollen - auf
-        schmalen Bildschirmen weiterhin gestapelt (Meldungen zuerst). */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <section>
+      <section className="flex flex-col min-h-0">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <div><h2 className="font-bold text-gray-900">Offene Einsätze</h2><p className="text-xs text-gray-500">{ctx.openIncidents.length} offen</p></div>
+          <div><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-xs text-gray-500">{ctx.openIncidents.length} offen · {ctx.visibleIncidents.filter(item => item.status === 'erledigt').length} abgeschlossen</p></div>
           <div className="flex items-center gap-3">
             {ctx.openIncidents.length > 1 && expandedIncidentId ? <button type="button" onClick={() => setExpandedIncidentId(null)} className="text-xs font-semibold text-gray-600">Alle zuklappen</button> : null}
             {ctx.canOperateZentrale ? <button type="button" onClick={ctx.openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}
           </div>
         </div>
-        <IncidentCards
-          visibleIncidents={ctx.openIncidents}
-          lageByIncidentId={ctx.lageByIncidentId}
-          baustellen={ctx.baustellen}
-          canOperateZentrale={ctx.canOperateZentrale}
-          openEditIncident={ctx.openEditIncident}
-          openLageForIncident={ctx.openLageForIncident}
-          completeIncident={ctx.completeIncident}
-          deleteIncident={ctx.deleteIncident}
-          accordion
-          expandedIncidentId={expandedIncidentId}
-          onToggleIncident={item => setExpandedIncidentId(current => ctx.openIncidents.length === 1 ? item.id : current === item.id ? null : item.id)}
-          visualByIncidentId={incidentVisuals}
-        />
+        <div className="overflow-y-auto pr-1" style={{ maxHeight: 560 }}>
+          <IncidentCards
+            visibleIncidents={listIncidents}
+            lageByIncidentId={ctx.lageByIncidentId}
+            baustellen={ctx.baustellen}
+            canOperateZentrale={ctx.canOperateZentrale}
+            openEditIncident={ctx.openEditIncident}
+            openLageForIncident={ctx.openLageForIncident}
+            completeIncident={ctx.completeIncident}
+            deleteIncident={ctx.deleteIncident}
+            accordion
+            expandedIncidentId={expandedIncidentId}
+            onToggleIncident={item => setExpandedIncidentId(current => current === item.id ? null : item.id)}
+            visualByIncidentId={incidentVisuals}
+          />
+        </div>
       </section>
       <section>
         <h2 className="font-bold text-gray-900 flex items-center gap-2 mb-3"><MapPin className="w-4 h-4 text-blue-700" /> Einsatzkarte – Gemeindegebiet Dornbirn</h2>
         <LeafletMap
-          height={420}
+          height={560}
           markers={incidentMarkers}
           lines={focusedIncident ? [...ctx.baustellenLines, ...ctx.sperrenLines] : []}
           circles={focusedIncident ? schutzCircles : []}
           focus={focusedIncident ? { lat: focusedIncident.location_lat as number, lng: focusedIncident.location_lng as number, zoom: 16 } : null}
           fitLines={false}
         />
-        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert · relevante Zusatzebenen eingeblendet.' : 'Nur offene Einsatzorte. Einsatz aufklappen oder Pin auswählen, um Details einzublenden.'}</p>
+        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert · relevante Zusatzebenen eingeblendet.' : 'Nur offene Einsatzorte auf der Karte.'}</p>
       </section>
     </div>
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
@@ -141,13 +135,6 @@ export default function ZentraleUebersicht() {
       <p className="text-sm text-amber-800 mt-1">Am Ende der Schicht an die Ablöse zu übergeben - ergibt sich automatisch aus den noch offenen Einsätzen, kein eigener Eintrag nötig.</p>
       {ctx.uebergabeIncidents.length === 0 ? <p className="text-sm text-amber-700 mt-3">Keine offenen Einsätze zu übergeben.</p> : <ul className="mt-3 space-y-1.5 text-sm text-amber-900">{ctx.uebergabeIncidents.map(item => <li key={item.id}>• {formatTime(item.reported_at)} – {item.location || item.summary.slice(0, 60)}</li>)}</ul>}
     </section>
-    {/* Besetzung: einmal pro Schicht eingetragen, danach nur bei Bedarf
-        nachgeschaut - deshalb bewusst unten, nicht mehr direkt unter
-        "Sofort wichtig". */}
     <DutyPanel assignments={ctx.shiftAssignments} functions={ctx.dutyFunctions} dutyShift={ctx.dutyShift} setDutyShift={ctx.setDutyShift} />
-    {/* Baustellen sind maximal für die Karte relevant (Streckenkenntnis) -
-        keine eigene Verwaltungsliste auf der Übersicht, die lebt jetzt auf
-        einer eigenen Sidebar-Seite (/zentrale/baustellen). */}
-    <div><h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Informativ – bei Bedarf</h2><p className="text-sm text-gray-500">Weitere Bereiche (Schutzmaßnahmen, Personenhinweise, Fahndungen, RSa/RSb, Alarmierung, Unterlagen und Baustellen) über die Seitenleiste.</p></div>
   </div>
 }
