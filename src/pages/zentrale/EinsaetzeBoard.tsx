@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
+import { formatTime } from '../../lib/zentraleShared'
 import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, noteWithoutStufe, readStoredStufe, withStufe, writeStoredStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
 import type { IncidentReport, ZentraleKontakt } from '../../lib/types'
 
@@ -56,8 +56,7 @@ export default function EinsaetzeBoard({
     setLevels(current => ({ ...current, [item.id]: stufe }))
     setExpanded(item.id)
     const note = withStufe(noteWithoutStufe(item.note), stufe)
-    const result = await supabase.from('incident_reports').update({ note: note || null }).eq('id', item.id)
-    if (!result.error) item.note = note || null
+    await supabase.from('incident_reports').update({ note: note || null }).eq('id', item.id)
   }
 
   function printSelected() {
@@ -85,8 +84,8 @@ export default function EinsaetzeBoard({
         <p className="text-sm text-gray-500">{items.length} Einsätze. Stufe Standard: Kleinereignis.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => setView('uebersicht')} className={`text-sm px-3 py-2 rounded-lg border ${view === 'uebersicht' ? 'bg-blue-800 text-white border-blue-800' : 'border-gray-300'}`}>Übersicht</button>
-        <button type="button" onClick={() => setView('detail')} className={`text-sm px-3 py-2 rounded-lg border ${view === 'detail' ? 'bg-blue-800 text-white border-blue-800' : 'border-gray-300'}`}>Detail</button>
+        <button type="button" onClick={() => setView('uebersicht')} className={`text-sm px-3 py-2 rounded-lg border ${view === 'uebersicht' ? 'bg-white text-blue-800 border-blue-800' : 'border-gray-300'}`}>Übersicht</button>
+        <button type="button" onClick={() => setView('detail')} className={`text-sm px-3 py-2 rounded-lg border ${view === 'detail' ? 'bg-white text-blue-800 border-blue-800' : 'border-gray-300'}`}>Detail</button>
         <button type="button" onClick={printSelected} className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-300"><Printer className="w-4 h-4" /> Drucken{chosen.length ? ` (${chosen.length})` : ''}</button>
       </div>
     </div>
