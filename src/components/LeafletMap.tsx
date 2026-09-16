@@ -94,7 +94,7 @@ export default function LeafletMap({
   markers,
   lines,
   circles,
-  height = 220,
+  height = 520,
   zoom,
   focus,
   onMapClick,

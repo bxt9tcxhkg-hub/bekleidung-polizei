@@ -4,27 +4,59 @@ export interface GeocodeResult {
   displayName: string
 }
 
-/**
- * Löst eine Ortsangabe (Straße o. Ä.) im Gemeindegebiet Dornbirn über den
- * öffentlichen Nominatim-Dienst (OpenStreetMap) in Koordinaten auf.
- * Kostenlos, kein API-Key - dafür mit Nutzungsgrenze (Nominatim Usage
- * Policy), deshalb nur bei explizitem Klick aufrufen, nicht automatisch
- * beim Tippen.
- */
 export interface StreetSuggestion {
   street: string
   lat: number
   lng: number
+  houseNumber?: string
+  label?: string
 }
 
-/**
- * Schlägt Straßennamen im Gemeindegebiet Dornbirn vor, während der
- * Zentralist tippt. Nutzt Nominatims strukturierte Suche (street/city/
- * country), damit nur Treffer aus Dornbirn zurückkommen, statt wie bei
- * geocodeLocation per Freitext-Suffix. Aufrufseitig debouncen (Nominatim-
- * Nutzungsgrenze) - hier nur Anfrage + Deduplizierung nach Straßenname.
- */
+export async function suggestAddresses(query: string): Promise<StreetSuggestion[]> {
+  const trimmed = query.trim()
+  if (trimmed.length < 2) return []
+  const escaped = trimmed.replace(/'/g, "''")
+  const compact = escaped.toLowerCase().replace(/\s+/g, '')
+  const filter = `gemeinde='Dornbirn' AND (strasse ILIKE '%${escaped}%' OR mcodelc ILIKE '%${compact}%')`
+  const params = new URLSearchParams({
+    service: 'WFS', version: '1.1.0', request: 'GetFeature',
+    typeName: 'vogis:adressen', outputFormat: 'application/json',
+    srsName: 'EPSG:4326', maxFeatures: '15', CQL_FILTER: filter,
+  })
+  let response: Response
+  try {
+    response = await fetch(`https://vogis.cnv.at/geoserver/vogis/wfs?${params}`)
+  } catch { return [] }
+  if (!response.ok) return []
+  const data = await response.json().catch(() => null) as {
+    features?: { geometry?: { coordinates?: unknown }; properties?: Record<string, string | null> }[]
+  } | null
+  const suggestions: StreetSuggestion[] = []
+  const seen = new Set<string>()
+  for (const feature of data?.features ?? []) {
+    const street = feature.properties?.strasse?.trim() ?? ''
+    const houseNumber = feature.properties?.hausnr?.trim() ?? ''
+    if (!street) continue
+    const label = houseNumber ? `${street} ${houseNumber}` : street
+    if (seen.has(label)) continue
+    const coords = feature.geometry?.coordinates
+    let lng = NaN
+    let lat = NaN
+    if (Array.isArray(coords) && typeof coords[0] === 'number') {
+      lng = Number(coords[0]); lat = Number(coords[1])
+    } else if (Array.isArray(coords) && Array.isArray(coords[0]) && typeof coords[0][0] === 'number') {
+      lng = Number(coords[0][0]); lat = Number(coords[0][1])
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+    seen.add(label)
+    suggestions.push({ street, houseNumber, label, lat, lng })
+  }
+  return suggestions
+}
+
 export async function suggestStreets(query: string): Promise<StreetSuggestion[]> {
+  const fromVogis = await suggestAddresses(query)
+  if (fromVogis.length > 0) return fromVogis
   const trimmed = query.trim()
   if (trimmed.length < 2) return []
   const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=10&street=${encodeURIComponent(trimmed)}&city=Dornbirn&country=Austria`
@@ -51,16 +83,6 @@ export async function suggestStreets(query: string): Promise<StreetSuggestion[]>
   return suggestions
 }
 
-/**
- * Berechnet eine Route entlang des tatsächlichen Straßennetzes zwischen zwei
- * Punkten (statt einer Luftlinie), über den öffentlichen OSRM-Demo-Dienst
- * (Open Source Routing Machine, ebenfalls auf OpenStreetMap-Daten). Wie bei
- * Nominatim kostenlos und ohne API-Key, aber nur für gelegentliche Anfragen
- * gedacht (Fair-Use) - deshalb nur beim Speichern/Zeichnen aufrufen, nicht
- * laufend. Bei Fehlern (Dienst nicht erreichbar, keine Route gefunden) wird
- * null zurückgegeben - aufrufseitig fällt die Karte dann auf die Luftlinie
- * zwischen den beiden Punkten zurück, es gibt also keinen Hartausfall.
- */
 export async function routeAlongRoad(start: { lat: number; lng: number }, end: { lat: number; lng: number }): Promise<[number, number][] | null> {
   const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`
   let response: Response
@@ -73,7 +95,6 @@ export async function routeAlongRoad(start: { lat: number; lng: number }, end: {
   const result = await response.json().catch(() => null) as { code?: string; routes?: { geometry?: { coordinates?: [number, number][] } }[] } | null
   const coordinates = result?.code === 'Ok' ? result.routes?.[0]?.geometry?.coordinates : null
   if (!coordinates || coordinates.length < 2) return null
-  // GeoJSON liefert [lng, lat] - Leaflet erwartet [lat, lng].
   const points: [number, number][] = coordinates
     .filter((pair): pair is [number, number] => Array.isArray(pair) && Number.isFinite(pair[0]) && Number.isFinite(pair[1]))
     .map(([lng, lat]) => [lat, lng])
@@ -86,12 +107,6 @@ export interface ReverseGeocodeResult {
   displayName: string
 }
 
-/**
- * Löst einen Kartenpunkt (Klick auf die Karte) in eine Adresse auf - als
- * Alternative zur Texteingabe von Straße/Hausnummer beim Erfassen eines
- * Einsatzortes. Wie bei den übrigen Nominatim-Aufrufen nur bei einer
- * expliziten Nutzeraktion (Klick), nicht laufend während des Bewegens.
- */
 export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeResult | null> {
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&addressdetails=1&lat=${lat}&lon=${lng}`
   let response: Response
