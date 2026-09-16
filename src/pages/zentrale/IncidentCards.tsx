@@ -1,6 +1,7 @@
-import { AlertTriangle, ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Empty } from '../../components/ZentraleEntryEditor'
 import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
+import { noteWithoutStufe } from '../../lib/einsatzSchema'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import type { IncidentReport, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 
@@ -12,7 +13,7 @@ function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; bau
 
 type IncidentVisual = { color: string; label: string }
 
-export function IncidentCards({ visibleIncidents, lageByIncidentId, baustellen, canOperateZentrale, openEditIncident, openLageForIncident, completeIncident, deleteIncident, accordion = false, expandedIncidentId = null, onToggleIncident, visualByIncidentId = {} }: {
+export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale, openEditIncident, completeIncident, deleteIncident, accordion = false, expandedIncidentId = null, onToggleIncident, visualByIncidentId = {} }: {
   visibleIncidents: IncidentReport[]
   lageByIncidentId: Record<string, ZentraleEntry>
   baustellen: ZentraleBaustelle[]
@@ -29,10 +30,10 @@ export function IncidentCards({ visibleIncidents, lageByIncidentId, baustellen, 
   return <div className="space-y-3">{visibleIncidents.length === 0
     ? <Empty text={accordion ? 'Keine offenen Einsätze.' : 'Heute wurden noch keine Meldungen erfasst.'} />
     : visibleIncidents.map(item => {
-      const lage = lageByIncidentId[item.id]
       const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null
       const expanded = !accordion || expandedIncidentId === item.id
       const visual = visualByIncidentId[item.id]
+      const bemerkung = noteWithoutStufe(item.note)
       return <article
         key={item.id}
         className={`rounded-2xl border bg-white overflow-hidden transition-shadow ${expanded ? 'border-gray-300 shadow-sm' : 'border-gray-200'}`}
@@ -52,7 +53,7 @@ export function IncidentCards({ visibleIncidents, lageByIncidentId, baustellen, 
               {accordion ? <span className="ml-auto text-gray-500">{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span> : null}
             </div>
             <p className="mt-2 font-semibold text-gray-900">{item.location || 'Ohne Ortsangabe'}</p>
-            {!expanded ? <><p className="mt-1 line-clamp-2 text-sm text-gray-700">{item.summary}</p><p className="mt-2 text-xs font-medium text-gray-500">{DISPOSITION_LABEL[item.disposition]}</p></> : null}
+            {!expanded ? <p className="mt-1 line-clamp-2 text-sm text-gray-700">{item.summary}</p> : null}
           </button>
           {canOperateZentrale ? <div className="flex shrink-0 gap-1">
             {item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item)} className="text-xs font-medium text-green-700 border border-green-200 px-2.5 py-2 rounded-lg">Erledigt</button> : null}
@@ -65,11 +66,9 @@ export function IncidentCards({ visibleIncidents, lageByIncidentId, baustellen, 
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">
             {item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}
             {item.caller_name ? <span>Melder: {item.caller_name}</span> : null}
-            <span>{DISPOSITION_LABEL[item.disposition]}</span>
-            {item.note ? <span>Bemerkung: {item.note}</span> : null}
+            {bemerkung ? <span>{bemerkung}</span> : null}
           </div>
           <NearbyBaustellenHint point={point} baustellen={baustellen} />
-          {canOperateZentrale ? <button type="button" onClick={() => openLageForIncident(item)} className={`inline-flex items-center gap-1.5 text-xs font-semibold mt-3 ${lage ? 'text-red-700' : 'text-blue-700'}`}>{lage ? <><AlertTriangle className="w-3.5 h-3.5" /> Operative Lage ansehen</> : 'Als Operative Lage erfassen'}</button> : null}
         </div> : null}
       </article>
     })}</div>
