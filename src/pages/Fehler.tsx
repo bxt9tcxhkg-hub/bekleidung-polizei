@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import type { AppError } from '../lib/types'
+import type { AppError } from '../lib/appErrorTypes'
 
 export default function Fehler() {
   const [errors, setErrors] = useState<AppError[]>([])
