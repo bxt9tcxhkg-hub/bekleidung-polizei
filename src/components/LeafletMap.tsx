@@ -25,43 +25,7 @@ const MAP_BASEMAPS = [
   { id: 'kataster', label: 'Kataster' },
 ] as const
 
-export type MapBasemap = (typeof MAP_BASEMAPS)[number]['id']
-
-function vogisWms(mapfile: string, layers: string, format = 'image/jpeg'): L.TileLayer.WMS {
-  return L.tileLayer.wms(`https://vogis.cnv.at/mapserver/mapserv?map=${mapfile}`, {
-    layers,
-    format,
-    transparent: format.includes('png'),
-    version: '1.1.1',
-    attribution: 'VoGIS Land Vorarlberg (CC BY 4.0)',
-    maxZoom: 19,
-  })
-}
-
-function createBasemapLayer(id: MapBasemap): L.Layer {
-  if (id === 'luftbild') return vogisWms('i_luftbilder_r_wms.map', 'ef2025_10cm', 'image/jpeg')
-  if (id === 'topo') return vogisWms('i_topographie_r_wms.map', 'topokarte_isoli_text_20t', 'image/jpeg')
-  if (id === 'kataster') {
-    const group = L.layerGroup()
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap',
-    }).addTo(group)
-    L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/DKM_grp/wms', {
-      layers: 'DKM_grp,Grundstück_Nr_grp',
-      format: 'image/png',
-      transparent: true,
-      version: '1.1.1',
-      attribution: 'DKM / VoGIS (CC BY 4.0)',
-      maxZoom: 19,
-    }).addTo(group)
-    return group
-  }
-  return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-  })
-}
+type MapBasemap = (typeof MAP_BASEMAPS)[number]['id']
 
 export interface MapMarker {
   lat: number
@@ -90,27 +54,62 @@ export interface MapCircle {
   fillOpacity?: number
 }
 
-export default function LeafletMap({
-  markers,
-  lines,
-  circles,
-  height = 520,
-  zoom,
-  focus,
-  onMapClick,
-  fitLines = true,
-  incidentKey = null,
-}: {
+function vogisWms(mapfile: string, layers: string, format = 'image/jpeg'): L.TileLayer.WMS {
+  return L.tileLayer.wms(`https://vogis.cnv.at/mapserver/mapserv?map=${mapfile}`, {
+    layers,
+    format,
+    transparent: format.includes('png'),
+    version: '1.1.1',
+    attribution: 'VoGIS Land Vorarlberg (CC BY 4.0)',
+    maxZoom: 19,
+  })
+}
+
+function createBasemapLayer(id: MapBasemap): L.Layer {
+  if (id === 'luftbild') return vogisWms('i_luftbilder_r_wms.map', 'ef2025_10cm', 'image/jpeg')
+  if (id === 'topo') return vogisWms('i_topographie_r_wms.map', 'topokarte_isoli_text_20t', 'image/jpeg')
+  if (id === 'kataster') {
+    const group = L.layerGroup()
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(group)
+    L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/DKM_grp/wms', {
+      layers: 'DKM_grp,Grundstueck_Nr_grp',
+      format: 'image/png',
+      transparent: true,
+      version: '1.1.1',
+      attribution: 'DKM / VoGIS (CC BY 4.0)',
+      maxZoom: 19,
+    }).addTo(group)
+    return group
+  }
+  return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap',
+  })
+}
+
+export default function LeafletMap(props: {
   markers: readonly MapMarker[]
   lines?: readonly MapLine[]
   circles?: readonly MapCircle[]
   height?: number
   zoom?: number
-  focus?: { lat: number; lng: number; zoom?: number } | null
-  onMapClick?: (lat: number; lng: number) => void
+  focus?: { lat: number, lng: number, zoom?: number } | null
+  onMapClick?: (lat: number, lng: number) => void
   fitLines?: boolean
   incidentKey?: string | number | null
 }) {
+  const markers = props.markers
+  const lines = props.lines
+  const circles = props.circles
+  const height = props.height ?? 520
+  const zoom = props.zoom
+  const focus = props.focus
+  const onMapClick = props.onMapClick
+  const fitLines = props.fitLines !== false
+  const incidentKey = props.incidentKey ?? null
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const baseLayerRef = useRef<L.Layer | null>(null)
@@ -121,21 +120,26 @@ export default function LeafletMap({
   useEffect(() => { setBasemap('karte') }, [incidentKey])
 
   const pin = focus ?? markers.find(marker => marker.selected) ?? (markers.length === 1 ? markers[0] : null)
+  const pinLat = pin ? pin.lat : null
+  const pinLng = pin ? pin.lng : null
   useEffect(() => {
-    if (!pin) { setParcelLabel(''); return }
+    if (pinLat === null || pinLng === null) { setParcelLabel(''); return }
     let cancelled = false
-    setParcelLabel('KG/GST …')
-    void lookupParcel(pin.lat, pin.lng).then(parcel => {
+    setParcelLabel('KG/GST ...')
+    void lookupParcel(pinLat, pinLng).then(parcel => {
       if (!cancelled) setParcelLabel(parcel?.label ?? '')
     }).catch(() => { if (!cancelled) setParcelLabel('') })
     return () => { cancelled = true }
-  }, [pin?.lat, pin?.lng])
+  }, [pinLat, pinLng])
 
   useEffect(() => {
     if (!containerRef.current) return
     const map = L.map(containerRef.current, { attributionControl: true })
     mapRef.current = map
-    map.on('click', (event: L.LeafletMouseEvent) => onMapClickRef.current?.(event.latlng.lat, event.latlng.lng))
+    map.on('click', (event: L.LeafletMouseEvent) => {
+      const handler = onMapClickRef.current
+      if (handler) handler(event.latlng.lat, event.latlng.lng)
+    })
     return () => { map.remove(); mapRef.current = null; baseLayerRef.current = null }
   }, [])
 
@@ -253,13 +257,13 @@ export default function LeafletMap({
           </button>
         ))}
       </div>
-      <div ref={containerRef} style={{ height: height === 420 ? 560 : height }} className="rounded-xl overflow-hidden border border-gray-200" />
+      <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
       <div className="mt-1.5 px-1 text-xs text-gray-600">
         {parcelLabel ? <p className="font-medium text-gray-800">{parcelLabel}</p> : null}
         <p>
           <span className="font-medium text-gray-700">KG</span> Katastralgemeinde
           <span className="mx-2 text-gray-300">|</span>
-          <span className="font-medium text-gray-700">GST</span> Grundstücksnummer
+          <span className="font-medium text-gray-700">GST</span> Grundstuecksnummer
         </p>
       </div>
     </div>
