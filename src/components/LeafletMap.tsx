@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
+import { lookupParcel } from '../lib/kataster'
 import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png'
@@ -115,8 +116,20 @@ export default function LeafletMap({
   const baseLayerRef = useRef<L.Layer | null>(null)
   const onMapClickRef = useRef(onMapClick)
   const [basemap, setBasemap] = useState<MapBasemap>('karte')
+  const [parcelLabel, setParcelLabel] = useState('')
   useEffect(() => { onMapClickRef.current = onMapClick })
   useEffect(() => { setBasemap('karte') }, [incidentKey])
+
+  const pin = focus ?? markers.find(marker => marker.selected) ?? (markers.length === 1 ? markers[0] : null)
+  useEffect(() => {
+    if (!pin) { setParcelLabel(''); return }
+    let cancelled = false
+    setParcelLabel('KG/GST …')
+    void lookupParcel(pin.lat, pin.lng).then(parcel => {
+      if (!cancelled) setParcelLabel(parcel?.label ?? '')
+    }).catch(() => { if (!cancelled) setParcelLabel('') })
+    return () => { cancelled = true }
+  }, [pin?.lat, pin?.lng])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -143,17 +156,17 @@ export default function LeafletMap({
       let icon: L.Icon | L.DivIcon = markerIcon
       if (marker.color || marker.label) {
         const size = marker.selected ? 42 : 34
-        const pin = document.createElement('div')
-        pin.style.width = `${size}px`
-        pin.style.height = `${size}px`
-        pin.style.borderRadius = '50% 50% 50% 0'
-        pin.style.transform = 'rotate(-45deg)'
-        pin.style.background = marker.color ?? '#2563eb'
-        pin.style.border = marker.selected ? '4px solid #ffffff' : '3px solid #ffffff'
-        pin.style.boxShadow = marker.selected ? '0 0 0 3px #111827, 0 4px 10px rgb(0 0 0 / 35%)' : '0 2px 7px rgb(0 0 0 / 30%)'
-        pin.style.display = 'flex'
-        pin.style.alignItems = 'center'
-        pin.style.justifyContent = 'center'
+        const pinEl = document.createElement('div')
+        pinEl.style.width = `${size}px`
+        pinEl.style.height = `${size}px`
+        pinEl.style.borderRadius = '50% 50% 50% 0'
+        pinEl.style.transform = 'rotate(-45deg)'
+        pinEl.style.background = marker.color ?? '#2563eb'
+        pinEl.style.border = marker.selected ? '4px solid #ffffff' : '3px solid #ffffff'
+        pinEl.style.boxShadow = marker.selected ? '0 0 0 3px #111827, 0 4px 10px rgb(0 0 0 / 35%)' : '0 2px 7px rgb(0 0 0 / 30%)'
+        pinEl.style.display = 'flex'
+        pinEl.style.alignItems = 'center'
+        pinEl.style.justifyContent = 'center'
         const label = document.createElement('span')
         label.textContent = marker.label ?? ''
         label.style.transform = 'rotate(45deg)'
@@ -161,9 +174,9 @@ export default function LeafletMap({
         label.style.fontSize = marker.selected ? '14px' : '12px'
         label.style.fontWeight = '800'
         label.style.lineHeight = '1'
-        pin.appendChild(label)
+        pinEl.appendChild(label)
         icon = L.divIcon({
-          html: pin,
+          html: pinEl,
           className: '',
           iconSize: [size, size],
           iconAnchor: [Math.round(size / 2), size],
@@ -241,6 +254,9 @@ export default function LeafletMap({
         ))}
       </div>
       <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
+      {parcelLabel ? (
+        <p className="mt-1.5 text-xs font-medium text-gray-700 px-1">{parcelLabel}</p>
+      ) : null}
     </div>
   )
 }
