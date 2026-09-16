@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Empty } from '../../components/ZentraleEntryEditor'
-import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
-import { noteWithoutStufe } from '../../lib/einsatzSchema'
+import { formatTime } from '../../lib/zentraleShared'
+import { noteWithoutStufe, readStoredStufe, STUFE_META } from '../../lib/einsatzSchema'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import type { IncidentReport, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 
@@ -28,16 +28,19 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
   visualByIncidentId?: Record<string, IncidentVisual>
 }) {
   return <div className="space-y-3">{visibleIncidents.length === 0
-    ? <Empty text={accordion ? 'Keine offenen Einsätze.' : 'Heute wurden noch keine Meldungen erfasst.'} />
+    ? <Empty text={accordion ? 'Keine Einsätze.' : 'Heute wurden noch keine Meldungen erfasst.'} />
     : visibleIncidents.map(item => {
       const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null
       const expanded = !accordion || expandedIncidentId === item.id
       const visual = visualByIncidentId[item.id]
       const bemerkung = noteWithoutStufe(item.note)
+      const stufe = readStoredStufe(item.id, item.note)
+      const meta = STUFE_META[stufe]
+      const done = item.status === 'erledigt'
       return <article
         key={item.id}
-        className={`rounded-2xl border bg-white overflow-hidden transition-shadow ${expanded ? 'border-gray-300 shadow-sm' : 'border-gray-200'}`}
-        style={visual ? { borderLeftWidth: 5, borderLeftColor: visual.color } : undefined}
+        className={`rounded-2xl border overflow-hidden transition-shadow ${done ? 'border-gray-200 bg-gray-50 opacity-60' : expanded ? 'border-gray-300 bg-white shadow-sm' : 'border-gray-200 bg-white'}`}
+        style={visual && !done ? { borderLeftWidth: 5, borderLeftColor: visual.color } : undefined}
       >
         <div className="flex items-start gap-2 p-3 sm:p-4">
           <button
@@ -47,9 +50,10 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
             aria-expanded={accordion ? expanded : undefined}
           >
             <div className="flex flex-wrap items-center gap-2">
-              {visual ? <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-extrabold text-white" style={{ backgroundColor: visual.color }}>{visual.label}</span> : null}
+              {visual && !done ? <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-extrabold text-white" style={{ backgroundColor: visual.color }}>{visual.label}</span> : null}
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
               <span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span>
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${done ? 'bg-gray-200 text-gray-600' : item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{done ? 'Abgeschlossen' : item.status === 'weitergegeben' ? 'An BP' : 'Offen'}</span>
               {accordion ? <span className="ml-auto text-gray-500">{expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}</span> : null}
             </div>
             <p className="mt-2 font-semibold text-gray-900">{item.location || 'Ohne Ortsangabe'}</p>
@@ -63,6 +67,7 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
         </div>
         {expanded ? <div className="border-t border-gray-100 px-3 pb-4 pt-3 sm:px-4">
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.summary}</p>
+          <p className="text-xs text-gray-500 mt-2">{meta.hint}</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-3">
             {item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}
             {item.caller_name ? <span>Melder: {item.caller_name}</span> : null}
