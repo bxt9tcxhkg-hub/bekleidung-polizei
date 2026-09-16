@@ -24,17 +24,36 @@ export const ENTSCHEIDUNGSPUNKTE = [
   'Zivilschutzalarm',
 ]
 
+const PREFIX = /^STUFE:(klein|mittel|gross|katastrophe)\n?/
+
 export function parseStufe(note: string | null | undefined): Ereignisstufe {
-  const match = note?.match(/^STUFE:(klein|mittel|gross|katastrophe)\n?/)
+  const match = note?.match(PREFIX)
   return (match?.[1] as Ereignisstufe) ?? 'klein'
 }
 
-export function withStufe(note: string | null | undefined, stufe: Ereignisstufe): string {
-  const rest = (note ?? '').replace(/^STUFE:(klein|mittel|gross|katastrophe)\n?/, '')
-  if (stufe === 'klein') return rest
-  return `STUFE:${stufe}\n${rest}`
+export function noteWithoutStufe(note: string | null | undefined): string {
+  return (note ?? '').replace(PREFIX, '')
 }
 
-export function noteWithoutStufe(note: string | null | undefined): string {
-  return (note ?? '').replace(/^STUFE:(klein|mittel|gross|katastrophe)\n?/, '')
+export function withStufe(note: string | null | undefined, stufe: Ereignisstufe): string {
+  const rest = noteWithoutStufe(note)
+  if (stufe === 'klein') return rest
+  return rest ? `STUFE:${stufe}\n${rest}` : `STUFE:${stufe}`
+}
+
+function storageKey(id: string) { return `einsatz-stufe:${id}` }
+
+export function readStoredStufe(id: string, note?: string | null): Ereignisstufe {
+  try {
+    const stored = localStorage.getItem(storageKey(id))
+    if (stored && EREIGNISSTUFEN.includes(stored as Ereignisstufe)) return stored as Ereignisstufe
+  } catch { /* ignore */ }
+  return parseStufe(note)
+}
+
+export function writeStoredStufe(id: string, stufe: Ereignisstufe) {
+  try {
+    if (stufe === 'klein') localStorage.removeItem(storageKey(id))
+    else localStorage.setItem(storageKey(id), stufe)
+  } catch { /* ignore */ }
 }
