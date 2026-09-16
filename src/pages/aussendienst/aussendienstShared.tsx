@@ -5,16 +5,10 @@ import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import { ZIELFUNKTION_LABEL, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import type { IncidentDisposition, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
-
-// Von AussendienstShell.tsx und den Außendienst-Unterseiten (Einsätze,
-// Kontrollaufträge, Operative Hinweise, Fahrzeug - jetzt eigenständige
-// Sidebar-Seiten statt Tabs) gemeinsam genutzte Darstellungsbausteine.
+import IncidentDocs from '../zentrale/IncidentDocs'
 
 export function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
 
-// Wie NearbyBaustellenHint in zentrale/zentraleShared.tsx (bewusst hier
-// dupliziert statt bereichsübergreifend importiert - jeder Portalbereich hat
-// seine eigenen Darstellungsbausteine, siehe restliche Datei).
 function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; baustellen: readonly ZentraleBaustelle[] }) {
   const nearby = nearbyByLine(point, baustellen)
   if (nearby.length === 0) return null
@@ -24,7 +18,17 @@ function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; bau
 export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void> }) {
   if (kind === 'incidents') {
     if (!incidents || incidents.length === 0) return <Empty text="Heute wurden noch keine Meldungen erfasst." />
-    return <div className="space-y-3">{incidents.map(item => { const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null; return <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p><p className="text-sm text-gray-700 mt-1">{item.summary}</p><p className="text-xs text-gray-500 mt-2">{DISPOSITION_LABEL[item.disposition]}</p><NearbyBaustellenHint point={point} baustellen={baustellen ?? []} /></article> })}</div>
+    return <div className="space-y-3">{incidents.map(item => {
+      const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null
+      return <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div>
+        <p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p>
+        <p className="text-sm text-gray-700 mt-1">{item.summary}</p>
+        <p className="text-xs text-gray-500 mt-2">{DISPOSITION_LABEL[item.disposition]}</p>
+        <NearbyBaustellenHint point={point} baustellen={baustellen ?? []} />
+        <IncidentDocs incidentId={item.id} from="streife" />
+      </article>
+    })}</div>
   }
   const list = entries ?? []
   if (list.length === 0) return <Empty text="Keine Einträge vorhanden." />
@@ -52,8 +56,6 @@ export function AuftragModal({ auftrag, setAuftrag, editing, saving, error, clos
   </Modal>
 }
 
-// Rein textuelle Meldung ohne Kartenzeichnen - die genaue Streckenmarkierung
-// (und Bestätigung) erfolgt in der Zentrale, siehe zentraleShared.tsx BaustelleModal.
 export function BaustelleReportModal({ report, setReport, saving, error, close, save }: { report: BaustelleReportState; setReport: Dispatch<SetStateAction<BaustelleReportState>>; saving: boolean; error: string; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<BaustelleReportState>) => setReport(current => ({ ...current, ...values }))
   return <Modal title="Baustelle melden" close={close}>
