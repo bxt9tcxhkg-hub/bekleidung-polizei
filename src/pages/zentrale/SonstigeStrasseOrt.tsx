@@ -29,7 +29,7 @@ export default function SonstigeStrasseOrt({
 
   async function handleMapClick(nextLat: number, nextLng: number) {
     const result = await reverseGeocode(nextLat, nextLng)
-    const label = result?.label || `${nextLat.toFixed(5)}, ${nextLng.toFixed(5)}`
+    const label = [result?.street, result?.houseNumber].filter(Boolean).join(' ') || result?.displayName || `${nextLat.toFixed(5)}, ${nextLng.toFixed(5)}`
     onName(label)
     onPoint(nextLat, nextLng, label)
   }
@@ -43,11 +43,13 @@ export default function SonstigeStrasseOrt({
       {mode === 'address' ? (
         <StreetAutocomplete
           ref={streetRef}
+          label="Straße / Adresse"
           value={name}
           onChange={onName}
           onSelect={item => {
-            onName(item.label)
-            if (item.lat != null && item.lng != null) onPoint(item.lat, item.lng, item.label)
+            const label = item.label || [item.street, item.houseNumber].filter(Boolean).join(' ')
+            onName(label)
+            onPoint(item.lat, item.lng, label)
           }}
         />
       ) : (
