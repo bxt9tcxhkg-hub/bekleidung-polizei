@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, Pencil, Trash2 } from 'lucide-react'
 import { Empty } from '../../components/ZentraleEntryEditor'
 import { supabase } from '../../lib/supabase'
 import { formatTime } from '../../lib/zentraleShared'
-import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, noteWithoutStufe, readStoredStufe, withStufe, writeStoredStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, formatStamp, noteWithoutStufe, readKette, readStoredStufe, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import type { IncidentReport, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 
@@ -31,11 +31,19 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
   visualByIncidentId?: Record<string, IncidentVisual>
 }) {
   const [levels, setLevels] = useState<Record<string, Ereignisstufe>>({})
+  const [ketten, setKetten] = useState<Record<string, KetteStand>>({})
   useEffect(() => {
     setLevels(current => {
       const next = { ...current }
       for (const item of visibleIncidents) {
         if (!next[item.id]) next[item.id] = readStoredStufe(item.id, item.note)
+      }
+      return next
+    })
+    setKetten(current => {
+      const next = { ...current }
+      for (const item of visibleIncidents) {
+        if (!next[item.id]) next[item.id] = readKette(item.id)
       }
       return next
     })
@@ -45,6 +53,22 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
     writeStoredStufe(item.id, stufe)
     setLevels(current => ({ ...current, [item.id]: stufe }))
     await supabase.from('incident_reports').update({ note: withStufe(noteWithoutStufe(item.note), stufe) || null }).eq('id', item.id)
+  }
+
+  function markKette(incidentId: string, name: string, field: 'versucht' | 'erreicht') {
+    const now = new Date().toISOString()
+    setKetten(current => {
+      const prev = current[incidentId] ?? {}
+      const row = { ...prev[name] }
+      if (row[field]) delete row[field]
+      else {
+        row[field] = now
+        if (field === 'erreicht' && !row.versucht) row.versucht = now
+      }
+      const nextStand = { ...prev, [name]: row }
+      writeKette(incidentId, nextStand)
+      return { ...current, [incidentId]: nextStand }
+    })
   }
 
   return <div className="space-y-3">{visibleIncidents.length === 0
@@ -57,6 +81,7 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
       const stufe = levels[item.id] ?? readStoredStufe(item.id, item.note)
       const meta = STUFE_META[stufe]
       const done = item.status === 'erledigt'
+      const stand = ketten[item.id] ?? {}
       return <article key={item.id} className={`rounded-2xl border overflow-hidden ${done ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-gray-200 bg-white'}`} style={visual && !done ? { borderLeftWidth: 5, borderLeftColor: visual.color } : undefined}>
         <div className="flex items-start gap-2 p-3 sm:p-4 pb-2">
           <button type="button" onClick={() => accordion && onToggleIncident?.(item)} className={`min-w-0 flex-1 text-left ${accordion ? '' : 'cursor-default'}`}>
@@ -75,21 +100,41 @@ export function IncidentCards({ visibleIncidents, baustellen, canOperateZentrale
             <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button>
           </div> : null}
         </div>
-        {canOperateZentrale ? <div className="px-3 sm:px-4 pb-3 flex flex-wrap gap-1.5">
-          {EREIGNISSTUFEN.map(key => {
+        <div className="px-3 sm:px-4 pb-3">
+          <p className="text-xs font-semibold text-gray-600 mb-1.5">Wie stark ist die Bevölkerung betroffen?</p>
+          {canOperateZentrale ? <div className="flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
             const row = STUFE_META[key]
-            return <button key={key} type="button" onClick={() => void setStufe(item, key)} className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border" style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}>{row.label}</button>
-          })}
-        </div> : <div className="px-3 sm:px-4 pb-3"><span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span></div>}
+            return <button key={key} type="button" onClick={() => void setStufe(item, key)} title={row.wann} className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border" style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}>{row.label}</button>
+          })}</div> : <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>}
+          <p className="text-xs text-gray-600 mt-2"><span className="font-semibold">{meta.label}:</span> {meta.wann} {meta.hint}.</p>
+        </div>
         {stufe !== 'klein' ? <div className="mx-3 sm:mx-4 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
           <p className="font-bold">Verständigung telefonisch</p>
-          <ul className="mt-1 list-disc pl-5">{TELEFONKETTE.map(name => <li key={name}>{name}</li>)}</ul>
-          {stufe === 'gross' || stufe === 'katastrophe' ? <><p className="font-bold mt-2">Entscheidung</p><ul className="list-disc pl-5">{ENTSCHEIDUNGSPUNKTE.map(name => <li key={name}>{name}</li>)}</ul></> : null}
-          <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Kontakte bearbeiten</Link>
+          <p className="text-xs text-amber-800 mb-2">Versucht = angerufen. Erreicht = Person informiert.</p>
+          <div className="space-y-2">{TELEFONKETTE.map(name => {
+            const row = stand[name] ?? {}
+            return <div key={name} className="rounded-lg bg-white/70 px-2 py-2">
+              <p className="font-medium">{name}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => markKette(item.id, name, 'versucht')} className={`text-xs px-2 py-1 rounded-md border ${row.versucht ? 'bg-amber-100 border-amber-400' : 'border-gray-300 bg-white'}`}>Versucht{row.versucht ? ` ${formatStamp(row.versucht)}` : ''}</button>
+                <button type="button" onClick={() => markKette(item.id, name, 'erreicht')} className={`text-xs px-2 py-1 rounded-md border ${row.erreicht ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white'}`}>Erreicht{row.erreicht ? ` ${formatStamp(row.erreicht)}` : ''}</button>
+              </div>
+            </div>
+          })}</div>
+          {stufe === 'gross' || stufe === 'katastrophe' ? <div className="mt-3">
+            <p className="font-bold">Entscheidung</p>
+            <div className="mt-1 space-y-2">{ENTSCHEIDUNGSPUNKTE.map(name => {
+              const row = stand[name] ?? {}
+              return <div key={name} className="rounded-lg bg-white/70 px-2 py-2">
+                <p className="font-medium">{name}</p>
+                <button type="button" onClick={() => markKette(item.id, name, 'erreicht')} className={`mt-1 text-xs px-2 py-1 rounded-md border ${row.erreicht ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white'}`}>{row.erreicht ? `Erledigt ${formatStamp(row.erreicht)}` : 'Erledigt markieren'}</button>
+              </div>
+            })}</div>
+          </div> : null}
+          <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
         </div> : null}
         {expanded ? <div className="border-t border-gray-100 px-3 pb-4 pt-3 sm:px-4">
-          <p className="text-xs text-gray-500">{meta.hint} · {meta.dienstbetrieb}</p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
             {item.caller_phone ? <span>TEL: {item.caller_phone}</span> : null}
             {item.caller_name ? <span>Melder: {item.caller_name}</span> : null}
             {bemerkung ? <span>{bemerkung}</span> : null}
