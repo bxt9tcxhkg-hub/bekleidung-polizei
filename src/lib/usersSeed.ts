@@ -10,7 +10,6 @@ import { officerAuthEmail } from './officerAuthEmail'
 
 export const BEKLEIDUNG_SEED_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
 export const EINSATZ_MT_SEED_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
-/** App-Wert für Stadtpolizei Dornbirn (profiles.organisation). */
 export const ET_ROSTER_ORGANISATION = 'Stadtpolizei' as const
 export const PARKAUFSICHT_ORGANISATION = 'Parkaufsicht' as const
 
@@ -25,6 +24,7 @@ export type UserSeedOfficer = {
   organisation: SeedOrganisation
   bekleidung: BekleidungSeedRole
   einsatz_mt: EinsatzMtSeedRole
+  officer?: boolean
 }
 
 export type UserSeedFile = {
@@ -69,7 +69,6 @@ export function parseUsersSeed(input: unknown): { ok: true; file: UserSeedFile }
     if (!nachname || !vorname || !dienstnummer) {
       return { ok: false, error: `Zeile ${index + 1}: nachname, vorname und dienstnummer sind Pflicht.` }
     }
-    // Parkaufsicht: nur Bekleidung Benutzer. Keine erfundenen höheren Rollen.
     if (organisation === PARKAUFSICHT_ORGANISATION) {
       bekleidung = 'user'
       einsatz = 'user'
@@ -84,6 +83,7 @@ export function parseUsersSeed(input: unknown): { ok: true; file: UserSeedFile }
       organisation,
       bekleidung,
       einsatz_mt: einsatz,
+      officer: row.officer === false ? false : true,
     })
   }
   return { ok: true, file: { ...(input as UserSeedFile), officers: rows } }
@@ -98,6 +98,7 @@ export const USERS_SEED_FILE = parsed.file
 export const USERS_SEED = parsed.file.officers
 export const PARKAUFSICHT_SEED = USERS_SEED.filter(row => row.organisation === PARKAUFSICHT_ORGANISATION)
 export const STADTPOLIZEI_SEED = USERS_SEED.filter(row => row.organisation === ET_ROSTER_ORGANISATION)
+export const STADTPOLIZEI_OFFICER_SEED = STADTPOLIZEI_SEED.filter(row => row.officer !== false)
 
 export function bekleidungRolesFromSeed(role: BekleidungSeedRole): string[] {
   if (role === 'admin') return ['admin']
@@ -105,9 +106,51 @@ export function bekleidungRolesFromSeed(role: BekleidungSeedRole): string[] {
   return ['user', role]
 }
 
+export function normalizeSeedDienstnummer(dienstnummer: string | null | undefined): string {
+  return (dienstnummer ?? '').trim().replace(/^0+/, '') || ''
+}
+
 export function findUserSeedByDienstnummer(dienstnummer: string): UserSeedOfficer | undefined {
-  const needle = dienstnummer.trim().replace(/^0+/, '') || '0'
-  return USERS_SEED.find(row => (row.dienstnummer.replace(/^0+/, '') || '0') === needle)
+  const needle = normalizeSeedDienstnummer(dienstnummer)
+  if (!needle) return undefined
+  return USERS_SEED.find(row => normalizeSeedDienstnummer(row.dienstnummer) === needle)
+}
+
+export type RosterOfficerRef = {
+  organisation?: string | null
+  officer?: boolean | null
+  einsatz_roster?: boolean | null
+  dienstnummer?: string | null
+  name?: string | null
+  vorname?: string | null
+  nachname?: string | null
+}
+
+function profileNameHay(profile: RosterOfficerRef): string {
+  const fromParts = [profile.vorname, profile.nachname].filter(Boolean).join(' ')
+  return (profile.name ?? fromParts).trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function findUserSeedForRoster(profile: RosterOfficerRef): UserSeedOfficer | undefined {
+  const dn = normalizeSeedDienstnummer(profile.dienstnummer)
+  if (dn) {
+    const byDn = findUserSeedByDienstnummer(dn)
+    if (byDn) return byDn
+  }
+  return undefined
+}
+
+export function isPolizistForRoster(profile: RosterOfficerRef): boolean {
+  const org = (profile.organisation ?? '').trim() || ET_ROSTER_ORGANISATION
+  if (org !== ET_ROSTER_ORGANISATION) return false
+  if (profile.officer === false || profile.einsatz_roster === false) return false
+  const seed = findUserSeedForRoster(profile)
+  if (seed && seed.officer === false) return false
+  const dn = normalizeSeedDienstnummer(profile.dienstnummer)
+  if (dn === '24') return false
+  const hay = profileNameHay(profile)
+  if (hay.includes('sonja') && hay.includes('dolliner')) return false
+  return true
 }
 
 export function seedOfficerAuthEmail(row: Pick<UserSeedOfficer, 'vorname' | 'nachname' | 'dienstnummer'>): string {
