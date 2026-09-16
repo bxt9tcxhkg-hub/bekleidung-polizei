@@ -1,13 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 
-// Leaflets Standard-Icon referenziert Bildpfade relativ zum CSS, was unter
-// Vite/Bundlern nicht auflöst - deshalb hier explizit über importierte
-// Asset-URLs gesetzt, statt L.Icon.Default zu verbiegen.
 const markerIcon = L.icon({
   iconUrl: markerIconUrl,
   iconRetinaUrl: markerIcon2x,
@@ -20,26 +17,65 @@ const markerIcon = L.icon({
 
 const DORNBIRN_CENTER: [number, number] = [47.4125, 9.7417]
 
+export const MAP_BASEMAPS = [
+  { id: 'karte', label: 'Karte' },
+  { id: 'luftbild', label: 'Luftbild' },
+  { id: 'topo', label: 'Topo' },
+  { id: 'kataster', label: 'Kataster' },
+] as const
+
+export type MapBasemap = (typeof MAP_BASEMAPS)[number]['id']
+
+function vogisWms(mapfile: string, layers: string, format = 'image/jpeg'): L.TileLayer.WMS {
+  return L.tileLayer.wms(`https://vogis.cnv.at/mapserver/mapserv?map=${mapfile}`, {
+    layers,
+    format,
+    transparent: format.includes('png'),
+    version: '1.1.1',
+    attribution: 'VoGIS Land Vorarlberg (CC BY 4.0)',
+    maxZoom: 19,
+  })
+}
+
+function createBasemapLayer(id: MapBasemap): L.Layer {
+  if (id === 'luftbild') return vogisWms('i_luftbilder_r_wms.map', 'ef2025_10cm', 'image/jpeg')
+  if (id === 'topo') return vogisWms('i_topographie_r_wms.map', 'topokarte_isoli_text_20t', 'image/jpeg')
+  if (id === 'kataster') {
+    const group = L.layerGroup()
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(group)
+    L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/DKM_grp/wms', {
+      layers: 'DKM_grp,Grundstück_Nr_grp',
+      format: 'image/png',
+      transparent: true,
+      version: '1.1.1',
+      attribution: 'DKM / VoGIS (CC BY 4.0)',
+      maxZoom: 19,
+    }).addTo(group)
+    return group
+  }
+  return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+  })
+}
+
 export interface MapMarker {
   lat: number
   lng: number
   popup?: string
-  /** Optional eindeutige Farbe, z. B. zur Zuordnung eines Einsatzes zur Karte. */
   color?: string
-  /** Kurze sichtbare Kennzeichnung im Marker (z. B. Einsatznummer). */
   label?: string
-  /** Hebt den aktuell ausgewählten Marker gegenüber den übrigen hervor. */
   selected?: boolean
-  /** Optionaler Klick-Handler, z. B. um die zugehörige Einsatzkarte zu öffnen. */
   onClick?: () => void
 }
 
 export interface MapLine {
   points: readonly [number, number][]
   popup?: string
-  /** CSS-Farbe der Linie, z. B. für den Status einer Baustelle. Default: Blau wie die Standard-Marker. */
   color?: string
-  /** Gestrichelt statt durchgezogen darstellen, z. B. für noch unbestätigte Meldungen. */
   dashed?: boolean
 }
 
@@ -62,35 +98,42 @@ export default function LeafletMap({
   focus,
   onMapClick,
   fitLines = true,
+  incidentKey = null,
 }: {
   markers: readonly MapMarker[]
   lines?: readonly MapLine[]
   circles?: readonly MapCircle[]
   height?: number
   zoom?: number
-  /** Zentriert die Karte bewusst auf einen ausgewählten Punkt, statt alle Ebenen einzupassen. */
   focus?: { lat: number; lng: number; zoom?: number } | null
-  /** Wird bei jedem Klick auf die Karte mit den geklickten Koordinaten aufgerufen - z. B. zum Einzeichnen eines Streckenabschnitts. */
   onMapClick?: (lat: number, lng: number) => void
-  /** Ob Linien (z. B. Baustellen) den automatischen Kartenausschnitt mitbestimmen. Default true (z. B. beim Einzeichnen einer Baustelle gewünscht) - false, wenn Linien nur Hintergrundinfo sind und die Ansicht nicht verschieben sollen (z. B. "Aktive Einsätze"-Karte). */
   fitLines?: boolean
+  incidentKey?: string | number | null
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const baseLayerRef = useRef<L.Layer | null>(null)
   const onMapClickRef = useRef(onMapClick)
+  const [basemap, setBasemap] = useState<MapBasemap>('karte')
   useEffect(() => { onMapClickRef.current = onMapClick })
+  useEffect(() => { setBasemap('karte') }, [incidentKey])
 
   useEffect(() => {
     if (!containerRef.current) return
     const map = L.map(containerRef.current, { attributionControl: true })
     mapRef.current = map
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-    }).addTo(map)
     map.on('click', (event: L.LeafletMouseEvent) => onMapClickRef.current?.(event.latlng.lat, event.latlng.lng))
-    return () => { map.remove(); mapRef.current = null }
+    return () => { map.remove(); mapRef.current = null; baseLayerRef.current = null }
   }, [])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const next = createBasemapLayer(basemap)
+    next.addTo(map)
+    if (baseLayerRef.current) map.removeLayer(baseLayerRef.current)
+    baseLayerRef.current = next
+  }, [basemap])
 
   useEffect(() => {
     const map = mapRef.current
@@ -130,9 +173,6 @@ export default function LeafletMap({
       const placed = L.marker([marker.lat, marker.lng], { icon, zIndexOffset: marker.selected ? 1000 : 0 }).addTo(layerGroup)
       if (marker.onClick) placed.on('click', marker.onClick)
       if (marker.popup) {
-        // bindPopup rendert einen String als HTML - Ortsangaben/Sachverhalte
-        // sind Freitext von Nutzern, deshalb hier als reiner Text statt als
-        // Markup übergeben (verhindert Skript-Injektion über Marker-Popups).
         const popupEl = document.createElement('div')
         popupEl.textContent = marker.popup
         placed.bindPopup(popupEl)
@@ -186,10 +226,21 @@ export default function LeafletMap({
     return () => { layerGroup.remove() }
   }, [markers, lines, circles, zoom, focus, fitLines])
 
-  // isolate: Leaflets interne Ebenen (Zoom-Controls, Marker, Popups) haben
-  // von Haus aus hohe z-index-Werte (bis 1000). Ohne eigenen Stacking-
-  // Context "durchdringen" sie Overlays mit niedrigerem z-index, z. B. das
-  // Meldungs-Modal - eine Hintergrundkarte konnte so über dem Modal
-  // erscheinen. isolate kapselt die Karte in ihrem eigenen Kontext.
-  return <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200 isolate" />
+  return (
+    <div className="relative isolate">
+      <div className="absolute top-2 right-2 z-[500] flex flex-wrap justify-end gap-1 rounded-lg bg-white/95 p-1 shadow border border-gray-200">
+        {MAP_BASEMAPS.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => setBasemap(item.id)}
+            className={`px-2 py-1 text-xs font-medium rounded-md ${basemap === item.id ? 'bg-blue-800 text-white' : 'text-gray-700 hover:bg-gray-100'}`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
+    </div>
+  )
 }
