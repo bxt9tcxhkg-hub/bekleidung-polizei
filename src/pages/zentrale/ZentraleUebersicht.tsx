@@ -6,10 +6,11 @@ import { personDisplayName } from '../../lib/register'
 import { firstControlDeadline, hasInitialControl, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { supabase } from '../../lib/supabase'
 import { ZUSTAND_LABEL, formatZeitraum, strassenName } from '../../lib/strassenzustand'
-import type { ZentraleEntryCategory } from '../../lib/types'
+import type { IncidentReport, ZentraleEntryCategory } from '../../lib/types'
 import type { ZentraleContext } from './ZentraleShell'
 import { DutyPanel, IncidentCards, SofortWichtig } from './zentraleShared'
 import { FAHNDUNG_ART_LABEL, formatTime } from '../../lib/zentraleShared'
+import EinsatzArbeitModal from './EinsatzArbeitModal'
 
 const CATEGORY_ROUTE: Partial<Record<ZentraleEntryCategory, string>> = { brief: '/rsa-rsb' }
 const INCIDENT_COLORS = ['#2563eb', '#ea580c', '#7c3aed', '#0f766e', '#be185d', '#4d7c0f', '#0891b2', '#92400e']
@@ -19,7 +20,8 @@ export default function ZentraleUebersicht() {
   const navigate = useNavigate()
   const [schutzfaelle, setSchutzfaelle] = useState<Schutzfall[]>([])
   const [schutzError, setSchutzError] = useState(false)
-  const [expandedIncidentId, setExpandedIncidentId] = useState<string | null>(null)
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null)
+  const [workIncident, setWorkIncident] = useState<IncidentReport | null>(null)
   const previousOpenCountRef = useRef(0)
   const [now] = useState(() => new Date().getTime())
   useEffect(() => {
@@ -46,11 +48,15 @@ export default function ZentraleUebersicht() {
     color: INCIDENT_COLORS[index % INCIDENT_COLORS.length],
     label: String(index + 1),
   }])), [ctx.openIncidents])
+  function openWork(item: IncidentReport) {
+    setSelectedIncidentId(item.id)
+    setWorkIncident(item)
+  }
   const incidentMarkers = useMemo(() => ctx.openIncidents
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => {
       const visual = incidentVisuals[item.id]
-      const selected = expandedIncidentId === item.id
+      const selected = selectedIncidentId === item.id
       return {
         lat: item.location_lat as number,
         lng: item.location_lng as number,
@@ -58,17 +64,17 @@ export default function ZentraleUebersicht() {
         label: visual.label,
         selected,
         popup: selected ? `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 80)}` : undefined,
-        onClick: () => setExpandedIncidentId(item.id),
+        onClick: () => openWork(item),
       }
-    }), [ctx.openIncidents, expandedIncidentId, incidentVisuals])
+    }), [ctx.openIncidents, selectedIncidentId, incidentVisuals])
   const focusedIncident = useMemo(() => ctx.openIncidents.find(item =>
-    item.id === expandedIncidentId && item.location_lat !== null && item.location_lng !== null
-  ) ?? null, [ctx.openIncidents, expandedIncidentId])
+    item.id === selectedIncidentId && item.location_lat !== null && item.location_lng !== null
+  ) ?? null, [ctx.openIncidents, selectedIncidentId])
 
   useEffect(() => {
     const previousCount = previousOpenCountRef.current
     previousOpenCountRef.current = ctx.openIncidents.length
-    setExpandedIncidentId(current => {
+    setSelectedIncidentId(current => {
       if (ctx.openIncidents.length === 1) return ctx.openIncidents[0].id
       if (ctx.openIncidents.length > 1 && previousCount <= 1) return null
       if (current && listIncidents.some(item => item.id === current)) return current
@@ -95,10 +101,7 @@ export default function ZentraleUebersicht() {
       <section className="flex flex-col min-h-0">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-xs text-gray-500">{ctx.openIncidents.length} offen · {ctx.visibleIncidents.filter(item => item.status === 'erledigt').length} abgeschlossen</p></div>
-          <div className="flex items-center gap-3">
-            {ctx.openIncidents.length > 1 && expandedIncidentId ? <button type="button" onClick={() => setExpandedIncidentId(null)} className="text-xs font-semibold text-gray-600">Alle zuklappen</button> : null}
-            {ctx.canOperateZentrale ? <button type="button" onClick={ctx.openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}
-          </div>
+          {ctx.canOperateZentrale ? <button type="button" onClick={ctx.openIncident} className="text-sm font-semibold text-blue-700">Meldung erfassen</button> : null}
         </div>
         <div className="overflow-y-auto pr-1" style={{ maxHeight: 560 }}>
           <IncidentCards
@@ -110,10 +113,9 @@ export default function ZentraleUebersicht() {
             openLageForIncident={ctx.openLageForIncident}
             completeIncident={ctx.completeIncident}
             deleteIncident={ctx.deleteIncident}
-            accordion
-            expandedIncidentId={expandedIncidentId}
-            onToggleIncident={item => setExpandedIncidentId(current => current === item.id ? null : item.id)}
             visualByIncidentId={incidentVisuals}
+            selectedIncidentId={selectedIncidentId}
+            onOpenIncident={openWork}
           />
         </div>
       </section>
@@ -127,7 +129,7 @@ export default function ZentraleUebersicht() {
           focus={focusedIncident ? { lat: focusedIncident.location_lat as number, lng: focusedIncident.location_lng as number, zoom: 16 } : null}
           fitLines={false}
         />
-        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert · relevante Zusatzebenen eingeblendet.' : 'Nur offene Einsatzorte auf der Karte.'}</p>
+        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert.' : 'Nur offene Einsatzorte auf der Karte. Klick auf Pin oder Karte öffnet das Arbeitsfenster.'}</p>
       </section>
     </div>
     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
@@ -136,5 +138,13 @@ export default function ZentraleUebersicht() {
       {ctx.uebergabeIncidents.length === 0 ? <p className="text-sm text-amber-700 mt-3">Keine offenen Einsätze zu übergeben.</p> : <ul className="mt-3 space-y-1.5 text-sm text-amber-900">{ctx.uebergabeIncidents.map(item => <li key={item.id}>• {formatTime(item.reported_at)} – {item.location || item.summary.slice(0, 60)}</li>)}</ul>}
     </section>
     <DutyPanel assignments={ctx.shiftAssignments} functions={ctx.dutyFunctions} dutyShift={ctx.dutyShift} setDutyShift={ctx.setDutyShift} />
+    {workIncident ? <EinsatzArbeitModal
+      item={workIncident}
+      baustellen={ctx.baustellen}
+      canOperateZentrale={ctx.canOperateZentrale}
+      close={() => setWorkIncident(null)}
+      openEditIncident={ctx.openEditIncident}
+      completeIncident={ctx.completeIncident}
+    /> : null}
   </div>
 }
