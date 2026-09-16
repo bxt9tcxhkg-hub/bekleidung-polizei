@@ -1,14 +1,35 @@
-import { useOutletContext } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useOutletContext, useSearchParams } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
+import type { IncidentReport } from '../../lib/types'
 import type { ZentraleContext } from './ZentraleShell'
-import { IncidentCards } from './zentraleShared'
+import EinsaetzeBoard from './EinsaetzeBoard'
 
-// Kein eigener "Neue Meldung"-Button hier - die Zentrale-Kopfzeile
-// (ZentraleShell.tsx) zeigt ihn bereits auf jeder Seite, ein zweiter,
-// gleich wirkender Button direkt darunter wäre nur eine Dopplung.
 export default function ZentraleEinsaetze() {
   const ctx = useOutletContext<ZentraleContext>()
-  return <section>
-    <div className="mb-3"><h2 className="font-bold text-gray-900">Einsätze</h2><p className="text-sm text-gray-500">Kurze interne Koordination, keine Aktenbearbeitung.</p></div>
-    <IncidentCards visibleIncidents={ctx.visibleIncidents} lageByIncidentId={ctx.lageByIncidentId} baustellen={ctx.baustellen} canOperateZentrale={ctx.canOperateZentrale} openEditIncident={ctx.openEditIncident} openLageForIncident={ctx.openLageForIncident} completeIncident={ctx.completeIncident} deleteIncident={ctx.deleteIncident} />
-  </section>
+  const [params] = useSearchParams()
+  const abgeschlossen = params.get('liste') === 'abgeschlossen'
+  const [done, setDone] = useState<IncidentReport[]>([])
+
+  useEffect(() => {
+    if (!abgeschlossen) return
+    void supabase.from('incident_reports').select('*').eq('status', 'erledigt').order('reported_at', { ascending: false }).limit(200).then(result => {
+      setDone((result.data ?? []) as IncidentReport[])
+    })
+  }, [abgeschlossen, ctx.visibleIncidents])
+
+  const openItems = useMemo(
+    () => ctx.visibleIncidents.filter(item => item.status !== 'erledigt'),
+    [ctx.visibleIncidents],
+  )
+
+  return <EinsaetzeBoard
+    title={abgeschlossen ? 'Abgeschlossene Einsätze' : 'Einsätze'}
+    items={abgeschlossen ? done : openItems}
+    canOperate={ctx.canOperateZentrale}
+    onEdit={ctx.openEditIncident}
+    onComplete={ctx.completeIncident}
+    onDelete={ctx.deleteIncident}
+    showComplete={!abgeschlossen}
+  />
 }
