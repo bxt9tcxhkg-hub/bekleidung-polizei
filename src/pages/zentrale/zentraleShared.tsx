@@ -1,4 +1,3 @@
-export { DutyPanel } from './DutyPanel'
 export { SofortWichtig } from './SofortWichtig'
 export { IncidentCards } from './IncidentCards'
 export { IncidentModal } from './IncidentModal'

@@ -6,7 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
-import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyShift, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
@@ -46,11 +46,6 @@ export interface ZentraleContext {
   baustellen: ZentraleBaustelle[]
   baustellenLines: { points: readonly [number, number][]; popup?: string; color?: string; dashed?: boolean }[]
   sperrenLines: { points: readonly [number, number][]; popup?: string; color?: string; dashed?: boolean }[]
-  assignments: DutyAssignment[]
-  dutyFunctions: DutyFunctionConfig[]
-  shiftAssignments: DutyAssignment[]
-  dutyShift: DutyShift
-  setDutyShift: (value: DutyShift) => void
   criticalEntries: ZentraleEntry[]
   criticalAvBv: ZentraleAvBv[]
   criticalFahndungen: ZentraleFahndung[]
@@ -79,7 +74,6 @@ export default function ZentraleShell() {
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
-  const [dutyFunctions, setDutyFunctions] = useState<DutyFunctionConfig[]>([])
   const [incidents, setIncidents] = useState<IncidentReport[]>([])
   const [openIncidentsAllDays, setOpenIncidentsAllDays] = useState<IncidentReport[]>([])
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
@@ -120,10 +114,9 @@ export default function ZentraleShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [entryResult, dutyResult, functionResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult, strassenzustandResult] = await Promise.all([
+    const [entryResult, dutyResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult, strassenzustandResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
-      supabase.from('duty_functions').select('*').eq('active', true).order('sort_order').order('label'),
       supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       supabase.from('incident_reports').select('*').eq('status', 'offen').order('reported_at', { ascending: true }),
       supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false }),
@@ -136,7 +129,6 @@ export default function ZentraleShell() {
     else setError('')
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
     setAssignments((dutyResult.data ?? []) as unknown as DutyAssignment[])
-    setDutyFunctions((functionResult.data ?? []) as DutyFunctionConfig[])
     setIncidents((incidentResult.data ?? []) as IncidentReport[])
     setOpenIncidentsAllDays((openIncidentResult.data ?? []) as IncidentReport[])
     setPersonNotes(personResult.error ? [] : (personResult.data ?? []) as unknown as OperationalPersonNote[])
@@ -430,7 +422,6 @@ export default function ZentraleShell() {
   const ctx: ZentraleContext = {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
     visibleIncidents, openIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines, sperrenLines,
-    assignments, dutyFunctions, shiftAssignments, dutyShift, setDutyShift,
     criticalEntries, criticalAvBv, criticalFahndungen, criticalStrassensperren, criticalSourcesError,
     openIncident, openEditIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,
     openNewBaustelle, openEditBaustelle, confirmBaustelle, closeBaustelle, deleteBaustelle,
