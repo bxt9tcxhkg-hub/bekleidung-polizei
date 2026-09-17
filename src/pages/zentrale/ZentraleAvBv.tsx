@@ -10,6 +10,9 @@ import { findSimilarObjects, objectLabel, personDisplayName, useObjects, usePers
 import { defaultBvAvEnd, firstControlDeadline, hasInitialControl, localDateTimeInput, MASSNAHME_LABEL, SCHUTZ_SELECT, type EvRechtsgrundlage, type Schutzfall, type SchutzfallStatus, type Schutzmassnahme } from '../../lib/schutzmassnahmen'
 import { supabase } from '../../lib/supabase'
 import { Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
+import { loadActivePersonNotesByPerson } from '../../lib/personenhinweise'
+import type { OperationalPersonNote } from '../../lib/types'
+import { PersonHinweisAnzeige } from './PersonHinweisAnzeige'
 
 type AreaForm = { key: string; objectId: string; label: string; lat: number | null; lng: number | null; radius: number; confirmed: boolean }
 type FormState = {
@@ -53,6 +56,11 @@ export default function ZentraleAvBvPage() {
   const [form, setForm] = useState<FormState>(emptyForm)
   const [areas, setAreas] = useState<AreaForm[]>([newArea()])
   const [locatingKey, setLocatingKey] = useState<string | null>(null)
+  const [personHinweise, setPersonHinweise] = useState<Map<string, OperationalPersonNote[]>>(new Map())
+  async function loadHinweiseFor(ids: string[]) {
+    const found = await loadActivePersonNotesByPerson(ids)
+    setPersonHinweise(current => new Map([...current, ...found]))
+  }
   const [now] = useState(() => new Date().getTime())
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -92,6 +100,7 @@ export default function ZentraleAvBvPage() {
     const lat = Number(searchParams.get('lat'))
     const lng = Number(searchParams.get('lng'))
     setSearchParams({}, { replace: true })
+    void loadHinweiseFor([gefaehrderId, ...geschuetzteIds].filter((id): id is string => Boolean(id)))
     void (async () => {
       setEditing(null)
       setForm({ ...emptyForm(), gefaehrderId: gefaehrderId ?? '', geschuetzteIds })
@@ -128,6 +137,7 @@ export default function ZentraleAvBvPage() {
   function openNew() { setEditing(null); setForm(emptyForm()); setAreas([newArea()]); setShowForm(true); setError('') }
   function openEdit(item: Schutzfall) {
     setEditing(item)
+    void loadHinweiseFor([item.gefaehrder_id, ...(item.geschuetzte ?? []).map(row => row.person_id)])
     setForm({
       massnahme: item.massnahme, rechtsgrundlage: item.ev_rechtsgrundlage ?? '382b', gefaehrderId: item.gefaehrder_id,
       geschuetzteIds: (item.geschuetzte ?? []).map(row => row.person_id), pad: item.pad_aktenzahl,
@@ -211,8 +221,11 @@ export default function ZentraleAvBvPage() {
     {showForm ? <Modal title={editing ? 'Schutzmaßnahme bearbeiten' : 'Schutzmaßnahme anlegen'} close={() => setShowForm(false)}>
       <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => chooseMeasure('bv_av')} className={`rounded-xl border p-3 text-left text-sm ${form.massnahme === 'bv_av' ? 'border-red-500 bg-red-50 text-red-900' : 'border-gray-200'}`}><strong>BV/AV</strong><br /><span className="text-xs">kombiniertes polizeiliches Verbot</span></button><button type="button" onClick={() => chooseMeasure('ev')} className={`rounded-xl border p-3 text-left text-sm ${form.massnahme === 'ev' ? 'border-purple-500 bg-purple-50 text-purple-900' : 'border-gray-200'}`}><strong>EV</strong><br /><span className="text-xs">gerichtliche einstweilige Verfügung</span></button></div>
       {form.massnahme === 'ev' ? <label className="block text-xs font-medium text-gray-600">Rechtsgrundlage *<select className={inputClass} value={form.rechtsgrundlage} onChange={event => setForm(current => ({ ...current, rechtsgrundlage: event.target.value as EvRechtsgrundlage }))}><option value="382b">§ 382b EO – Wohnung</option><option value="382c">§ 382c EO – allgemeiner Schutz</option><option value="kombiniert">§§ 382b und 382c EO</option></select></label> : <div className="rounded-xl bg-blue-50 p-3 text-xs text-blue-900"><strong>Automatisch:</strong> Ende nach 14 Tagen und 100-m-Schutzbereich um die Wohnung. Die personenbezogene 100-m-Annäherung wird nicht als feste Kreiszone dargestellt.</div>}
-      <PersonPicker persons={persons} value={form.gefaehrderId || null} onChange={id => setForm(current => ({ ...current, gefaehrderId: id ?? '' }))} createdBy={profile?.id ?? null} onCreated={person => setPersons(current => [...current.filter(row => row.id !== person.id), person].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} label="Gefährder" required />
-      <fieldset><legend className="text-xs font-medium text-gray-600">Geschützte Person(en) *</legend><div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-300 p-2 space-y-1">{persons.filter(person => person.id !== form.gefaehrderId).map(person => <label key={person.id} className="flex items-center gap-2 rounded p-1.5 text-sm hover:bg-gray-50"><input type="checkbox" checked={form.geschuetzteIds.includes(person.id)} onChange={event => setForm(current => ({ ...current, geschuetzteIds: event.target.checked ? [...current.geschuetzteIds, person.id] : current.geschuetzteIds.filter(id => id !== person.id) }))} />{personDisplayName(person)}</label>)}</div><div className="mt-2"><PersonPicker persons={persons.filter(person => person.id !== form.gefaehrderId && !form.geschuetzteIds.includes(person.id))} value={null} onChange={id => { if (id) setForm(current => ({ ...current, geschuetzteIds: current.geschuetzteIds.includes(id) ? current.geschuetzteIds : [...current.geschuetzteIds, id] })) }} createdBy={profile?.id ?? null} onCreated={person => setPersons(current => [...current.filter(row => row.id !== person.id), person].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} label="Weitere geschützte Person hinzufügen" /></div></fieldset>
+      <PersonPicker persons={persons} value={form.gefaehrderId || null} onChange={id => { setForm(current => ({ ...current, gefaehrderId: id ?? '' })); if (id) void loadHinweiseFor([id]) }} createdBy={profile?.id ?? null} onCreated={person => setPersons(current => [...current.filter(row => row.id !== person.id), person].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} label="Gefährder" required />
+      {form.gefaehrderId ? <PersonHinweisAnzeige personId={form.gefaehrderId} personName={personDisplayName(persons.find(p => p.id === form.gefaehrderId))} notes={personHinweise.get(form.gefaehrderId) ?? []} createdBy={profile?.id ?? null} canOperate={canOperate} onChanged={() => void loadHinweiseFor([form.gefaehrderId])} /> : null}
+      <fieldset><legend className="text-xs font-medium text-gray-600">Geschützte Person(en) *</legend><div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-gray-300 p-2 space-y-1">{persons.filter(person => person.id !== form.gefaehrderId).map(person => <label key={person.id} className="flex items-center gap-2 rounded p-1.5 text-sm hover:bg-gray-50"><input type="checkbox" checked={form.geschuetzteIds.includes(person.id)} onChange={event => { setForm(current => ({ ...current, geschuetzteIds: event.target.checked ? [...current.geschuetzteIds, person.id] : current.geschuetzteIds.filter(id => id !== person.id) })); if (event.target.checked) void loadHinweiseFor([person.id]) }} />{personDisplayName(person)}</label>)}</div><div className="mt-2"><PersonPicker persons={persons.filter(person => person.id !== form.gefaehrderId && !form.geschuetzteIds.includes(person.id))} value={null} onChange={id => { if (id) { setForm(current => ({ ...current, geschuetzteIds: current.geschuetzteIds.includes(id) ? current.geschuetzteIds : [...current.geschuetzteIds, id] })); void loadHinweiseFor([id]) } }} createdBy={profile?.id ?? null} onCreated={person => setPersons(current => [...current.filter(row => row.id !== person.id), person].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} label="Weitere geschützte Person hinzufügen" /></div>
+        {form.geschuetzteIds.map(id => { const note = personHinweise.get(id); return note && note.length > 0 ? <PersonHinweisAnzeige key={id} personId={id} personName={personDisplayName(persons.find(p => p.id === id))} notes={note} createdBy={profile?.id ?? null} canOperate={canOperate} onChanged={() => void loadHinweiseFor([id])} /> : null })}
+      </fieldset>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="PAD-Aktenzahl *" value={form.pad} onChange={value => setForm(current => ({ ...current, pad: value }))} /><Field label="Ausstellende Stelle" value={form.stelle} onChange={value => setForm(current => ({ ...current, stelle: value }))} /><Field label="Beginn *" type="datetime-local" value={form.beginn} onChange={value => setForm(current => ({ ...current, beginn: value, ende: current.massnahme === 'bv_av' ? defaultBvAvEnd(value) : current.ende }))} /><Field label="Ende *" type="datetime-local" value={form.ende} onChange={value => setForm(current => ({ ...current, ende: value }))} /></div>
       <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900">{form.massnahme === 'bv_av' ? 'Wohnungs-Schutzbereich' : 'Gerichtliche Schutzbereiche'}</h3>{form.massnahme === 'ev' ? <button type="button" onClick={() => setAreas(current => [...current, newArea()])} className="text-sm font-semibold text-blue-700"><Plus className="mr-1 inline h-4 w-4" />Weiterer Ort</button> : null}</div>{areas.map((area, index) => <div key={area.key} className="rounded-xl border border-gray-200 p-3 space-y-3">
         <div className="flex items-center justify-between"><span className="text-xs font-bold text-gray-500">Schutzbereich {index + 1}</span>{form.massnahme === 'ev' && areas.length > 1 ? <button type="button" onClick={() => setAreas(current => current.filter(row => row.key !== area.key))} aria-label="Schutzbereich entfernen"><X className="h-4 w-4 text-gray-500" /></button> : null}</div>

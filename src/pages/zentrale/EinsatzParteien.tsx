@@ -4,8 +4,10 @@ import { Link } from 'react-router-dom'
 import { PersonNameAutocomplete } from '../../components/RegisterPickers'
 import { inputClass } from '../../components/ZentraleEntryEditor'
 import { addEinsatzPartei, EINSATZ_PARTEI_ROLLEN, EINSATZ_PARTEI_ROLLE_LABEL, loadEinsatzParteien, MAIL_KIND_LABEL, openMailDeliveriesByPerson, removeEinsatzPartei, updateEinsatzParteiRolle } from '../../lib/einsatzParteien'
+import { loadActivePersonNotesByPerson } from '../../lib/personenhinweise'
 import { personDisplayName } from '../../lib/register'
-import type { EinsatzPartei, EinsatzParteiRolle, MailDelivery, OperationalPerson } from '../../lib/types'
+import type { EinsatzPartei, EinsatzParteiRolle, MailDelivery, OperationalPerson, OperationalPersonNote } from '../../lib/types'
+import { PersonHinweisAnzeige } from './PersonHinweisAnzeige'
 
 /** Baut die AV/BV-Vormerkungs-URL aus allen aktuell im Einsatz markierten Gefährder-/Geschützten-Kandidaten in einem Zug, inkl. Einsatzort als Schutzbereichs-Vorschlag. */
 function schutzfallUrl(gefaehrderId: string | null, geschuetzteIds: Set<string>, incidentLocation: { location: string | null; lat: number | null; lng: number | null }) {
@@ -34,6 +36,7 @@ export default function EinsatzParteien({ incidentId, incidentLocation, persons,
 }) {
   const [parteien, setParteien] = useState<EinsatzPartei[]>([])
   const [hints, setHints] = useState<Map<string, Pick<MailDelivery, 'id' | 'kind' | 'status'>[]>>(new Map())
+  const [hinweise, setHinweise] = useState<Map<string, OperationalPersonNote[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [personId, setPersonId] = useState<string | null>(null)
@@ -51,7 +54,10 @@ export default function EinsatzParteien({ incidentId, incidentLocation, persons,
     try {
       const rows = await loadEinsatzParteien(incidentId)
       setParteien(rows)
-      setHints(await openMailDeliveriesByPerson(rows.map(row => row.person_id)))
+      const personIds = rows.map(row => row.person_id)
+      const [mailHints, personHinweise] = await Promise.all([openMailDeliveriesByPerson(personIds), loadActivePersonNotesByPerson(personIds)])
+      setHints(mailHints)
+      setHinweise(personHinweise)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Die Parteien konnten nicht geladen werden.')
@@ -64,8 +70,9 @@ export default function EinsatzParteien({ incidentId, incidentLocation, persons,
   async function onPersonSelected(id: string | null) {
     setPersonId(id)
     if (!id) return
-    const found = await openMailDeliveriesByPerson([id])
+    const [found, foundHinweise] = await Promise.all([openMailDeliveriesByPerson([id]), loadActivePersonNotesByPerson([id])])
     setHints(current => new Map([...current, ...found]))
+    setHinweise(current => new Map([...current, ...foundHinweise]))
   }
 
   async function add() {
@@ -114,6 +121,7 @@ export default function EinsatzParteien({ incidentId, incidentLocation, persons,
           </select> : <span className="text-xs font-semibold text-gray-600">{EINSATZ_PARTEI_ROLLE_LABEL[item.rolle]}</span>}
           {item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}
           <HinweisOffeneMeldung items={hints.get(item.person_id) ?? []} />
+          <PersonHinweisAnzeige personId={item.person_id} personName={personDisplayName(item.person)} notes={hinweise.get(item.person_id) ?? []} createdBy={createdBy} canOperate={canOperate} onChanged={() => void load()} />
           {canOperate ? <div className="flex flex-wrap gap-2 mt-2">
             <button type="button" onClick={() => toggleGefaehrder(item.person_id)} className={`text-xs font-medium border px-2 py-1 rounded-md ${schutzfallGefaehrder === item.person_id ? 'text-white bg-red-700 border-red-700' : 'text-red-700 border-red-200 bg-red-50'}`}>{schutzfallGefaehrder === item.person_id ? '✓ ' : ''}Für AV/BV: Gefährder</button>
             <button type="button" onClick={() => toggleGeschuetzt(item.person_id)} className={`text-xs font-medium border px-2 py-1 rounded-md ${schutzfallGeschuetzte.has(item.person_id) ? 'text-white bg-purple-700 border-purple-700' : 'text-purple-700 border-purple-200 bg-purple-50'}`}>{schutzfallGeschuetzte.has(item.person_id) ? '✓ ' : ''}Für AV/BV: Geschützte Person</button>
@@ -131,6 +139,7 @@ export default function EinsatzParteien({ incidentId, incidentLocation, persons,
       <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Partei erfassen</p>
       <PersonNameAutocomplete label="Person" persons={persons} value={personId} onChange={id => void onPersonSelected(id)} createdBy={createdBy} onCreated={person => { onPersonCreated(person); void onPersonSelected(person.id) }} />
       {personId ? <HinweisOffeneMeldung items={hints.get(personId) ?? []} /> : null}
+      {personId ? <PersonHinweisAnzeige personId={personId} personName={personDisplayName(persons.find(p => p.id === personId))} notes={hinweise.get(personId) ?? []} createdBy={createdBy} canOperate={canOperate} onChanged={() => void onPersonSelected(personId)} /> : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <label className="block text-xs font-medium text-gray-600">Rolle<select className={inputClass} value={rolle} onChange={event => setRolle(event.target.value as EinsatzParteiRolle)}>
           {EINSATZ_PARTEI_ROLLEN.map(key => <option key={key} value={key}>{EINSATZ_PARTEI_ROLLE_LABEL[key]}</option>)}
