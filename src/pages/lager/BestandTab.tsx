@@ -1,4 +1,4 @@
-import { Check, Trash2, Warehouse, X } from 'lucide-react'
+import { Check, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { groupSizes, sizeLabel } from '../../lib/sizes'
 import type { LagerController } from './useLager'
 
@@ -16,6 +16,7 @@ export function BestandTab({ lager }: { lager: LagerController }) {
     invTotalPages, invPage, setInvPage,
     invEntries, pageSize,
     setConfirmDelete,
+    invSearch, setInvSearch,
   } = lager
 
   return (
@@ -75,11 +76,28 @@ export function BestandTab({ lager }: { lager: LagerController }) {
     )}
 
     {/* Lagerbestand */}
+    {Object.keys(invByProduct).length > 0 ? (
+      <div className="relative">
+        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <input
+          type="text"
+          value={invSearch}
+          onChange={e => setInvSearch(e.target.value)}
+          placeholder="Artikel, Artikelnummer oder Größe suchen…"
+          className="w-full sm:max-w-sm pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+    ) : null}
     {Object.keys(invByProduct).length === 0 ? (
       <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
         <Warehouse className="w-12 h-12 mb-3 text-gray-300" />
         <p className="font-semibold text-gray-500">Kein Bestand erfasst</p>
         <p className="text-sm text-gray-400 mt-1">Klicke „Bestand erfassen" um Artikel einzubuchen</p>
+      </div>
+    ) : invEntries.length === 0 ? (
+      <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center py-16 text-center">
+        <Search className="w-12 h-12 mb-3 text-gray-300" />
+        <p className="font-semibold text-gray-500">Keine Treffer für „{invSearch}"</p>
       </div>
     ) : (
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">

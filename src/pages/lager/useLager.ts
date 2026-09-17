@@ -31,6 +31,7 @@ export function useLager() {
   const [error, setError] = useState('')
   const [invPage, setInvPage] = useState(0)
   const [ordersPage, setOrdersPage] = useState(0)
+  const [invSearch, setInvSearch] = useState('')
 
   // Bestand edit
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -81,6 +82,9 @@ export function useLager() {
   useEffect(() => {
     setInvPage(p => Math.min(p, Math.max(0, Math.ceil(inventory.length / PAGE_SIZE) - 1)))
   }, [inventory.length])
+  // Bei neuer Suche wieder auf Seite 1, sonst könnte man auf einer Seite
+  // landen, die es in den gefilterten Treffern gar nicht mehr gibt.
+  useEffect(() => { setInvPage(0) }, [invSearch])
   useEffect(() => {
     setOrdersPage(p => Math.min(p, Math.max(0, Math.ceil(stockOrders.length / PAGE_SIZE) - 1)))
   }, [stockOrders.length])
@@ -319,10 +323,18 @@ export function useLager() {
   }
 
   // Pagination slices (Größen innerhalb eines Artikels sortiert)
-  const invEntries = Object.entries(invByProduct).flatMap(([, entries]) => {
+  const invEntriesAll = Object.entries(invByProduct).flatMap(([, entries]) => {
     const order = sortedSizes(entries.map(e => e.size))
     return [...entries].sort((a, b) => order.indexOf(a.size) - order.indexOf(b.size))
   })
+  const invSearchQuery = invSearch.trim().toLowerCase()
+  const invEntries = invSearchQuery
+    ? invEntriesAll.filter(entry =>
+        (entry.products?.name ?? '').toLowerCase().includes(invSearchQuery)
+        || (entry.products?.article_number ?? '').toLowerCase().includes(invSearchQuery)
+        || entry.size.toLowerCase().includes(invSearchQuery),
+      )
+    : invEntriesAll
   const invTotalPages = Math.ceil(invEntries.length / PAGE_SIZE)
   const pagedInvEntries = invEntries.slice(invPage * PAGE_SIZE, (invPage + 1) * PAGE_SIZE)
 
@@ -335,7 +347,7 @@ export function useLager() {
 
   return {
     tab, setTab, products, loading, error, setError,
-    invPage, setInvPage, ordersPage, setOrdersPage,
+    invPage, setInvPage, ordersPage, setOrdersPage, invSearch, setInvSearch,
     editingId, setEditingId, editQty, setEditQty, addForm, setAddForm,
     editingMinId, setEditingMinId, editMinVal, setEditMinVal, savingMin,
     addSearch, setAddSearch, addDropdown, setAddDropdown, saving,

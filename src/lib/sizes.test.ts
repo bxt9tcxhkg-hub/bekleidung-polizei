@@ -37,6 +37,16 @@ describe('groupSizes', () => {
     expect(groups[1].sizes).toEqual(['44N', '46N'])
   })
 
+  it('gruppiert Längen-Format (34/1, 34/2) in Länge 1/Länge 2', () => {
+    const sizes = ['34/1', '34/2', '36/1', '36/2', '38/1', '38/2']
+    const groups = groupSizes(sizes)!
+    expect(groups.map(g => g.label)).toEqual(['Länge 1', 'Länge 2'])
+    expect(groups[0].sizes).toEqual(['34/1', '36/1', '38/1'])
+    expect(groups[1].sizes).toEqual(['34/2', '36/2', '38/2'])
+    expect(sizeLabel('34/1', true)).toBe('34')
+    expect(sizeLabel('34/2', true)).toBe('34')
+  })
+
   it('liefert null für einfache numerische Größen', () => {
     expect(groupSizes(['36', '37', '38'])).toBeNull()
   })
