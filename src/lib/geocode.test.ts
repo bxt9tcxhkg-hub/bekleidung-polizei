@@ -11,26 +11,49 @@ describe('suggestStreets', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('grenzt die Suche strukturiert auf Dornbirn ein und dedupliziert nach Straßenname', async () => {
+  it('sucht zuerst strukturiert über VOGIS (Gemeinde Dornbirn) und dedupliziert nach Straße+Hausnummer', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => [
-        { lat: '47.41', lon: '9.75', address: { road: 'Eisengasse' } },
-        { lat: '47.42', lon: '9.76', address: { road: 'Eisengasse' } },
-        { lat: '47.43', lon: '9.77', address: { road: 'Eisenbahnstraße' } },
-        { lat: '47.44', lon: '9.78', address: {} },
-      ],
+      json: async () => ({
+        features: [
+          { properties: { strasse: 'Eisengasse', hausnr: '1' }, geometry: { coordinates: [9.75, 47.41] } },
+          { properties: { strasse: 'Eisengasse', hausnr: '1' }, geometry: { coordinates: [9.75, 47.41] } },
+          { properties: { strasse: 'Eisenbahnstraße', hausnr: '2' }, geometry: { coordinates: [9.77, 47.43] } },
+        ],
+      }),
     })
     vi.stubGlobal('fetch', fetchMock)
     const result = await suggestStreets('Eisen')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
     const requestedUrl = String(fetchMock.mock.calls[0][0])
-    expect(requestedUrl).toContain('street=Eisen')
-    expect(requestedUrl).toContain('city=Dornbirn')
-    expect(requestedUrl).toContain('country=Austria')
+    expect(requestedUrl).toContain('vogis.cnv.at')
+    expect(requestedUrl).toContain('CQL_FILTER')
+    expect(requestedUrl).toContain('Dornbirn')
     expect(result).toEqual([
-      { street: 'Eisengasse', lat: 47.41, lng: 9.75 },
-      { street: 'Eisenbahnstraße', lat: 47.43, lng: 9.77 },
+      { street: 'Eisengasse', houseNumber: '1', label: 'Eisengasse 1', lat: 47.41, lng: 9.75 },
+      { street: 'Eisenbahnstraße', houseNumber: '2', label: 'Eisenbahnstraße 2', lat: 47.43, lng: 9.77 },
     ])
+  })
+
+  it('fällt auf Nominatim zurück, wenn VOGIS keine Treffer liefert', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ features: [] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { lat: '47.41', lon: '9.75', address: { road: 'Eisengasse' } },
+          { lat: '47.42', lon: '9.76', address: { road: 'Eisengasse' } },
+          { lat: '47.44', lon: '9.78', address: {} },
+        ],
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await suggestStreets('Eisen')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const nominatimUrl = String(fetchMock.mock.calls[1][0])
+    expect(nominatimUrl).toContain('street=Eisen')
+    expect(nominatimUrl).toContain('city=Dornbirn')
+    expect(nominatimUrl).toContain('country=Austria')
+    expect(result).toEqual([{ street: 'Eisengasse', lat: 47.41, lng: 9.75 }])
   })
 
   it('gibt leeres Array zurück, wenn nichts gefunden wurde oder die Anfrage fehlschlägt', async () => {

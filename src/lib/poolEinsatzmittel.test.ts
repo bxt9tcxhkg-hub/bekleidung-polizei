@@ -61,7 +61,7 @@ describe('Kategorien und Verwahrungsorte', () => {
   it('ordnet jeder Kategorie nur die festgelegten Felder zu', () => {
     expect([...POOL_EM_FIELDS.langwaffe_stg77]).toEqual(['marke', 'typ', 'waffennummer', 'kaliber'])
     expect([...POOL_EM_FIELDS.magazine]).toEqual(['anzahl'])
-    expect([...POOL_EM_FIELDS.munition]).toEqual(['marke', 'typ', 'art', 'anzahl'])
+    expect([...POOL_EM_FIELDS.munition]).toEqual(['art', 'typ', 'marke', 'anzahl'])
     expect([...POOL_EM_FIELDS.pfefferspray_gross]).toEqual(['marke', 'anzahl', 'ablaufdatum'])
     expect([...POOL_EM_FIELDS.schild]).toEqual(['marke', 'anzahl'])
     expect([...POOL_EM_FIELDS.ballistischer_helm]).toEqual(['ablaufdatum', 'anzahl'])

@@ -83,7 +83,7 @@ function looksLikeName(line: string): boolean {
 }
 
 const DATE = /\b(\d{1,2}\.\d{1,2}\.\d{4})\b/
-const TOP = /\b(?:Top|Wohnung|Whg)\.?\s*([A-Z0-9\/\-]+)/i
+const TOP = /\b(?:Top|Wohnung|Whg)\.?\s*([A-Z0-9/-]+)/i
 
 export function personenAusText(text: string): EinsatzPerson[] {
   const lines = text.split(/[\n\r;]+/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)

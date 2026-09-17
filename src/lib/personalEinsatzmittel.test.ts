@@ -54,7 +54,7 @@ describe('Kategorien', () => {
   it('ordnet jeder Kategorie nur die festgelegten Felder zu', () => {
     expect([...PERSONAL_EM_FIELDS.schutzweste]).toEqual(['groesse', 'ablaufdatum', 'schutzfristen'])
     expect([...PERSONAL_EM_FIELDS.glock_17]).toEqual(['marke', 'waffennummer', 'service', 'magazinanzahl'])
-    expect([...PERSONAL_EM_FIELDS.munition]).toEqual(['marke', 'kaliber', 'art', 'patronen'])
+    expect([...PERSONAL_EM_FIELDS.munition]).toEqual(['art', 'marke', 'kaliber', 'patronen'])
     expect([...PERSONAL_EM_FIELDS.pfefferspray]).toEqual(['ablauf_mm_yyyy'])
     expect([...PERSONAL_EM_FIELDS.schlagstock]).toEqual(['marke'])
     expect([...PERSONAL_EM_FIELDS.handfesseln]).toEqual([])

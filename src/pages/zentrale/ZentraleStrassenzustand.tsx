@@ -90,6 +90,7 @@ export default function ZentraleStrassenzustand() {
   const [showForm, setShowForm] = useState(false)
   const [editingBericht, setEditingBericht] = useState<StrassenzustandBericht | null>(null)
   const [rows, setRows] = useState<RowDraft[]>([emptyRow()])
+  const [anmerkung, setAnmerkung] = useState('')
   useEffect(() => {
     if (searchParams.get('neu') === '1' && canOperate) {
       setEditingBericht(null)
@@ -100,7 +101,6 @@ export default function ZentraleStrassenzustand() {
       setSearchParams({}, { replace: true })
     }
   }, [searchParams, canOperate, setSearchParams])
-  const [anmerkung, setAnmerkung] = useState('')
   const [showStammdaten, setShowStammdaten] = useState<'strassen' | 'auftraggeber' | 'melder' | null>(null)
   const [neuerName, setNeuerName] = useState('')
   const [geometrieStrasse, setGeometrieStrasse] = useState<StrassenzustandStrasse | null>(null)
