@@ -856,6 +856,20 @@ export interface IncidentReport {
   involved_person_ref?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
 }
 
+export type EinsatzParteiRolle = 'beschuldigter' | 'opfer' | 'zeuge' | 'sonstige'
+
+/** Beteiligte Partei eines Einsatzes - getrennt vom Melder, erfasst beim Weiterarbeiten mit dem Einsatz. */
+export interface EinsatzPartei {
+  id: string
+  incident_id: string
+  person_id: string
+  rolle: EinsatzParteiRolle
+  note: string | null
+  created_by: string
+  created_at: string
+  person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+}
+
 /** Zentrales Personen-Register - Verknüpfungspunkt für Personenhinweise, RSa/RSb, AV/BV & EV und Fahndungen. */
 export interface OperationalPerson {
   id: string
@@ -1290,6 +1304,7 @@ type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref'>
+type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
 type OperationalPersonRow = Omit<OperationalPerson, 'home_object'>
 type OperationalObjectRow = Omit<OperationalObject, never>
 type OperationalPhoneNumberRow = Omit<OperationalPhoneNumber, 'person' | 'object'>
@@ -1516,6 +1531,11 @@ export type Database = {
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_caller_person_id_fkey'; columns: ['caller_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_involved_person_id_fkey'; columns: ['involved_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+      ] }
+      einsatz_parteien: { Row: EinsatzParteiRow; Insert: Pick<EinsatzParteiRow, 'incident_id' | 'person_id' | 'rolle' | 'created_by'> & Partial<Omit<EinsatzParteiRow, 'id' | 'created_at' | 'incident_id' | 'person_id' | 'rolle' | 'created_by'>>; Update: Partial<Omit<EinsatzParteiRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'einsatz_parteien_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_parteien_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_parteien_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       operational_persons: { Row: OperationalPersonRow; Insert: Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

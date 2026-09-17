@@ -6,7 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
-import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, DutyShift, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
@@ -67,6 +67,9 @@ export interface ZentraleContext {
   confirmBaustelle: (item: ZentraleBaustelle) => Promise<void>
   closeBaustelle: (item: ZentraleBaustelle) => Promise<void>
   deleteBaustelle: (item: ZentraleBaustelle) => Promise<void>
+  persons: OperationalPerson[]
+  onPersonCreated: (person: OperationalPerson) => void
+  createdBy: string | null
 }
 
 export default function ZentraleShell() {
@@ -431,6 +434,7 @@ export default function ZentraleShell() {
     criticalEntries, criticalAvBv, criticalFahndungen, criticalStrassensperren, criticalSourcesError,
     openIncident, openEditIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,
     openNewBaustelle, openEditBaustelle, confirmBaustelle, closeBaustelle, deleteBaustelle,
+    persons, onPersonCreated: person => setPersons(current => [...current, person]), createdBy: profile?.id ?? null,
   }
 
   return <div>

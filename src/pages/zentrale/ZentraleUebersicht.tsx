@@ -148,6 +148,9 @@ export default function ZentraleUebersicht() {
       close={() => setWorkIncident(null)}
       openEditIncident={ctx.openEditIncident}
       completeIncident={ctx.completeIncident}
+      persons={ctx.persons}
+      onPersonCreated={ctx.onPersonCreated}
+      createdBy={ctx.createdBy}
     /> : null}
   </div>
 }

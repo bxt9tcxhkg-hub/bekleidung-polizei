@@ -4,13 +4,14 @@ import { Modal } from '../../components/ZentraleEntryEditor'
 import { supabase } from '../../lib/supabase'
 import { formatTime } from '../../lib/zentraleShared'
 import { EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, formatStamp, noteWithoutStufe, readKette, readStoredStufe, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
-import type { IncidentReport, ZentraleBaustelle } from '../../lib/types'
+import type { IncidentReport, OperationalPerson, ZentraleBaustelle } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
+import EinsatzParteien from './EinsatzParteien'
 
-type Tab = 'checkliste' | 'dateien'
+type Tab = 'checkliste' | 'parteien' | 'dateien'
 
 export default function EinsatzArbeitModal({
-  item, canOperateZentrale, close, openEditIncident, completeIncident,
+  item, canOperateZentrale, close, openEditIncident, completeIncident, persons, onPersonCreated, createdBy,
 }: {
   item: IncidentReport
   baustellen: ZentraleBaustelle[]
@@ -18,6 +19,9 @@ export default function EinsatzArbeitModal({
   close: () => void
   openEditIncident: (item: IncidentReport) => void
   completeIncident: (item: IncidentReport) => Promise<void>
+  persons: OperationalPerson[]
+  onPersonCreated: (person: OperationalPerson) => void
+  createdBy: string | null
 }) {
   const [tab, setTab] = useState<Tab>('checkliste')
   const [stufe, setStufeState] = useState<Ereignisstufe>(() => readStoredStufe(item.id, item.note))
@@ -56,6 +60,7 @@ export default function EinsatzArbeitModal({
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
     <div className="flex gap-1 border-b border-gray-200">
       <button type="button" className={tabClass('checkliste')} onClick={() => setTab('checkliste')}>Checkliste</button>
+      <button type="button" className={tabClass('parteien')} onClick={() => setTab('parteien')}>Parteien</button>
       <button type="button" className={tabClass('dateien')} onClick={() => setTab('dateien')}>Dateien & Listen</button>
     </div>
     {tab === 'checkliste' ? <div className="space-y-4">
@@ -82,7 +87,7 @@ export default function EinsatzArbeitModal({
         })}</div>
         <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
       </div>}
-    </div> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
+    </div> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
     {canOperateZentrale ? <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
       <button type="button" onClick={() => { close(); openEditIncident(item) }} className="text-sm font-medium border border-gray-300 px-3 py-2 rounded-lg">Meldung ändern</button>
       {item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item).then(close)} className="text-sm font-medium text-green-800 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}
