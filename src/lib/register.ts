@@ -64,6 +64,23 @@ export function personLabel(person: Pick<OperationalPerson, 'vorname' | 'nachnam
  * Abgleich (Tippfehler) - das würde bei Polizeidaten (gleicher Name, andere
  * Person ist normal) zu viele falsche Warnungen erzeugen.
  */
+/**
+ * Mögliche Duplikate vor dem Anlegen eines neuen Objekts, z. B. wenn ein
+ * Einsatzort als Objekt übernommen werden soll: dieselbe Adresse kann schon
+ * über einen Schlüssel oder eine frühere Meldung im Register stehen - und
+ * andersherum soll ein aus einem Einsatzort erzeugtes Objekt später bei
+ * einer Schlüsselanlage wiedergefunden werden, statt doppelt zu entstehen.
+ */
+export function findSimilarObjects(objects: OperationalObject[], addressQuery: string): OperationalObject[] {
+  const q = addressQuery.trim().toLowerCase()
+  if (!q) return []
+  return objects.filter(object => {
+    const addr = (object.address ?? '').trim().toLowerCase()
+    if (!addr) return false
+    return addr === q || addr.includes(q) || q.includes(addr)
+  })
+}
+
 export function findSimilarPersons(persons: OperationalPerson[], vorname: string, nachname: string, excludeId?: string | null): OperationalPerson[] {
   const v = vorname.trim().toLowerCase()
   const n = nachname.trim().toLowerCase()

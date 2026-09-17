@@ -6,7 +6,7 @@ import LeafletMap from '../../components/LeafletMap'
 import { PersonPicker } from '../../components/RegisterPickers'
 import { logAudit } from '../../lib/audit'
 import { geocodeLocation } from '../../lib/geocode'
-import { objectLabel, personDisplayName, useObjects, usePersons } from '../../lib/register'
+import { findSimilarObjects, objectLabel, personDisplayName, useObjects, usePersons } from '../../lib/register'
 import { defaultBvAvEnd, firstControlDeadline, hasInitialControl, localDateTimeInput, MASSNAHME_LABEL, SCHUTZ_SELECT, type EvRechtsgrundlage, type Schutzfall, type SchutzfallStatus, type Schutzmassnahme } from '../../lib/schutzmassnahmen'
 import { supabase } from '../../lib/supabase'
 import { Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
@@ -42,7 +42,7 @@ export default function ZentraleAvBvPage() {
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const canOperate = canManage || isZentralistOnDuty
   const { persons, setPersons } = usePersons()
-  const { objects } = useObjects()
+  const { objects, setObjects, loading: objectsLoading } = useObjects()
   const [items, setItems] = useState<Schutzfall[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -76,21 +76,43 @@ export default function ZentraleAvBvPage() {
   // als Gefährder bzw. geschützte Person(en) in ein neues Schutzfall-Formular
   // übernehmen, gebündelt in einem Zug (nicht mehr einzeln, sonst geht die
   // jeweils andere Auswahl beim erneuten Öffnen verloren). Der Einsatzort
-  // (Adresse + Koordinaten der Meldung) schlägt gleich den ersten
-  // Schutzbereich vor, statt nur unverknüpfte Objekte zur Auswahl zu zeigen.
+  // wird dabei wie eine Person behandelt: erst im Objekt-Register nach einer
+  // passenden Adresse suchen (z. B. schon über einen Schlüssel angelegt) und
+  // verknüpfen, sonst den Einsatzort selbst als neues Objekt anlegen - damit
+  // ist der Schutzbereich ein echtes, wiederverwendbares Objekt statt nur
+  // loser Text/Koordinaten.
   useEffect(() => {
     const gefaehrderId = searchParams.get('gefaehrderId')
     const geschuetzteIds = searchParams.getAll('geschuetztePersonId')
     if ((!gefaehrderId && geschuetzteIds.length === 0) || !canOperate) return
+    // Solange das Objekt-Register noch lädt, nicht schon vorschnell ein
+    // (mögliches Duplikat-)Objekt anlegen - auf den fertig geladenen Stand warten.
+    if (objectsLoading) return
     const ort = searchParams.get('ort')
     const lat = Number(searchParams.get('lat'))
     const lng = Number(searchParams.get('lng'))
-    setEditing(null)
-    setForm({ ...emptyForm(), gefaehrderId: gefaehrderId ?? '', geschuetzteIds })
-    setAreas([ort && Number.isFinite(lat) && Number.isFinite(lng) ? { ...newArea(), label: ort, lat, lng, confirmed: true } : newArea()])
-    setShowForm(true); setError('')
     setSearchParams({}, { replace: true })
-  }, [searchParams, canOperate])
+    void (async () => {
+      setEditing(null)
+      setForm({ ...emptyForm(), gefaehrderId: gefaehrderId ?? '', geschuetzteIds })
+      if (!ort || !Number.isFinite(lat) || !Number.isFinite(lng)) { setAreas([newArea()]); setShowForm(true); setError(''); return }
+      const match = findSimilarObjects(objects, ort)[0]
+      if (match) {
+        setAreas([{ ...newArea(), objectId: match.id, label: objectLabel(match), lat, lng, confirmed: true }])
+      } else if (profile?.id) {
+        const created = await supabase.from('operational_objects').insert({ address: ort, created_by: profile.id }).select('*').single()
+        if (created.data) {
+          setObjects(current => [...current, created.data as typeof objects[number]].sort((a, b) => a.address.localeCompare(b.address, 'de-AT')))
+          setAreas([{ ...newArea(), objectId: created.data.id, label: objectLabel(created.data), lat, lng, confirmed: true }])
+        } else {
+          setAreas([{ ...newArea(), label: ort, lat, lng, confirmed: true }])
+        }
+      } else {
+        setAreas([{ ...newArea(), label: ort, lat, lng, confirmed: true }])
+      }
+      setShowForm(true); setError('')
+    })()
+  }, [searchParams, canOperate, objectsLoading])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 
