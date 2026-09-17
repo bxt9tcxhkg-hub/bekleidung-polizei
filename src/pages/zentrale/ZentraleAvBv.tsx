@@ -72,13 +72,23 @@ export default function ZentraleAvBvPage() {
     fillColor: item.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
   }))), [items, now])
 
-  // Vormerkung aus der Parteien-Erfassung eines Einsatzes: Person direkt als
-  // Gefährder bzw. geschützte Person in ein neues Schutzfall-Formular übernehmen.
+  // Vormerkung aus der Parteien-Erfassung eines Einsatzes: Person(en) direkt
+  // als Gefährder bzw. geschützte Person(en) in ein neues Schutzfall-Formular
+  // übernehmen, gebündelt in einem Zug (nicht mehr einzeln, sonst geht die
+  // jeweils andere Auswahl beim erneuten Öffnen verloren). Der Einsatzort
+  // (Adresse + Koordinaten der Meldung) schlägt gleich den ersten
+  // Schutzbereich vor, statt nur unverknüpfte Objekte zur Auswahl zu zeigen.
   useEffect(() => {
     const gefaehrderId = searchParams.get('gefaehrderId')
-    const geschuetztePersonId = searchParams.get('geschuetztePersonId')
-    if ((!gefaehrderId && !geschuetztePersonId) || !canOperate) return
-    setEditing(null); setForm(current => ({ ...emptyForm(), gefaehrderId: gefaehrderId ?? '', geschuetzteIds: geschuetztePersonId ? [geschuetztePersonId] : current.geschuetzteIds })); setAreas([newArea()]); setShowForm(true); setError('')
+    const geschuetzteIds = searchParams.getAll('geschuetztePersonId')
+    if ((!gefaehrderId && geschuetzteIds.length === 0) || !canOperate) return
+    const ort = searchParams.get('ort')
+    const lat = Number(searchParams.get('lat'))
+    const lng = Number(searchParams.get('lng'))
+    setEditing(null)
+    setForm({ ...emptyForm(), gefaehrderId: gefaehrderId ?? '', geschuetzteIds })
+    setAreas([ort && Number.isFinite(lat) && Number.isFinite(lng) ? { ...newArea(), label: ort, lat, lng, confirmed: true } : newArea()])
+    setShowForm(true); setError('')
     setSearchParams({}, { replace: true })
   }, [searchParams, canOperate])
 

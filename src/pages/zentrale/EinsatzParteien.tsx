@@ -1,11 +1,21 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Trash2 } from 'lucide-react'
+import { AlertTriangle, ShieldAlert, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PersonNameAutocomplete } from '../../components/RegisterPickers'
 import { inputClass } from '../../components/ZentraleEntryEditor'
 import { addEinsatzPartei, EINSATZ_PARTEI_ROLLEN, EINSATZ_PARTEI_ROLLE_LABEL, loadEinsatzParteien, MAIL_KIND_LABEL, openMailDeliveriesByPerson, removeEinsatzPartei, updateEinsatzParteiRolle } from '../../lib/einsatzParteien'
 import { personDisplayName } from '../../lib/register'
 import type { EinsatzPartei, EinsatzParteiRolle, MailDelivery, OperationalPerson } from '../../lib/types'
+
+/** Baut die AV/BV-Vormerkungs-URL aus allen aktuell im Einsatz markierten Gefährder-/Geschützten-Kandidaten in einem Zug, inkl. Einsatzort als Schutzbereichs-Vorschlag. */
+function schutzfallUrl(gefaehrderId: string | null, geschuetzteIds: Set<string>, incidentLocation: { location: string | null; lat: number | null; lng: number | null }) {
+  const params = new URLSearchParams()
+  if (gefaehrderId) params.set('gefaehrderId', gefaehrderId)
+  for (const id of geschuetzteIds) params.append('geschuetztePersonId', id)
+  if (incidentLocation.location) params.set('ort', incidentLocation.location)
+  if (incidentLocation.lat !== null && incidentLocation.lng !== null) { params.set('lat', String(incidentLocation.lat)); params.set('lng', String(incidentLocation.lng)) }
+  return `/zentrale/av-bv-ev?${params}`
+}
 
 function HinweisOffeneMeldung({ items }: { items: Pick<MailDelivery, 'id' | 'kind' | 'status'>[] }) {
   if (items.length === 0) return null
@@ -14,8 +24,9 @@ function HinweisOffeneMeldung({ items }: { items: Pick<MailDelivery, 'id' | 'kin
   </p>
 }
 
-export default function EinsatzParteien({ incidentId, persons, onPersonCreated, createdBy, canOperate }: {
+export default function EinsatzParteien({ incidentId, incidentLocation, persons, onPersonCreated, createdBy, canOperate }: {
   incidentId: string
+  incidentLocation: { location: string | null; lat: number | null; lng: number | null }
   persons: OperationalPerson[]
   onPersonCreated: (person: OperationalPerson) => void
   createdBy: string | null
@@ -29,6 +40,11 @@ export default function EinsatzParteien({ incidentId, persons, onPersonCreated, 
   const [rolle, setRolle] = useState<EinsatzParteiRolle>('beschuldigter')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  // Nur lokale Auswahl für die gebündelte AV/BV-Vormerkung - keine eigene
+  // Speicherung, wird beim Klick auf "AV/BV-Formular öffnen" in einem Zug
+  // als URL-Parameter mitgegeben (siehe schutzfallUrl()).
+  const [schutzfallGefaehrder, setSchutzfallGefaehrder] = useState<string | null>(null)
+  const [schutzfallGeschuetzte, setSchutzfallGeschuetzte] = useState<Set<string>>(new Set())
 
   async function load() {
     setLoading(true)
@@ -76,6 +92,15 @@ export default function EinsatzParteien({ incidentId, persons, onPersonCreated, 
     try { await removeEinsatzPartei(item.id); await load() } catch (err) { setError(err instanceof Error ? err.message : 'Die Partei konnte nicht entfernt werden.') }
   }
 
+  function toggleGefaehrder(personId: string) {
+    setSchutzfallGefaehrder(current => current === personId ? null : personId)
+    setSchutzfallGeschuetzte(current => { if (!current.has(personId)) return current; const next = new Set(current); next.delete(personId); return next })
+  }
+  function toggleGeschuetzt(personId: string) {
+    setSchutzfallGeschuetzte(current => { const next = new Set(current); if (next.has(personId)) next.delete(personId); else next.add(personId); return next })
+    setSchutzfallGefaehrder(current => current === personId ? null : current)
+  }
+
   if (loading) return <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-800" /></div>
 
   return <div className="space-y-4">
@@ -90,13 +115,17 @@ export default function EinsatzParteien({ incidentId, persons, onPersonCreated, 
           {item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}
           <HinweisOffeneMeldung items={hints.get(item.person_id) ?? []} />
           {canOperate ? <div className="flex flex-wrap gap-2 mt-2">
-            <Link to={`/zentrale/av-bv-ev?gefaehrderId=${item.person_id}`} className="text-xs font-medium text-red-700 border border-red-200 bg-red-50 px-2 py-1 rounded-md">Als Gefährder in AV/BV vormerken</Link>
-            <Link to={`/zentrale/av-bv-ev?geschuetztePersonId=${item.person_id}`} className="text-xs font-medium text-purple-700 border border-purple-200 bg-purple-50 px-2 py-1 rounded-md">Als geschützte Person vormerken</Link>
+            <button type="button" onClick={() => toggleGefaehrder(item.person_id)} className={`text-xs font-medium border px-2 py-1 rounded-md ${schutzfallGefaehrder === item.person_id ? 'text-white bg-red-700 border-red-700' : 'text-red-700 border-red-200 bg-red-50'}`}>{schutzfallGefaehrder === item.person_id ? '✓ ' : ''}Für AV/BV: Gefährder</button>
+            <button type="button" onClick={() => toggleGeschuetzt(item.person_id)} className={`text-xs font-medium border px-2 py-1 rounded-md ${schutzfallGeschuetzte.has(item.person_id) ? 'text-white bg-purple-700 border-purple-700' : 'text-purple-700 border-purple-200 bg-purple-50'}`}>{schutzfallGeschuetzte.has(item.person_id) ? '✓ ' : ''}Für AV/BV: Geschützte Person</button>
           </div> : null}
         </div>
         {canOperate ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0" aria-label="Partei entfernen"><Trash2 className="w-4 h-4" /></button> : null}
       </div>
     </li>)}</ul>}
+    {canOperate && (schutzfallGefaehrder || schutzfallGeschuetzte.size > 0) ? <div className="rounded-xl border border-red-200 bg-red-50 p-3 flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-red-900 flex items-center gap-1.5"><ShieldAlert className="w-4 h-4 flex-shrink-0" /> {schutzfallGefaehrder ? '1 Gefährder' : 'Kein Gefährder'} · {schutzfallGeschuetzte.size} geschützte Person(en) ausgewählt</p>
+      <Link to={schutzfallUrl(schutzfallGefaehrder, schutzfallGeschuetzte, incidentLocation)} className="text-sm font-semibold text-white bg-red-700 hover:bg-red-800 px-3 py-2 rounded-lg">AV/BV-Formular öffnen</Link>
+    </div> : null}
 
     {canOperate ? <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
       <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Partei erfassen</p>

@@ -87,7 +87,7 @@ export default function EinsatzArbeitModal({
         })}</div>
         <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
       </div>}
-    </div> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
+    </div> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
     {canOperateZentrale ? <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
       <button type="button" onClick={() => { close(); openEditIncident(item) }} className="text-sm font-medium border border-gray-300 px-3 py-2 rounded-lg">Meldung ändern</button>
       {item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item).then(close)} className="text-sm font-medium text-green-800 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}
