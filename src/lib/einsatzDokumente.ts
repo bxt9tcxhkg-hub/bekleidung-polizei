@@ -61,6 +61,22 @@ export async function uploadEinsatzdokument(incidentId: string, file: File): Pro
   return await response.json() as { key: string; name: string }
 }
 
+export async function deleteEinsatzdokument(incidentId: string, fileKey: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const response = await fetch('/incident-document-delete', {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+      'X-Incident-Id': incidentId,
+      'X-File-Key': fileKey,
+    },
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(data?.error || 'Unterlage konnte nicht gelöscht werden.')
+  }
+}
+
 export async function openEinsatzdokument(fileKey: string) {
   const { data: sessionData } = await supabase.auth.getSession()
   const response = await fetch(`/files/${fileKey}`, {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DOK_ART_LABEL, DOK_ARTEN, openEinsatzdokument, readDokumente, uploadEinsatzdokument, writeDokumente, type DokArt, type EinsatzDokument } from '../../lib/einsatzDokumente'
+import { DOK_ART_LABEL, DOK_ARTEN, deleteEinsatzdokument, openEinsatzdokument, readDokumente, uploadEinsatzdokument, writeDokumente, type DokArt, type EinsatzDokument } from '../../lib/einsatzDokumente'
 import { LISTENART_LABEL, LISTENART_SPALTEN, LISTENARTEN, extractPdfPlainText, personenAusText, readPersonenListe, writePersonenListe, type EinsatzPerson, type Listenart, type PersonenStatus } from '../../lib/zmrPersonen'
 
 function nextStatus(art: Listenart, status: PersonenStatus): PersonenStatus {
@@ -87,6 +87,19 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
     }
   }
 
+  async function onDelete(doc: EinsatzDokument) {
+    if (!confirm(`${DOK_ART_LABEL[doc.art]} · ${doc.fileName} wirklich löschen?`)) return
+    setError('')
+    try {
+      await deleteEinsatzdokument(incidentId, doc.fileKey)
+      const list = docs.filter(row => row.id !== doc.id)
+      writeDokumente(incidentId, list)
+      setDocs(list)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unterlage konnte nicht gelöscht werden.')
+    }
+  }
+
   function takeFiles(list: FileList | File[] | null) {
     const files = list ? Array.from(list) : []
     if (files[0]) void onFile(files[0])
@@ -96,10 +109,11 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
     <div>
       <p className="text-xs font-bold text-gray-800">Dateien</p>
       {docs.length === 0 ? <p className="text-xs text-gray-500 mt-2">Noch keine Datei.</p> : <ul className="mt-2 space-y-1">{docs.map(doc => (
-        <li key={doc.id}>
+        <li key={doc.id} className="flex items-center gap-2">
           <button type="button" onClick={() => void openEinsatzdokument(doc.fileKey).catch(() => setError('Datei konnte nicht geöffnet werden.'))} className="text-left text-xs text-blue-800 hover:underline">
             {DOK_ART_LABEL[doc.art]} · {doc.fileName} · {new Date(doc.at).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
           </button>
+          {canUpload ? <button type="button" onClick={() => void onDelete(doc)} className="text-xs text-red-700 hover:underline">Entfernen</button> : null}
         </li>
       ))}</ul>}
       {canUpload ? <div
