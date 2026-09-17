@@ -23,10 +23,10 @@ describe('groupSizes', () => {
     expect(groups[2].sizes).toEqual(['L68', 'L72', 'L100'])
   })
 
-  it('gruppiert Jacken (44I/44II) in Weite I/Weite II', () => {
+  it('gruppiert Jacken (44I/44II) in Länge I/Länge II', () => {
     const sizes = ['44I', '44II', '46I', '46II', '60I', '60II']
     const groups = groupSizes(sizes)!
-    expect(groups.map(g => g.label)).toEqual(['Weite I', 'Weite II'])
+    expect(groups.map(g => g.label)).toEqual(['Länge I', 'Länge II'])
     expect(groups[0].sizes).toEqual(['44I', '46I', '60I'])
     expect(groups[1].sizes).toEqual(['44II', '46II', '60II'])
   })
@@ -35,16 +35,6 @@ describe('groupSizes', () => {
     const groups = groupSizes(['44N', '46N', '22U', '88S'])!
     expect(groups.map(g => g.label)).toEqual(['Untersetzt', 'Normal', 'Schlank'])
     expect(groups[1].sizes).toEqual(['44N', '46N'])
-  })
-
-  it('gruppiert Längen-Format (34/1, 34/2) in Länge 1/Länge 2', () => {
-    const sizes = ['34/1', '34/2', '36/1', '36/2', '38/1', '38/2']
-    const groups = groupSizes(sizes)!
-    expect(groups.map(g => g.label)).toEqual(['Länge 1', 'Länge 2'])
-    expect(groups[0].sizes).toEqual(['34/1', '36/1', '38/1'])
-    expect(groups[1].sizes).toEqual(['34/2', '36/2', '38/2'])
-    expect(sizeLabel('34/1', true)).toBe('34')
-    expect(sizeLabel('34/2', true)).toBe('34')
   })
 
   it('liefert null für einfache numerische Größen', () => {

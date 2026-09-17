@@ -1,11 +1,10 @@
 import { ClipboardList } from 'lucide-react'
-import { groupSizes, sizeLabel } from '../../lib/sizes'
 import { STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../../lib/types'
 import type { LagerController } from './useLager'
 
 export function HistorieTab({ lager }: { lager: LagerController }) {
   const {
-    stockOrders, pagedStockOrders, products, saving, markReceived,
+    stockOrders, pagedStockOrders, saving, markReceived,
     ordersTotalPages, ordersPage, setOrdersPage, pageSize,
   } = lager
 
@@ -35,7 +34,7 @@ export function HistorieTab({ lager }: { lager: LagerController }) {
                 <p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p>
                 <p className="text-xs text-gray-400">{o.products?.article_number}</p>
               </td>
-              <td className="px-4 py-3 text-gray-700">{sizeLabel(o.size, groupSizes(products.find(p => p.id === o.product_id)?.sizes ?? [o.size]) !== null)} · {o.quantity}×</td>
+              <td className="px-4 py-3 text-gray-700">{o.size} · {o.quantity}×</td>
               <td className="px-4 py-3">
                 <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STOCK_ORDER_STATUS_COLORS[o.status]}`}>
                   {STOCK_ORDER_STATUS_LABELS[o.status]}

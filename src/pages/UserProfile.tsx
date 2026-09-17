@@ -21,8 +21,8 @@ const MALE_SIZE_FIELDS: SizeField[] = [
   {
     key: 'jacke', label: 'Jackengröße',
     options: [
-      { group: 'Weite I',  sizes: ['44I','46I','48I','50I','52I','54I','56I','58I','60I'] },
-      { group: 'Weite II', sizes: ['44II','46II','48II','50II','52II','54II','56II','58II','60II'] },
+      { group: 'Länge I',  sizes: ['44I','46I','48I','50I','52I','54I','56I','58I','60I'] },
+      { group: 'Länge II', sizes: ['44II','46II','48II','50II','52II','54II','56II','58II','60II'] },
     ],
   },
   { key: 'hemd',       label: 'Hemdgröße',            options: ['37/38','39/40','41/42','43/44','45/46','47/48','49/50','51/52'] },
@@ -44,8 +44,8 @@ const FEMALE_SIZE_FIELDS: SizeField[] = [
   {
     key: 'jacke', label: 'Jackengröße',
     options: [
-      { group: 'Weite I',  sizes: ['34I','36I','38I','40I','42I','44I'] },
-      { group: 'Weite II', sizes: ['34II','36II','38II','40II','42II','44II'] },
+      { group: 'Länge I',  sizes: ['34I','36I','38I','40I','42I','44I'] },
+      { group: 'Länge II', sizes: ['34II','36II','38II','40II','42II','44II'] },
     ],
   },
   { key: 'hemd',       label: 'Blusen-/Hemdgröße',    options: ['34','36','38','40','42','44','46','48'] },

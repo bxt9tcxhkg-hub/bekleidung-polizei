@@ -1,5 +1,4 @@
 import { Check, Minus, Search, Trash2, Warehouse, X } from 'lucide-react'
-import { groupSizes, sizeLabel } from '../../lib/sizes'
 import type { LagerController } from './useLager'
 
 export function BestandTab({ lager }: { lager: LagerController }) {
@@ -119,7 +118,7 @@ export function BestandTab({ lager }: { lager: LagerController }) {
                   <p className="font-medium text-gray-900">{entry.products?.name ?? '–'}</p>
                   <p className="text-xs text-gray-400">{entry.products?.article_number} · {entry.products?.category}</p>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{sizeLabel(entry.size, groupSizes(entry.products?.sizes ?? [entry.size]) !== null)}</td>
+                <td className="px-4 py-3 text-gray-600">{entry.size}</td>
                 <td className="px-4 py-3 text-center">
                   {editingId === entry.id ? (
                     <div className="flex items-center justify-center gap-2">

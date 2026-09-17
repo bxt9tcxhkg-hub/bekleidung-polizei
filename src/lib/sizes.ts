@@ -11,11 +11,8 @@ const UNS_RE = /^[UNS]\d/
 const KL_RE = /^[KL]\d/
 // Suffix U/N/S
 const SUFFIX_RE = /\d[UNS]$/
-// Jacket: 44I or 44II
+// Jacket: 44I or 44II (Länge I / Länge II, nicht Weite)
 const JACKET_RE = /^\d+I{1,2}$/
-// Länge: 34/1 or 34/2 (Größe/Länge, einstellige Länge) - nicht zu verwechseln
-// mit geteilten Hemdgrößen wie 37/38 (zwei ähnlich große Zahlen, eine Größe)
-const LAENGE_RE = /^\d+\/\d$/
 
 function extractNum(s: string): number {
   const n = parseFloat(s.replace(/^[A-Za-z]+/, '').replace(/[A-Za-z]+$/, ''))
@@ -35,19 +32,11 @@ function sortSizes(sizes: string[]): string[] {
 }
 
 export function groupSizes(sizes: string[]): SizeGroup[] | null {
-  // Länge format: 34/1, 34/2 → Länge 1 / Länge 2
-  if (sizes.some(s => LAENGE_RE.test(s))) {
-    const lengths = [...new Set(sizes.filter(s => LAENGE_RE.test(s)).map(s => s.split('/')[1]))].sort()
-    return lengths
-      .map(len => ({ label: `Länge ${len}`, sizes: sortSizes(sizes.filter(s => s.endsWith(`/${len}`))) }))
-      .filter(g => g.sizes.length > 0)
-  }
-
-  // Jacket format: 44I / 44II → Weite I / Weite II
+  // Jacket format: 44I / 44II → Länge I / Länge II
   if (sizes.some(s => JACKET_RE.test(s))) {
     return [
-      { label: 'Weite I',  sizes: sortSizes(sizes.filter(s => /^\d+I$/.test(s))) },
-      { label: 'Weite II', sizes: sortSizes(sizes.filter(s => /^\d+II$/.test(s))) },
+      { label: 'Länge I',  sizes: sortSizes(sizes.filter(s => /^\d+I$/.test(s))) },
+      { label: 'Länge II', sizes: sortSizes(sizes.filter(s => /^\d+II$/.test(s))) },
     ].filter(g => g.sizes.length > 0)
   }
 
@@ -90,6 +79,5 @@ export function sizeLabel(s: string, grouped: boolean): string {
   if (SUFFIX_RE.test(s)) return s.replace(/[UNS]$/, '')
   if (UNS_RE.test(s) || KL_RE.test(s)) return s.slice(1)
   if (JACKET_RE.test(s)) return s.replace(/I+$/, '')
-  if (LAENGE_RE.test(s)) return s.split('/')[0]
   return s
 }

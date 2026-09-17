@@ -308,10 +308,13 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                     value={addForm.size} onChange={e => setAddForm(f => f ? { ...f, size: e.target.value } : f)}>
                     <option value="">Größe wählen...</option>
                     {(() => {
-                      const isGrouped = groupSizes(selectedAddProduct.sizes) !== null
+                      // Flaches Dropdown ohne Gruppen-Überschrift (anders als
+                      // der Größen-Auswahldialog unten) - die volle Größe
+                      // muss hier stehen bleiben, sonst sind z. B. "34I" und
+                      // "34II" beide nur "34" und nicht mehr unterscheidbar.
                       return sortedSizes(selectedAddProduct.sizes).map(s => {
                         const stock = stockFor(selectedAddProduct.id, s)
-                        return <option key={s} value={s}>{sizeLabel(s, isGrouped)}{stock > 0 ? ` (aktuell ${stock}×)` : ''}</option>
+                        return <option key={s} value={s}>{s}{stock > 0 ? ` (aktuell ${stock}×)` : ''}</option>
                       })
                     })()}
                   </select>
