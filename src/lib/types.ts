@@ -1687,6 +1687,7 @@ export type Database = {
       lookup_login_email: { Args: { p_username: string }; Returns: string | null }
       record_mail_delivery_action: { Args: { p_id: string; p_status: string }; Returns: undefined }
       close_mail_delivery: { Args: { p_id: string }; Returns: undefined }
+      merge_operational_persons: { Args: { p_keep_id: string; p_remove_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }

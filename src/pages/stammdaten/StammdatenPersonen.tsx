@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Merge, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase'
 import type { OperationalPerson } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
-import { objectLabel, personDisplayName, useObjects } from '../../lib/register'
+import { objectLabel, personDisplayName, personLabel, useObjects } from '../../lib/register'
 
 // Zentrales Personen-Register: Basis für die Verknüpfung von Personenhinweisen,
 // RSa/RSb, AV/BV & EV und Fahndungen auf dieselbe Person, statt Namen in
@@ -35,6 +35,10 @@ export default function StammdatenPersonen() {
   const [editing, setEditing] = useState<OperationalPerson | null>(null)
   const [form, setForm] = useState(emptyForm)
   const { objects, setObjects } = useObjects()
+  const [mergeItem, setMergeItem] = useState<OperationalPerson | null>(null)
+  const [mergeTargetId, setMergeTargetId] = useState<string | null>(null)
+  const [mergeSaving, setMergeSaving] = useState(false)
+  const [mergeError, setMergeError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -168,6 +172,17 @@ export default function StammdatenPersonen() {
     logAudit('Person endgültig gelöscht', personDisplayName(editing)); setShowForm(false); setNotice(cleanupWarning ? 'Person wurde gelöscht; verwaiste Telefonnummern konnten nicht vollständig bereinigt werden.' : 'Person wurde endgültig gelöscht.'); await load()
   }
 
+  async function mergePersons() {
+    if (!mergeItem || !mergeTargetId) { setMergeError('Bitte die zu übernehmende Person auswählen.'); return }
+    setMergeSaving(true); setMergeError('')
+    const result = await supabase.rpc('merge_operational_persons', { p_keep_id: mergeItem.id, p_remove_id: mergeTargetId })
+    setMergeSaving(false)
+    if (result.error) { setMergeError('Die Personen konnten nicht zusammengeführt werden.'); return }
+    const removedName = personDisplayName(persons.find(person => person.id === mergeTargetId))
+    logAudit('Personen zusammengeführt', `${removedName} → ${personDisplayName(mergeItem)}`)
+    setMergeItem(null); setMergeTargetId(null); setNotice('Die Personen wurden zusammengeführt.'); await load()
+  }
+
   return <div>
     <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Personen</h1><p className="text-sm text-gray-500 mt-1">Zentrales Register - wird von Personenhinweisen, RSa/RSb, AV/BV & EV und Fahndungen als Verknüpfung genutzt.</p></div>
@@ -201,7 +216,10 @@ export default function StammdatenPersonen() {
                 {count.schutzPerson ? <span className="text-xs font-medium bg-rose-50 text-rose-700 px-2 py-0.5 rounded-full">{count.schutzPerson}× Schutzfall (geschützte Person)</span> : null}
               </div> : null}
             </div>
-            {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Person bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
+            {canManage ? <div className="flex items-center gap-1 flex-shrink-0">
+              <button type="button" onClick={() => { setMergeItem(item); setMergeTargetId(null); setMergeError('') }} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Mit anderer Person zusammenführen"><Merge className="w-4 h-4" /></button>
+              <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Person bearbeiten"><Pencil className="w-4 h-4" /></button>
+            </div> : null}
           </article>
         })}</div>}
       </section>
@@ -224,6 +242,20 @@ export default function StammdatenPersonen() {
         {editing && canManage ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}
         <button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button>
         <button type="button" disabled={saving} onClick={() => void save()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button>
+      </div>
+    </Modal> : null}
+    {mergeItem ? <Modal title="Personen zusammenführen" close={() => setMergeItem(null)}>
+      <p className="text-sm text-gray-600">Bleibt bestehen: <strong>{personDisplayName(mergeItem)}</strong>. Alle Verweise (Personenhinweise, RSa/RSb, AV/BV & EV, Fahndungen, Parteien in Einsätzen, Schutzmaßnahmen) der unten gewählten Person werden hierher umgehängt, fehlende Stammdaten übernommen, danach wird die gewählte Person endgültig gelöscht.</p>
+      <label className="block text-xs font-medium text-gray-600">Wird entfernt und übernommen in „{personDisplayName(mergeItem)}“
+        <select className={inputClass} value={mergeTargetId ?? ''} onChange={event => setMergeTargetId(event.target.value || null)}>
+          <option value="">– Person wählen –</option>
+          {persons.filter(person => person.id !== mergeItem.id).map(person => <option key={person.id} value={person.id}>{personLabel(person)}</option>)}
+        </select>
+      </label>
+      {mergeError ? <ErrorMessage text={mergeError} /> : null}
+      <div className="flex justify-end gap-3 pt-2">
+        <button type="button" onClick={() => setMergeItem(null)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button>
+        <button type="button" disabled={mergeSaving || !mergeTargetId} onClick={() => void mergePersons()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{mergeSaving ? 'Zusammenführen…' : 'Zusammenführen'}</button>
       </div>
     </Modal> : null}
   </div>
