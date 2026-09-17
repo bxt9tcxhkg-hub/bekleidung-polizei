@@ -1,6 +1,6 @@
 import { useEffect, useState, type FocusEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import { composeObjectAddress, objectLabel, personDisplayName, personLabel } from '../lib/register'
+import { composeObjectAddress, findSimilarPersons, objectLabel, personDisplayName, personLabel } from '../lib/register'
 import type { OperationalObject, OperationalPerson } from '../lib/types'
 import { inputClass } from './ZentraleEntryEditor'
 
@@ -29,6 +29,7 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
   const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const similar = findSimilarPersons(persons, vorname, nachname)
 
   async function create() {
     // Am Telefon ist oft zunächst nur Vor- oder Nachname bekannt - beide
@@ -67,6 +68,10 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
         <input type="date" className={inputClass} value={birthDate} onChange={event => setBirthDate(event.target.value)} />
         <input className={inputClass} placeholder="Telefon" value={phone} onChange={event => setPhone(event.target.value)} />
       </div>
+      {similar.length > 0 ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-2">
+        <p className="text-xs font-semibold text-amber-800">Ähnliche Person(en) bereits vorhanden - ist es eine davon?</p>
+        <div className="mt-1 space-y-1">{similar.map(person => <button key={person.id} type="button" onClick={() => { onChange(person.id); setShowCreate(false); setVorname(''); setNachname(''); setBirthDate(''); setPhone(''); setError('') }} className="block w-full text-left text-xs text-amber-900 hover:underline">{personLabel(person)}</button>)}</div>
+      </div> : null}
       {error ? <p className="text-xs text-red-700">{error}</p> : null}
       <div className="flex justify-end gap-2">
         <button type="button" onClick={() => { setShowCreate(false); setError('') }} className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg">Abbrechen</button>
@@ -134,26 +139,32 @@ export function PersonNameAutocomplete({ persons, value, onChange, createdBy, on
     if (value) onChange(null)
     setVorname(nextVorname); setNachname(nextNachname); setOpen(true)
   }
+  async function createPerson() {
+    setOpen(false); setResolving(true)
+    const result = await supabase.from('operational_persons').insert({ vorname: vorname.trim() || null, nachname: nachname.trim() || null, created_by: createdBy }).select('*').single()
+    if (result.error || !result.data) { setResolving(false); setError('Person konnte nicht angelegt werden.'); return }
+    if (phone?.trim()) {
+      const today = new Date()
+      const erhobenAm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      await supabase.from('operational_phone_numbers').insert({ person_id: result.data.id, number: phone.trim(), erhoben_am: erhobenAm, created_by: createdBy })
+    }
+    setResolving(false)
+    onCreated(result.data as OperationalPerson)
+    onChange(result.data.id)
+  }
   function resolve() {
     // Kurze Verzögerung, damit ein Klick auf einen Vorschlag (onMouseDown)
     // zuerst greift - sonst schließt das onBlur die Liste vorher.
     setTimeout(() => { void (async () => {
-      setOpen(false)
-      if (value) return
-      if (!vorname.trim() && !nachname.trim()) return
+      if (value) { setOpen(false); return }
+      if (!vorname.trim() && !nachname.trim()) { setOpen(false); return }
       const exact = persons.find(person => (person.vorname ?? '').toLowerCase() === vorname.trim().toLowerCase() && (person.nachname ?? '').toLowerCase() === nachname.trim().toLowerCase())
       if (exact) { selectPerson(exact); return }
-      setResolving(true)
-      const result = await supabase.from('operational_persons').insert({ vorname: vorname.trim() || null, nachname: nachname.trim() || null, created_by: createdBy }).select('*').single()
-      if (result.error || !result.data) { setResolving(false); setError('Person konnte nicht angelegt werden.'); return }
-      if (phone?.trim()) {
-        const today = new Date()
-        const erhobenAm = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-        await supabase.from('operational_phone_numbers').insert({ person_id: result.data.id, number: phone.trim(), erhoben_am: erhobenAm, created_by: createdBy })
-      }
-      setResolving(false)
-      onCreated(result.data as OperationalPerson)
-      onChange(result.data.id)
+      // Ähnliche Namen vorhanden, aber keine exakte Übereinstimmung: nicht
+      // stillschweigend anlegen, sondern die Vorschlagsliste offen lassen -
+      // "+ Neue Person anlegen" muss dort bewusst angeklickt werden.
+      if (suggestions.length > 0) return
+      await createPerson()
     })() }, 150)
   }
 
@@ -176,9 +187,11 @@ export function PersonNameAutocomplete({ persons, value, onChange, createdBy, on
     {value ? <p className="text-xs text-green-700 mt-1">✓ {personDisplayName(selected)} - bestehende Person verknüpft</p> : resolving ? <p className="text-xs text-gray-500 mt-1">Wird geprüft…</p> : null}
     {error ? <p className="text-xs text-red-700 mt-1">{error}</p> : null}
     {open && suggestions.length > 0 ? <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+      <p className="px-3 pt-2 text-xs text-gray-500">Ähnliche(r) Name(n) gefunden - eine davon, oder als neue Person anlegen?</p>
       {suggestions.map(person => <button key={person.id} type="button" onMouseDown={event => event.preventDefault()} onClick={() => selectPerson(person)} className="block w-full text-left px-3 py-2 text-sm hover:bg-blue-50">
         {personLabel(person)}{person.phone ? <span className="text-gray-400"> · {person.phone}</span> : null}
       </button>)}
+      {vorname.trim() || nachname.trim() ? <button type="button" onMouseDown={event => event.preventDefault()} onClick={() => void createPerson()} className="block w-full text-left px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50 border-t border-gray-100">+ „{[vorname, nachname].filter(Boolean).join(' ')}“ als neue Person anlegen</button> : null}
     </div> : null}
   </div>
 }

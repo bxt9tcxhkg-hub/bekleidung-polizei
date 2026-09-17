@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowLeft, CheckCircle2, MapPin, Pencil, Plus, X } from 'lucide-react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import LeafletMap from '../../components/LeafletMap'
 import { PersonPicker } from '../../components/RegisterPickers'
@@ -54,6 +54,7 @@ export default function ZentraleAvBvPage() {
   const [areas, setAreas] = useState<AreaForm[]>([newArea()])
   const [locatingKey, setLocatingKey] = useState<string | null>(null)
   const [now] = useState(() => new Date().getTime())
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,6 +71,16 @@ export default function ZentraleAvBvPage() {
     color: item.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed',
     fillColor: item.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
   }))), [items, now])
+
+  // Vormerkung aus der Parteien-Erfassung eines Einsatzes: Person direkt als
+  // Gefährder bzw. geschützte Person in ein neues Schutzfall-Formular übernehmen.
+  useEffect(() => {
+    const gefaehrderId = searchParams.get('gefaehrderId')
+    const geschuetztePersonId = searchParams.get('geschuetztePersonId')
+    if ((!gefaehrderId && !geschuetztePersonId) || !canOperate) return
+    setEditing(null); setForm(current => ({ ...emptyForm(), gefaehrderId: gefaehrderId ?? '', geschuetzteIds: geschuetztePersonId ? [geschuetztePersonId] : current.geschuetzteIds })); setAreas([newArea()]); setShowForm(true); setError('')
+    setSearchParams({}, { replace: true })
+  }, [searchParams, canOperate])
 
   if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
 

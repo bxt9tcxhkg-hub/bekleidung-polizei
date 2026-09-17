@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { PersonNameAutocomplete } from '../../components/RegisterPickers'
 import { inputClass } from '../../components/ZentraleEntryEditor'
 import { addEinsatzPartei, EINSATZ_PARTEI_ROLLEN, EINSATZ_PARTEI_ROLLE_LABEL, loadEinsatzParteien, MAIL_KIND_LABEL, openMailDeliveriesByPerson, removeEinsatzPartei, updateEinsatzParteiRolle } from '../../lib/einsatzParteien'
@@ -88,6 +89,10 @@ export default function EinsatzParteien({ incidentId, persons, onPersonCreated, 
           </select> : <span className="text-xs font-semibold text-gray-600">{EINSATZ_PARTEI_ROLLE_LABEL[item.rolle]}</span>}
           {item.note ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.note}</p> : null}
           <HinweisOffeneMeldung items={hints.get(item.person_id) ?? []} />
+          {canOperate ? <div className="flex flex-wrap gap-2 mt-2">
+            <Link to={`/zentrale/av-bv-ev?gefaehrderId=${item.person_id}`} className="text-xs font-medium text-red-700 border border-red-200 bg-red-50 px-2 py-1 rounded-md">Als Gefährder in AV/BV vormerken</Link>
+            <Link to={`/zentrale/av-bv-ev?geschuetztePersonId=${item.person_id}`} className="text-xs font-medium text-purple-700 border border-purple-200 bg-purple-50 px-2 py-1 rounded-md">Als geschützte Person vormerken</Link>
+          </div> : null}
         </div>
         {canOperate ? <button type="button" onClick={() => void remove(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0" aria-label="Partei entfernen"><Trash2 className="w-4 h-4" /></button> : null}
       </div>

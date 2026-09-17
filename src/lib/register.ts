@@ -55,3 +55,24 @@ export function personLabel(person: Pick<OperationalPerson, 'vorname' | 'nachnam
   const name = personDisplayName(person)
   return person.birth_date ? `${name} (geb. ${new Date(person.birth_date).toLocaleDateString('de-AT')})` : name
 }
+
+/**
+ * Mögliche Duplikate vor dem Anlegen einer neuen Person: gleicher Nachname
+ * oder gleicher Vorname (case-insensitive, exakt) bei einer bestehenden
+ * Person, ohne dass Vor- UND Nachname bereits exakt übereinstimmen (das wäre
+ * bereits ein eindeutiger Treffer, kein bloßer Verdacht). Bewusst kein Fuzzy-
+ * Abgleich (Tippfehler) - das würde bei Polizeidaten (gleicher Name, andere
+ * Person ist normal) zu viele falsche Warnungen erzeugen.
+ */
+export function findSimilarPersons(persons: OperationalPerson[], vorname: string, nachname: string, excludeId?: string | null): OperationalPerson[] {
+  const v = vorname.trim().toLowerCase()
+  const n = nachname.trim().toLowerCase()
+  if (!v && !n) return []
+  return persons.filter(person => {
+    if (person.id === excludeId) return false
+    const pv = (person.vorname ?? '').trim().toLowerCase()
+    const pn = (person.nachname ?? '').trim().toLowerCase()
+    if (v && n && pv === v && pn === n) return false
+    return (n && pn === n) || (v && pv === v)
+  })
+}
