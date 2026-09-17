@@ -1,4 +1,4 @@
-import { BookOpen, Car, ClipboardList, LayoutGrid, Mail, Radio, Shield, ShieldAlert, UserRoundCheck } from 'lucide-react'
+import { BookOpen, Car, ClipboardList, LayoutGrid, Radio, Shield, ShieldAlert, UserRoundCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
@@ -16,9 +16,9 @@ export default function AussendienstLayout() {
       { to: '/aussendienst/hinweise', label: 'Operative Hinweise', icon: ShieldAlert },
       { to: '/aussendienst/schutzmassnahmen', label: 'Schutzmaßnahmen', icon: UserRoundCheck },
       { to: '/aussendienst/fahrzeug', label: 'Fahrzeug', icon: Car },
-      // Dieselben Seiten wie unter Zentrale/RSa-RSb bzw. Unterlagen - keine
-      // eigene Kopie, nur bequem von hier erreichbar.
-      { to: '/rsa-rsb', label: 'RSa/RSb', icon: Mail },
+      // Dieselbe Seite wie unter Zentrale/Unterlagen - keine eigene Kopie,
+      // nur bequem von hier erreichbar. RSa/RSb ist kein Außendienst-Unterpunkt,
+      // sondern bereichsübergreifend und hat eine eigene Portal-Kachel.
       { to: '/zentrale/unterlagen', label: 'Kontrollbehelfe', icon: BookOpen },
     ]),
     ...genehmigerSection(isGenehmiger),

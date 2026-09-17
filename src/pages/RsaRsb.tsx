@@ -5,8 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 /**
  * Eigenständiger Einstiegspunkt für RSa/RSb-Zustellungen und Vernehmungen –
  * unabhängig vom heutigen Dienst nutzbar (kein Erfordernis, eine Funktion
- * gewählt oder "operativ" zu sein). Dieselbe Übersicht ist zusätzlich in
- * Zentrale, Außendienst und Innendienst als Reiter eingebettet.
+ * gewählt oder "operativ" zu sein). Bereichsübergreifender Datenpool mit
+ * eigener Portal-Kachel, kein Unterpunkt von Zentrale, Außendienst oder
+ * Innendienst - die Zentrale-Übersicht zeigt dafür nur die Anzahl offener Fälle.
  */
 export default function RsaRsb() {
   const { hasAreaAccess } = useAuth()

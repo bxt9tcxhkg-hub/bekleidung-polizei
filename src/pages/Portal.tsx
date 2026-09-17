@@ -189,8 +189,8 @@ export default function Portal() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
           {hasAreaAccess('zentrale') ? <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} /> : null}
-          {hasAreaAccess('zentrale') ? <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck, Kontrollaufträge und RSa/RSb" icon={Shield} /> : null}
-          {hasAreaAccess('zentrale') ? <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße, RSa/RSb und Übergabe" icon={Building2} /> : null}
+          {hasAreaAccess('zentrale') ? <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck und Kontrollaufträge" icon={Shield} /> : null}
+          {hasAreaAccess('zentrale') ? <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße und Übergabe" icon={Building2} /> : null}
           {hasAreaAccess('zentrale') ? <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – jederzeit erfassbar, unabhängig vom heutigen Dienst" icon={Mail} /> : null}
         </PortalSection>
 

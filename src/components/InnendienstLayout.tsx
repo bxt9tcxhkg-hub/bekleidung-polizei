@@ -1,4 +1,4 @@
-import { BookOpen, Building2, ClipboardList, FileClock, LayoutGrid, Mail, Receipt } from 'lucide-react'
+import { BookOpen, Building2, ClipboardList, FileClock, LayoutGrid, Receipt } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -16,8 +16,9 @@ export default function InnendienstLayout() {
       { to: '/innendienst/bescheide', label: 'Bescheide & Verstöße', icon: ClipboardList },
       { to: '/innendienst/uebergabe', label: 'Schichtübergabe', icon: FileClock },
       { to: '/innendienst/gebuehren', label: 'Gebührenordnung', icon: Receipt },
-      // Dieselben Seiten wie unter Zentrale/RSa-RSb - keine eigene Kopie, nur bequem von hier erreichbar.
-      { to: '/rsa-rsb', label: 'RSa/RSb', icon: Mail },
+      // Dieselbe Seite wie unter Zentrale/Unterlagen - keine eigene Kopie,
+      // nur bequem von hier erreichbar. RSa/RSb ist kein Innendienst-Unterpunkt,
+      // sondern bereichsübergreifend und hat eine eigene Portal-Kachel.
       { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
     ]),
     ...genehmigerSection(isGenehmiger),
