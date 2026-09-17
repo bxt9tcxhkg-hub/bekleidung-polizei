@@ -9,7 +9,7 @@ import { decodeFahndungPdf, encodeFahndungPdf } from '../../lib/fahndungPdf'
 import { supabase } from '../../lib/supabase'
 import type { ZentraleFahndung } from '../../lib/types'
 
-export default function ZentraleFahndungenPage() {
+export default function StammdatenFahndungen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
@@ -105,8 +105,8 @@ export default function ZentraleFahndungenPage() {
   }
 
   return <div>
-    <Link to="/zentrale" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Zentrale</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Fahndungen</h1><p className="text-sm text-gray-500 mt-1">Nur PDF-Ausschreibungen. Ziehen oder Datei wählen.</p></div>
+    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Fahndungen</h1><p className="text-sm text-gray-500 mt-1">Nur PDF-Ausschreibungen. Ziehen oder Datei wählen.</p></div>
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (

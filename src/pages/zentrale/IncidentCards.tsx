@@ -2,7 +2,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { Empty } from '../../components/ZentraleEntryEditor'
 import { formatTime } from '../../lib/zentraleShared'
 import { STUFE_META, readStoredStufe } from '../../lib/einsatzSchema'
-import type { IncidentReport, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
+import type { IncidentReport, ZentraleEntry } from '../../lib/types'
 
 type IncidentVisual = { color: string; label: string }
 
@@ -12,7 +12,6 @@ export function IncidentCards({
 }: {
   visibleIncidents: IncidentReport[]
   lageByIncidentId: Record<string, ZentraleEntry>
-  baustellen: ZentraleBaustelle[]
   canOperateZentrale: boolean
   openEditIncident: (item: IncidentReport) => void
   openLageForIncident: (item: IncidentReport) => void

@@ -8,12 +8,11 @@ import { reverseGeocode, type StreetSuggestion } from '../../lib/geocode'
 import { lookupParcel } from '../../lib/kataster'
 import { composeKilometerLocation } from '../../lib/roadKilometer'
 import { composeIncidentLocation, type IncidentFormState } from '../../lib/zentraleShared'
-import { nearbyByLine } from '../../lib/geo'
 import { ContextHints } from './ContextHints'
 import { OrtDossier } from './OrtDossier'
-import type { IncidentReport, OperationalPerson, OperationalPersonNote, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
+import type { IncidentReport, OperationalPerson, OperationalPersonNote, ZentraleAvBv, ZentraleEntry } from '../../lib/types'
 
-export function IncidentModal({ editing, incident, setIncident, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, contextFahndungen, baustellen, priorIncidents, saving, error, locating, locateError, locate, close, save }: { editing: boolean; incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; contextFahndungen: ZentraleFahndung[]; baustellen: ZentraleBaustelle[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
+export function IncidentModal({ editing, incident, setIncident, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, priorIncidents, saving, error, locating, locateError, locate, close, save }: { editing: boolean; incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<IncidentFormState>) => setIncident(current => ({ ...current, ...values }))
   const streetRef = useRef<StreetAutocompleteHandle>(null)
   const [mapResolving, setMapResolving] = useState(false)
@@ -80,7 +79,7 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
       </> : <RoadKilometerPicker query={incident.roadQuery} roadNumber={incident.roadNumber} roadName={incident.roadName} kilometer={incident.kilometer} kilometerFrom={incident.kilometerFrom} kilometerTo={incident.kilometerTo} onQueryChange={value => patch({ roadQuery: value, roadNumber: '', roadName: '', kilometerFrom: null, kilometerTo: null, street: '', location: '', lat: null, lng: null, coordsPrecise: false })} onRoadSelect={road => patch({ roadQuery: `${road.roadName} (${road.roadNumber})`, roadNumber: road.roadNumber, roadName: road.roadName, kilometerFrom: road.fromKm, kilometerTo: road.toKm, street: road.roadName, location: incident.kilometer ? composeKilometerLocation(road.roadName, road.roadNumber, incident.kilometer) : '', lat: null, lng: null, coordsPrecise: false })} onKilometerChange={value => patch({ kilometer: value, location: incident.roadNumber && value ? composeKilometerLocation(incident.roadName, incident.roadNumber, value) : '', lat: null, lng: null, coordsPrecise: false })} onResolved={point => patch({ kilometer: point.kilometer, location: composeKilometerLocation(incident.roadName, point.roadNumber, point.kilometer), lat: point.lat, lng: point.lng, coordsPrecise: true })} />}
       <OrtDossier street={incident.street} houseNumber={incident.houseNumber} location={incident.location} />
       <Area label="Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} />
-      <ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} fahndungen={contextFahndungen} baustellen={nearbyByLine(incident.lat !== null && incident.lng !== null ? { lat: incident.lat, lng: incident.lng } : null, baustellen)} priorIncidents={priorIncidents} />
+      <ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} priorIncidents={priorIncidents} />
       {error ? <ErrorMessage text={error} /> : null}
       <Actions saving={saving} close={close} save={save} />
     </div>

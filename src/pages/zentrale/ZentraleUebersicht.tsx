@@ -2,14 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapPin, ShieldAlert, UsersRound } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import LeafletMap from '../../components/LeafletMap'
-import { personDisplayName } from '../../lib/register'
 import { firstControlDeadline, hasInitialControl, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { supabase } from '../../lib/supabase'
 import { ZUSTAND_LABEL, formatZeitraum, strassenName } from '../../lib/strassenzustand'
 import type { IncidentReport } from '../../lib/types'
 import type { ZentraleContext } from './ZentraleShell'
 import { IncidentCards, SofortWichtig } from './zentraleShared'
-import { FAHNDUNG_ART_LABEL, formatTime } from '../../lib/zentraleShared'
+import { formatTime } from '../../lib/zentraleShared'
 import EinsatzArbeitModal from './EinsatzArbeitModal'
 
 const INCIDENT_COLORS = ['#2563eb', '#ea580c', '#7c3aed', '#0f766e', '#be185d', '#4d7c0f', '#0891b2', '#92400e']
@@ -91,7 +90,6 @@ export default function ZentraleUebersicht() {
         },
       })),
       ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
-      ...ctx.criticalFahndungen.map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung, onOpen: () => navigate('/zentrale/fahndungen') })),
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
     {schutzfaelle.length > 0 ? <button type="button" onClick={() => navigate('/zentrale/av-bv-ev')} className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left hover:border-blue-400"><span className="flex items-center gap-2 font-bold text-blue-950"><ShieldAlert className="h-5 w-5" />{schutzfaelle.length} aktive Schutzmaßnahme{schutzfaelle.length === 1 ? '' : 'n'}</span><span className="mt-1 block text-sm text-blue-800">Schutzbereiche, Ausnahmen und Kontrollstatus öffnen.</span></button> : null}
@@ -105,7 +103,6 @@ export default function ZentraleUebersicht() {
           <IncidentCards
             visibleIncidents={listIncidents}
             lageByIncidentId={ctx.lageByIncidentId}
-            baustellen={ctx.baustellen}
             canOperateZentrale={ctx.canOperateZentrale}
             openEditIncident={ctx.openEditIncident}
             openLageForIncident={ctx.openLageForIncident}
@@ -122,7 +119,7 @@ export default function ZentraleUebersicht() {
         <LeafletMap
           height={560}
           markers={incidentMarkers}
-          lines={focusedIncident ? [...ctx.baustellenLines, ...ctx.sperrenLines] : []}
+          lines={focusedIncident ? ctx.sperrenLines : []}
           circles={focusedIncident ? schutzCircles : []}
           focus={focusedIncident ? { lat: focusedIncident.location_lat as number, lng: focusedIncident.location_lng as number, zoom: 16 } : null}
           fitLines={false}
@@ -137,7 +134,6 @@ export default function ZentraleUebersicht() {
     </section>
     {workIncident ? <EinsatzArbeitModal
       item={workIncident}
-      baustellen={ctx.baustellen}
       canOperateZentrale={ctx.canOperateZentrale}
       close={() => setWorkIncident(null)}
       openEditIncident={ctx.openEditIncident}

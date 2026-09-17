@@ -4,15 +4,15 @@ import { Link, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
-import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
+import { geocodeLocation } from '../../lib/geocode'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
-import type { DutyAssignment, DutyShift, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleBaustelle, ZentraleEntry, ZentraleEntryCategory, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyShift, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleEntry, ZentraleEntryCategory } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
 import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
-import { BaustelleModal, IncidentModal } from './zentraleShared'
-import { DISPOSITION_LABEL, EMPTY_BAUSTELLE_FORM, EMPTY_INCIDENT_FORM, formatTime, type BaustelleFormState, type IncidentFormState } from '../../lib/zentraleShared'
+import { IncidentModal } from './zentraleShared'
+import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, type IncidentFormState } from '../../lib/zentraleShared'
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
@@ -43,12 +43,9 @@ export interface ZentraleContext {
   openIncidents: IncidentReport[]
   uebergabeIncidents: IncidentReport[]
   openIncidentMarkers: { lat: number; lng: number; popup: string }[]
-  baustellen: ZentraleBaustelle[]
-  baustellenLines: { points: readonly [number, number][]; popup?: string; color?: string; dashed?: boolean }[]
   sperrenLines: { points: readonly [number, number][]; popup?: string; color?: string; dashed?: boolean }[]
   criticalEntries: ZentraleEntry[]
   criticalAvBv: ZentraleAvBv[]
-  criticalFahndungen: ZentraleFahndung[]
   criticalStrassensperren: StrassenzustandBerichtzeile[]
   criticalSourcesError: boolean
   openIncident: () => void
@@ -57,11 +54,6 @@ export interface ZentraleContext {
   openEditEntry: (item: ZentraleEntry) => void
   completeIncident: (item: IncidentReport) => Promise<void>
   deleteIncident: (item: IncidentReport) => Promise<void>
-  openNewBaustelle: () => void
-  openEditBaustelle: (item: ZentraleBaustelle) => void
-  confirmBaustelle: (item: ZentraleBaustelle) => Promise<void>
-  closeBaustelle: (item: ZentraleBaustelle) => Promise<void>
-  deleteBaustelle: (item: ZentraleBaustelle) => Promise<void>
   persons: OperationalPerson[]
   onPersonCreated: (person: OperationalPerson) => void
   createdBy: string | null
@@ -78,7 +70,6 @@ export default function ZentraleShell() {
   const [openIncidentsAllDays, setOpenIncidentsAllDays] = useState<IncidentReport[]>([])
   const [personNotes, setPersonNotes] = useState<OperationalPersonNote[]>([])
   const [avBvOpen, setAvBvOpen] = useState<ZentraleAvBv[]>([])
-  const [fahndungenOpen, setFahndungenOpen] = useState<ZentraleFahndung[]>([])
   const [strassenzustandZeilen, setStrassenzustandZeilen] = useState<StrassenzustandBerichtzeile[]>([])
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -98,15 +89,6 @@ export default function ZentraleShell() {
   const [priorIncidents, setPriorIncidents] = useState<IncidentReport[]>([])
   const priorIncidentsRequestRef = useRef(0)
   const [editingLinkedIncident, setEditingLinkedIncident] = useState<IncidentReport | null>(null)
-  const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
-  const [showBaustelleForm, setShowBaustelleForm] = useState(false)
-  const [editingBaustelle, setEditingBaustelle] = useState<ZentraleBaustelle | null>(null)
-  const [baustelleForm, setBaustelleForm] = useState<BaustelleFormState>(EMPTY_BAUSTELLE_FORM)
-  const [baustelleSaving, setBaustelleSaving] = useState(false)
-  const [baustelleError, setBaustelleError] = useState('')
-  const [baustelleLocating, setBaustelleLocating] = useState<'start' | 'end' | null>(null)
-  const [baustelleRouting, setBaustelleRouting] = useState(false)
-  const baustelleRouteRequestRef = useRef(0)
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale' || ownAssignment?.function === 'innendienst'
@@ -114,15 +96,13 @@ export default function ZentraleShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = todayLocal()
-    const [entryResult, dutyResult, incidentResult, openIncidentResult, personResult, avBvResult, fahndungResult, baustelleResult, strassenzustandResult] = await Promise.all([
+    const [entryResult, dutyResult, incidentResult, openIncidentResult, personResult, avBvResult, strassenzustandResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
       supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       supabase.from('incident_reports').select('*').eq('status', 'offen').order('reported_at', { ascending: true }),
       supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false }),
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
-      supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
-      supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
       supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name,start_lat,start_lng,end_lat,end_lng,path)').order('created_at', { ascending: false }),
     ])
     if (entryResult.error || dutyResult.error || incidentResult.error || openIncidentResult.error) setError('Die Informationen der Zentrale konnten nicht vollständig geladen werden.')
@@ -133,25 +113,12 @@ export default function ZentraleShell() {
     setOpenIncidentsAllDays((openIncidentResult.data ?? []) as IncidentReport[])
     setPersonNotes(personResult.error ? [] : (personResult.data ?? []) as unknown as OperationalPersonNote[])
     setAvBvOpen(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as ZentraleAvBv[])
-    setFahndungenOpen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
     setStrassenzustandZeilen(strassenzustandResult.error ? [] : (strassenzustandResult.data ?? []) as unknown as StrassenzustandBerichtzeile[])
-    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error || strassenzustandResult.error))
-    setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
+    setCriticalSourcesError(Boolean(avBvResult.error || strassenzustandResult.error))
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
   useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
-  useEffect(() => {
-    const { startLat, startLng, endLat, endLng } = baustelleForm
-    if (startLat === null || startLng === null || endLat === null || endLng === null) return
-    const requestId = ++baustelleRouteRequestRef.current
-    setBaustelleRouting(true)
-    void routeAlongRoad({ lat: startLat, lng: startLng }, { lat: endLat, lng: endLng }).then(path => {
-      if (baustelleRouteRequestRef.current !== requestId) return
-      setBaustelleRouting(false)
-      setBaustelleForm(current => current.startLat === startLat && current.startLng === startLng && current.endLat === endLat && current.endLng === endLng ? { ...current, path } : current)
-    })
-  }, [baustelleForm.startLat, baustelleForm.startLng, baustelleForm.endLat, baustelleForm.endLng])
 
   const lageEntries = useMemo(() => entries.filter(item => item.category === 'lage'), [entries])
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
@@ -183,12 +150,6 @@ export default function ZentraleShell() {
   const openIncidentMarkers = useMemo(() => openIncidentsAllDays
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => ({ lat: item.location_lat as number, lng: item.location_lng as number, popup: `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 40)}` })), [openIncidentsAllDays])
-  const baustellenLines = useMemo(() => baustellen.map(item => ({
-    points: item.path && item.path.length >= 2 ? item.path : [[item.start_lat, item.start_lng], [item.end_lat, item.end_lng]] as readonly [number, number][],
-    popup: `${item.titel}${item.status === 'gemeldet' ? ' (ungeprüft)' : ''}`,
-    color: item.status === 'gemeldet' ? '#9ca3af' : '#f97316',
-    dashed: item.status === 'gemeldet',
-  })), [baustellen])
   const involvedOrCallerPersonIds = useMemo(() => [incident.callerPersonId, incident.involvedPersonId].filter((value): value is string => !!value), [incident.callerPersonId, incident.involvedPersonId])
   const contextEntries = useMemo(() => {
     const place = incident.location.trim(), phone = normalizePhone(incident.callerPhone)
@@ -209,13 +170,7 @@ export default function ZentraleShell() {
     return avBvOpen.filter(item => (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
       || (place.length >= 4 && addressesMatch(place, item.object?.address ?? item.gebiet ?? '')))
   }, [avBvOpen, incident.location, involvedOrCallerPersonIds])
-  const contextFahndungen = useMemo(() => {
-    const place = incident.location.trim()
-    return fahndungenOpen.filter(item => (item.person_id && involvedOrCallerPersonIds.includes(item.person_id))
-      || (place.length >= 4 && addressesMatch(place, item.object?.address ?? '')))
-  }, [fahndungenOpen, incident.location, involvedOrCallerPersonIds])
   const criticalAvBv = useMemo(() => avBvOpen.filter(item => item.priority === 'kritisch'), [avBvOpen])
-  const criticalFahndungen = useMemo(() => fahndungenOpen.filter(item => item.priority === 'kritisch'), [fahndungenOpen])
   const criticalStrassensperren = useMemo(() => aktiveSperren(strassenzustandZeilen), [strassenzustandZeilen])
   const sperrenLines = useMemo(() => criticalStrassensperren
     .filter(zeile => zeile.zustand === 'gesperrt' && zeile.strassenzustand_strassen?.start_lat != null && zeile.strassenzustand_strassen.start_lng != null && zeile.strassenzustand_strassen.end_lat != null && zeile.strassenzustand_strassen.end_lng != null)
@@ -358,73 +313,11 @@ export default function ZentraleShell() {
   async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
   async function deleteIncident(item: IncidentReport) { if (!window.confirm('Diese Einsatzmeldung endgültig löschen?')) return; const result = await supabase.from('incident_reports').delete().eq('id', item.id); if (result.error) { setError('Die Einsatzmeldung konnte nicht gelöscht werden.'); return } logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80)); await load() }
 
-  function openNewBaustelle() { setEditingBaustelle(null); setBaustelleForm(EMPTY_BAUSTELLE_FORM); setBaustelleError(''); setShowBaustelleForm(true) }
-  function openEditBaustelle(item: ZentraleBaustelle) {
-    setEditingBaustelle(item)
-    setBaustelleForm({ titel: item.titel, startAddress: '', endAddress: '', note: item.note ?? '', gueltigBis: item.gueltig_bis ?? '', startLat: item.start_lat, startLng: item.start_lng, endLat: item.end_lat, endLng: item.end_lng, path: item.path, drawMode: false })
-    setBaustelleError(''); setShowBaustelleForm(true)
-  }
-  async function locateBaustelleStart() {
-    const queried = baustelleForm.startAddress.trim()
-    if (!queried) return
-    setBaustelleLocating('start'); setBaustelleError('')
-    const result = await geocodeLocation(queried)
-    setBaustelleLocating(null)
-    if (!result) { setBaustelleError('Startpunkt konnte nicht gefunden werden.'); return }
-    setBaustelleForm(current => current.startAddress.trim() === queried ? { ...current, startLat: result.lat, startLng: result.lng } : current)
-  }
-  async function locateBaustelleEnd() {
-    const queried = baustelleForm.endAddress.trim()
-    if (!queried) return
-    setBaustelleLocating('end'); setBaustelleError('')
-    const result = await geocodeLocation(queried)
-    setBaustelleLocating(null)
-    if (!result) { setBaustelleError('Endpunkt konnte nicht gefunden werden.'); return }
-    setBaustelleForm(current => current.endAddress.trim() === queried ? { ...current, endLat: result.lat, endLng: result.lng } : current)
-  }
-  function handleBaustelleMapClick(lat: number, lng: number) {
-    setBaustelleForm(current => {
-      if (!current.drawMode) return current
-      if (current.startLat === null || current.startLng === null || (current.endLat !== null && current.endLng !== null)) return { ...current, startLat: lat, startLng: lng, endLat: null, endLng: null }
-      return { ...current, endLat: lat, endLng: lng }
-    })
-  }
-  async function saveBaustelle() {
-    if (!profile?.id) return
-    if (!baustelleForm.titel.trim()) { setBaustelleError('Bitte eine Bezeichnung eingeben.'); return }
-    if (baustelleForm.startLat === null || baustelleForm.startLng === null || baustelleForm.endLat === null || baustelleForm.endLng === null) { setBaustelleError('Bitte Start- und Endpunkt festlegen (Adresse suchen oder auf der Karte klicken).'); return }
-    setBaustelleSaving(true)
-    const payload = { titel: baustelleForm.titel.trim(), start_lat: baustelleForm.startLat, start_lng: baustelleForm.startLng, end_lat: baustelleForm.endLat, end_lng: baustelleForm.endLng, path: baustelleForm.path, note: baustelleForm.note.trim() || null, gueltig_bis: baustelleForm.gueltigBis || null }
-    const response = editingBaustelle ? await supabase.from('zentrale_baustellen').update(payload).eq('id', editingBaustelle.id) : await supabase.from('zentrale_baustellen').insert({ ...payload, created_by: profile.id, status: canOperateZentrale ? 'offen' : 'gemeldet' })
-    setBaustelleSaving(false)
-    if (response.error) { setBaustelleError('Baustelle konnte nicht gespeichert werden.'); return }
-    logAudit(editingBaustelle ? 'Baustelle bearbeitet' : 'Baustelle gemeldet', baustelleForm.titel.trim())
-    setShowBaustelleForm(false); setNotice(editingBaustelle ? 'Baustelle wurde aktualisiert.' : (canOperateZentrale ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung.')); await load()
-  }
-  async function confirmBaustelle(item: ZentraleBaustelle) {
-    if (!profile?.id) return
-    const result = await supabase.from('zentrale_baustellen').update({ status: 'offen', confirmed_by: profile.id, confirmed_at: new Date().toISOString() }).eq('id', item.id)
-    if (result.error) { setError('Baustelle konnte nicht bestätigt werden.'); return }
-    logAudit('Baustelle bestätigt', item.titel); setNotice('Baustelle wurde bestätigt.'); await load()
-  }
-  async function closeBaustelle(item: ZentraleBaustelle) {
-    const result = await supabase.from('zentrale_baustellen').update({ status: 'erledigt' }).eq('id', item.id)
-    if (result.error) { setError('Baustelle konnte nicht abgeschlossen werden.'); return }
-    logAudit('Baustelle abgeschlossen', item.titel); setNotice('Baustelle wurde als erledigt markiert.'); await load()
-  }
-  async function deleteBaustelle(item: ZentraleBaustelle) {
-    if (!window.confirm(`Baustelle „${item.titel}“ endgültig löschen?`)) return
-    const result = await supabase.from('zentrale_baustellen').delete().eq('id', item.id)
-    if (result.error) { setError('Baustelle konnte nicht gelöscht werden.'); return }
-    logAudit('Baustelle endgültig gelöscht', item.titel); setNotice('Baustelle wurde gelöscht.'); await load()
-  }
-
   const ctx: ZentraleContext = {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
-    visibleIncidents, openIncidents, uebergabeIncidents, openIncidentMarkers, baustellen, baustellenLines, sperrenLines,
-    criticalEntries, criticalAvBv, criticalFahndungen, criticalStrassensperren, criticalSourcesError,
+    visibleIncidents, openIncidents, uebergabeIncidents, openIncidentMarkers, sperrenLines,
+    criticalEntries, criticalAvBv, criticalStrassensperren, criticalSourcesError,
     openIncident, openEditIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,
-    openNewBaustelle, openEditBaustelle, confirmBaustelle, closeBaustelle, deleteBaustelle,
     persons, onPersonCreated: person => setPersons(current => [...current, person]), createdBy: profile?.id ?? null,
   }
 
@@ -433,8 +326,7 @@ export default function ZentraleShell() {
     {error && !showEntryForm && !showIncidentForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
-    {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} contextFahndungen={contextFahndungen} baustellen={baustellen} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
-    {showBaustelleForm ? <BaustelleModal form={baustelleForm} setForm={setBaustelleForm} editing={editingBaustelle} canOperate={canOperateZentrale} saving={baustelleSaving} error={baustelleError} locating={baustelleLocating} routing={baustelleRouting} locateStart={locateBaustelleStart} locateEnd={locateBaustelleEnd} onMapClick={handleBaustelleMapClick} close={() => setShowBaustelleForm(false)} save={saveBaustelle} /> : null}
   </div>
 }

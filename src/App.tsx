@@ -52,11 +52,11 @@ const ZentraleShell = lazy(() => import('./pages/zentrale/ZentraleShell'))
 const ZentraleUebersicht = lazy(() => import('./pages/zentrale/ZentraleUebersicht'))
 const ZentraleEinsaetze = lazy(() => import('./pages/zentrale/ZentraleEinsaetze'))
 const ZentraleLagePage = lazy(() => import('./pages/zentrale/ZentraleLagePage'))
-const ZentraleBaustellenPage = lazy(() => import('./pages/zentrale/ZentraleBaustellenPage'))
 const ZentraleAvBv = lazy(() => import('./pages/zentrale/ZentraleAvBv'))
 const StammdatenPersonen = lazy(() => import('./pages/stammdaten/StammdatenPersonen'))
 const StammdatenObjekte = lazy(() => import('./pages/stammdaten/StammdatenObjekte'))
-const ZentraleFahndungen = lazy(() => import('./pages/zentrale/ZentraleFahndungen'))
+const StammdatenFahndungen = lazy(() => import('./pages/stammdaten/StammdatenFahndungen'))
+const StammdatenBaustellen = lazy(() => import('./pages/stammdaten/StammdatenBaustellen'))
 const StammdatenSchluessel = lazy(() => import('./pages/stammdaten/StammdatenSchluessel'))
 const StammdatenKontakte = lazy(() => import('./pages/stammdaten/StammdatenKontakte'))
 const ZentraleAlarmierung = lazy(() => import('./pages/zentrale/ZentraleAlarmierung'))
@@ -132,10 +132,8 @@ export default function App() {
               <Route path="/zentrale" element={<ZentraleUebersicht />} />
               <Route path="/zentrale/einsaetze" element={<ZentraleEinsaetze />} />
               <Route path="/zentrale/lage" element={<ZentraleLagePage />} />
-              <Route path="/zentrale/baustellen" element={<ZentraleBaustellenPage />} />
             </Route>
             <Route path="/zentrale/av-bv-ev" element={<ZentraleAvBv />} />
-            <Route path="/zentrale/fahndungen" element={<ZentraleFahndungen />} />
             <Route path="/zentrale/alarmierung" element={<ZentraleAlarmierung />} />
             <Route path="/zentrale/unterlagen" element={<ZentraleUnterlagen />} />
             <Route path="/zentrale/strassenzustand" element={<ZentraleStrassenzustand />} />
@@ -144,6 +142,8 @@ export default function App() {
           <Route path="/zentrale/kontakte" element={<Navigate to="/stammdaten/kontakte" replace />} />
           <Route path="/zentrale/personen" element={<Navigate to="/stammdaten/personen" replace />} />
           <Route path="/zentrale/objekte" element={<Navigate to="/stammdaten/objekte" replace />} />
+          <Route path="/zentrale/fahndungen" element={<Navigate to="/stammdaten/fahndungen" replace />} />
+          <Route path="/zentrale/baustellen" element={<Navigate to="/stammdaten/baustellen" replace />} />
           <Route
             element={
               <ProtectedRoute>
@@ -156,6 +156,8 @@ export default function App() {
             <Route path="/stammdaten/kontakte" element={<StammdatenKontakte />} />
             <Route path="/stammdaten/personen" element={<StammdatenPersonen />} />
             <Route path="/stammdaten/objekte" element={<StammdatenObjekte />} />
+            <Route path="/stammdaten/fahndungen" element={<StammdatenFahndungen />} />
+            <Route path="/stammdaten/baustellen" element={<StammdatenBaustellen />} />
           </Route>
           <Route
             element={

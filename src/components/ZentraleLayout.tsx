@@ -1,4 +1,4 @@
-import { BookOpen, Construction, LayoutGrid, MapPin, Radio, Search, ShieldAlert, UserRoundCheck } from 'lucide-react'
+import { BookOpen, LayoutGrid, MapPin, Radio, ShieldAlert, UserRoundCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -14,11 +14,9 @@ export default function ZentraleLayout() {
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/zentrale', label: 'Zentrale', icon: Radio },
       { to: '/zentrale/av-bv-ev', label: 'BV/AV & EV', icon: ShieldAlert },
-      { to: '/zentrale/fahndungen', label: 'Fahndungen', icon: Search },
       { to: '/stammdaten/kontakte', label: 'Kontakte', icon: UserRoundCheck },
       { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
       { to: '/zentrale/strassenzustand', label: 'Straßenzustand', icon: MapPin },
-      { to: '/zentrale/baustellen', label: 'Baustellen', icon: Construction },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]

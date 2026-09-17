@@ -4,7 +4,7 @@ import { Modal } from '../../components/ZentraleEntryEditor'
 import { supabase } from '../../lib/supabase'
 import { formatTime } from '../../lib/zentraleShared'
 import { EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, formatStamp, noteWithoutStufe, readKette, readStoredStufe, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
-import type { IncidentReport, OperationalPerson, ZentraleBaustelle } from '../../lib/types'
+import type { IncidentReport, OperationalPerson } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
 import EinsatzParteien from './EinsatzParteien'
 
@@ -14,7 +14,6 @@ export default function EinsatzArbeitModal({
   item, canOperateZentrale, close, openEditIncident, completeIncident, persons, onPersonCreated, createdBy,
 }: {
   item: IncidentReport
-  baustellen: ZentraleBaustelle[]
   canOperateZentrale: boolean
   close: () => void
   openEditIncident: (item: IncidentReport) => void
