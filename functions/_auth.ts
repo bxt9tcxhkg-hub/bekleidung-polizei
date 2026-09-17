@@ -203,6 +203,11 @@ export async function canReadFile(request: Request, env: AuthEnv, key: string): 
   if (key.startsWith('einsatz-unterlagen/') || key.startsWith('schulungs-unterlagen/')) {
     return canReadEinsatzMaterial(request, env, key)
   }
+  // Einsatz-Unterlagen (ZMR-Auszug etc.) haben keine eigene DB-Tabelle; Berechtigung folgt
+  // der beim Upload/Löschen: angemeldetes aktives Profil reicht (isAuthenticated bereits geprüft).
+  if (key.startsWith('einsatz-dokumente/')) {
+    return true
+  }
   if (key.startsWith('fuhrpark-dokumente/')) {
     return canReadFleetDocument(request, env, key)
   }
