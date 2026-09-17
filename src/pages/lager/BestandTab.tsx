@@ -1,4 +1,4 @@
-import { Check, Search, Trash2, Warehouse, X } from 'lucide-react'
+import { Check, Minus, Search, Trash2, Warehouse, X } from 'lucide-react'
 import { groupSizes, sizeLabel } from '../../lib/sizes'
 import type { LagerController } from './useLager'
 
@@ -17,6 +17,7 @@ export function BestandTab({ lager }: { lager: LagerController }) {
     invEntries, pageSize,
     setConfirmDelete,
     invSearch, setInvSearch,
+    takeOutId, setTakeOutId, takeOutQty, setTakeOutQty, takingOut, takeOut,
   } = lager
 
   return (
@@ -138,22 +139,46 @@ export function BestandTab({ lager }: { lager: LagerController }) {
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  ) : takeOutId === entry.id ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <input type="number" min="1" max={entry.quantity}
+                        className="w-16 text-center border border-amber-400 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        value={takeOutQty}
+                        onChange={e => setTakeOutQty(e.target.value)}
+                        autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') takeOut(entry); if (e.key === 'Escape') setTakeOutId(null) }}
+                      />
+                      <button onClick={() => takeOut(entry)} disabled={takingOut}
+                        className="p-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-60" title="Entnahme buchen">
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => setTakeOutId(null)}
+                        className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ) : (
-                    <button onClick={() => { setEditingId(entry.id); setEditQty(String(entry.quantity)) }}
-                      className="inline-flex items-center gap-2 hover:bg-gray-100 px-3 py-1 rounded-lg transition-colors group">
-                      {(() => {
-                        const min = entry.products?.min_quantity ?? 0
-                        const qty = entry.quantity
-                        const color = qty === 0 ? 'text-gray-400' : min > 0 && qty < min ? 'text-red-600' : min > 0 && qty <= min * 1.5 ? 'text-amber-600' : 'text-green-700'
-                        return <span className={`text-sm font-semibold ${color}`}>{qty}×</span>
-                      })()}
-                      {(() => {
-                        const min = entry.products?.min_quantity ?? 0
-                        return min > 0 && entry.quantity < min
-                          ? <span className="text-xs text-red-400">min. {min}</span>
-                          : <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
-                      })()}
-                    </button>
+                    <div className="inline-flex items-center gap-1 group">
+                      <button onClick={() => { setEditingId(entry.id); setEditQty(String(entry.quantity)) }}
+                        className="inline-flex items-center gap-2 hover:bg-gray-100 px-3 py-1 rounded-lg transition-colors">
+                        {(() => {
+                          const min = entry.products?.min_quantity ?? 0
+                          const qty = entry.quantity
+                          const color = qty === 0 ? 'text-gray-400' : min > 0 && qty < min ? 'text-red-600' : min > 0 && qty <= min * 1.5 ? 'text-amber-600' : 'text-green-700'
+                          return <span className={`text-sm font-semibold ${color}`}>{qty}×</span>
+                        })()}
+                        {(() => {
+                          const min = entry.products?.min_quantity ?? 0
+                          return min > 0 && entry.quantity < min
+                            ? <span className="text-xs text-red-400">min. {min}</span>
+                            : <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">bearbeiten</span>
+                        })()}
+                      </button>
+                      {entry.quantity > 0 ? <button onClick={() => { setTakeOutId(entry.id); setTakeOutQty('1') }}
+                        className="p-1.5 text-amber-700 hover:bg-amber-50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" title="Entnehmen / Ausbuchen">
+                        <Minus className="w-3.5 h-3.5" />
+                      </button> : null}
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3 text-right text-xs text-gray-400 hidden md:table-cell">

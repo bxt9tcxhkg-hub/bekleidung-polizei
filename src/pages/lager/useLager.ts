@@ -38,6 +38,13 @@ export function useLager() {
   const [editQty, setEditQty] = useState('')
   const [addForm, setAddForm] = useState<{ product_id: string; size: string; quantity: string } | null>(null)
 
+  // Ausbuchen (Entnahme): eigene, schnelle Aktion statt über die absolute
+  // Bestandskorrektur - dort müsste man den neuen Gesamtwert im Kopf
+  // ausrechnen, hier einfach "wie viel nehme ich raus".
+  const [takeOutId, setTakeOutId] = useState<string | null>(null)
+  const [takeOutQty, setTakeOutQty] = useState('1')
+  const [takingOut, setTakingOut] = useState(false)
+
   // Mindestmenge edit
   const [editingMinId, setEditingMinId] = useState<string | null>(null)
   const [editMinVal, setEditMinVal] = useState('')
@@ -116,10 +123,28 @@ export function useLager() {
     const qty = parseInt(editQty)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
-    const { error: qtyError } = await supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id)
+    // .select() erzwingen: RLS lässt ein UPDATE ohne Berechtigung sonst
+    // "erfolgreich" mit 0 geänderten Zeilen durchlaufen (kein SQL-Error) -
+    // ohne die Rückgabe zu prüfen, würde die Anzeige einfach unverändert
+    // zurückspringen, ohne dass sichtbar wird, warum.
+    const { data, error: qtyError } = await supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id).select('id')
     setSaving(false)
     if (qtyError) { setError('Bestand konnte nicht gespeichert werden.'); return }
+    if (!data || data.length === 0) { setError('Bestand konnte nicht gespeichert werden (keine Berechtigung?).'); return }
     setEditingId(null)
+    loadAll()
+  }
+
+  async function takeOut(entry: InventoryItem) {
+    const amount = parseInt(takeOutQty)
+    if (isNaN(amount) || amount < 1) { setError('Bitte eine gültige Menge angeben.'); return }
+    if (amount > entry.quantity) { setError('Es sind nicht so viele Stück vorrätig.'); return }
+    setTakingOut(true)
+    const { error: adjError } = await supabase.rpc('adjust_inventory', { p_product: entry.product_id, p_size: entry.size, p_delta: -amount })
+    setTakingOut(false)
+    if (adjError) { setError('Entnahme konnte nicht gebucht werden.'); return }
+    logAudit('Bestand entnommen', `${entry.products?.name ?? ''} ${entry.size} -${amount}`.trim())
+    setTakeOutId(null); setTakeOutQty('1')
     loadAll()
   }
 
@@ -127,9 +152,10 @@ export function useLager() {
     const val = parseInt(editMinVal)
     if (isNaN(val) || val < 1) return
     setSavingMin(true)
-    const { error: minError } = await supabase.from('products').update({ min_quantity: val }).eq('id', productId)
+    const { data, error: minError } = await supabase.from('products').update({ min_quantity: val }).eq('id', productId).select('id')
     setSavingMin(false)
     if (minError) { setError('Mindestmenge konnte nicht gespeichert werden.'); return }
+    if (!data || data.length === 0) { setError('Mindestmenge konnte nicht gespeichert werden (keine Berechtigung?).'); return }
     setEditingMinId(null)
     loadAll()
   }
@@ -349,6 +375,7 @@ export function useLager() {
     tab, setTab, products, loading, error, setError,
     invPage, setInvPage, ordersPage, setOrdersPage, invSearch, setInvSearch,
     editingId, setEditingId, editQty, setEditQty, addForm, setAddForm,
+    takeOutId, setTakeOutId, takeOutQty, setTakeOutQty, takingOut, takeOut,
     editingMinId, setEditingMinId, editMinVal, setEditMinVal, savingMin,
     addSearch, setAddSearch, addDropdown, setAddDropdown, saving,
     followUp, setFollowUp, advancingOrders,
