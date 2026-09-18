@@ -588,6 +588,8 @@ export interface ZentraleEntry {
   target_function: KontrollauftragZielfunktion | null
   /** Nur für category 'lage' gesetzt (Pflicht) - die auslösende Einsatzmeldung. */
   incident_id: string | null
+  /** Nur für automatisch aus einem Schutzfall (BV/AV, EV) erzeugte Kontrollaufträge gesetzt. */
+  schutzfall_id: string | null
   /** Erledigungsfrist, z. B. bei einem automatisch aus einem AV/BV-Ausspruch erzeugten Kontrollauftrag (72 Stunden). Nicht auf diese Kategorie beschränkt. */
   due_at: string | null
   /** Zeitpunkt des Erledigt-Klicks bei einem Kontrollauftrag - reine Gedankenstütze für die spätere Protokollierung im PAD, kein Nachweis. */
