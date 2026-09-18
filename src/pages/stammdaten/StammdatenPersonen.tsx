@@ -136,7 +136,7 @@ export default function StammdatenPersonen() {
       supabase.from('zentrale_av_bv').select('id', { count: 'exact', head: true }).eq('person_id', personId),
       supabase.from('zentrale_fahndungen').select('id', { count: 'exact', head: true }).eq('person_id', personId),
       supabase.from('schutzfaelle').select('id', { count: 'exact', head: true }).eq('gefaehrder_id', personId),
-      supabase.from('schutzfall_personen').select('id', { count: 'exact', head: true }).eq('person_id', personId),
+      supabase.from('schutzfall_personen').select('person_id', { count: 'exact', head: true }).eq('person_id', personId),
     ])
     if (noteCount.error || mailCount.error || avBvCount.error || fahndungCount.error || schutzGefaehrderCount.error || schutzPersonCount.error) {
       setError('Verknüpfungen konnten nicht geprüft werden - Löschen abgebrochen.')
