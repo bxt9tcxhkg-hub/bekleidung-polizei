@@ -54,8 +54,8 @@ export interface MapCircle {
   fillOpacity?: number
 }
 
-function vogisWms(mapfile: string, layers: string, format = 'image/jpeg'): L.TileLayer.WMS {
-  return L.tileLayer.wms(`https://vogis.cnv.at/mapserver/mapserv?map=${mapfile}`, {
+function vogisWms(mapfile: string, layers: string, format = 'image/jpeg', onTileError?: (event: L.TileErrorEvent) => void): L.TileLayer.WMS {
+  const layer = L.tileLayer.wms(`https://vogis.cnv.at/mapserver/mapserv?map=${mapfile}`, {
     layers,
     format,
     transparent: format.includes('png'),
@@ -63,25 +63,32 @@ function vogisWms(mapfile: string, layers: string, format = 'image/jpeg'): L.Til
     attribution: 'VoGIS Land Vorarlberg (CC BY 4.0)',
     maxZoom: 19,
   })
+  if (onTileError) layer.on('tileerror', onTileError)
+  return layer
 }
 
-function createBasemapLayer(id: MapBasemap): L.Layer {
-  if (id === 'luftbild') return vogisWms('i_luftbilder_r_wms.map', 'ef2025_10cm', 'image/jpeg')
-  if (id === 'topo') return vogisWms('i_topographie_r_wms.map', 'topokarte_isoli_text_20t', 'image/jpeg')
+// Ein WMS-Tile, das nicht geladen werden kann, bleibt bei Leaflet einfach
+// leer - kein Fehler in der UI. tileerror macht das sichtbar, statt dass es
+// wie "kein Grundstückslayer vorhanden" aussieht (siehe LeafletMap unten).
+function createBasemapLayer(id: MapBasemap, onTileError?: (event: L.TileErrorEvent) => void): L.Layer {
+  if (id === 'luftbild') return vogisWms('i_luftbilder_r_wms.map', 'ef2025_10cm', 'image/jpeg', onTileError)
+  if (id === 'topo') return vogisWms('i_topographie_r_wms.map', 'topokarte_isoli_text_20t', 'image/jpeg', onTileError)
   if (id === 'kataster') {
     const group = L.layerGroup()
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap',
     }).addTo(group)
-    L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/wms', {
+    const wms = L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/wms', {
       layers: 'vogis:DKM_grp,vogis:Grundstueck_Nr_grp',
       format: 'image/png',
       transparent: true,
       version: '1.1.1',
       attribution: 'DKM / VoGIS (CC BY 4.0)',
       maxZoom: 19,
-    }).addTo(group)
+    })
+    if (onTileError) wms.on('tileerror', onTileError)
+    wms.addTo(group)
     return group
   }
   return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -116,6 +123,7 @@ export default function LeafletMap(props: {
   const onMapClickRef = useRef(onMapClick)
   const [basemap, setBasemap] = useState<MapBasemap>('karte')
   const [parcelLabel, setParcelLabel] = useState('')
+  const [tileError, setTileError] = useState(false)
   useEffect(() => { onMapClickRef.current = onMapClick })
   useEffect(() => { setBasemap('karte') }, [incidentKey])
 
@@ -151,7 +159,8 @@ export default function LeafletMap(props: {
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const next = createBasemapLayer(basemap)
+    setTileError(false)
+    const next = createBasemapLayer(basemap, () => setTileError(true))
     next.addTo(map)
     if (baseLayerRef.current) map.removeLayer(baseLayerRef.current)
     baseLayerRef.current = next
@@ -263,6 +272,7 @@ export default function LeafletMap(props: {
         ))}
       </div>
       <div ref={containerRef} style={{ height }} className="rounded-xl overflow-hidden border border-gray-200" />
+      {tileError ? <p className="mt-1.5 px-1 text-xs text-amber-700">Diese Kartenebene konnte nicht vollständig geladen werden (VoGIS-Dienst nicht erreichbar oder Anfrage abgelehnt).</p> : null}
       <div className="mt-1.5 px-1 text-xs text-gray-600">
         {parcelLabel ? <p className="font-medium text-gray-800">{parcelLabel}</p> : null}
         <p>
