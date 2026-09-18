@@ -1341,7 +1341,6 @@ type SchutzfallRow = {
   schluessel_verwahrort: string | null
   ausnahmen: string | null
   hinweise: string | null
-  kontrolle_erforderlich: boolean
   created_by: string
   created_at: string
   updated_at: string

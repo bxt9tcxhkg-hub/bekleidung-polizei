@@ -42,8 +42,6 @@ export interface Schutzfall {
   schluessel_verwahrort: string | null
   ausnahmen: string | null
   hinweise: string | null
-  /** Legt fest, ob beim Anlegen/Bearbeiten ein Kontrollauftrag für die Streife erzeugt werden soll (siehe create_schutzfall_kontrollauftrag/remove_schutzfall_kontrollauftrag). */
-  kontrolle_erforderlich: boolean
   created_by: string
   created_at: string
   updated_at: string
