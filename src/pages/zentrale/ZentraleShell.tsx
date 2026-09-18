@@ -12,7 +12,7 @@ import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/ze
 import { personDisplayName, usePersons } from '../../lib/register'
 import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
 import { IncidentModal } from './zentraleShared'
-import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, type IncidentFormState } from '../../lib/zentraleShared'
+import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, startOfTodayIso, type IncidentFormState } from '../../lib/zentraleShared'
 
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
@@ -99,7 +99,7 @@ export default function ZentraleShell() {
     const [entryResult, dutyResult, incidentResult, openIncidentResult, personResult, avBvResult, strassenzustandResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
-      supabase.from('incident_reports').select('*').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('*').gte('reported_at', startOfTodayIso()).order('reported_at', { ascending: false }),
       supabase.from('incident_reports').select('*').eq('status', 'offen').order('reported_at', { ascending: true }),
       supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false }),
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),

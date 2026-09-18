@@ -8,7 +8,7 @@ import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
 import { personDisplayName } from '../../lib/register'
 import { MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
-import { FAHNDUNG_ART_LABEL } from '../../lib/zentraleShared'
+import { FAHNDUNG_ART_LABEL, startOfTodayIso } from '../../lib/zentraleShared'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 
@@ -102,7 +102,7 @@ export default function AussendienstShell() {
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfTodayIso()).order('reported_at', { ascending: false }),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),

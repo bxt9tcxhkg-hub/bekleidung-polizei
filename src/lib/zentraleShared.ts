@@ -10,6 +10,23 @@ export const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = 
 export const AV_BV_ART_LABEL: Record<AvBvArt, string> = { amtsverbot: 'Amtsverbot', betretungsverbot: 'Betretungsverbot', einreiseverbot: 'Einreiseverbot' }
 export const FAHNDUNG_ART_LABEL: Record<FahndungArt, string> = { person: 'Person', fahrzeug: 'Fahrzeug', objekt: 'Objekt', sonstiges: 'Sonstiges' }
 export function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
+
+/**
+ * ISO-Zeitpunkt für "Mitternacht heute" in der lokalen Zeitzone des Geräts,
+ * für .gte('reported_at', ...)-Filter auf einer timestamptz-Spalte. Ein
+ * naiver String wie `${todayLocal()}T00:00:00` wird von Postgres ohne
+ * Offset interpretiert (Session-Zeitzone, i. d. R. UTC) - das lag bis zu
+ * zwei Stunden (MESZ) hinter der tatsächlichen lokalen Mitternacht zurück
+ * und ließ heute erst erfasste Einsätze rund um Mitternacht aus der
+ * "heute"-Liste verschwinden, bis die UTC-Uhr nachzog. new Date() kennt die
+ * lokale Zeitzone und .toISOString() liefert den korrekten UTC-Zeitpunkt
+ * inklusive "Z"-Offset, den Postgres eindeutig interpretiert.
+ */
+export function startOfTodayIso() {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date.toISOString()
+}
 export function composeIncidentLocation(street: string, houseNumber: string, houseNumberUnknown: boolean) {
   const trimmedStreet = street.trim()
   if (!trimmedStreet) return ''
