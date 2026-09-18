@@ -74,8 +74,8 @@ function createBasemapLayer(id: MapBasemap): L.Layer {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap',
     }).addTo(group)
-    L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/DKM_grp/wms', {
-      layers: 'DKM_grp,Grundstueck_Nr_grp',
+    L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/wms', {
+      layers: 'vogis:DKM_grp,vogis:Grundstueck_Nr_grp',
       format: 'image/png',
       transparent: true,
       version: '1.1.1',
