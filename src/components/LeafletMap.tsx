@@ -134,7 +134,12 @@ export default function LeafletMap(props: {
 
   useEffect(() => {
     if (!containerRef.current) return
-    const map = L.map(containerRef.current, { attributionControl: true })
+    // center/zoom müssen schon beim Erzeugen gesetzt sein: ohne initiale Ansicht
+    // ist die Karte noch nicht "geladen" - ruft der Marker/Kreis-Effekt direkt
+    // danach circle.getBounds() auf (z. B. bei Adresssuche mit Radius-Kreis),
+    // wirft Leaflet "Cannot read properties of undefined (reading
+    // 'layerPointToLatLng')", weil die Kreisprojektion noch fehlt.
+    const map = L.map(containerRef.current, { attributionControl: true, center: DORNBIRN_CENTER, zoom: 13 })
     mapRef.current = map
     map.on('click', (event: L.LeafletMouseEvent) => {
       const handler = onMapClickRef.current
