@@ -59,13 +59,14 @@ const StammdatenFahndungen = lazy(() => import('./pages/stammdaten/StammdatenFah
 const StammdatenBaustellen = lazy(() => import('./pages/stammdaten/StammdatenBaustellen'))
 const StammdatenSchluessel = lazy(() => import('./pages/stammdaten/StammdatenSchluessel'))
 const StammdatenKontakte = lazy(() => import('./pages/stammdaten/StammdatenKontakte'))
+const StammdatenTelefonnummern = lazy(() => import('./pages/stammdaten/StammdatenTelefonnummern'))
 const ZentraleAlarmierung = lazy(() => import('./pages/zentrale/ZentraleAlarmierung'))
 const ZentraleUnterlagen = lazy(() => import('./pages/zentrale/ZentraleUnterlagen'))
 const ZentraleStrassenzustand = lazy(() => import('./pages/zentrale/ZentraleStrassenzustand'))
 const AussendienstShell = lazy(() => import('./pages/aussendienst/AussendienstShell'))
 const AussendienstUebersicht = lazy(() => import('./pages/aussendienst/AussendienstUebersicht'))
 const AussendienstEinsaetze = lazy(() => import('./pages/aussendienst/AussendienstEinsaetze'))
-const AussendienstKontrollauftraege = lazy(() => import('./pages/aussendienst/AussendienstKontrollauftraege'))
+const KontrollauftraegePage = lazy(() => import('./pages/aussendienst/KontrollauftraegePage'))
 const AussendienstHinweise = lazy(() => import('./pages/aussendienst/AussendienstHinweise'))
 const AussendienstFahrzeug = lazy(() => import('./pages/aussendienst/AussendienstFahrzeug'))
 const AussendienstSchutzmassnahmen = lazy(() => import('./pages/aussendienst/AussendienstSchutzmassnahmen'))
@@ -134,6 +135,7 @@ export default function App() {
               <Route path="/zentrale/lage" element={<ZentraleLagePage />} />
             </Route>
             <Route path="/zentrale/av-bv-ev" element={<ZentraleAvBv />} />
+            <Route path="/zentrale/kontrollauftraege" element={<KontrollauftraegePage />} />
             <Route path="/zentrale/alarmierung" element={<ZentraleAlarmierung />} />
             <Route path="/zentrale/unterlagen" element={<ZentraleUnterlagen />} />
             <Route path="/zentrale/strassenzustand" element={<ZentraleStrassenzustand />} />
@@ -154,6 +156,7 @@ export default function App() {
             <Route path="/stammdaten" element={<Navigate to="/stammdaten/schluessel" replace />} />
             <Route path="/stammdaten/schluessel" element={<StammdatenSchluessel />} />
             <Route path="/stammdaten/kontakte" element={<StammdatenKontakte />} />
+            <Route path="/stammdaten/telefonnummern" element={<StammdatenTelefonnummern />} />
             <Route path="/stammdaten/personen" element={<StammdatenPersonen />} />
             <Route path="/stammdaten/objekte" element={<StammdatenObjekte />} />
             <Route path="/stammdaten/fahndungen" element={<StammdatenFahndungen />} />
@@ -169,7 +172,7 @@ export default function App() {
             <Route element={<AussendienstShell />}>
               <Route path="/aussendienst" element={<AussendienstUebersicht />} />
               <Route path="/aussendienst/einsaetze" element={<AussendienstEinsaetze />} />
-              <Route path="/aussendienst/kontrollauftraege" element={<AussendienstKontrollauftraege />} />
+              <Route path="/aussendienst/kontrollauftraege" element={<KontrollauftraegePage />} />
               <Route path="/aussendienst/hinweise" element={<AussendienstHinweise />} />
               <Route path="/aussendienst/fahrzeug" element={<AussendienstFahrzeug />} />
               <Route path="/aussendienst/schutzmassnahmen" element={<AussendienstSchutzmassnahmen />} />

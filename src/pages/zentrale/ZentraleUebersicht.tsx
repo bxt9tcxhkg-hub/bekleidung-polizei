@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapPin, ShieldAlert, UsersRound } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import LeafletMap from '../../components/LeafletMap'
+import WichtigeTelefonnummernCard from '../../components/WichtigeTelefonnummernCard'
 import { firstControlDeadline, hasInitialControl, loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { supabase } from '../../lib/supabase'
 import { ZUSTAND_LABEL, formatZeitraum, strassenName } from '../../lib/strassenzustand'
@@ -100,6 +101,7 @@ export default function ZentraleUebersicht() {
       ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: kontrolliert.has(item.id) && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
+    <WichtigeTelefonnummernCard />
     {schutzfaelle.length > 0 ? <button type="button" onClick={() => navigate('/zentrale/av-bv-ev')} className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left hover:border-blue-400"><span className="flex items-center gap-2 font-bold text-blue-950"><ShieldAlert className="h-5 w-5" />{schutzfaelle.length} aktive Schutzmaßnahme{schutzfaelle.length === 1 ? '' : 'n'}</span><span className="mt-1 block text-sm text-blue-800">Schutzbereiche, Ausnahmen und Kontrollstatus öffnen.</span></button> : null}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <section className="flex flex-col min-h-0">

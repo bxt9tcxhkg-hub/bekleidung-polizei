@@ -1,5 +1,6 @@
 import { CheckCircle2, ClipboardList, Coins, Music, Palette, Plus, ShieldAlert } from 'lucide-react'
 import { useOutletContext } from 'react-router-dom'
+import WichtigeTelefonnummernCard from '../../components/WichtigeTelefonnummernCard'
 import { formatEuro } from './innendienstShared'
 import type { InnendienstContext } from './InnendienstShell'
 
@@ -15,6 +16,7 @@ export default function InnendienstUebersicht() {
   const ctx = useOutletContext<InnendienstContext>()
   const { ownTask } = ctx
   return <div className="space-y-4 mb-6">
+    <WichtigeTelefonnummernCard />
     <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Coins className="w-4 h-4 text-blue-700" /> Kassenabrechnung</h2><p className="text-xs text-gray-500 mt-0.5">Grundbestand {formatEuro(ownTask?.float_amount ?? 500)} · erst Erlös laut Kasse, dann Stückelungen zählen.</p>
       {ownTask?.kasse_confirmed_at && ownTask.expected_revenue != null ? <div className="mt-2 space-y-1.5"><div className="rounded-xl bg-green-50 border border-green-200 text-green-800 px-4 py-3 flex items-center gap-2 text-sm"><CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Abgerechnet um {new Date(ownTask.kasse_confirmed_at).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}</div>
         <dl className="text-sm grid grid-cols-2 gap-x-3 gap-y-1 px-1"><dt className="text-gray-500">Erlös lt. Kasse</dt><dd className="text-right font-medium">{formatEuro(ownTask.expected_revenue)}</dd><dt className="text-gray-500">Gezählt</dt><dd className="text-right font-medium">{formatEuro(ownTask.counted_total ?? 0)}</dd><dt className="text-gray-500">Differenz</dt><dd className={`text-right font-bold ${Math.round(((ownTask.counted_total ?? 0) - ownTask.float_amount - ownTask.expected_revenue) * 100) === 0 ? 'text-green-700' : 'text-red-700'}`}>{formatEuro((ownTask.counted_total ?? 0) - ownTask.float_amount - ownTask.expected_revenue)}</dd></dl>

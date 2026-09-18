@@ -683,6 +683,20 @@ export interface ZentraleKontakt {
   object?: Pick<OperationalObject, 'id' | 'address' | 'label'> | null
 }
 
+export type TelefonnummerKategorie = 'intern' | 'extern'
+
+export interface WichtigeTelefonnummer {
+  id: string
+  kategorie: TelefonnummerKategorie
+  bezeichnung: string
+  nummer: string
+  hinweis: string | null
+  sortierung: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type AlarmierungBereich = 'polizei' | 'staedtisch' | 'beide'
 
 export interface ZentraleAlarmierung {
@@ -1351,6 +1365,7 @@ type SchutzkontrolleRow = { id: string; schutzfall_id: string; kontrolliert_am: 
 type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
 type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
 type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
+type WichtigeTelefonnummerRow = Omit<WichtigeTelefonnummer, never>
 type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
 type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
@@ -1602,6 +1617,9 @@ export type Database = {
       zentrale_kontakte: { Row: ZentraleKontaktRow; Insert: Pick<ZentraleKontaktRow, 'name' | 'created_by'> & Partial<Omit<ZentraleKontaktRow, 'id' | 'created_at' | 'updated_at' | 'name' | 'created_by'>>; Update: Partial<Omit<ZentraleKontaktRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_kontakte_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'zentrale_kontakte_object_id_fkey'; columns: ['object_id']; isOneToOne: false; referencedRelation: 'operational_objects'; referencedColumns: ['id'] },
+      ] }
+      wichtige_telefonnummern: { Row: WichtigeTelefonnummerRow; Insert: Pick<WichtigeTelefonnummerRow, 'kategorie' | 'bezeichnung' | 'nummer' | 'created_by'> & Partial<Omit<WichtigeTelefonnummerRow, 'id' | 'created_at' | 'updated_at' | 'kategorie' | 'bezeichnung' | 'nummer' | 'created_by'>>; Update: Partial<Omit<WichtigeTelefonnummerRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'wichtige_telefonnummern_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       zentrale_alarmierung: { Row: ZentraleAlarmierungRow; Insert: Pick<ZentraleAlarmierungRow, 'anlass' | 'created_by'> & Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'updated_at' | 'anlass' | 'created_by'>>; Update: Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_alarmierung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },

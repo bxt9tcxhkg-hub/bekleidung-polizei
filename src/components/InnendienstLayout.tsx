@@ -1,4 +1,4 @@
-import { BookOpen, Building2, ClipboardList, FileClock, LayoutGrid, Receipt } from 'lucide-react'
+import { BookOpen, Building2, ClipboardList, FileClock, LayoutGrid, Phone, Receipt } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -20,6 +20,7 @@ export default function InnendienstLayout() {
       // nur bequem von hier erreichbar. RSa/RSb ist kein Innendienst-Unterpunkt,
       // sondern bereichsübergreifend und hat eine eigene Portal-Kachel.
       { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
+      { to: '/stammdaten/telefonnummern', label: 'Telefonnummern', icon: Phone },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]

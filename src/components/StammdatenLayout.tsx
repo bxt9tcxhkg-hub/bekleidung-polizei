@@ -1,4 +1,4 @@
-import { Building2, Construction, Contact, KeyRound, LayoutGrid, Search, Users } from 'lucide-react'
+import { Building2, Construction, Contact, KeyRound, LayoutGrid, Phone, Search, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import type { NavSection } from '../lib/sidebarSections'
@@ -16,6 +16,7 @@ export default function StammdatenLayout() {
         { to: '/', label: 'Portal', icon: LayoutGrid },
         { to: '/stammdaten/schluessel', label: 'Schlüssel', icon: KeyRound },
         { to: '/stammdaten/kontakte', label: 'Kontakte', icon: Contact },
+        { to: '/stammdaten/telefonnummern', label: 'Telefonnummern', icon: Phone },
         { to: '/stammdaten/personen', label: 'Personen', icon: Users },
         { to: '/stammdaten/objekte', label: 'Objekte', icon: Building2 },
         { to: '/stammdaten/fahndungen', label: 'Fahndungen', icon: Search },
