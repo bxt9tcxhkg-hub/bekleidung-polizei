@@ -29,7 +29,7 @@ export default function ZentraleUebersicht() {
     })
   }, [])
   const schutzWarnings = useMemo(() => schutzfaelle.filter(item =>
-    (item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now)
+    (!hasInitialControl(item) && firstControlDeadline(item).getTime() < now)
     || new Date(item.ende).getTime() - now < 24 * 60 * 60 * 1000
   ), [schutzfaelle, now])
   const schutzCircles = useMemo(() => schutzfaelle.flatMap(item => (item.bereiche ?? []).map(area => ({
@@ -89,7 +89,7 @@ export default function ZentraleUebersicht() {
           else if (item.category === 'uebergabe') { navigate('/innendienst') }
         },
       })),
-      ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: item.massnahme === 'bv_av' && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
+      ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: !hasInitialControl(item) && firstControlDeadline(item).getTime() < now ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
     {schutzfaelle.length > 0 ? <button type="button" onClick={() => navigate('/zentrale/av-bv-ev')} className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left hover:border-blue-400"><span className="flex items-center gap-2 font-bold text-blue-950"><ShieldAlert className="h-5 w-5" />{schutzfaelle.length} aktive Schutzmaßnahme{schutzfaelle.length === 1 ? '' : 'n'}</span><span className="mt-1 block text-sm text-blue-800">Schutzbereiche, Ausnahmen und Kontrollstatus öffnen.</span></button> : null}
