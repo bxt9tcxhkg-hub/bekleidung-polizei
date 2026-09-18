@@ -7,8 +7,8 @@ import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
 import { personDisplayName } from '../../lib/register'
-import { MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
-import { FAHNDUNG_ART_LABEL, startOfTodayIso } from '../../lib/zentraleShared'
+import { loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
+import { FAHNDUNG_ART_LABEL, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 
@@ -18,7 +18,6 @@ import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 // die gemeinsamen Daten/Handler (ein Laden für alle Seiten), rendert Kopfzeile,
 // Meldungen und Modals, und reicht den Rest über den Outlet-Context durch.
 
-function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 // location_lat/-lng zusätzlich zur Zentrale-Ansicht: damit sich eine Baustelle
 // in der Nähe des Einsatzorts auch hier anzeigen lässt (siehe baustellen unten).
 type SimpleIncident = {
@@ -72,6 +71,11 @@ export default function AussendienstShell() {
   const [checks, setChecks] = useState<VehicleCheck[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [avBv, setAvBv] = useState<Schutzfall[]>([])
+  // Ob ein Schutzfall für die Streife "wichtig" ist, entscheidet sich (wie
+  // überall sonst, siehe ZentraleAvBv.tsx) allein daran, ob ein verknüpfter
+  // Kontrollauftrag existiert - sonst würde eine EV ohne angeforderte
+  // Kontrolle hier trotzdem wie eine dringende Warnung erscheinen.
+  const [kontrolliert, setKontrolliert] = useState<Set<string>>(new Set())
   const [fahndungen, setFahndungen] = useState<ZentraleFahndung[]>([])
   const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
   // Wie in ZentraleShell.tsx: bei Ladefehler darf "Keine aktuell dringenden
@@ -95,19 +99,20 @@ export default function AussendienstShell() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const today = todayLocal()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult, baustelleResult] = await Promise.all([
+    const today = operationalToday()
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult, baustelleResult, kontrolliertIds] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfTodayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       // Für "Baustelle in der Nähe" auf der Einsatzliste - erledigte Baustellen wie in der Zentrale ausgeblendet.
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
+      loadSchutzfaelleMitKontrollauftrag(),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
@@ -120,6 +125,7 @@ export default function AussendienstShell() {
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
     setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
+    setKontrolliert(kontrolliertIds)
     setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
     setLoading(false)
   }, [])
@@ -149,9 +155,13 @@ export default function AussendienstShell() {
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const criticalItems = useMemo(() => [
     ...criticalEntries.map(item => ({ id: item.id, title: item.title, description: item.description })),
-    ...avBv.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · Gefährder: ${item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}`, description: item.ausnahmen ? `Ausnahmen: ${item.ausnahmen}` : `PAD ${item.pad_aktenzahl} · Schutzbereiche prüfen` })),
+    // BV/AV hat die gesetzliche 72h-Erstkontrollpflicht und erscheint daher
+    // immer; eine EV nur, wenn für sie tatsächlich ein Kontrollauftrag
+    // angefordert wurde (siehe ZentraleAvBv.tsx) - sonst würde diese Warnung
+    // der dort bewusst getroffenen Entscheidung widersprechen.
+    ...avBv.filter(item => item.massnahme === 'bv_av' || kontrolliert.has(item.id)).map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · Gefährder: ${item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}`, description: item.ausnahmen ? `Ausnahmen: ${item.ausnahmen}` : `PAD ${item.pad_aktenzahl} · Schutzbereiche prüfen` })),
     ...fahndungen.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung })),
-  ], [avBv, criticalEntries, fahndungen])
+  ], [avBv, criticalEntries, fahndungen, kontrolliert])
   const openIncidents = useMemo(() => {
     const relevant = ownAssignment?.function === 'jd' ? incidents.filter(item => item.disposition === 'jd')
       : ownAssignment?.function === 'vd' ? incidents.filter(item => item.disposition === 'vd')
@@ -166,7 +176,7 @@ export default function AussendienstShell() {
     if (!profile?.id || !ownAssignment?.vehicle_id) return
     setSaving(true)
     const { error: checkError } = await supabase.from('vehicle_checks').upsert(
-      { vehicle_id: ownAssignment.vehicle_id, duty_date: todayLocal(), shift: ownAssignment.shift, status, note: note.trim() || null, checked_by: profile.id },
+      { vehicle_id: ownAssignment.vehicle_id, duty_date: operationalToday(), shift: ownAssignment.shift, status, note: note.trim() || null, checked_by: profile.id },
       { onConflict: 'vehicle_id,duty_date,shift' },
     )
     setSaving(false)

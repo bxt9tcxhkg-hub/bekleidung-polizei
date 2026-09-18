@@ -12,9 +12,8 @@ import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/ze
 import { personDisplayName, usePersons } from '../../lib/register'
 import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
 import { IncidentModal } from './zentraleShared'
-import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, startOfTodayIso, type IncidentFormState } from '../../lib/zentraleShared'
+import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, operationalToday, startOfOperationalDayIso, type IncidentFormState } from '../../lib/zentraleShared'
 
-function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
 function normalizePhone(value: string | null | undefined) { return (value ?? '').replace(/\D/g, '') }
 function incidentLocationParts(location: string | null): { street: string; houseNumber: string } {
@@ -90,16 +89,16 @@ export default function ZentraleShell() {
   const priorIncidentsRequestRef = useRef(0)
   const [editingLinkedIncident, setEditingLinkedIncident] = useState<IncidentReport | null>(null)
 
-  const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === todayLocal())
+  const ownAssignment = assignments.find(item => item.user_id === profile?.id && item.duty_date === operationalToday())
   const canOperateZentrale = canManage || ownAssignment?.function === 'zentrale' || ownAssignment?.function === 'innendienst'
 
   const load = useCallback(async () => {
     setLoading(true)
-    const today = todayLocal()
+    const today = operationalToday()
     const [entryResult, dutyResult, incidentResult, openIncidentResult, personResult, avBvResult, strassenzustandResult] = await Promise.all([
       supabase.from('zentrale_entries').select('*').neq('category', 'kontrollauftrag').order('priority').order('updated_at', { ascending: false }),
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer), fleet_vehicles(id,name,call_sign,license_plate)').eq('duty_date', today).order('function'),
-      supabase.from('incident_reports').select('*').gte('reported_at', startOfTodayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('*').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
       supabase.from('incident_reports').select('*').eq('status', 'offen').order('reported_at', { ascending: true }),
       supabase.from('operational_person_notes').select('*, person:operational_persons(id,vorname,nachname,birth_date,phone)').eq('active', true).order('updated_at', { ascending: false }),
       supabase.from('zentrale_av_bv').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),

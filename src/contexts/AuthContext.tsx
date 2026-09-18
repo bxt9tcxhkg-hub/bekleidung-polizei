@@ -7,6 +7,7 @@ import type { PortalArea } from '../lib/portalEntitlements'
 import { hasAreaEntitlement } from '../lib/portalEntitlements'
 import { planAuthStateChange } from '../lib/authStateChange'
 import { shouldForcePasswordChange, shouldForceUsernameSet } from '../lib/workflow'
+import { operationalToday } from '../lib/zentraleShared'
 
 export type { AppRole }
 
@@ -85,8 +86,6 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 function operativeModeStorageKey(userId: string) { return `operativeMode:${userId}` }
-function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -126,16 +125,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Spiegelt is_zentralist_on_duty() in der Datenbank (dort maßgeblich, hier
-  // nur für die UI-Gate). Serverseitiger CURRENT_DATE-Vergleich vs. lokales
-  // Browserdatum kann in seltenen Randfällen minimal auseinanderlaufen - wie
-  // beim bestehenden ownAssignment-Abgleich in ZentraleShell.tsx, dort schon
-  // ebenso in Kauf genommen.
+  // nur für die UI-Gate) - beide nutzen denselben Diensttag-Begriff
+  // (operationalToday()/operational_today(), siehe Migration
+  // 20260919000000), der einen über Mitternacht laufenden Nachtdienst nicht
+  // schon um Mitternacht verliert.
   async function loadZentralistOnDuty(userId: string): Promise<boolean> {
     const { data, error } = await supabase
       .from('duty_assignments')
       .select('id')
       .eq('user_id', userId)
-      .eq('duty_date', todayLocal())
+      .eq('duty_date', operationalToday())
       .in('function', ['zentrale', 'innendienst'])
       .limit(1)
     if (error) {
