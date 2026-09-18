@@ -50,6 +50,8 @@ export type BaustelleFormState = typeof EMPTY_BAUSTELLE_FORM
 export type IncidentFormState = {
   callerPhone: string
   callerPersonId: string | null
+  /** Meldende Stelle statt Person (z. B. RFL, LLZ, Feuerwehr) - Freitext statt Personen-Register, schließt callerPersonId aus. */
+  callerOrg: string
   locationMode: 'address' | 'kilometer'
   street: string
   houseNumber: string
@@ -71,7 +73,7 @@ export type IncidentFormState = {
   reportedTime: string
 }
 export const EMPTY_INCIDENT_FORM: IncidentFormState = {
-  callerPhone: '', callerPersonId: null, locationMode: 'address',
+  callerPhone: '', callerPersonId: null, callerOrg: '', locationMode: 'address',
   street: '', houseNumber: '', houseNumberUnknown: false,
   roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null,
   location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '',

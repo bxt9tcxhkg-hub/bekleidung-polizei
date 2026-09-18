@@ -17,6 +17,7 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
   const streetRef = useRef<StreetAutocompleteHandle>(null)
   const [mapResolving, setMapResolving] = useState(false)
   const [mapError, setMapError] = useState('')
+  const [orgMode, setOrgMode] = useState(Boolean(incident.callerOrg))
 
   async function handleMapClick(lat: number, lng: number) {
     patch({
@@ -45,9 +46,10 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
   return <Modal title={editing ? 'Meldung bearbeiten' : 'Neue Meldung'} close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(480px,1.1fr)] gap-5">
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />
+        {orgMode ? <Field label="Meldende Stelle" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} /> : <PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
         <Field label="Telefonnummer" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
       </div>
+      <button type="button" onClick={() => { setOrgMode(!orgMode); patch(orgMode ? { callerOrg: '' } : { callerOrg: '', callerPersonId: null }) }} className={`text-xs font-semibold ${orgMode ? 'text-blue-700' : 'text-gray-500'}`}>{orgMode ? '✓ Meldende Stelle (statt Person)' : 'Meldende Stelle statt Person (z. B. RFL, LLZ, Feuerwehr)'}</button>
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Einsatzort</p>
       <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1">
         <button type="button" onClick={() => patch({ locationMode: 'address', roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, location: composeIncidentLocation(incident.street, incident.houseNumber, incident.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${incident.locationMode === 'address' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straße und Hausnummer</button>

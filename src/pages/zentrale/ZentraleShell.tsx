@@ -247,6 +247,7 @@ export default function ZentraleShell() {
     setIncident({
       callerPhone: item.caller_phone ?? '',
       callerPersonId: item.caller_person_id,
+      callerOrg: item.caller_person_id ? '' : (item.caller_name ?? ''),
       locationMode: kilometerLocation ? 'kilometer' : 'address',
       street,
       houseNumber,
@@ -295,7 +296,9 @@ export default function ZentraleShell() {
       ? 'weitergegeben'
       : editingIncident?.status === 'erledigt' ? 'erledigt' : 'offen'
     const payload = {
-      caller_phone: incident.callerPhone.trim() || null, caller_person_id: incident.callerPersonId, caller_name: callerPerson ? personDisplayName(callerPerson) : null,
+      caller_phone: incident.callerPhone.trim() || null,
+      caller_person_id: incident.callerOrg.trim() ? null : incident.callerPersonId,
+      caller_name: incident.callerOrg.trim() ? incident.callerOrg.trim() : (callerPerson ? personDisplayName(callerPerson) : null),
       location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(),
       involved_person_id: incident.involvedPersonId, involved_person: involvedPerson ? personDisplayName(involvedPerson) : null, involved_birth_date: involvedPerson?.birth_date ?? null,
       disposition: incident.disposition, note: incident.note.trim() || null, status,
