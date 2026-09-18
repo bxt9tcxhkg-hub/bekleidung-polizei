@@ -582,6 +582,10 @@ export interface ZentraleEntry {
   valid_from: string | null
   valid_until: string | null
   location: string | null
+  location_lat: number | null
+  location_lng: number | null
+  /** Freitext für eine zeitliche Eingrenzung innerhalb der Gültigkeit, z. B. "ab 19:00 Uhr". */
+  zeitfenster: string | null
   responsible: string | null
   reference: string | null
   restricted: boolean

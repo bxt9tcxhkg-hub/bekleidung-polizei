@@ -7,7 +7,7 @@ import type { KontrollauftragZielfunktion } from './types'
 
 export const ZIELFUNKTION_LABEL: Record<KontrollauftragZielfunktion, string> = { jd: 'Nur JD', vd: 'Nur VD', beide: 'JD und VD' }
 
-export const EMPTY_AUFTRAG = { title: '', description: '', location: '', validFrom: '', validUntil: '', targetFunction: 'beide' as KontrollauftragZielfunktion }
+export const EMPTY_AUFTRAG = { title: '', description: '', location: '', lat: null as number | null, lng: null as number | null, zeitfenster: '', validFrom: '', validUntil: '', targetFunction: 'beide' as KontrollauftragZielfunktion }
 export type AuftragFormState = typeof EMPTY_AUFTRAG
 
 // Vereinfachte, rein textuelle Baustellen-Meldung für die Streife - kein

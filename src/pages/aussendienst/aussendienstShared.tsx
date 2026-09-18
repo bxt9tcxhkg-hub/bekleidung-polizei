@@ -1,7 +1,9 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
-import { CheckCircle2, ChevronDown, Circle, Pencil, Printer, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Circle, MapPin, Pencil, Printer, Trash2 } from 'lucide-react'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
+import LeafletMap from '../../components/LeafletMap'
 import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
+import { geocodeLocation } from '../../lib/geocode'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import { ZIELFUNKTION_LABEL, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { useAuth } from '../../contexts/AuthContext'
@@ -96,24 +98,44 @@ export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canM
     const erledigt = item.status === 'erledigt'
     return <article key={item.id} className="p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3 min-w-0">
       {onToggleErledigt ? <button type="button" onClick={() => void onToggleErledigt(item)} className={`mt-0.5 flex-shrink-0 ${erledigt ? 'text-green-600' : 'text-gray-300 hover:text-gray-400'}`} aria-label={erledigt ? 'Als offen markieren' : 'Als erledigt markieren'}>{erledigt ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button> : null}
-      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className={`font-semibold ${erledigt ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.title}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span>{item.target_function ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ZIELFUNKTION_LABEL[item.target_function]}</span> : null}</div>{item.description ? <p className={`text-sm mt-2 whitespace-pre-wrap ${erledigt ? 'text-gray-400' : 'text-gray-600'}`}>{item.description}</p> : null}<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">{item.location ? <span>Ort: {item.location}</span> : null}{item.valid_from ? <span>Ab: {new Date(item.valid_from).toLocaleDateString('de-AT')}</span> : null}{item.valid_until ? <span>Bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{erledigt && item.erledigt_at ? <span>Erledigt um {formatTime(item.erledigt_at)} (Gedankenstütze, kein Nachweis)</span> : null}</div></div></div>{canManage && onEdit ? <button type="button" onClick={() => onEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Eintrag bearbeiten"><Pencil className="w-4 h-4" /></button> : null}</div></article>
+      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className={`font-semibold ${erledigt ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.title}</h3><span className={`text-xs font-medium px-2 py-0.5 rounded-full ${item.priority === 'kritisch' ? 'bg-red-100 text-red-800' : item.priority === 'hoch' ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>{item.priority}</span>{item.target_function ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">{ZIELFUNKTION_LABEL[item.target_function]}</span> : null}</div>{item.description ? <p className={`text-sm mt-2 whitespace-pre-wrap ${erledigt ? 'text-gray-400' : 'text-gray-600'}`}>{item.description}</p> : null}<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">{item.location ? <span>Ort: {item.location}</span> : null}{item.zeitfenster ? <span>Uhrzeit: {item.zeitfenster}</span> : null}{item.valid_from ? <span>Ab: {new Date(item.valid_from).toLocaleDateString('de-AT')}</span> : null}{item.valid_until ? <span>Bis: {new Date(item.valid_until).toLocaleDateString('de-AT')}</span> : null}{erledigt && item.erledigt_at ? <span>Erledigt um {formatTime(item.erledigt_at)} (Gedankenstütze, kein Nachweis)</span> : null}</div></div></div>{canManage && onEdit ? <button type="button" onClick={() => onEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Eintrag bearbeiten"><Pencil className="w-4 h-4" /></button> : null}</div></article>
   })}</div>
 }
 
 export function AuftragModal({ auftrag, setAuftrag, editing, saving, error, close, save, remove }: { auftrag: AuftragFormState; setAuftrag: Dispatch<SetStateAction<AuftragFormState>>; editing: ZentraleEntry | null; saving: boolean; error: string; close: () => void; save: () => Promise<void>; remove: () => Promise<void> }) {
   const patch = (values: Partial<AuftragFormState>) => setAuftrag(current => ({ ...current, ...values }))
-  return <Modal title={editing ? 'Kontrollauftrag bearbeiten' : 'Kontrollauftrag anlegen'} close={close}>
-    <Field label="Bezeichnung *" value={auftrag.title} onChange={value => patch({ title: value })} />
-    <Area label="Welche Kontrollen sind durchzuführen" value={auftrag.description} onChange={value => patch({ description: value })} />
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <Field label="Ort" value={auftrag.location} onChange={value => patch({ location: value })} />
-      <label className="text-xs font-medium text-gray-600">Zielfunktion<select className={inputClass} value={auftrag.targetFunction} onChange={event => patch({ targetFunction: event.target.value as KontrollauftragZielfunktion })}>{Object.entries(ZIELFUNKTION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      <Field label="Von" type="date" value={auftrag.validFrom} onChange={value => patch({ validFrom: value })} />
-      <Field label="Bis" type="date" value={auftrag.validUntil} onChange={value => patch({ validUntil: value })} />
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState('')
+  async function locate() {
+    if (!auftrag.location.trim()) { setLocateError('Bitte zuerst einen Ort eintragen.'); return }
+    setLocating(true); setLocateError('')
+    const result = await geocodeLocation(auftrag.location)
+    setLocating(false)
+    if (!result) { setLocateError('Die Position wurde nicht gefunden. Bitte Ort prüfen oder auf der Karte anklicken.'); return }
+    patch({ lat: result.lat, lng: result.lng })
+  }
+  return <Modal title={editing ? 'Kontrollauftrag bearbeiten' : 'Kontrollauftrag anlegen'} close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1fr)] gap-5">
+    <div className="space-y-4">
+      <Field label="Bezeichnung *" value={auftrag.title} onChange={value => patch({ title: value })} />
+      <Area label="Welche Kontrollen sind durchzuführen" value={auftrag.description} onChange={value => patch({ description: value })} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Ort" value={auftrag.location} onChange={value => patch({ location: value, lat: null, lng: null })} />
+        <label className="text-xs font-medium text-gray-600">Zielfunktion<select className={inputClass} value={auftrag.targetFunction} onChange={event => patch({ targetFunction: event.target.value as KontrollauftragZielfunktion })}>{Object.entries(ZIELFUNKTION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <Field label="Von" type="date" value={auftrag.validFrom} onChange={value => patch({ validFrom: value })} />
+        <Field label="Bis" type="date" value={auftrag.validUntil} onChange={value => patch({ validUntil: value })} />
+      </div>
+      <Field label="Uhrzeit / Zeitfenster (optional)" value={auftrag.zeitfenster} onChange={value => patch({ zeitfenster: value })} />
+      <button type="button" onClick={() => void locate()} disabled={locating} className="inline-flex items-center gap-2 rounded-lg border border-blue-300 px-3 py-2 text-sm font-medium text-blue-800 disabled:opacity-60"><MapPin className="w-4 h-4" />{locating ? 'Position wird gesucht…' : 'Ort auf Karte suchen'}</button>
+      {locateError ? <p className="text-xs text-red-700">{locateError}</p> : null}
+      {error ? <ErrorMessage text={error} /> : null}
+      <div className="flex flex-wrap gap-3 pt-2">{editing ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}<Actions saving={saving} close={close} save={save} /></div>
     </div>
-    {error ? <ErrorMessage text={error} /> : null}
-    <div className="flex flex-wrap gap-3 pt-2">{editing ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}<Actions saving={saving} close={close} save={save} /></div>
-  </Modal>
+    <div>
+      <p className="text-xs font-medium text-gray-600 mb-1">Ort auf der Karte</p>
+      <LeafletMap markers={auftrag.lat !== null && auftrag.lng !== null ? [{ lat: auftrag.lat, lng: auftrag.lng, popup: auftrag.location || 'Kontrollauftrag' }] : []} onMapClick={(lat, lng) => patch({ lat, lng })} height={480} />
+      <p className="text-xs text-gray-500 mt-1.5">Alternativ zur Adresssuche: auf die Karte klicken, um den Ort direkt dort zu setzen.</p>
+    </div>
+  </div></Modal>
 }
 
 export function BaustelleReportModal({ report, setReport, saving, error, close, save }: { report: BaustelleReportState; setReport: Dispatch<SetStateAction<BaustelleReportState>>; saving: boolean; error: string; close: () => void; save: () => Promise<void> }) {

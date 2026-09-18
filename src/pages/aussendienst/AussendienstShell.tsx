@@ -175,11 +175,11 @@ export default function AussendienstShell() {
   }
 
   function openNewAuftrag() { setEditingAuftrag(null); setAuftrag(EMPTY_AUFTRAG); setAuftragError(''); setShowAuftragForm(true) }
-  function openEditAuftrag(item: ZentraleEntry) { setEditingAuftrag(item); setAuftrag({ title: item.title, description: item.description ?? '', location: item.location ?? '', validFrom: item.valid_from?.slice(0, 10) ?? '', validUntil: item.valid_until?.slice(0, 10) ?? '', targetFunction: item.target_function ?? 'beide' }); setAuftragError(''); setShowAuftragForm(true) }
+  function openEditAuftrag(item: ZentraleEntry) { setEditingAuftrag(item); setAuftrag({ title: item.title, description: item.description ?? '', location: item.location ?? '', lat: item.location_lat, lng: item.location_lng, zeitfenster: item.zeitfenster ?? '', validFrom: item.valid_from?.slice(0, 10) ?? '', validUntil: item.valid_until?.slice(0, 10) ?? '', targetFunction: item.target_function ?? 'beide' }); setAuftragError(''); setShowAuftragForm(true) }
   async function saveAuftrag() {
     if (!auftrag.title.trim()) { setAuftragError('Bitte eine Bezeichnung eingeben.'); return }
     setSaving(true)
-    const payload = { category: 'kontrollauftrag' as const, title: auftrag.title.trim(), description: auftrag.description.trim() || null, location: auftrag.location.trim() || null, valid_from: auftrag.validFrom || null, valid_until: auftrag.validUntil || null, target_function: auftrag.targetFunction }
+    const payload = { category: 'kontrollauftrag' as const, title: auftrag.title.trim(), description: auftrag.description.trim() || null, location: auftrag.location.trim() || null, location_lat: auftrag.lat, location_lng: auftrag.lng, zeitfenster: auftrag.zeitfenster.trim() || null, valid_from: auftrag.validFrom || null, valid_until: auftrag.validUntil || null, target_function: auftrag.targetFunction }
     const response = editingAuftrag ? await supabase.from('zentrale_entries').update(payload).eq('id', editingAuftrag.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
     setSaving(false)
     if (response.error) { setAuftragError('Kontrollauftrag konnte nicht gespeichert werden.'); return }
