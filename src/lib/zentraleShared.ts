@@ -66,6 +66,8 @@ export type IncidentFormState = {
   summary: string
   involvedPersonId: string | null
   disposition: IncidentDisposition
+  /** Von der Zentrale zugewiesene Streife (Fahrzeug) - zusätzlich zur groben Disposition (JD/VD/BP), unabhängig von der Streife selbst per "Übernehmen" gesetzten Zuständigkeit. */
+  assignedVehicleId: string | null
   note: string
   lat: number | null
   lng: number | null
@@ -76,6 +78,6 @@ export const EMPTY_INCIDENT_FORM: IncidentFormState = {
   callerPhone: '', callerPersonId: null, callerOrg: '', locationMode: 'address',
   street: '', houseNumber: '', houseNumberUnknown: false,
   roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null,
-  location: '', summary: '', involvedPersonId: null, disposition: 'jd', note: '',
+  location: '', summary: '', involvedPersonId: null, disposition: 'jd', assignedVehicleId: null, note: '',
   lat: null, lng: null, coordsPrecise: false, reportedTime: '',
 }

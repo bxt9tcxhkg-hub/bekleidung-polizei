@@ -120,6 +120,11 @@ export default function ZentraleShell() {
   useEffect(() => { void load() }, [load])
   useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
 
+  const patrolVehicles = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; call_sign: string | null; license_plate: string | null }>()
+    for (const item of assignments) if (item.vehicle_id && item.fleet_vehicles && !seen.has(item.vehicle_id)) seen.set(item.vehicle_id, item.fleet_vehicles)
+    return [...seen.values()]
+  }, [assignments])
   const lageEntries = useMemo(() => entries.filter(item => item.category === 'lage'), [entries])
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const uebergabeIncidents = openIncidentsAllDays
@@ -248,6 +253,7 @@ export default function ZentraleShell() {
       callerPhone: item.caller_phone ?? '',
       callerPersonId: item.caller_person_id,
       callerOrg: item.caller_person_id ? '' : (item.caller_name ?? ''),
+      assignedVehicleId: item.assigned_vehicle_id,
       locationMode: kilometerLocation ? 'kilometer' : 'address',
       street,
       houseNumber,
@@ -301,7 +307,7 @@ export default function ZentraleShell() {
       caller_name: incident.callerOrg.trim() ? incident.callerOrg.trim() : (callerPerson ? personDisplayName(callerPerson) : null),
       location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(),
       involved_person_id: incident.involvedPersonId, involved_person: involvedPerson ? personDisplayName(involvedPerson) : null, involved_birth_date: involvedPerson?.birth_date ?? null,
-      disposition: incident.disposition, note: incident.note.trim() || null, status,
+      disposition: incident.disposition, assigned_vehicle_id: incident.assignedVehicleId, note: incident.note.trim() || null, status,
       reported_at: reportedAt.toISOString(),
     }
     setSaving(true)
@@ -329,7 +335,7 @@ export default function ZentraleShell() {
     {error && !showEntryForm && !showIncidentForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
-    {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} patrolVehicles={patrolVehicles} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }

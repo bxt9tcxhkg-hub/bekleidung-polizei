@@ -21,7 +21,13 @@ import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 // location_lat/-lng zusätzlich zur Zentrale-Ansicht: damit sich eine Baustelle
 // in der Nähe des Einsatzorts auch hier anzeigen lässt (siehe baustellen unten).
-type SimpleIncident = { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null; caller_name: string | null; caller_phone: string | null; involved_person: string | null; involved_birth_date: string | null }
+type SimpleIncident = {
+  id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
+  caller_name: string | null; caller_phone: string | null; involved_person: string | null; involved_birth_date: string | null
+  assigned_vehicle_id: string | null; taken_over_by: string | null; taken_over_at: string | null
+  assigned_vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign'> | null
+  taken_over_by_profile?: { id: string; name: string } | null
+}
 
 export interface AussendienstContext {
   loading: boolean
@@ -51,6 +57,9 @@ export interface AussendienstContext {
   openEditAuftrag: (item: ZentraleEntry) => void
   toggleKontrollauftragErledigt: (item: ZentraleEntry) => Promise<void>
   openBaustelleReport: () => void
+  patrolVehicles: { id: string; name: string; call_sign: string | null; license_plate: string | null }[]
+  takeOverIncident: (id: string) => Promise<void>
+  releaseIncidentTakeover: (id: string) => Promise<void>
 }
 
 export default function AussendienstShell() {
@@ -93,7 +102,7 @@ export default function AussendienstShell() {
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
@@ -121,6 +130,21 @@ export default function AussendienstShell() {
   const ownVehicle = vehicles.find(item => item.id === ownAssignment?.vehicle_id)
   const ownCheck = checks.find(item => item.vehicle_id === ownAssignment?.vehicle_id && item.shift === ownAssignment?.shift)
   const patrolMates = useMemo(() => ownAssignment ? assignments.filter(item => item.user_id !== profile?.id && item.function === ownAssignment.function && item.shift === ownAssignment.shift) : [], [assignments, ownAssignment, profile?.id])
+  const patrolVehicles = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; call_sign: string | null; license_plate: string | null }>()
+    for (const item of assignments) if (item.vehicle_id && item.fleet_vehicles && !seen.has(item.vehicle_id)) seen.set(item.vehicle_id, item.fleet_vehicles)
+    return [...seen.values()]
+  }, [assignments])
+  async function takeOverIncident(id: string) {
+    const result = await supabase.rpc('take_over_incident', { p_id: id })
+    if (result.error) { setError('Die Meldung konnte nicht übernommen werden.'); return }
+    await load()
+  }
+  async function releaseIncidentTakeover(id: string) {
+    const result = await supabase.rpc('release_incident_takeover', { p_id: id })
+    if (result.error) { setError('Die Übernahme konnte nicht zurückgenommen werden.'); return }
+    await load()
+  }
 
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const criticalItems = useMemo(() => [
@@ -210,6 +234,7 @@ export default function AussendienstShell() {
     incidents, entries, avBv, fahndungen, baustellen, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
+    patrolVehicles, takeOverIncident, releaseIncidentTakeover,
   }
 
   return <div>

@@ -1,5 +1,5 @@
 import { AlertTriangle, Car, CheckCircle2, Circle, Construction, ListChecks, Plus, Radio, ShieldAlert, UsersRound } from 'lucide-react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import { formatTime } from '../../lib/zentraleShared'
 import type { AussendienstContext } from './AussendienstShell'
 import Fuellliste from './Fuellliste'
@@ -35,7 +35,7 @@ export default function AussendienstUebersicht() {
     </section>
 
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Radio className="w-4 h-4 text-blue-700" /> Jetzt offen</h2>{ctx.openIncidents.length === 0 ? <p className="text-sm text-gray-500 mt-2">Keine offenen Einsätze.</p> : <ul className="mt-2 space-y-1.5 text-sm text-gray-700">{ctx.openIncidents.slice(0, 4).map(item => <li key={item.id}>• {formatTime(item.reported_at)} – {item.location || item.summary.slice(0, 40)}</li>)}</ul>}</section>
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Radio className="w-4 h-4 text-blue-700" /> Jetzt offen</h2>{ctx.openIncidents.length === 0 ? <p className="text-sm text-gray-500 mt-2">Keine offenen Einsätze.</p> : <ul className="mt-2 space-y-1.5 text-sm text-gray-700">{ctx.openIncidents.slice(0, 4).map(item => <li key={item.id}>• {formatTime(item.reported_at)} – {item.location || item.summary.slice(0, 40)}</li>)}</ul>}<Link to="/aussendienst/einsaetze" className="inline-block text-xs font-semibold text-blue-700 mt-2 hover:underline">Alle Einsätze ansehen →</Link></section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><UsersRound className="w-4 h-4 text-blue-700" /> Meine Streife</h2><p className="text-sm text-gray-500 mt-1">{ownFunction?.label ?? ownAssignment.function} · {ownAssignment.shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}</p><p className="text-sm text-gray-700 mt-2">{patrolMates.length === 0 ? 'Keine weiteren Kolleginnen/Kollegen in dieser Funktion eingetragen.' : `Mit: ${patrolMates.map(item => item.profiles?.name).filter(Boolean).join(', ')}`}</p>{ownVehicle ? <p className="text-sm font-semibold text-blue-700 mt-2">Fahrzeug: {ownVehicle.call_sign || ownVehicle.name}{ownVehicle.license_plate ? ` · ${ownVehicle.license_plate}` : ''}</p> : <p className="text-sm text-gray-500 mt-2">Kein Fahrzeug zugewiesen (auf der Startseite wählbar).</p>}</section>
     </div>

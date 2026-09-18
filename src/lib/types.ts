@@ -851,11 +851,18 @@ export interface IncidentReport {
   disposition: IncidentDisposition
   note: string | null
   status: IncidentStatus
+  /** Von der Zentrale zugewiesene Streife (Fahrzeug), zusätzlich zur groben Disposition (JD/VD/BP). */
+  assigned_vehicle_id: string | null
+  /** Beamter/in, der/die die Meldung im Außendienst selbst übernommen hat. */
+  taken_over_by: string | null
+  taken_over_at: string | null
   created_by: string
   created_at: string
   updated_at: string
   caller_person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
   involved_person_ref?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
+  assigned_vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign' | 'license_plate'> | null
+  taken_over_by_profile?: Pick<Profile, 'id' | 'name'> | null
 }
 
 export type EinsatzParteiRolle = 'beschuldigter' | 'opfer' | 'zeuge' | 'sonstige'
@@ -1305,7 +1312,7 @@ type FleetDocumentRow = Omit<FleetDocument, 'uploader' | 'vehicle'>
 type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
-type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref'>
+type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref' | 'assigned_vehicle' | 'taken_over_by_profile'>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
 type OperationalPersonRow = Omit<OperationalPerson, 'home_object'>
 type OperationalObjectRow = Omit<OperationalObject, never>
@@ -1533,6 +1540,8 @@ export type Database = {
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_caller_person_id_fkey'; columns: ['caller_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_involved_person_id_fkey'; columns: ['involved_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_assigned_vehicle_id_fkey'; columns: ['assigned_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_taken_over_by_fkey'; columns: ['taken_over_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_parteien: { Row: EinsatzParteiRow; Insert: Pick<EinsatzParteiRow, 'incident_id' | 'person_id' | 'rolle' | 'created_by'> & Partial<Omit<EinsatzParteiRow, 'id' | 'created_at' | 'incident_id' | 'person_id' | 'rolle' | 'created_by'>>; Update: Partial<Omit<EinsatzParteiRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'einsatz_parteien_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
@@ -1690,6 +1699,8 @@ export type Database = {
       record_mail_delivery_action: { Args: { p_id: string; p_status: string }; Returns: undefined }
       close_mail_delivery: { Args: { p_id: string }; Returns: undefined }
       merge_operational_persons: { Args: { p_keep_id: string; p_remove_id: string }; Returns: undefined }
+      take_over_incident: { Args: { p_id: string }; Returns: undefined }
+      release_incident_takeover: { Args: { p_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }
