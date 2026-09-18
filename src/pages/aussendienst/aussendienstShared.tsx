@@ -1,9 +1,13 @@
-import type { Dispatch, SetStateAction } from 'react'
-import { CheckCircle2, Circle, Pencil, Trash2 } from 'lucide-react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
+import { CheckCircle2, Circle, Pencil, Printer, Trash2 } from 'lucide-react'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import { ZIELFUNKTION_LABEL, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
+import { useAuth } from '../../contexts/AuthContext'
+import { loadEinsatzParteien } from '../../lib/einsatzParteien'
+import { readDokumente } from '../../lib/einsatzDokumente'
+import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
 import type { IncidentDisposition, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import IncidentDocs from '../zentrale/IncidentDocs'
 
@@ -15,13 +19,35 @@ function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; bau
   return <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2"><p className="text-sm font-bold text-orange-900">Baustelle in der Nähe</p><div className="space-y-1 mt-1">{nearby.map(item => <p key={item.id} className="text-sm text-orange-900">{item.titel}{item.status === 'gemeldet' ? <span className="text-xs font-medium text-orange-700 ml-1">(ungeprüft)</span> : null}{item.note ? <span className="text-orange-800"> · {item.note}</span> : null}</p>)}</div></div>
 }
 
-export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void> }) {
+type IncidentListItem = { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null; caller_name?: string | null; caller_phone?: string | null; involved_person?: string | null; involved_birth_date?: string | null }
+
+function PrintIncidentButton({ item }: { item: IncidentListItem }) {
+  const { profile } = useAuth()
+  const [printing, setPrinting] = useState(false)
+  async function print() {
+    setPrinting(true)
+    try {
+      const parteien = await loadEinsatzParteien(item.id)
+      const dokumente = readDokumente(item.id)
+      generateEinsatzUebersicht({ incident: item, parteien, dokumente, erstelltVon: profile?.name ?? '–' })
+    } catch {
+      // Die Parteien-Abfrage kann fehlschlagen (z.B. keine Verbindung) - der
+      // Ausdruck soll trotzdem mit den vorhandenen Meldungsdaten möglich sein.
+      generateEinsatzUebersicht({ incident: item, parteien: [], dokumente: readDokumente(item.id), erstelltVon: profile?.name ?? '–' })
+    } finally {
+      setPrinting(false)
+    }
+  }
+  return <button type="button" onClick={() => void print()} disabled={printing} className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline disabled:opacity-60"><Printer className="w-3.5 h-3.5" />{printing ? 'Wird vorbereitet…' : 'Übersicht drucken'}</button>
+}
+
+export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void> }) {
   if (kind === 'incidents') {
     if (!incidents || incidents.length === 0) return <Empty text="Heute wurden noch keine Meldungen erfasst." />
     return <div className="space-y-3">{incidents.map(item => {
       const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null
       return <article key={item.id} className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
-        <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'weitergegeben' ? 'An BP weitergegeben' : item.status === 'erledigt' ? 'Erledigt' : 'Offen'}</span></div><PrintIncidentButton item={item} /></div>
         <p className="font-semibold text-gray-900 mt-2">{item.location || 'Ohne Ortsangabe'}</p>
         <p className="text-sm text-gray-700 mt-1">{item.summary}</p>
         <p className="text-xs text-gray-500 mt-2">{DISPOSITION_LABEL[item.disposition]}</p>

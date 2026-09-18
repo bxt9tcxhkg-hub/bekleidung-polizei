@@ -21,7 +21,7 @@ import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 function todayLocal() { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 // location_lat/-lng zusätzlich zur Zentrale-Ansicht: damit sich eine Baustelle
 // in der Nähe des Einsatzorts auch hier anzeigen lässt (siehe baustellen unten).
-type SimpleIncident = { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null }
+type SimpleIncident = { id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null; caller_name: string | null; caller_phone: string | null; involved_person: string | null; involved_birth_date: string | null }
 
 export interface AussendienstContext {
   loading: boolean
@@ -93,7 +93,7 @@ export default function AussendienstShell() {
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date').gte('reported_at', `${today}T00:00:00`).order('reported_at', { ascending: false }),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
