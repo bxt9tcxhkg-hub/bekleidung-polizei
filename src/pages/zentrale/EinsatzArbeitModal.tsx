@@ -57,6 +57,7 @@ export default function EinsatzArbeitModal({
 
   return <Modal wide title={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} close={close}>
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
+    <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
     <div className="flex gap-1 border-b border-gray-200">
       <button type="button" className={tabClass('checkliste')} onClick={() => setTab('checkliste')}>Checkliste</button>
       <button type="button" className={tabClass('parteien')} onClick={() => setTab('parteien')}>Parteien</button>
