@@ -93,6 +93,19 @@ describe('geocodeLocation', () => {
     expect(await geocodeLocation('Unbekannter Ort')).toBeNull()
   })
 
+  it('hängt bei cityHint=null nur Österreich an, ohne Dornbirn zu erzwingen (z. B. Wohnsitz eines Gefährders bei BV/AV & EV)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ lat: '47.5031', lon: '9.7471', display_name: 'Kirchstraße 1, 6900 Bregenz, Österreich' }],
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await geocodeLocation('Kirchstraße 1, 6900 Bregenz', null)
+    const requestedUrl = String(fetchMock.mock.calls[0][0])
+    expect(requestedUrl).toContain(encodeURIComponent('Kirchstraße 1, 6900 Bregenz, Österreich'))
+    expect(requestedUrl).not.toContain(encodeURIComponent('Dornbirn'))
+    expect(result).toEqual({ lat: 47.5031, lng: 9.7471, displayName: 'Kirchstraße 1, 6900 Bregenz, Österreich' })
+  })
+
   it('gibt null bei einer fehlgeschlagenen Anfrage zurück, statt zu werfen', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
     expect(await geocodeLocation('Irgendwo')).toBeNull()

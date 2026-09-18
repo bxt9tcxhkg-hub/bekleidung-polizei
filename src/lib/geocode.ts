@@ -125,10 +125,19 @@ export async function reverseGeocode(lat: number, lng: number): Promise<ReverseG
   }
 }
 
-export async function geocodeLocation(query: string): Promise<GeocodeResult | null> {
+/**
+ * cityHint wird an die Anfrage angehängt, damit z. B. "Marktplatz 1" nicht
+ * bundesweit mehrdeutig ist (Standard: Dornbirn, für Baustellen/Straßen-
+ * zustand/Einsatzort/Aussendienst-Routen immer im Stadtgebiet). Eine Adresse,
+ * die selbst schon PLZ/Ort enthält (z. B. Wohnsitz eines Gefährders bei
+ * BV/AV & EV, kann außerhalb von Dornbirn liegen), braucht keinen erzwungenen
+ * Orts-Zusatz - dafür cityHint explizit auf null setzen.
+ */
+export async function geocodeLocation(query: string, cityHint: string | null = 'Dornbirn'): Promise<GeocodeResult | null> {
   const trimmed = query.trim()
   if (!trimmed) return null
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=at&q=${encodeURIComponent(`${trimmed}, Dornbirn, Österreich`)}`
+  const q = cityHint ? `${trimmed}, ${cityHint}, Österreich` : `${trimmed}, Österreich`
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=at&q=${encodeURIComponent(q)}`
   let response: Response
   try {
     response = await fetch(url, { headers: { 'Accept-Language': 'de-AT' } })
