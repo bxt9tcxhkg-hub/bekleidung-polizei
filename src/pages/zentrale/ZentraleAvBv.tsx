@@ -74,14 +74,14 @@ export default function ZentraleAvBvPage() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  const mapCircles = useMemo(() => items.filter(item => item.status === 'aktiv' && new Date(item.ende).getTime() > now).flatMap(item => (item.bereiche ?? []).map(area => ({
-    lat: area.lat, lng: area.lng, radiusMeters: area.radius_m,
-    popup: `${MASSNAHME_LABEL[item.massnahme]} · ${area.bezeichnung} · PAD ${item.pad_aktenzahl}`,
-    color: item.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed',
-    fillColor: item.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
-    fillOpacity: selectedId === item.id ? 0.35 : 0.12,
-  }))), [items, now, selectedId])
   const selectedItem = useMemo(() => items.find(item => item.id === selectedId) ?? null, [items, selectedId])
+  const mapCircles = useMemo(() => selectedItem ? (selectedItem.bereiche ?? []).map(area => ({
+    lat: area.lat, lng: area.lng, radiusMeters: area.radius_m,
+    popup: `${MASSNAHME_LABEL[selectedItem.massnahme]} · ${area.bezeichnung} · PAD ${selectedItem.pad_aktenzahl}`,
+    color: selectedItem.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed',
+    fillColor: selectedItem.massnahme === 'bv_av' ? '#ef4444' : '#8b5cf6',
+    fillOpacity: 0.35,
+  })) : [], [selectedItem])
   const selectedArea = selectedItem?.bereiche?.[0] ?? null
   const mapFocus = selectedArea ? { lat: selectedArea.lat, lng: selectedArea.lng, zoom: 16 } : null
 
