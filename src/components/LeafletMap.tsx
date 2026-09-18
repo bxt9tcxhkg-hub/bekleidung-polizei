@@ -79,8 +79,11 @@ function createBasemapLayer(id: MapBasemap, onTileError?: (event: L.TileErrorEve
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap',
     }).addTo(group)
+    // Grundstück_Nr_grp mit Umlaut - vogis:Grundstueck_Nr_grp (ue statt ü)
+    // existiert nicht und lieferte eine WMS ServiceException "LayerNotDefined"
+    // (per GetCapabilities/GetMap-Test gegen den echten Dienst verifiziert).
     const wms = L.tileLayer.wms('https://vogis.cnv.at/geoserver/vogis/wms', {
-      layers: 'vogis:DKM_grp,vogis:Grundstueck_Nr_grp',
+      layers: 'DKM_grp,Grundstück_Nr_grp',
       format: 'image/png',
       transparent: true,
       version: '1.1.1',
