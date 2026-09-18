@@ -1,4 +1,4 @@
-import { BookOpen, LayoutGrid, MapPin, Radio, ShieldAlert, UserRoundCheck } from 'lucide-react'
+import { BookOpen, ClipboardList, LayoutGrid, MapPin, Radio, ShieldAlert, UserRoundCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -18,7 +18,11 @@ export default function ZentraleLayout() {
       { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
       { to: '/zentrale/strassenzustand', label: 'Straßenzustand', icon: MapPin },
     ]),
-    ...genehmigerSection(isGenehmiger),
+    // Kontrollaufträge anlegen/ändern/löschen ist per RLS auf den Genehmiger
+    // beschränkt (Kommandant entscheidet) - dieselbe Seite wie im Außendienst
+    // (keine eigene Kopie), aber von hier aus für den Genehmiger überhaupt
+    // erreichbar, unabhängig davon, ob er auch im Außendienst-Bereich ist.
+    ...genehmigerSection(isGenehmiger, [{ to: '/aussendienst/kontrollauftraege', label: 'Kontrollaufträge', icon: ClipboardList }]),
   ]
 
   const footerLine = [
