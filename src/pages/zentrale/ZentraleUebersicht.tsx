@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapPin, ShieldAlert, UsersRound } from 'lucide-react'
+import { MapPin } from 'lucide-react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import LeafletMap from '../../components/LeafletMap'
 import WichtigeTelefonnummernCard from '../../components/WichtigeTelefonnummernCard'
@@ -102,7 +102,6 @@ export default function ZentraleUebersicht() {
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
     <WichtigeTelefonnummernCard />
-    {schutzfaelle.length > 0 ? <button type="button" onClick={() => navigate('/zentrale/av-bv-ev')} className="w-full rounded-2xl border border-blue-200 bg-blue-50 p-4 text-left hover:border-blue-400"><span className="flex items-center gap-2 font-bold text-blue-950"><ShieldAlert className="h-5 w-5" />{schutzfaelle.length} aktive Schutzmaßnahme{schutzfaelle.length === 1 ? '' : 'n'}</span><span className="mt-1 block text-sm text-blue-800">Schutzbereiche, Ausnahmen und Kontrollstatus öffnen.</span></button> : null}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <section className="flex flex-col min-h-0">
         <div className="flex items-center justify-between gap-3 mb-3">
@@ -137,11 +136,6 @@ export default function ZentraleUebersicht() {
         <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert.' : 'Nur offene Einsatzorte auf der Karte. Klick auf Pin oder Karte öffnet das Arbeitsfenster.'}</p>
       </section>
     </div>
-    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-      <h2 className="font-bold text-amber-900 flex items-center gap-2"><UsersRound className="w-4 h-4" /> Schichtübergabe</h2>
-      <p className="text-sm text-amber-800 mt-1">Am Ende der Schicht an die Ablöse zu übergeben - ergibt sich automatisch aus den noch offenen Einsätzen, kein eigener Eintrag nötig.</p>
-      {ctx.uebergabeIncidents.length === 0 ? <p className="text-sm text-amber-700 mt-3">Keine offenen Einsätze zu übergeben.</p> : <ul className="mt-3 space-y-1.5 text-sm text-amber-900">{ctx.uebergabeIncidents.map(item => <li key={item.id}>• {formatTime(item.reported_at)} – {item.location || item.summary.slice(0, 60)}</li>)}</ul>}
-    </section>
     {workIncident ? <EinsatzArbeitModal
       item={workIncident}
       canOperateZentrale={ctx.canOperateZentrale}
