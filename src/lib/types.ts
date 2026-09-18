@@ -1341,6 +1341,7 @@ type SchutzfallRow = {
   schluessel_verwahrort: string | null
   ausnahmen: string | null
   hinweise: string | null
+  kontrolle_erforderlich: boolean
   created_by: string
   created_at: string
   updated_at: string
@@ -1706,6 +1707,7 @@ export type Database = {
       take_over_incident: { Args: { p_id: string }; Returns: undefined }
       release_incident_takeover: { Args: { p_id: string }; Returns: undefined }
       create_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: string | null }
+      remove_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }

@@ -152,7 +152,7 @@ export default function ZentraleAvBvPage() {
       beginn: localDateTimeInput(item.beginn), ende: localDateTimeInput(item.ende), status: item.status,
       waffenverbot: item.waffenverbot, schluesselStatus: item.schluessel_status,
       verwahrort: item.schluessel_verwahrort ?? '', ausnahmen: item.ausnahmen ?? '', hinweise: item.hinweise ?? '',
-      kontrolleErforderlich: true,
+      kontrolleErforderlich: item.kontrolle_erforderlich,
     })
     setAreas((item.bereiche ?? []).map(area => ({ key: area.id, objectId: area.object_id ?? '', label: area.bezeichnung, lat: area.lat, lng: area.lng, radius: area.radius_m, confirmed: area.position_bestaetigt })))
     setShowForm(true); setError('')
@@ -186,6 +186,7 @@ export default function ZentraleAvBvPage() {
       ausstellende_stelle: form.stelle.trim() || null, beginn: new Date(form.beginn).toISOString(), ende: new Date(form.ende).toISOString(),
       status: form.status, waffenverbot: form.waffenverbot, schluessel_status: form.schluesselStatus,
       schluessel_verwahrort: form.verwahrort.trim() || null, ausnahmen: form.ausnahmen.trim() || null, hinweise: form.hinweise.trim() || null,
+      kontrolle_erforderlich: form.kontrolleErforderlich,
     }
     let id = editing?.id
     if (editing) {
@@ -209,6 +210,12 @@ export default function ZentraleAvBvPage() {
     if (form.kontrolleErforderlich) {
       const kontrollResult = await supabase.rpc('create_schutzfall_kontrollauftrag', { p_schutzfall_id: id! })
       if (kontrollResult.error) kontrollHinweis = ' Der Kontrollauftrag konnte nicht angelegt werden - bitte in den Kontrollaufträgen manuell nachtragen.'
+    } else if (editing) {
+      // Nur beim Bearbeiten relevant: ein zuvor angelegter Kontrollauftrag
+      // wird zurückgenommen, wenn die Kontrolle nachträglich als nicht mehr
+      // nötig markiert wird. Beim Neuanlegen gibt es ohnehin noch keinen.
+      const removeResult = await supabase.rpc('remove_schutzfall_kontrollauftrag', { p_schutzfall_id: id! })
+      if (removeResult.error) kontrollHinweis = ' Ein bestehender Kontrollauftrag konnte nicht zurückgenommen werden.'
     }
     setShowForm(false); setNotice((editing ? 'Schutzmaßnahme wurde aktualisiert.' : 'Schutzmaßnahme wurde angelegt.') + kontrollHinweis); await load()
   }
