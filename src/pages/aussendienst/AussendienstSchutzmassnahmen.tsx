@@ -5,7 +5,7 @@ import LeafletMap from '../../components/LeafletMap'
 import { logAudit } from '../../lib/audit'
 import { personDisplayName } from '../../lib/register'
 import { supabase } from '../../lib/supabase'
-import { assessDistance, distanceNote, firstControlDeadline, hasInitialControl, haversineMeters, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
+import { assessDistance, distanceNote, firstControlDeadline, hasInitialControl, haversineMeters, loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 
 type Point = { lat: number; lng: number; accuracy: number }
 
@@ -24,14 +24,19 @@ export default function AussendienstSchutzmassnahmen() {
   const [protectedPoint, setProtectedPoint] = useState<Point | null>(null)
   const [tapTarget, setTapTarget] = useState<'danger' | 'protected'>('danger')
   const [now] = useState(() => new Date().getTime())
+  const [kontrolliert, setKontrolliert] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
-    const result = await supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende')
+    const [result, ids] = await Promise.all([
+      supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
+      loadSchutzfaelleMitKontrollauftrag(),
+    ])
     setLoading(false)
     if (result.error) { setError('Die Schutzmaßnahmen konnten nicht geladen werden.'); return }
     const rows = (result.data ?? []) as unknown as Schutzfall[]
     setItems(rows)
+    setKontrolliert(ids)
     setSelected(current => rows.find(row => row.id === current?.id) ?? null)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -79,7 +84,7 @@ export default function AussendienstSchutzmassnahmen() {
     <button type="button" onClick={() => locate()} disabled={locating} className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"><Navigation className="h-4 w-4" />{locating ? 'Standort wird ermittelt…' : 'Meinen Standort anzeigen'}</button>
     {loading ? <div className="py-8 text-center text-sm text-gray-500">Schutzmaßnahmen werden geladen…</div> : items.length === 0 ? <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">Keine aktiven Schutzmaßnahmen.</div> : <div className="grid gap-3">{items.map(item => {
       const initialDone = hasInitialControl(item)
-      const overdue = !initialDone && firstControlDeadline(item).getTime() < now
+      const overdue = kontrolliert.has(item.id) && !initialDone && firstControlDeadline(item).getTime() < now
       return <button type="button" key={item.id} onClick={() => { setSelected(item); setOwnPoint(null); setDangerPoint(null); setProtectedPoint(null); setNote('') }} className="rounded-2xl border border-gray-200 bg-white p-4 text-left hover:border-blue-300">
         <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.massnahme === 'bv_av' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{MASSNAHME_LABEL[item.massnahme]}</span>{overdue ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800">Erstkontrolle überfällig</span> : null}</div>
         <p className="mt-2 font-semibold text-gray-900">Gefährder: {item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}</p>

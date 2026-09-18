@@ -7,7 +7,7 @@ import { PersonPicker } from '../../components/RegisterPickers'
 import { logAudit } from '../../lib/audit'
 import { geocodeLocation } from '../../lib/geocode'
 import { findSimilarObjects, objectLabel, personDisplayName, useObjects, usePersons } from '../../lib/register'
-import { defaultBvAvEnd, firstControlDeadline, hasInitialControl, localDateTimeInput, MASSNAHME_LABEL, SCHUTZ_SELECT, type EvRechtsgrundlage, type Schutzfall, type SchutzfallStatus, type Schutzmassnahme } from '../../lib/schutzmassnahmen'
+import { defaultBvAvEnd, firstControlDeadline, hasInitialControl, loadSchutzfaelleMitKontrollauftrag, localDateTimeInput, MASSNAHME_LABEL, SCHUTZ_SELECT, type EvRechtsgrundlage, type Schutzfall, type SchutzfallStatus, type Schutzmassnahme } from '../../lib/schutzmassnahmen'
 import { supabase } from '../../lib/supabase'
 import { Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { loadActivePersonNotesByPerson } from '../../lib/personenhinweise'
@@ -78,14 +78,14 @@ export default function ZentraleAvBvPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [result, kontrollResult] = await Promise.all([
+    const [result, kontrolliert] = await Promise.all([
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).order('status').order('ende'),
-      supabase.from('zentrale_entries').select('schutzfall_id').eq('category', 'kontrollauftrag').not('schutzfall_id', 'is', null),
+      loadSchutzfaelleMitKontrollauftrag(),
     ])
     setLoading(false)
     if (result.error) { setError('Die Schutzmaßnahmen konnten nicht geladen werden.'); return }
     setError(''); setItems((result.data ?? []) as unknown as Schutzfall[])
-    setKontrollauftragIds(new Set((kontrollResult.data ?? []).map(row => row.schutzfall_id as string)))
+    setKontrollauftragIds(kontrolliert)
   }, [])
   useEffect(() => { void load() }, [load])
 
@@ -242,11 +242,12 @@ export default function ZentraleAvBvPage() {
         <div className="mb-3 flex items-center justify-between gap-3"><div><h2 className="font-bold text-gray-900">Schutzmaßnahmen</h2><p className="text-xs text-gray-500">{items.length} erfasst · Rot: BV/AV · Violett: EV.</p></div>{canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white"><Plus className="h-4 w-4" /> Schutzfall</button> : null}</div>
         <div className="overflow-y-auto pr-1" style={{ maxHeight: 560 }}>
           {loading ? <div className="py-10 text-center text-sm text-gray-500">Schutzmaßnahmen werden geladen…</div> : items.length === 0 ? <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">Noch keine Schutzmaßnahmen erfasst.</div> : <section className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">{items.map(item => {
+            const kontrolleAngefordert = kontrollauftragIds.has(item.id)
             const initialDone = hasInitialControl(item)
-            const overdue = !initialDone && firstControlDeadline(item).getTime() < now
-            const dueSoon = !initialDone && !overdue
+            const overdue = kontrolleAngefordert && !initialDone && firstControlDeadline(item).getTime() < now
+            const dueSoon = kontrolleAngefordert && !initialDone && !overdue
             return <article key={item.id} className={`p-4 sm:p-5 ${selectedId === item.id ? 'bg-blue-50' : ''}`}>
-              <div className="flex items-start justify-between gap-3"><button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 flex-1 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.massnahme === 'bv_av' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{MASSNAHME_LABEL[item.massnahme]}</span><span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{item.status}</span>{overdue ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"><AlertTriangle className="mr-1 inline h-3 w-3" />Erstkontrolle überfällig</span> : dueSoon ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Erstkontrolle bis {firstControlDeadline(item).toLocaleString('de-AT')}</span> : <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800"><CheckCircle2 className="mr-1 inline h-3 w-3" />Erstkontrolle erfasst</span>}</div>
+              <div className="flex items-start justify-between gap-3"><button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 flex-1 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"><div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.massnahme === 'bv_av' ? 'bg-red-100 text-red-800' : 'bg-purple-100 text-purple-800'}`}>{MASSNAHME_LABEL[item.massnahme]}</span><span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{item.status}</span>{!kontrolleAngefordert ? null : overdue ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"><AlertTriangle className="mr-1 inline h-3 w-3" />Erstkontrolle überfällig</span> : dueSoon ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">Erstkontrolle bis {firstControlDeadline(item).toLocaleString('de-AT')}</span> : <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800"><CheckCircle2 className="mr-1 inline h-3 w-3" />Erstkontrolle erfasst</span>}</div>
                 <h3 className="mt-2 font-semibold text-gray-900">Gefährder: {item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}</h3><p className="mt-1 text-sm text-gray-600">Geschützt: {(item.geschuetzte ?? []).map(row => row.person ? personDisplayName(row.person) : '—').join(', ') || '—'}</p>
                 <p className="mt-1 text-xs text-gray-500">PAD {item.pad_aktenzahl} · {new Date(item.beginn).toLocaleString('de-AT')} bis {new Date(item.ende).toLocaleString('de-AT')}</p>
                 {(item.bereiche ?? []).map(area => <p key={area.id} className="mt-1 text-sm text-gray-600"><MapPin className="mr-1 inline h-4 w-4 text-blue-700" />{area.bezeichnung} · {area.radius_m} m</p>)}

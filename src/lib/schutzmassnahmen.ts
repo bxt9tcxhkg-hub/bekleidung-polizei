@@ -1,3 +1,4 @@
+import { supabase } from './supabase'
 import type { OperationalObject, OperationalPerson } from './types'
 
 export type Schutzmassnahme = 'bv_av' | 'ev'
@@ -100,4 +101,16 @@ export function distanceNote(distance: number, accuracy: number, subject: string
   const assessment = assessDistance(distance, limit, accuracy)
   const accuracyText = accuracy > 0 ? `; Standortgenauigkeit ±${Math.round(accuracy)} m` : '; Position(en) manuell auf Karte gesetzt'
   return `Distanzhinweis ${subject}: Luftlinie ca. ${Math.round(distance)} m${accuracyText}; technische Einschätzung: ${assessment.label} des ${limit}-m-Abstands. PAD-Protokollierung/rechtliche Beurteilung separat.`
+}
+
+/**
+ * Ob überhaupt eine Kontrolle erfasst werden soll, entscheidet sich allein
+ * daran, ob ein verknüpfter Kontrollauftrag existiert (siehe ZentraleAvBv.tsx)
+ * - "Erstkontrolle überfällig/fällig" darf daher nirgends angezeigt werden,
+ * wenn für den Schutzfall keine Kontrolle angefordert wurde, sonst
+ * widerspricht die Warnung der bewusst getroffenen Entscheidung.
+ */
+export async function loadSchutzfaelleMitKontrollauftrag(): Promise<Set<string>> {
+  const result = await supabase.from('zentrale_entries').select('schutzfall_id').eq('category', 'kontrollauftrag').not('schutzfall_id', 'is', null)
+  return new Set((result.data ?? []).map(row => row.schutzfall_id as string))
 }
