@@ -31,12 +31,14 @@ type FormState = {
   verwahrort: string
   ausnahmen: string
   hinweise: string
+  /** Legt beim Anlegen fest, ob daraus ein Kontrollauftrag für die Streife entstehen soll - bewusste Entscheidung statt Automatik. */
+  kontrolleErforderlich: boolean
 }
 
 function newArea(): AreaForm { return { key: crypto.randomUUID(), objectId: '', label: '', lat: null, lng: null, radius: 100, confirmed: false } }
 function emptyForm(): FormState {
   const begin = localDateTimeInput()
-  return { massnahme: 'bv_av', rechtsgrundlage: '382b', gefaehrderId: '', geschuetzteIds: [], pad: '', externeAkte: '', stelle: '', beginn: begin, ende: defaultBvAvEnd(begin), status: 'aktiv', waffenverbot: true, schluesselStatus: 'nicht_erfasst', verwahrort: '', ausnahmen: '', hinweise: '' }
+  return { massnahme: 'bv_av', rechtsgrundlage: '382b', gefaehrderId: '', geschuetzteIds: [], pad: '', externeAkte: '', stelle: '', beginn: begin, ende: defaultBvAvEnd(begin), status: 'aktiv', waffenverbot: true, schluesselStatus: 'nicht_erfasst', verwahrort: '', ausnahmen: '', hinweise: '', kontrolleErforderlich: true }
 }
 
 export default function ZentraleAvBvPage() {
@@ -150,6 +152,7 @@ export default function ZentraleAvBvPage() {
       beginn: localDateTimeInput(item.beginn), ende: localDateTimeInput(item.ende), status: item.status,
       waffenverbot: item.waffenverbot, schluesselStatus: item.schluessel_status,
       verwahrort: item.schluessel_verwahrort ?? '', ausnahmen: item.ausnahmen ?? '', hinweise: item.hinweise ?? '',
+      kontrolleErforderlich: true,
     })
     setAreas((item.bereiche ?? []).map(area => ({ key: area.id, objectId: area.object_id ?? '', label: area.bezeichnung, lat: area.lat, lng: area.lng, radius: area.radius_m, confirmed: area.position_bestaetigt })))
     setShowForm(true); setError('')
@@ -202,7 +205,12 @@ export default function ZentraleAvBvPage() {
     setSaving(false)
     if (personsResult.error || areasResult.error) { setError('Der Schutzfall wurde gespeichert, aber Personen oder Schutzbereiche konnten nicht vollständig zugeordnet werden. Bitte den Eintrag öffnen und vervollständigen.'); await load(); return }
     logAudit(editing ? 'Schutzmaßnahme bearbeitet' : 'Schutzmaßnahme angelegt', `${MASSNAHME_LABEL[form.massnahme]} · PAD ${form.pad.trim()}`)
-    setShowForm(false); setNotice(editing ? 'Schutzmaßnahme wurde aktualisiert.' : 'Schutzmaßnahme wurde angelegt.'); await load()
+    let kontrollHinweis = ''
+    if (form.kontrolleErforderlich) {
+      const kontrollResult = await supabase.rpc('create_schutzfall_kontrollauftrag', { p_schutzfall_id: id! })
+      if (kontrollResult.error) kontrollHinweis = ' Der Kontrollauftrag konnte nicht angelegt werden - bitte in den Kontrollaufträgen manuell nachtragen.'
+    }
+    setShowForm(false); setNotice((editing ? 'Schutzmaßnahme wurde aktualisiert.' : 'Schutzmaßnahme wurde angelegt.') + kontrollHinweis); await load()
   }
 
   return <div className="space-y-5">
@@ -243,6 +251,7 @@ export default function ZentraleAvBvPage() {
         {form.geschuetzteIds.map(id => { const note = personHinweise.get(id); return note && note.length > 0 ? <PersonHinweisAnzeige key={id} personId={id} personName={personDisplayName(persons.find(p => p.id === id))} notes={note} createdBy={profile?.id ?? null} canOperate={canOperate} onChanged={() => void loadHinweiseFor([id])} /> : null })}
       </fieldset>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><Field label="PAD-Aktenzahl *" value={form.pad} onChange={value => setForm(current => ({ ...current, pad: value }))} /><Field label="Ausstellende Stelle" value={form.stelle} onChange={value => setForm(current => ({ ...current, stelle: value }))} /><Field label="Beginn *" type="datetime-local" value={form.beginn} onChange={value => setForm(current => ({ ...current, beginn: value, ende: current.massnahme === 'bv_av' ? defaultBvAvEnd(value) : current.ende }))} /><Field label="Ende *" type="datetime-local" value={form.ende} onChange={value => setForm(current => ({ ...current, ende: value }))} /></div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.kontrolleErforderlich} onChange={event => setForm(current => ({ ...current, kontrolleErforderlich: event.target.checked }))} />Kontrolle durch die Streife erforderlich (legt beim Speichern einen Kontrollauftrag an)</label>
       <div className="space-y-3"><div className="flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-900">{form.massnahme === 'bv_av' ? 'Wohnungs-Schutzbereich' : 'Gerichtliche Schutzbereiche'}</h3>{form.massnahme === 'ev' ? <button type="button" onClick={() => setAreas(current => [...current, newArea()])} className="text-sm font-semibold text-blue-700"><Plus className="mr-1 inline h-4 w-4" />Weiterer Ort</button> : null}</div>{areas.map((area, index) => <div key={area.key} className="rounded-xl border border-gray-200 p-3 space-y-3">
         <div className="flex items-center justify-between"><span className="text-xs font-bold text-gray-500">Schutzbereich {index + 1}</span>{form.massnahme === 'ev' && areas.length > 1 ? <button type="button" onClick={() => setAreas(current => current.filter(row => row.key !== area.key))} aria-label="Schutzbereich entfernen"><X className="h-4 w-4 text-gray-500" /></button> : null}</div>
         <label className="block text-xs font-medium text-gray-600">Objekt aus Stammdaten<select className={inputClass} value={area.objectId} onChange={event => selectObject(area.key, event.target.value)}><option value="">Ohne Objektverknüpfung</option>{objects.map(object => <option key={object.id} value={object.id}>{objectLabel(object)}</option>)}</select></label>

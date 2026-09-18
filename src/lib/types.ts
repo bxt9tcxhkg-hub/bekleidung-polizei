@@ -592,6 +592,8 @@ export interface ZentraleEntry {
   target_function: KontrollauftragZielfunktion | null
   /** Nur für category 'lage' gesetzt (Pflicht) - die auslösende Einsatzmeldung. */
   incident_id: string | null
+  /** Nur für einen bewusst aus einem Schutzfall (BV/AV, EV) erzeugten Kontrollauftrag gesetzt. */
+  schutzfall_id: string | null
   /** Erledigungsfrist. Nicht auf category 'kontrollauftrag' beschränkt, aktuell aber nirgends im Frontend gesetzt oder gelesen. */
   due_at: string | null
   /** Zeitpunkt des Erledigt-Klicks bei einem Kontrollauftrag - reine Gedankenstütze für die spätere Protokollierung im PAD, kein Nachweis. */
@@ -1703,6 +1705,7 @@ export type Database = {
       merge_operational_persons: { Args: { p_keep_id: string; p_remove_id: string }; Returns: undefined }
       take_over_incident: { Args: { p_id: string }; Returns: undefined }
       release_incident_takeover: { Args: { p_id: string }; Returns: undefined }
+      create_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: string | null }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       decide_pool_einsatzmittel_request: { Args: { p_request_id: string; p_approve: boolean; p_note?: string | null }; Returns: string | null }
       can_self_register_schulung: { Args: { p_session_id: string }; Returns: boolean }
