@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, AlertTriangle, CheckCircle, Info } from 'lucide-react'
+import { ShoppingCart, Plus, Minus, Trash2, Send, X, ShoppingBag, AlertTriangle, CheckCircle, Info, PackageX } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
 import { getCurrentBudget, getUsedBudget, DEFAULT_BUDGET } from '../lib/budget'
 import { fmtEUR } from '../lib/format'
 import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
+import { buildInventoryMap, inventoryKey } from '../lib/inventory'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -30,7 +31,18 @@ export default function Shop() {
   const [genderFilterActive, setGenderFilterActive] = useState(true)
   const [sizeGuideModal, setSizeGuideModal] = useState<string | null>(null)
   const [lastSizes, setLastSizes] = useState<Record<string, string>>({})
+  const [inventoryMap, setInventoryMap] = useState<Record<string, number>>({})
   const [error, setError] = useState('')
+
+  /** Bei nicht mehr gelisteten (inaktiven) Artikeln nur Größen mit Restbestand anbieten. */
+  function orderableSizes(product: Product): string[] {
+    if (product.active) return product.sizes
+    return product.sizes.filter(s => (inventoryMap[inventoryKey(product.id, s)] ?? 0) > 0)
+  }
+
+  function stockOf(product: Product, size: string): number {
+    return inventoryMap[inventoryKey(product.id, size)] ?? 0
+  }
 
   async function loadBudget() {
     const [total, used] = await Promise.all([
@@ -54,11 +66,18 @@ export default function Shop() {
   useEffect(() => {
     async function init() {
       setLoading(true)
-      const [pRes, qRes] = await Promise.all([
-        supabase.from('products').select('*').eq('active', true).eq('organisation', profile?.organisation ?? 'Stadtpolizei').order('category').order('name'),
+      const [pRes, qRes, invRes] = await Promise.all([
+        supabase.from('products').select('*').eq('organisation', profile?.organisation ?? 'Stadtpolizei').order('category').order('name'),
         supabase.from('quarters').select('*').not('status', 'eq', 'closed').order('year', { ascending: false }),
+        supabase.from('inventory').select('product_id,size,quantity'),
       ])
-      setProducts(pRes.data ?? [])
+      const invMap = buildInventoryMap(invRes.data ?? [])
+      setInventoryMap(invMap)
+      // Inaktive (nicht mehr gelistete) Artikel nur zeigen, solange noch Restbestand einer Größe da ist.
+      const availableProducts = (pRes.data ?? []).filter(p =>
+        p.active || p.sizes.some(s => (invMap[inventoryKey(p.id, s)] ?? 0) > 0),
+      )
+      setProducts(availableProducts)
       const qs = qRes.data ?? []
       setQuarters(qs)
       setActiveQuarter(qs.find(q => q.status === 'active') ?? null)
@@ -111,19 +130,29 @@ export default function Shop() {
   }
 
   function openSizeModal(product: Product) {
+    const sizes = orderableSizes(product)
     const prefKey = SUB_CAT_PREF[product.sub_category ?? '']
     const prefSize = prefKey ? (profile?.size_preferences ?? {})[prefKey] : undefined
-    const hasPref = prefSize && product.sizes.includes(prefSize)
-    const defaultSize = hasPref ? prefSize : (lastSizes[product.id] ?? product.sizes[0] ?? '')
+    const hasPref = prefSize && sizes.includes(prefSize)
+    const lastSize = lastSizes[product.id]
+    const defaultSize = hasPref ? prefSize : (lastSize && sizes.includes(lastSize) ? lastSize : sizes[0] ?? '')
     setSizeModal({ product, size: defaultSize, quantity: 1 })
   }
 
   async function addToCart() {
     if (!sizeModal || !activeQuarter) return
-    setAdding(sizeModal.product.id)
     const existing = cartItems.find(o =>
       o.product_id === sizeModal.product.id && o.size === sizeModal.size && o.quarter_id === activeQuarter.id
     )
+    if (!sizeModal.product.active) {
+      const stock = stockOf(sizeModal.product, sizeModal.size)
+      const requestedTotal = (existing?.quantity ?? 0) + sizeModal.quantity
+      if (requestedTotal > stock) {
+        setError(`Nur noch ${stock}× „${sizeModal.product.name}" (Gr. ${sizeLabel(sizeModal.size, true)}) am Lager – der Artikel wird nicht mehr nachbestellt.`)
+        return
+      }
+    }
+    setAdding(sizeModal.product.id)
     const { error: err } = existing
       ? await supabase.from('orders').update({ quantity: existing.quantity + sizeModal.quantity }).eq('id', existing.id)
       : await supabase.from('orders').insert({
@@ -302,6 +331,11 @@ export default function Shop() {
               </div>
               <div className="p-3 sm:p-4 flex flex-col flex-1">
                 <h3 className="font-semibold text-gray-900 text-xs sm:text-sm leading-snug mb-1">{product.name}</h3>
+                {!product.active && (
+                  <span className="inline-flex items-center gap-1 w-fit bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-medium px-1.5 py-0.5 rounded-md mb-1.5">
+                    <PackageX className="w-3 h-3" /> Nicht mehr lieferbar · begrenzter Restbestand
+                  </span>
+                )}
                 <p className="text-blue-800 font-bold text-xs sm:text-sm mb-3">{fmtEUR(Number(product.price))}</p>
                 <button
                   onClick={() => openSizeModal(product)}
@@ -326,6 +360,11 @@ export default function Shop() {
               <div>
                 <h2 className="font-bold text-gray-900">{sizeModal.product.name}</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{fmtEUR(Number(sizeModal.product.price))} · {sizeModal.product.category}</p>
+                {!sizeModal.product.active && (
+                  <p className="flex items-center gap-1 text-xs text-amber-700 mt-1">
+                    <PackageX className="w-3.5 h-3.5" /> Nicht mehr lieferbar – nur Größen mit Restbestand wählbar
+                  </p>
+                )}
                 {sizeModal.product.size_guide && (
                   <button onClick={() => setSizeGuideModal(sizeModal.product.size_guide!)}
                     className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-0.5 font-medium">
@@ -336,17 +375,19 @@ export default function Shop() {
               <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-5 py-4 space-y-4">
-              {sizeModal.product.sizes.length > 0 && (() => {
-                const sizes = sortedSizes(sizeModal.product.sizes)
+              {orderableSizes(sizeModal.product).length > 0 && (() => {
+                const sizes = sortedSizes(orderableSizes(sizeModal.product))
                 const groups = groupSizes(sizes)
                 const isGrouped = groups !== null
 
                 const SizeBtn = ({ s }: { s: string }) => {
                   const isLast = lastSizes[sizeModal.product.id] === s
+                  const stock = !sizeModal.product.active ? stockOf(sizeModal.product, s) : null
                   return (
-                    <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s } : m)}
+                    <button key={s} onClick={() => setSizeModal(m => m ? { ...m, size: s, quantity: 1 } : m)}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors relative ${sizeModal.size === s ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
                       {sizeLabel(s, isGrouped)}
+                      {stock !== null && <span className="ml-1 text-[10px] opacity-75">({stock}×)</span>}
                       {isLast && (
                         <span className={`absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full border-2 border-white ${sizeModal.size === s ? 'bg-yellow-300' : 'bg-blue-400'}`} title="Zuletzt bestellt" />
                       )}
@@ -383,18 +424,32 @@ export default function Shop() {
                   </div>
                 )
               })()}
-              <div>
-                <p className="text-xs font-medium text-gray-600 mb-2">Menge</p>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: Math.max(1, m.quantity - 1) } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50"><Minus className="w-4 h-4" /></button>
-                  <span className="text-lg font-semibold w-8 text-center">{sizeModal.quantity}</span>
-                  <button onClick={() => setSizeModal(m => m ? { ...m, quantity: m.quantity + 1 } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50"><Plus className="w-4 h-4" /></button>
-                </div>
-              </div>
+              {(() => {
+                const maxQty = sizeModal.product.active ? null : stockOf(sizeModal.product, sizeModal.size)
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-medium text-gray-600">Menge</p>
+                      {maxQty !== null && (
+                        <span className="text-xs text-amber-700 font-medium">nur noch {maxQty}× am Lager</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setSizeModal(m => m ? { ...m, quantity: Math.max(1, m.quantity - 1) } : m)} className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50"><Minus className="w-4 h-4" /></button>
+                      <span className="text-lg font-semibold w-8 text-center">{sizeModal.quantity}</span>
+                      <button
+                        onClick={() => setSizeModal(m => m ? { ...m, quantity: maxQty !== null ? Math.min(maxQty, m.quantity + 1) : m.quantity + 1 } : m)}
+                        disabled={maxQty !== null && sizeModal.quantity >= maxQty}
+                        className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40"
+                      ><Plus className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
             <div className="px-5 py-4 border-t flex gap-3">
               <button onClick={() => setSizeModal(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={addToCart} disabled={(sizeModal.product.sizes.length > 0 && !sizeModal.size) || adding === sizeModal.product.id}
+              <button onClick={addToCart} disabled={(orderableSizes(sizeModal.product).length > 0 && !sizeModal.size) || adding === sizeModal.product.id}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                 <ShoppingCart className="w-4 h-4" /> Hinzufügen
               </button>
