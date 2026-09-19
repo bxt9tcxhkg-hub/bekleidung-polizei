@@ -73,9 +73,10 @@ export default function Shop() {
       ])
       const invMap = buildInventoryMap(invRes.data ?? [])
       setInventoryMap(invMap)
+      // Rein intern verwaltete Artikel (orderable_in_shop = false) nie im Shop zeigen.
       // Inaktive (nicht mehr gelistete) Artikel nur zeigen, solange noch Restbestand einer Größe da ist.
       const availableProducts = (pRes.data ?? []).filter(p =>
-        p.active || p.sizes.some(s => (invMap[inventoryKey(p.id, s)] ?? 0) > 0),
+        p.orderable_in_shop && (p.active || p.sizes.some(s => (invMap[inventoryKey(p.id, s)] ?? 0) > 0)),
       )
       setProducts(availableProducts)
       const qs = qRes.data ?? []

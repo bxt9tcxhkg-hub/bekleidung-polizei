@@ -84,7 +84,16 @@ export default function ProductsTable({
                 </span>
               </td>
               <td className="px-4 py-3 text-gray-600 hidden xl:table-cell">{SIZE_MODE_LABELS[p.size_mode ?? 'sizes']}</td>
-              <td className="px-4 py-3"><Badge active={p.active} /></td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-1.5">
+                  <Badge active={p.active} />
+                  {!p.orderable_in_shop && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-700" title="Nicht im Shop bestellbar">
+                      Nur Lager
+                    </span>
+                  )}
+                </div>
+              </td>
               {isSachbearbeiter && (
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2 justify-end">

@@ -60,6 +60,7 @@ export function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 
     min_quantity: 0,
     bezugsart,
     size_mode,
+    orderable_in_shop: true,
   }
 }
 

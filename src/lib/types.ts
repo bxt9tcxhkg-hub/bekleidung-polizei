@@ -87,6 +87,7 @@ export interface Product {
   min_quantity: number
   bezugsart: ProductBezugsart
   size_mode: ProductSizeMode
+  orderable_in_shop: boolean
   created_at: string | null
 }
 

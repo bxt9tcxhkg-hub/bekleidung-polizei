@@ -181,6 +181,13 @@ export default function ProductFormModal({
             <label htmlFor="tailoring" className="text-sm text-gray-700">Benötigt Schneiderei</label>
           </div>
           <div className="flex items-center gap-3">
+            <input type="checkbox" id="orderable_in_shop" checked={form.orderable_in_shop} onChange={e => setForm(f => ({ ...f, orderable_in_shop: e.target.checked }))} className="rounded" />
+            <label htmlFor="orderable_in_shop" className="text-sm text-gray-700">Im Shop bestellbar</label>
+          </div>
+          {!form.orderable_in_shop && (
+            <p className="text-xs text-gray-400 -mt-2">Artikel bleibt im Lager erfasst/nachbestellbar, taucht aber nie im Bekleidungskatalog für Beamte auf.</p>
+          )}
+          <div className="flex items-center gap-3">
             <input type="checkbox" id="active" checked={form.active} onChange={e => setForm(f => ({ ...f, active: e.target.checked }))} className="rounded" />
             <label htmlFor="active" className="text-sm text-gray-700">Aktiv</label>
           </div>

@@ -54,7 +54,7 @@ export function useProducts() {
   }
 
   function openEdit(p: Product) {
-    setForm({ article_number: p.article_number, name: p.name, category: p.category, sub_category: p.sub_category ?? null, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active, min_quantity: p.min_quantity ?? 0, bezugsart: p.bezugsart ?? 'massa', size_mode: p.size_mode ?? 'sizes' })
+    setForm({ article_number: p.article_number, name: p.name, category: p.category, sub_category: p.sub_category ?? null, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active, min_quantity: p.min_quantity ?? 0, bezugsart: p.bezugsart ?? 'massa', size_mode: p.size_mode ?? 'sizes', orderable_in_shop: p.orderable_in_shop ?? true })
     setEditId(p.id)
     setError('')
     setShowForm(true)

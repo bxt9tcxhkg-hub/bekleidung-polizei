@@ -49,4 +49,5 @@ export const emptyProduct = (): ProductFormData => ({
   min_quantity: 0,
   bezugsart: 'massa',
   size_mode: 'sizes',
+  orderable_in_shop: true,
 })
