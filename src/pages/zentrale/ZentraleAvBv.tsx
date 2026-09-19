@@ -13,6 +13,7 @@ import { Area, ErrorMessage, Field, Modal, inputClass } from '../../components/Z
 import { loadActivePersonNotesByPerson } from '../../lib/personenhinweise'
 import type { OperationalPersonNote } from '../../lib/types'
 import { PersonHinweisAnzeige } from './PersonHinweisAnzeige'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
 type AreaForm = { key: string; objectId: string; label: string; lat: number | null; lng: number | null; radius: number; confirmed: boolean }
 type FormState = {
@@ -46,6 +47,7 @@ function emptyForm(): FormState {
 
 export default function ZentraleAvBvPage() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const canOperate = canManage || isZentralistOnDuty
@@ -143,7 +145,7 @@ export default function ZentraleAvBvPage() {
     })()
   }, [searchParams, canOperate, objectsLoading])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function chooseMeasure(massnahme: Schutzmassnahme) {
     setForm(current => {

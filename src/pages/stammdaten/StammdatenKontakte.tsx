@@ -8,6 +8,7 @@ import type { ZentraleKontakt } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
 import { objectLabel, useObjects } from '../../lib/register'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
 const emptyForm = { name: '', institution: '', funktion: '', telefon: '', email: '', erreichbarkeit: '', objectId: null as string | null, note: '', restricted: false }
 
@@ -17,6 +18,7 @@ type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer'; name: string; ins
 
 export default function StammdatenKontaktePage() {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   // Pflege obliegt der Administration oder den Sachbearbeitern im Bereich
   // Datenpflege (eigener Portalbereich, siehe portalEntitlements.ts) - gelesen
   // wird das Register von Zentrale UND Datenpflege gemeinsam.
@@ -56,7 +58,7 @@ export default function StammdatenKontaktePage() {
   const institutions = useMemo(() => [...new Set(rows.map(row => row.institution).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'de-AT')), [rows])
   const visibleRows = useMemo(() => filterInstitution ? rows.filter(row => row.institution === filterInstitution) : rows, [rows, filterInstitution])
 
-  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
   function openEdit(item: ZentraleKontakt) { setEditing(item); setForm({ name: item.name, institution: item.institution ?? '', funktion: item.funktion ?? '', telefon: item.telefon ?? '', email: item.email ?? '', erreichbarkeit: item.erreichbarkeit ?? '', objectId: item.object_id, note: item.note ?? '', restricted: item.restricted }); setShowForm(true); setError('') }

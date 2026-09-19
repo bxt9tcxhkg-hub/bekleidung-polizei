@@ -9,6 +9,7 @@ import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposit
 import { personDisplayName } from '../../lib/register'
 import { loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { FAHNDUNG_ART_LABEL, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 
@@ -63,6 +64,7 @@ export interface AussendienstContext {
 
 export default function AussendienstShell() {
   const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const zentraleRoles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
@@ -236,7 +238,7 @@ export default function AussendienstShell() {
     logAudit('Baustelle gemeldet', baustelleReport.titel.trim()); setShowBaustelleForm(false); setNotice(canManageZentrale ? 'Baustelle wurde angelegt.' : 'Baustelle wurde gemeldet und wartet auf Prüfung durch die Zentrale.')
   }
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !isStrictAdmin && !eigeneBereicheHeute.has('aussendienst')) return <Navigate to="/" replace />
 
   const ctx: AussendienstContext = {
     loading, ownAssignment, ownFunction, ownVehicle, ownCheck, patrolMates,

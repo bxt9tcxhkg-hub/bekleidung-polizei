@@ -11,6 +11,7 @@ import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { generateBescheidPdf, type BescheidKind } from '../../lib/innendienstBescheidPdf'
 import { BESCHEID_KINDS, DENOMINATIONS, EMPTY_BESCHEID_FORM, KIND_LABEL, countedTotalCents, formatEuro, inputClass, todayLocal, type BescheidFormState } from './innendienstShared'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
 // Innendienst ist in eigenständige Sidebar-Seiten aufgeteilt (Übersicht,
 // Bescheide & Verstöße, Schichtübergabe, Gebührenordnung - kein Tab-Streifen
@@ -43,6 +44,7 @@ export interface InnendienstContext {
 
 export default function InnendienstShell() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const navigate = useNavigate()
   const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const [shift, setShift] = useState<'tag' | 'nacht'>('tag')
@@ -259,7 +261,7 @@ export default function InnendienstShell() {
     logAudit('Schichtübergabe endgültig gelöscht', editingHandover.title); setShowHandoverForm(false); await load()
   }
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !isStrictAdmin && !eigeneBereicheHeute.has('innendienst')) return <Navigate to="/" replace />
 
   const ctx: InnendienstContext = {
     loading, shift, ownTask, bescheide, violationsByBescheid, violationCountByPerson, todaysBescheide, openViolations, handovers, canManageZentrale, gebuehrensaetze,

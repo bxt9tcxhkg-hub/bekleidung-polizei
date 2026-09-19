@@ -8,6 +8,7 @@ import type { OperationalPerson } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
 import { objectLabel, personDisplayName, personLabel, useObjects } from '../../lib/register'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
 // Zentrales Personen-Register: Basis für die Verknüpfung von Personenhinweisen,
 // RSa/RSb, AV/BV & EV und Fahndungen auf dieselbe Person, statt Namen in
@@ -22,6 +23,7 @@ const emptyForm = { vorname: '', nachname: '', birthDate: '', phone: '', phoneEr
 
 export default function StammdatenPersonen() {
   const { profile, hasAreaAccess, isStrictAdmin } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   // Die Register sind für die Zentrale lesbar; ihre Pflege ist ausschließlich Aufgabe der Administration.
   const canManage = isStrictAdmin
   const [persons, setPersons] = useState<OperationalPerson[]>([])
@@ -87,7 +89,7 @@ export default function StammdatenPersonen() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm({ ...emptyForm, phoneErhobenAm: todayLocal() }); setShowForm(true); setError('') }
   function openEdit(item: OperationalPerson) {

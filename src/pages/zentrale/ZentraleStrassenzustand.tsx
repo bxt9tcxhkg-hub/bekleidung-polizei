@@ -12,6 +12,7 @@ import { EMPTY_STRASSE_GEOMETRIE_FORM, type StrasseGeometrieFormState } from '..
 import { StrasseGeometrieModal } from './zentraleShared'
 import SonstigeStrasseOrt from './SonstigeStrasseOrt'
 import LeafletMap from '../../components/LeafletMap'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type {
   StrassenzustandBericht,
   StrassenzustandBerichtzeile,
@@ -74,6 +75,7 @@ const MELDUNGSART_BADGE: Record<StrassenzustandMeldungsart, string> = {
 
 export default function ZentraleStrassenzustand() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const canOperate = canManage || isZentralistOnDuty
@@ -353,7 +355,7 @@ export default function ZentraleStrassenzustand() {
     await load()
   }
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   return <div>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Straßenzustand</h1><p className="text-sm text-gray-500 mt-1">Bericht erfassen, prüfen und als PDF versenden.</p></div>

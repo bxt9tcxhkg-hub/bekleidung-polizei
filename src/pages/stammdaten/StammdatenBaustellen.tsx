@@ -10,6 +10,7 @@ import { BaustellenList } from '../zentrale/BaustellenList'
 import { BaustelleModal } from '../zentrale/BaustelleModal'
 import { EMPTY_BAUSTELLE_FORM, type BaustelleFormState } from '../../lib/zentraleShared'
 import type { ZentraleBaustelle } from '../../lib/types'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
 // Baustellen sind für die Streife maximal als Streckeninfo relevant, nie
 // dringend genug für "Sofort wichtig" oder die Zentrale-Übersicht selbst -
@@ -17,6 +18,7 @@ import type { ZentraleBaustelle } from '../../lib/types'
 
 export default function StammdatenBaustellen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const canOperate = canManage || isZentralistOnDuty
@@ -54,7 +56,7 @@ export default function StammdatenBaustellen() {
     })
   }, [form.startLat, form.startLng, form.endLat, form.endLng])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(EMPTY_BAUSTELLE_FORM); setFormError(''); setShowForm(true) }
   function openEdit(item: ZentraleBaustelle) {

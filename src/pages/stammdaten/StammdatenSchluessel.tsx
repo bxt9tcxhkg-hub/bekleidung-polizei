@@ -8,6 +8,7 @@ import type { Profile, SchluesselStatus, ZentraleSchluessel } from '../../lib/ty
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
 import { objectLabel, useObjects } from '../../lib/register'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
 const STATUS_LABEL: Record<SchluesselStatus, string> = { verfuegbar: 'Verfügbar', ausgegeben: 'Ausgegeben' }
 type Colleague = Pick<Profile, 'id' | 'name' | 'dienstnummer'>
@@ -15,6 +16,7 @@ const emptyForm = { schluesselNummer: '', objectId: null as string | null, verwa
 
 export default function StammdatenSchluesselPage() {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   // Pflege obliegt der Administration oder den Sachbearbeitern im Bereich
   // Datenpflege (eigener Portalbereich, siehe portalEntitlements.ts) - gelesen
   // wird das Register von Zentrale UND Datenpflege gemeinsam.
@@ -46,7 +48,7 @@ export default function StammdatenSchluesselPage() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
   function openEdit(item: ZentraleSchluessel) { setEditing(item); setForm({ schluesselNummer: item.schluessel_nummer, objectId: item.object_id, verwahrort: item.verwahrort ?? '', heldBy: item.held_by ?? '', note: item.note ?? '', status: item.status, restricted: item.restricted }); setShowForm(true); setError('') }

@@ -6,6 +6,7 @@ import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import type { UnterlagenBereich, ZentraleUnterlage } from '../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from './ZentraleEntryEditor'
+import { useOwnOperativBereicheToday } from '../lib/dutyAccess'
 
 const emptyForm = { titel: '', typ: '', fundort: '', gueltigBis: '', note: '', restricted: false }
 
@@ -28,6 +29,7 @@ export default function UnterlagenRegister({ bereich, title, description, areaTa
   backLabel: string
 }) {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   // Diensthabende Zentralisten dürfen Einträge erfassen/bearbeiten, auch ohne
@@ -52,7 +54,7 @@ export default function UnterlagenRegister({ bereich, title, description, areaTa
   }, [bereich])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
   function openEdit(item: ZentraleUnterlage) { setEditing(item); setForm({ titel: item.titel, typ: item.typ ?? '', fundort: item.fundort ?? '', gueltigBis: item.gueltig_bis ?? '', note: item.note ?? '', restricted: item.restricted }); setShowForm(true); setError('') }

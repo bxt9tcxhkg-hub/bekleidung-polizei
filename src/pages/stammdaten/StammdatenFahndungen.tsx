@@ -7,10 +7,12 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { decodeFahndungPdf, encodeFahndungPdf } from '../../lib/fahndungPdf'
 import { supabase } from '../../lib/supabase'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type { ZentraleFahndung } from '../../lib/types'
 
 export default function StammdatenFahndungen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger
@@ -33,7 +35,7 @@ export default function StammdatenFahndungen() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   async function uploadPdf(files: FileList | File[]) {
     const file = Array.from(files)[0]

@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { composeObjectAddress, objectLabel } from '../../lib/register'
 import { supabase } from '../../lib/supabase'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type { OperationalObject } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 
@@ -23,6 +24,7 @@ export default function StammdatenObjekte() {
   // Objekte entstehen sowohl aus Einsätzen als auch eigenständig über die
   // Datenpflege (gemeinsames Register) - Pflege obliegt der Administration
   // oder den Datenpflege-Sachbearbeitern.
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = isStrictAdmin || isDatenpflegeSachbearbeiter
@@ -69,7 +71,7 @@ export default function StammdatenObjekte() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
   function openEdit(item: OperationalObject) { setEditing(item); setForm({ strasse: item.strasse ?? '', hausnummer: item.hausnummer ?? '', plz: item.plz ?? '', ort: item.ort ?? '', label: item.label ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }

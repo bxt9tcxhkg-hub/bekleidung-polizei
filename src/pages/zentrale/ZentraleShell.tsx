@@ -11,6 +11,7 @@ import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
 import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import { IncidentModal } from './zentraleShared'
 import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, operationalToday, startOfOperationalDayIso, type IncidentFormState } from '../../lib/zentraleShared'
 
@@ -60,6 +61,7 @@ export interface ZentraleContext {
 
 export default function ZentraleShell() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const navigate = useNavigate()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
@@ -203,7 +205,7 @@ export default function ZentraleShell() {
     return () => clearTimeout(timer)
   }, [incident.street, incident.location, showIncidentForm])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !isStrictAdmin && !eigeneBereicheHeute.has('zentrale')) return <Navigate to="/" replace />
 
   function openLageForIncident(incidentItem: IncidentReport) {
     const existing = lageByIncidentId[incidentItem.id]

@@ -26,6 +26,7 @@ import { canManageSchulungen } from '../lib/schulungen'
 import { PORTAL_APPS, type PortalApp, type PortalAppId } from '../lib/portalApps'
 import { visiblePortalApps } from '../lib/portalEntitlements'
 import { supabase } from '../lib/supabase'
+import { useOwnOperativBereicheToday } from '../lib/dutyAccess'
 import { MyVehicleCard, TodayFunctionCard } from './portalDuty'
 
 const APP_ICONS: Record<PortalAppId, LucideIcon> = {
@@ -97,6 +98,10 @@ function NavTile({ to, label, description, icon: Icon, badge }: { to: string; la
 
 export default function Portal() {
   const { profile, isAdmin, isStrictAdmin, isGenehmiger, isGenehmigerEntitlement, areaRoles, hasAreaAccess, operativeModeActive, setOperativeModeActive } = useAuth()
+  // Zentrale/Innendienst/Außendienst sind Tagesfunktionen aus der
+  // Diensteinteilung, keine Dauerberechtigung - nur die heute zugeteilte
+  // Kachel wird gezeigt (Admin sieht als Aufsicht weiterhin immer alle drei).
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const adminLinks = visiblePortalAdminLinks(isAdmin)
   const zentraleManagerRole = (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
@@ -182,23 +187,23 @@ export default function Portal() {
         </section>
       ) : null}
 
-      {profile?.id && hasAreaAccess('zentrale') ? <TodayFunctionCard userId={profile.id} canManage={canManageDuties} /> : null}
-      {profile?.id && hasAreaAccess('zentrale') ? <div className="mb-6"><OwnerNotifications userId={profile.id} /></div> : null}
+      {/* Die Tagesfunktion (Zentrale/Innendienst/Außendienst) ist keine
+          Dauerberechtigung mehr, sondern für jede/n Benutzer/in wählbar -
+          deshalb hier nicht mehr an hasAreaAccess('zentrale') gekoppelt. */}
+      {profile?.id ? <TodayFunctionCard userId={profile.id} canManage={canManageDuties} /> : null}
+      {profile?.id ? <div className="mb-6"><OwnerNotifications userId={profile.id} /></div> : null}
       {profile?.id ? <MyVehicleCard userId={profile.id} /> : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
-          {/* Zentrale/Außendienst/Innendienst hängen noch am Bereich "zentrale" -
-              die tagesfunktionsbasierte Zugriffssteuerung (nur die heute
-              zugeteilte Funktion sichtbar, Admin sieht immer alle drei) folgt
-              in einer eigenen, weiteren Migration. */}
-          {hasAreaAccess('zentrale') ? <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} /> : null}
-          {hasAreaAccess('zentrale') ? <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck und Kontrollaufträge" icon={Shield} /> : null}
-          {hasAreaAccess('zentrale') ? <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße und Übergabe" icon={Building2} /> : null}
+          {isStrictAdmin || eigeneBereicheHeute.has('zentrale') ? <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} /> : null}
+          {isStrictAdmin || eigeneBereicheHeute.has('aussendienst') ? <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck und Kontrollaufträge" icon={Shield} /> : null}
+          {isStrictAdmin || eigeneBereicheHeute.has('innendienst') ? <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße und Übergabe" icon={Building2} /> : null}
+          {!isStrictAdmin && eigeneBereicheHeute.size === 0 ? <p className="text-sm text-gray-500 sm:col-span-2">Heute keine Funktion gewählt - oben "Funktion wählen", um Zentrale, Innendienst oder Außendienst zu nutzen.</p> : null}
         </PortalSection>
 
         <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung, Fuhrpark und Datenpflege" tone="organisation">
-          {hasAreaAccess('zentrale') || hasAreaAccess('datenpflege') ? (
+          {hasAreaAccess('zentrale') || hasAreaAccess('datenpflege') || eigeneBereicheHeute.size > 0 ? (
             <NavTile
               to="/stammdaten"
               label="Stammdaten & Nachschlagewerke"

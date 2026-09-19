@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { telHref, useWichtigeTelefonnummern } from '../../lib/telefonnummern'
+import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type { TelefonnummerKategorie, WichtigeTelefonnummer } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 
@@ -13,6 +14,7 @@ const emptyForm = { kategorie: 'intern' as TelefonnummerKategorie, bezeichnung: 
 
 export default function StammdatenTelefonnummernPage() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = isStrictAdmin || isGenehmiger || isDatenpflegeSachbearbeiter
@@ -24,7 +26,7 @@ export default function StammdatenTelefonnummernPage() {
   const [editing, setEditing] = useState<WichtigeTelefonnummer | null>(null)
   const [form, setForm] = useState(emptyForm)
 
-  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew(kategorie: TelefonnummerKategorie) { setEditing(null); setForm({ ...emptyForm, kategorie }); setShowForm(true); setError('') }
   function openEdit(item: WichtigeTelefonnummer) { setEditing(item); setForm({ kategorie: item.kategorie, bezeichnung: item.bezeichnung, nummer: item.nummer, hinweis: item.hinweis ?? '', sortierung: String(item.sortierung) }); setShowForm(true); setError('') }
