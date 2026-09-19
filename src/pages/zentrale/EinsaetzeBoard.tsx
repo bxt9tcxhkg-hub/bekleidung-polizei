@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatTime } from '../../lib/zentraleShared'
-import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, noteWithoutStufe, readStoredStufe, withStufe, writeStoredStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, noteWithoutStufe, readStoredStufe, telefonketteFuer, withStufe, writeStoredStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
 import type { IncidentReport, ZentraleKontakt } from '../../lib/types'
 
 export default function EinsaetzeBoard({
@@ -128,7 +128,7 @@ export default function EinsaetzeBoard({
                 <p className="text-xs text-gray-600">{meta.hint} · {meta.dienstbetrieb}</p>
                 {stufe !== 'klein' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   <p className="font-bold">Verständigung telefonisch</p>
-                  <ul className="mt-1 list-disc pl-5">{TELEFONKETTE.map(name => {
+                  <ul className="mt-1 list-disc pl-5">{telefonketteFuer(stufe).map(name => {
                     const match = kontakte.find(row => (row.funktion || '').toLowerCase().includes(name.toLowerCase().slice(0, 8)) || (row.name || '').toLowerCase().includes(name.toLowerCase().slice(0, 8)))
                     return <li key={name}>{name}{match ? ` – ${match.name}${match.telefon ? ` (${match.telefon})` : ''}` : ''}</li>
                   })}</ul>

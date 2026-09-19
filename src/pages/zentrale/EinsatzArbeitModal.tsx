@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Modal } from '../../components/ZentraleEntryEditor'
 import { supabase } from '../../lib/supabase'
 import { formatTime } from '../../lib/zentraleShared'
-import { EREIGNISSTUFEN, STUFE_META, TELEFONKETTE, formatStamp, noteWithoutStufe, readKette, readStoredStufe, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
+import { EREIGNISSTUFEN, STUFE_META, formatStamp, noteWithoutStufe, readKette, readStoredStufe, telefonketteFuer, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
 import type { IncidentReport, OperationalPerson } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
 import EinsatzParteien from './EinsatzParteien'
@@ -75,7 +75,7 @@ export default function EinsatzArbeitModal({
       {stufe === 'klein' ? <p className="text-sm text-gray-600">Kleinereignis: keine Telefonkette.</p> : <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
         <p className="font-bold">Verständigung telefonisch</p>
         <p className="text-xs text-amber-800 mb-2">Versucht = angerufen. Erreicht = Person informiert.</p>
-        <div className="space-y-2">{TELEFONKETTE.map(name => {
+        <div className="space-y-2">{telefonketteFuer(stufe).map(name => {
           const row = stand[name] ?? {}
           return <div key={name} className="rounded-lg bg-white/70 px-2 py-2">
             <p className="font-medium">{name}</p>
