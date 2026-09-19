@@ -6,10 +6,11 @@ import { formatTime } from '../../lib/zentraleShared'
 import { EREIGNISSTUFEN, STUFE_META, formatStamp, noteWithoutStufe, readKette, readStoredStufe, telefonketteFuer, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
 import type { IncidentReport, OperationalPerson } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
+import IncidentNamensliste from './IncidentNamensliste'
 import EinsatzParteien from './EinsatzParteien'
 import EinsatzChecklisten from './EinsatzChecklisten'
 
-type Tab = 'checkliste' | 'ablauf' | 'parteien' | 'dateien'
+type Tab = 'checkliste' | 'ablauf' | 'parteien' | 'dateien' | 'listen'
 
 export default function EinsatzArbeitModal({
   item, canOperateZentrale, close, openEditIncident, completeIncident, persons, onPersonCreated, createdBy,
@@ -63,7 +64,8 @@ export default function EinsatzArbeitModal({
       <button type="button" className={tabClass('checkliste')} onClick={() => setTab('checkliste')}>Checkliste</button>
       <button type="button" className={tabClass('ablauf')} onClick={() => setTab('ablauf')}>Ablauf</button>
       <button type="button" className={tabClass('parteien')} onClick={() => setTab('parteien')}>Parteien</button>
-      <button type="button" className={tabClass('dateien')} onClick={() => setTab('dateien')}>Dateien & Listen</button>
+      <button type="button" className={tabClass('dateien')} onClick={() => setTab('dateien')}>Dateien</button>
+      <button type="button" className={tabClass('listen')} onClick={() => setTab('listen')}>Listen</button>
     </div>
     {tab === 'checkliste' ? <div className="space-y-4">
       <div>
@@ -89,7 +91,7 @@ export default function EinsatzArbeitModal({
         })}</div>
         <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
       </div>}
-    </div> : tab === 'ablauf' ? <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} /> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
+    </div> : tab === 'ablauf' ? <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} /> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : tab === 'listen' ? <IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
     {canOperateZentrale ? <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
       <button type="button" onClick={() => { close(); openEditIncident(item) }} className="text-sm font-medium border border-gray-300 px-3 py-2 rounded-lg">Meldung ändern</button>
       {item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item).then(close)} className="text-sm font-medium text-green-800 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}

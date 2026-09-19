@@ -12,6 +12,7 @@ import { readDokumente } from '../../lib/einsatzDokumente'
 import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
 import type { IncidentDisposition, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import IncidentDocs from '../zentrale/IncidentDocs'
+import IncidentNamensliste from '../zentrale/IncidentNamensliste'
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
 
 export function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
@@ -87,7 +88,14 @@ function IncidentRow({ item, baustellen, takeOverIncident, releaseIncidentTakeov
         <summary className="text-xs font-bold text-gray-800 cursor-pointer">Ablauf-Checkliste (Erstmeldung / Notunterkunft)</summary>
         <div className="mt-2"><EinsatzChecklisten incidentId={item.id} canOperate /></div>
       </details>
-      <IncidentDocs incidentId={item.id} from="streife" />
+      <details className="rounded-xl border border-gray-200 px-3 py-2">
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Dateien</summary>
+        <div className="mt-2"><IncidentDocs incidentId={item.id} from="streife" /></div>
+      </details>
+      <details className="rounded-xl border border-gray-200 px-3 py-2">
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Listen</summary>
+        <div className="mt-2"><IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} /></div>
+      </details>
     </div> : null}
   </article>
 }
