@@ -33,8 +33,8 @@ const emptyTerminForm = { vehicleId: '', subject: '', dueDate: '', note: '' }
 // - jetzt fahrzeugübergreifend, FleetWerkstatt.tsx/FleetFristen.tsx sind nur
 // dünne Wrapper mit fester category.
 export function FleetTermineList({ category, title, description, placeholder }: { category: FleetAppointmentCategory; title: string; description: string; placeholder: string }) {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
-  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const { vehicles } = useFleetVehicles()
   const [searchParams, setSearchParams] = useSearchParams()
   const vehicleFilter = searchParams.get('vehicle') ?? ''

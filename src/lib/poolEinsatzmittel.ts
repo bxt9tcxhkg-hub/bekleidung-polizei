@@ -312,10 +312,8 @@ export function canManagePoolEinsatzmittel(input: {
   isStrictAdmin: boolean
   isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
-  operativeModeActive?: boolean
 }): boolean {
   if (input.isStrictAdmin || input.isGenehmiger) return true
-  if (input.operativeModeActive === false) return false
   if (input.rows === null) return false
   const role = parseEinsatzMtRole(rolesForArea(input.rows, 'einsatz_mt'))
   return role === 'sachbearbeiter' || role === 'admin'

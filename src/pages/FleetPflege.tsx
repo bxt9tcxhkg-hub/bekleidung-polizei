@@ -16,8 +16,8 @@ const CARE_KIND_LABEL: Record<FleetCareTaskKind, string> = { innenreinigung: 'In
 const emptyForm = { vehicleId: '', kind: 'sonstiges' as FleetCareTaskKind, subject: '', note: '' }
 
 export default function FleetPflege() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
-  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const { vehicles } = useFleetVehicles()
   const [searchParams, setSearchParams] = useSearchParams()
   const vehicleFilter = searchParams.get('vehicle') ?? ''

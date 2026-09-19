@@ -6,8 +6,8 @@ import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/s
 import { PortalSidebarShell } from './PortalSidebar'
 
 export default function SchulungenLayout() {
-  const { profile, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
-  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'schulungen', operativeModeActive)
+  const { profile, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const isSachbearbeiterHere = isStrictAdmin || isAreaManager(areaRoles, 'schulungen')
 
   const sections: NavSection[] = [
     meinBereichSection([

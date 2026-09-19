@@ -29,15 +29,16 @@ im Frontend. Bereits vorhandene Flags immer wiederverwenden:
 
 - `isStrictAdmin` — roh, nie gegatet. Admin ist Dauerzustand, kein
   „operativer Modus".
-- `isGenehmiger` / `isSachbearbeiter` — **gegated** durch `operativeModeActive`
-  („kein Dauerzustand" — für tatsächliches Bearbeiten/Bestätigen).
-- `isGenehmigerEntitlement` — ungegatete Fassung, nur für
+- `isGenehmiger` / `isSachbearbeiter` — roh, kein manueller Umschalter mehr
+  (der frühere „operative Modus"/Schieberegler wurde entfernt; die Fähigkeit
+  ist immer additiv zur normalen Benutzeransicht vorhanden, sobald die Rolle
+  zugewiesen ist).
+- `isGenehmigerEntitlement` — Alias auf `isGenehmiger`, nur für
   Zugriffs-/Sichtbarkeitsentscheidungen (z. B. „darf diese Seite überhaupt
   sehen"), nicht für Bearbeiten-Fähigkeiten.
-- `hasAreaAccess(area)` — Bereichszugriff (`portal_area_roles`), unabhängig
-  vom operativen Modus.
+- `hasAreaAccess(area)` — Bereichszugriff (`portal_area_roles`).
 - `isZentralistOnDuty` — Person hat aktuell Zentrale-Dienst (unabhängig von
-  Rolle/Modus).
+  Rolle).
 
 Das wiederkehrende Muster für „darf handeln" in der Zentrale (siehe
 `ZentraleUebersicht.tsx`, `StammdatenBaustellen.tsx`, `StammdatenFahndungen.tsx`
@@ -45,7 +46,7 @@ u. a.):
 
 ```ts
 const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
 const canOperate = canManage || isZentralistOnDuty
 ```
 

@@ -13,10 +13,10 @@ const KATEGORIE_LABEL: Record<TelefonnummerKategorie, string> = { intern: 'Inter
 const emptyForm = { kategorie: 'intern' as TelefonnummerKategorie, bezeichnung: '', nummer: '', hinweis: '', sortierung: '0' }
 
 export default function StammdatenTelefonnummernPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
-  const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = isStrictAdmin || isGenehmiger || isDatenpflegeSachbearbeiter
   const { nummern, loading, error: loadError, reload } = useWichtigeTelefonnummern()
   const [error, setError] = useState('')

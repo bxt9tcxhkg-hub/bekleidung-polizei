@@ -17,13 +17,13 @@ type BenutzerProfil = { id: string; name: string; dienstnummer: string | null; d
 type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer'; name: string; institution: string | null; funktion: string | null; telefon: string | null; kontakt?: ZentraleKontakt }
 
 export default function StammdatenKontaktePage() {
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   // Pflege obliegt der Administration oder den Sachbearbeitern im Bereich
   // Datenpflege (eigener Portalbereich, siehe portalEntitlements.ts) - gelesen
   // wird das Register von Zentrale UND Datenpflege gemeinsam.
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
-  const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = isStrictAdmin || isDatenpflegeSachbearbeiter
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleKontakt[]>([])

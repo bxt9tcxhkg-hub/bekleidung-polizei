@@ -97,7 +97,7 @@ function NavTile({ to, label, description, icon: Icon, badge }: { to: string; la
 }
 
 export default function Portal() {
-  const { profile, isAdmin, isStrictAdmin, isGenehmiger, isGenehmigerEntitlement, areaRoles, hasAreaAccess, operativeModeActive, setOperativeModeActive } = useAuth()
+  const { profile, isAdmin, isStrictAdmin, isGenehmiger, isGenehmigerEntitlement, areaRoles, hasAreaAccess } = useAuth()
   // Zentrale/Innendienst/Außendienst sind Tagesfunktionen aus der
   // Diensteinteilung, keine Dauerberechtigung - nur die heute zugeteilte
   // Kachel wird gezeigt (Admin sieht als Aufsicht weiterhin immer alle drei).
@@ -109,7 +109,7 @@ export default function Portal() {
   const rawCanManageFuhrpark = canManageFuhrpark({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const rawCanManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const rawCanManageSchulungen = canManageSchulungen({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
-  const canManageDuties = isStrictAdmin || isGenehmiger || (operativeModeActive && zentraleManagerRole)
+  const canManageDuties = isStrictAdmin || isGenehmiger || zentraleManagerRole
   const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number }>({})
 
   useEffect(() => {
@@ -176,14 +176,9 @@ export default function Portal() {
       </div>
 
       {totalOpenTasks > 0 ? (
-        <section className={`rounded-2xl border p-4 sm:p-5 mb-6 flex flex-wrap items-center justify-between gap-3 ${operativeModeActive ? 'border-amber-200 bg-amber-50' : 'border-blue-200 bg-blue-50'}`}>
-          <div className="flex items-center gap-3">
-            <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${operativeModeActive ? 'text-amber-700' : 'text-blue-700'}`} />
-            <p className="text-sm font-medium text-gray-800">{totalOpenTasks} offene {totalOpenTasks === 1 ? 'Aufgabe' : 'Aufgaben'} aus deiner Sachbearbeiter-/Genehmiger-Tätigkeit.</p>
-          </div>
-          {!operativeModeActive ? (
-            <button type="button" onClick={() => setOperativeModeActive(true)} className="text-sm font-semibold text-blue-800 bg-white border border-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-50 flex-shrink-0">Jetzt bearbeiten</button>
-          ) : null}
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6 flex flex-wrap items-center gap-3">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-700" />
+          <p className="text-sm font-medium text-gray-800">{totalOpenTasks} offene {totalOpenTasks === 1 ? 'Aufgabe' : 'Aufgaben'} aus deiner Sachbearbeiter-/Genehmiger-Tätigkeit.</p>
         </section>
       ) : null}
 

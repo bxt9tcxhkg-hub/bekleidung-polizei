@@ -43,10 +43,10 @@ export interface InnendienstContext {
 }
 
 export default function InnendienstShell() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const navigate = useNavigate()
-  const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  const canManageZentrale = isStrictAdmin || isGenehmiger || (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [shift, setShift] = useState<'tag' | 'nacht'>('tag')
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
   const [records, setRecords] = useState<InnendienstRecord[]>([])

@@ -46,10 +46,10 @@ function emptyForm(): FormState {
 }
 
 export default function ZentraleAvBvPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, isZentralistOnDuty } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canOperate = canManage || isZentralistOnDuty
   const { persons, setPersons } = usePersons()
   const { objects, setObjects, loading: objectsLoading } = useObjects()

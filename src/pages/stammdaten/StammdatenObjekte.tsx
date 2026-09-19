@@ -20,13 +20,13 @@ type LinkCounts = { avBv: number; fahndungen: number; schluessel: number; kontak
 const emptyForm = { strasse: '', hausnummer: '', plz: '', ort: '', label: '', note: '' }
 
 export default function StammdatenObjekte() {
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
   // Objekte entstehen sowohl aus Einsätzen als auch eigenständig über die
   // Datenpflege (gemeinsames Register) - Pflege obliegt der Administration
   // oder den Datenpflege-Sachbearbeitern.
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
-  const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = isStrictAdmin || isDatenpflegeSachbearbeiter
   const [objects, setObjects] = useState<OperationalObject[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})

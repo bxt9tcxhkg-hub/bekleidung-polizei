@@ -19,27 +19,18 @@ interface AuthContextType {
   loading: boolean
   isAdmin: boolean
   isStrictAdmin: boolean
-  // isSachbearbeiter/isGenehmiger sind für Fähigkeiten (Bearbeiten, Bestätigen,
-  // Sachbearbeiter/Genehmiger-Sidebar-Abschnitte) gedacht - sie gelten nur,
-  // solange operativeModeActive an ist ("kein Dauerzustand", siehe unten).
+  // isSachbearbeiter/isGenehmiger sind additive Fähigkeiten obendrauf zur
+  // normalen Benutzeransicht - wer die Rolle hat, sieht ihre Werkzeuge immer,
+  // ohne separate Aktivierung (kein Schieberegler/Modus mehr, siehe README-
+  // Migrationstabelle 20260919080000_sidebar_additiv). isGenehmigerEntitlement
+  // ist inzwischen derselbe Wert wie isGenehmiger (Alias, um bestehende
+  // Aufrufstellen nicht anfassen zu müssen).
   isSachbearbeiter: boolean
   isGenehmiger: boolean
-  // Ungegatete Fassung von isGenehmiger, ausschließlich für Zugriffs-/
-  // Sichtbarkeitsentscheidungen (welche Bereiche/Kacheln sieht die Person
-  // überhaupt) - die bleiben immer bestehen, unabhängig vom Modus, weil
-  // Genehmiger/Sachbearbeiter eines Bereichs automatisch auch dessen
-  // Benutzer sind (höhere Rolle schließt die niedrigere ein).
   isGenehmigerEntitlement: boolean
-  // Sachbearbeiter/Genehmiger sind für die Dauer ihrer Tätigkeit gedacht,
-  // kein Dauerzustand: standardmäßig (nach jedem Login) aus, damit die
-  // Person zunächst die einfache Benutzeransicht sieht. Erst durch
-  // bewusstes Umschalten werden die vollen Fähigkeiten aktiv; das
-  // Zurückschalten erfolgt ebenso bewusst und nie automatisch.
-  operativeModeActive: boolean
-  setOperativeModeActive: (active: boolean) => void
-  /** Roh: hat die Person überhaupt irgendwo (global oder in einem Bereich) eine
-   * Sachbearbeiter/Genehmiger-Rolle - steuert, ob der Umschalter in der Sidebar
-   * überhaupt angezeigt wird (für reine Benutzer gibt es nichts umzuschalten). */
+  /** Hat die Person überhaupt irgendwo (global oder in einem Bereich) eine
+   * Sachbearbeiter/Genehmiger-Rolle - für Stellen, die zwischen reinen
+   * Benutzern und Personen mit mindestens einer erweiterten Rolle unterscheiden. */
   hasElevatedRole: boolean
   mustChangePassword: boolean
   mustSetUsername: boolean
@@ -50,7 +41,7 @@ interface AuthContextType {
   hasAreaAccess: (area: PortalArea) => boolean
   // Ist die Person laut Diensteinteilung HEUTE als Zentralist(in) ODER
   // Innendienst eingeteilt (duty_assignments.function in 'zentrale',
-  // 'innendienst')? Unabhängig von operativeModeActive und von
+  // 'innendienst')? Unabhängig von
   // Sachbearbeiter/Genehmiger-Rollen: an ruhigeren Tagen deckt dieselbe
   // Person beide Posten ab, ein diensthabender Zentralist ODER Innendienst
   // erfasst operative Einträge (Meldungen, Straßenzustand usw.) auch ohne
@@ -71,8 +62,6 @@ const AuthContext = createContext<AuthContextType>({
   isSachbearbeiter: false,
   isGenehmiger: false,
   isGenehmigerEntitlement: false,
-  operativeModeActive: false,
-  setOperativeModeActive: () => {},
   hasElevatedRole: false,
   mustChangePassword: false,
   mustSetUsername: false,
@@ -85,7 +74,6 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 })
 
-function operativeModeStorageKey(userId: string) { return `operativeMode:${userId}` }
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -93,24 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isZentralistOnDuty, setIsZentralistOnDuty] = useState(false)
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState('')
-  const [operativeModeActive, setOperativeModeActiveState] = useState(false)
   const profileRequestIdRef = useRef(0)
-
-  // Überlebt einen versehentlichen Seitenneuladen während der Schicht (sessionStorage,
-  // je Konto), ist aber nie ein Dauerzustand: bei jedem frischen Login (kein
-  // gespeicherter Wert für dieses Konto in diesem Tab) startet die Ansicht als
-  // einfacher Benutzer, das bewusste Umschalten ist stets ein eigener Schritt.
-  function setOperativeModeActive(active: boolean, userId?: string) {
-    setOperativeModeActiveState(active)
-    const id = userId ?? user?.id
-    if (!id) return
-    try { sessionStorage.setItem(operativeModeStorageKey(id), active ? '1' : '0') } catch { /* z. B. privater Modus - dann eben nicht persistent */ }
-  }
-  function restoreOperativeMode(userId: string) {
-    let stored: string | null = null
-    try { stored = sessionStorage.getItem(operativeModeStorageKey(userId)) } catch { /* siehe oben */ }
-    setOperativeModeActiveState(stored === '1')
-  }
 
   async function loadAreaRoles(userId: string): Promise<AreaRoleSnapshot[] | null> {
     const { data, error } = await supabase
@@ -177,7 +148,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(data)
     setAreaRoles(areas)
     setIsZentralistOnDuty(onDuty)
-    restoreOperativeMode(userId)
     return true
   }
 
@@ -221,7 +191,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null)
         setAreaRoles(null)
         setIsZentralistOnDuty(false)
-        setOperativeModeActiveState(false)
         return
       }
       if (!session?.user) return
@@ -244,13 +213,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // eigene, dauerhafte Systemrolle (Nutzerverwaltung etc.), kein Schichtdienst
   // wie Sachbearbeiter/Genehmiger, und wird vom Umschalter nicht berührt.
   const { isAdmin, isSachbearbeiter: rawIsSachbearbeiter, isGenehmiger: rawIsGenehmiger, isStrictAdmin } = flagsFromRoles(roles)
-  // Sachbearbeiter/Genehmiger sind kein Dauerzustand: die nach außen gereichten
-  // Fähigkeits-Flags gelten nur, solange operativeModeActive an ist. isGenehmigerEntitlement
-  // bleibt roh für Zugriffs-/Sichtbarkeitsentscheidungen (siehe hasAreaAccess unten).
-  const isSachbearbeiter = operativeModeActive && rawIsSachbearbeiter
-  const isGenehmiger = operativeModeActive && rawIsGenehmiger
-  // Für den Umschalter in der Sidebar: hat die Person überhaupt irgendwo eine
-  // Sachbearbeiter/Genehmiger-Rolle (global oder in mindestens einem Bereich)?
+  // Additiv, keine separate Aktivierung mehr: wer die Rolle hat, sieht ihre
+  // Werkzeuge immer, obendrauf zur normalen Benutzeransicht.
+  const isSachbearbeiter = rawIsSachbearbeiter
+  const isGenehmiger = rawIsGenehmiger
+  // Hat die Person überhaupt irgendwo eine Sachbearbeiter/Genehmiger-Rolle
+  // (global oder in mindestens einem Bereich)?
   const hasElevatedRole = rawIsSachbearbeiter || rawIsGenehmiger
     || (areaRoles ?? []).some(row => row.roles.some(role => ['sachbearbeiter', 'admin', 'genehmiger', 'approver'].includes(role)))
   const mustChangePassword = shouldForcePasswordChange({
@@ -276,18 +244,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(null)
     setAreaRoles(null)
     setIsZentralistOnDuty(false)
-    setOperativeModeActiveState(false)
   }
 
-  // Zugriff/Sichtbarkeit bleibt immer auf den rohen Rollen - unabhängig vom
-  // Modus, sonst würde ein Genehmiger im Benutzer-Modus Bereiche verlieren,
-  // in denen er nur über den Genehmiger-Bonus (ohne eigene Benutzer-Zeile)
-  // drin ist. Siehe isGenehmigerEntitlement-Kommentar oben.
   const hasAreaAccess = (area: PortalArea) =>
     hasAreaEntitlement({ area, isStrictAdmin, isGenehmiger: rawIsGenehmiger, rows: areaRoles })
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, isGenehmigerEntitlement: rawIsGenehmiger, operativeModeActive, setOperativeModeActive, hasElevatedRole, mustChangePassword, mustSetUsername, availableRoles, authError, areaRoles, hasAreaAccess, isZentralistOnDuty, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, isStrictAdmin, isSachbearbeiter, isGenehmiger, isGenehmigerEntitlement: rawIsGenehmiger, hasElevatedRole, mustChangePassword, mustSetUsername, availableRoles, authError, areaRoles, hasAreaAccess, isZentralistOnDuty, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   )

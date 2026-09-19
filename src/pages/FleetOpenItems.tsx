@@ -12,8 +12,8 @@ const STAT_LABELS: Record<TabId, string> = { maengel: 'Mängel', pflege: 'Pflege
 const TAB_ROUTE: Record<TabId, string> = { maengel: '/fuhrpark/maengel', pflege: '/fuhrpark/pflege', werkstatt: '/fuhrpark/werkstatt', fristen: '/fuhrpark/fristen' }
 
 export default function FleetOpenItems() {
-  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
-  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+  const { hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
   const [statuses, setStatuses] = useState<FleetEquipmentStatus[]>([])
   const [careTasks, setCareTasks] = useState<FleetCareTask[]>([])

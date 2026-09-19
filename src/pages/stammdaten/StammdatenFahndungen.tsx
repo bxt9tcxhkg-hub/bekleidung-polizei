@@ -11,12 +11,12 @@ import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type { ZentraleFahndung } from '../../lib/types'
 
 export default function StammdatenFahndungen() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, isZentralistOnDuty } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const canManage = isStrictAdmin || isGenehmiger
-    || (operativeModeActive && (roles.some(role => ['sachbearbeiter', 'admin'].includes(role)) || datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))))
+    || (roles.some(role => ['sachbearbeiter', 'admin'].includes(role)) || datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
   const canOperate = canManage || isZentralistOnDuty
   const [items, setItems] = useState<ZentraleFahndung[]>([])
   const [loading, setLoading] = useState(true)

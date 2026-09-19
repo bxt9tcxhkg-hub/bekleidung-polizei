@@ -188,18 +188,14 @@ export function rolesForArea(
  * portal_area_roles-Zeile) - bewusst ohne den isStrictAdmin/isGenehmiger-
  * Bonus von canManage*(), damit die Sidebar "Sachbearbeiter" nur zeigt, wenn
  * das auch inhaltlich stimmt (Admin/Genehmiger bekommen ihre eigene,
- * richtig beschriftete Kennzeichnung).
- *
- * @param operativeModeActive Sachbearbeiter ist kein Dauerzustand - default
- *   true hält bestehende Aufrufe/Tests unverändert, echte Aufrufstellen
- *   reichen den aktuellen Modus aus dem AuthContext durch.
+ * richtig beschriftete Kennzeichnung). Additiv und immer aktiv, sobald die
+ * Rolle vorliegt - keine separate Aktivierung mehr nötig.
  */
 export function isAreaManager(
   rows: readonly { area: string; roles: string[] }[] | null,
   area: PortalArea,
-  operativeModeActive = true,
 ): boolean {
-  if (!rows || !operativeModeActive) return false
+  if (!rows) return false
   const roles = rolesForArea(rows, area)
   return roles.includes('sachbearbeiter') || roles.includes('admin')
 }

@@ -63,10 +63,10 @@ export interface AussendienstContext {
 }
 
 export default function AussendienstShell() {
-  const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isGenehmiger, isStrictAdmin, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const zentraleRoles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManageZentrale = isStrictAdmin || isGenehmiger || (operativeModeActive && zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  const canManageZentrale = isStrictAdmin || isGenehmiger || zentraleRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])

@@ -19,7 +19,6 @@ export function canViewLagerbestand(input: {
   isStrictAdmin: boolean
   isGenehmiger?: boolean
   rows: readonly { area: string; roles: string[] }[] | null
-  operativeModeActive?: boolean
 }): boolean {
   return canManagePersonalEinsatzmittel(input)
 }

@@ -15,13 +15,13 @@ type Colleague = Pick<Profile, 'id' | 'name' | 'dienstnummer'>
 const emptyForm = { schluesselNummer: '', objectId: null as string | null, verwahrort: '', heldBy: '', note: '', status: 'verfuegbar' as SchluesselStatus, restricted: false }
 
 export default function StammdatenSchluesselPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   // Pflege obliegt der Administration oder den Sachbearbeitern im Bereich
   // Datenpflege (eigener Portalbereich, siehe portalEntitlements.ts) - gelesen
   // wird das Register von Zentrale UND Datenpflege gemeinsam.
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
-  const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = isStrictAdmin || isDatenpflegeSachbearbeiter
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleSchluessel[]>([])

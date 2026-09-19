@@ -25,13 +25,13 @@ function tabPath(tab: EinsatzMaterialTab, byId: Map<string, EinsatzMaterialTab>)
 }
 
 export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMaterialArea }) {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const [area, setArea] = useState<EinsatzMaterialArea>(fixedArea ?? 'einsatzmittel')
   const activeArea = fixedArea ?? area
   const schulungenRoles = areaRoles?.find(row => row.area === 'schulungen')?.roles ?? []
   const canManage = activeArea === 'schulungen'
-    ? isStrictAdmin || isGenehmiger || (operativeModeActive && (schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')))
-    : canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+    ? isStrictAdmin || isGenehmiger || schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')
+    : canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   // Alle Ordner des Bereichs flach geladen (nicht nur die oberste Ebene) -
   // Kind-/Pfadbeziehungen werden clientseitig über parent_id aufgebaut, damit
   // beliebig tiefe Verschachtelung ohne rekursive Abfragen navigierbar ist.

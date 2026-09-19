@@ -33,8 +33,8 @@ function isTabId(value: string | null): value is TabId {
 export default function FleetVehicle() {
   const { vehicleId } = useParams()
   const navigate = useNavigate()
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
-  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
+  const canManage = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const [searchParams] = useSearchParams()
   const [vehicle, setVehicle] = useState<FleetVehicleType | null>(null)
   const [employees, setEmployees] = useState<Pick<Profile, 'id' | 'name' | 'dienstnummer'>[]>([])

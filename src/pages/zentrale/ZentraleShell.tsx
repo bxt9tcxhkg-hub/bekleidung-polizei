@@ -60,11 +60,11 @@ export interface ZentraleContext {
 }
 
 export default function ZentraleShell() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const navigate = useNavigate()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  const canManage = isStrictAdmin || isGenehmiger || roles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [assignments, setAssignments] = useState<DutyAssignment[]>([])
   const [incidents, setIncidents] = useState<IncidentReport[]>([])
