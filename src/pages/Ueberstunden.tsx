@@ -88,16 +88,25 @@ export default function Ueberstunden() {
 
   const loadZuEntscheiden = useCallback(async () => {
     if (!isGenehmiger) { setZuEntscheiden([]); return }
-    // fetchAllPages statt einer einzelnen Abfrage - sonst würde eine ältere
-    // eingereichte Meldung bei einer sehr großen Tabelle aus der von
-    // PostgREST gedeckelten Standard-Seite fallen und für den Genehmiger
-    // unsichtbar bleiben.
-    const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
-      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
-      .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true }).order('id', { ascending: true })
-      .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
+    // Eigene Meldungen sind aus der Entscheidungsliste ausgeblendet ("kein
+    // Selbst-Genehmigen") - AUSSER es gibt gar keinen zweiten Genehmiger/
+    // Admin/Approver, der sie stattdessen entscheiden könnte. Sonst bliebe
+    // die Meldung eines alleinigen Genehmigers für immer auf "eingereicht"
+    // stehen, ohne dass irgendjemand sie je zu sehen bekäme.
+    const [result, otherApproversResult] = await Promise.all([
+      // fetchAllPages statt einer einzelnen Abfrage - sonst würde eine
+      // ältere eingereichte Meldung bei einer sehr großen Tabelle aus der
+      // von PostgREST gedeckelten Standard-Seite fallen und für den
+      // Genehmiger unsichtbar bleiben.
+      fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
+        .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+        .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true }).order('id', { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('active', true).neq('id', profile?.id ?? '').overlaps('roles', ['admin', 'genehmiger', 'approver']),
+    ])
     if (result.error) { setError('Die zu entscheidenden Meldungen konnten nicht geladen werden.'); return }
-    setZuEntscheiden(result.data.filter(item => item.beamter_id !== profile?.id))
+    const selbstEinzigerGenehmiger = !otherApproversResult.error && (otherApproversResult.count ?? 0) === 0
+    setZuEntscheiden(selbstEinzigerGenehmiger ? result.data : result.data.filter(item => item.beamter_id !== profile?.id))
   }, [isGenehmiger, profile?.id])
   useEffect(() => { void loadZuEntscheiden() }, [loadZuEntscheiden])
 
@@ -244,7 +253,7 @@ export default function Ueberstunden() {
         {zuEntscheiden.length === 0 ? <Empty text="Keine eingereichten Meldungen zu entscheiden." /> : <div className="space-y-3">{zuEntscheiden.map(item => <article key={item.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{formatZeitraum(item)}</span></div>
+              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{formatZeitraum(item)}</span>{item.beamter_id === profile?.id ? <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">Eigene Meldung – kein weiterer Genehmiger vorhanden</span> : null}</div>
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
