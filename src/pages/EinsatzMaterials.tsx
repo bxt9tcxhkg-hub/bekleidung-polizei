@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, BookOpen, Download, Ellipsis, FileText, FolderInput, Link as LinkIcon, Plus, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Download, Ellipsis, FileText, Folder, FolderInput, Link as LinkIcon, Plus, Trash2, Upload, X } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
@@ -16,6 +16,14 @@ const AREA_LABELS: Record<EinsatzMaterialArea, string> = {
   schulungen: 'Schulungen',
 }
 
+/** Pfad von der obersten Ebene bis zu diesem Ordner (für Breadcrumb/Verschieben-Auswahl). */
+function tabPath(tab: EinsatzMaterialTab, byId: Map<string, EinsatzMaterialTab>): EinsatzMaterialTab[] {
+  const path: EinsatzMaterialTab[] = []
+  let cursor: EinsatzMaterialTab | undefined = tab
+  while (cursor) { path.unshift(cursor); cursor = cursor.parent_id ? byId.get(cursor.parent_id) : undefined }
+  return path
+}
+
 export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMaterialArea }) {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
   const [area, setArea] = useState<EinsatzMaterialArea>(fixedArea ?? 'einsatzmittel')
@@ -24,9 +32,12 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
   const canManage = activeArea === 'schulungen'
     ? isStrictAdmin || isGenehmiger || (operativeModeActive && (schulungenRoles.includes('sachbearbeiter') || schulungenRoles.includes('admin')))
     : canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles, operativeModeActive })
+  // Alle Ordner des Bereichs flach geladen (nicht nur die oberste Ebene) -
+  // Kind-/Pfadbeziehungen werden clientseitig über parent_id aufgebaut, damit
+  // beliebig tiefe Verschachtelung ohne rekursive Abfragen navigierbar ist.
   const [tabs, setTabs] = useState<EinsatzMaterialTab[]>([])
   const [materials, setMaterials] = useState<EinsatzMaterial[]>([])
-  const [activeTabId, setActiveTabId] = useState('')
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -57,7 +68,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
       .order('sort_order')
       .order('name')
     if (tabError) {
-      setError('Unterlagen-Kategorien konnten nicht geladen werden.')
+      setError('Unterlagen-Ordner konnten nicht geladen werden.')
       setTabs([])
       setMaterials([])
       setLoading(false)
@@ -65,7 +76,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
     }
     const nextTabs = (tabData ?? []) as EinsatzMaterialTab[]
     setTabs(nextTabs)
-    setActiveTabId(current => nextTabs.some(tab => tab.id === current) ? current : (nextTabs[0]?.id ?? ''))
+    setCurrentFolderId(current => current && nextTabs.some(tab => tab.id === current) ? current : null)
     if (nextTabs.length === 0) {
       setMaterials([])
       setLoading(false)
@@ -92,10 +103,15 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
     void load(activeArea)
   }, [activeArea, load])
 
-  const activeTab = tabs.find(tab => tab.id === activeTabId) ?? null
+  const tabsById = useMemo(() => new Map(tabs.map(tab => [tab.id, tab])), [tabs])
+  const currentTab = currentFolderId ? tabsById.get(currentFolderId) ?? null : null
+  const breadcrumb = useMemo(() => currentTab ? tabPath(currentTab, tabsById) : [], [currentTab, tabsById])
+  const childTabs = useMemo(() => tabs
+    .filter(tab => tab.parent_id === currentFolderId)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'de-AT')), [tabs, currentFolderId])
   const visibleMaterials = useMemo(
-    () => materials.filter(item => item.tab_id === activeTabId),
-    [materials, activeTabId],
+    () => currentFolderId ? materials.filter(item => item.tab_id === currentFolderId) : [],
+    [materials, currentFolderId],
   )
 
   if (!hasAreaAccess(activeArea === 'schulungen' ? 'schulungen' : 'einsatz_mt')) return <Navigate to="/" replace />
@@ -109,10 +125,10 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
   }
 
   function startEditTab() {
-    if (!activeTab) return
-    setEditingTab(activeTab)
-    setTabName(activeTab.name)
-    setTabDescription(activeTab.description ?? '')
+    if (!currentTab) return
+    setEditingTab(currentTab)
+    setTabName(currentTab.name)
+    setTabDescription(currentTab.description ?? '')
     setError('')
     setShowTabForm(true)
   }
@@ -120,7 +136,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
   async function saveTab() {
     const name = tabName.trim()
     if (!name) {
-      setError('Bitte einen Namen für den Tab eingeben.')
+      setError('Bitte einen Namen für den Ordner eingeben.')
       return
     }
     setSaving(true)
@@ -131,36 +147,44 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
       }).eq('id', editingTab.id)
       : await supabase.from('einsatz_material_tabs').insert({
         area: activeArea,
+        parent_id: currentFolderId,
         name,
         description: tabDescription.trim() || null,
-        sort_order: tabs.length,
+        sort_order: childTabs.length,
         created_by: profile?.id ?? null,
       })
     setSaving(false)
     if (response.error) {
-      setError(response.error.message.includes('duplicate') ? 'Ein Tab mit diesem Namen existiert bereits.' : 'Tab konnte nicht gespeichert werden.')
+      setError(response.error.message.includes('duplicate') ? 'Ein Ordner mit diesem Namen existiert hier bereits.' : 'Ordner konnte nicht gespeichert werden.')
       return
     }
-    logAudit(editingTab ? 'Unterlagen-Tab bearbeitet' : 'Unterlagen-Tab angelegt', `${AREA_LABELS[activeArea]} · ${name}`)
+    logAudit(editingTab ? 'Unterlagen-Ordner bearbeitet' : 'Unterlagen-Ordner angelegt', `${AREA_LABELS[activeArea]} · ${name}`)
     setShowTabForm(false)
-    setNotice('Tab wurde gespeichert.')
+    setNotice('Ordner wurde gespeichert.')
     await load(activeArea)
   }
 
   async function deleteTab() {
     if (!editingTab) return
-    if (!window.confirm(`Tab „${editingTab.name}“ endgültig löschen? Nur leere Tabs können gelöscht werden.`)) return
+    const hasChildren = tabs.some(tab => tab.parent_id === editingTab.id)
+    const hasMaterials = materials.some(item => item.tab_id === editingTab.id)
+    if (hasChildren || hasMaterials) {
+      setError('Dieser Ordner enthält noch Unterordner oder Unterlagen. Bitte zuerst leeren.')
+      return
+    }
+    if (!window.confirm(`Ordner „${editingTab.name}“ endgültig löschen?`)) return
     const { error: deleteError } = await supabase
       .from('einsatz_material_tabs')
       .delete()
       .eq('id', editingTab.id)
     if (deleteError) {
-      setError('Der Tab enthält noch Unterlagen. Bitte diese zuerst verschieben oder löschen.')
+      setError('Der Ordner konnte nicht gelöscht werden.')
       return
     }
-    logAudit('Unterlagen-Tab gelöscht', `${AREA_LABELS[activeArea]} · ${editingTab.name}`)
+    logAudit('Unterlagen-Ordner gelöscht', `${AREA_LABELS[activeArea]} · ${editingTab.name}`)
     setShowTabForm(false)
-    setNotice('Tab wurde entfernt.')
+    setCurrentFolderId(editingTab.parent_id)
+    setNotice('Ordner wurde entfernt.')
     await load(activeArea)
   }
 
@@ -197,7 +221,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
   }
 
   async function saveMaterial() {
-    if (!activeTab) return
+    if (!currentTab) return
     if (!title.trim()) {
       setError('Bitte einen Titel eingeben.')
       return
@@ -219,7 +243,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
     try {
       const uploaded = sourceType === 'file' && file ? await uploadFile(file) : null
       const { error: insertError } = await supabase.from('einsatz_materials').insert({
-        tab_id: activeTab.id,
+        tab_id: currentTab.id,
         title: title.trim(),
         description: description.trim() || null,
         file_key: uploaded?.key ?? null,
@@ -232,7 +256,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
         created_by: profile?.id ?? null,
       })
       if (insertError) throw insertError
-      logAudit('Unterlage hochgeladen', `${AREA_LABELS[activeArea]} · ${activeTab.name} · ${title.trim()}`)
+      logAudit('Unterlage hochgeladen', `${AREA_LABELS[activeArea]} · ${currentTab.name} · ${title.trim()}`)
       setShowMaterialForm(false)
       setNotice('Unterlage wurde gespeichert.')
       await load(activeArea)
@@ -281,11 +305,10 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
       setError(moveError.message || 'Unterlage konnte nicht verschoben werden.')
       return
     }
-    const target = tabs.find(tab => tab.id === targetTabId)
-    logAudit('Einsatz-Unterlage verschoben', `${editingMaterial.title} → ${target?.name ?? 'anderer Tab'}`)
+    const target = tabsById.get(targetTabId)
+    logAudit('Einsatz-Unterlage verschoben', `${editingMaterial.title} → ${target ? tabPath(target, tabsById).map(tab => tab.name).join(' / ') : 'anderer Ordner'}`)
     setEditingMaterial(null)
     setNotice('Unterlage wurde verschoben.')
-    setActiveTabId(targetTabId)
     await load(activeArea)
   }
 
@@ -321,7 +344,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
           <h1 className="text-2xl font-bold text-gray-900">{fixedArea === 'schulungen' ? 'Schulungen' : 'Unterlagen'}</h1>
           <p className="text-gray-500 text-sm mt-1">{fixedArea === 'schulungen' ? 'Schulungsunterlagen, Rechtsinformationen und Arbeitshilfen' : 'Dienstanweisungen und Schulungsmaterial'}</p>
         </div>
-        {canManage && activeTab ? (
+        {canManage && currentTab ? (
           <button type="button" onClick={startAddMaterial} className="flex items-center justify-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-xl">
             <Upload className="w-4 h-4" /> Unterlage hinzufügen
           </button>
@@ -330,7 +353,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
 
       {!fixedArea ? <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-xl w-fit">
         {(['einsatzmittel', 'einsatztraining'] as EinsatzMaterialArea[]).map(id => (
-          <button key={id} type="button" onClick={() => { setArea(id); setActiveTabId('') }} className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${area === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+          <button key={id} type="button" onClick={() => { setArea(id); setCurrentFolderId(null) }} className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-all ${area === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
             {AREA_LABELS[id]}
           </button>
         ))}
@@ -339,72 +362,78 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
       {error && !showTabForm && !showMaterialForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
       {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
 
-      <div className="flex items-center gap-2 mb-5 max-w-full overflow-x-auto pb-1">
-        {tabs.map(tab => (
-          <button key={tab.id} type="button" onClick={() => setActiveTabId(tab.id)} className={`text-sm font-medium px-4 py-2 rounded-xl whitespace-nowrap border transition-colors ${activeTabId === tab.id ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-            {tab.name}
-          </button>
-        ))}
-        {canManage ? (
-          <>
-            {activeTab ? <button type="button" onClick={startEditTab} className="p-2.5 rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-gray-900" aria-label="Aktiven Tab bearbeiten"><Ellipsis className="w-4 h-4" /></button> : null}
-            <button type="button" onClick={startAddTab} className="p-2.5 rounded-xl border border-gray-200 bg-white text-blue-700 hover:bg-blue-50" aria-label="Neuen Tab anlegen"><Plus className="w-4 h-4" /></button>
-          </>
-        ) : null}
+      <div className="flex items-center gap-1.5 text-sm text-gray-500 mb-4 flex-wrap">
+        <button type="button" onClick={() => setCurrentFolderId(null)} className={`hover:underline ${!currentTab ? 'font-semibold text-gray-900' : ''}`}>{AREA_LABELS[activeArea]}</button>
+        {breadcrumb.map((tab, index) => <span key={tab.id} className="flex items-center gap-1.5">
+          <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+          <button type="button" onClick={() => setCurrentFolderId(tab.id)} className={`hover:underline ${index === breadcrumb.length - 1 ? 'font-semibold text-gray-900' : ''}`}>{tab.name}</button>
+        </span>)}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <p className="text-xs text-gray-500">{currentTab?.description ?? ''}</p>
+        {canManage ? <div className="flex items-center gap-2">
+          {currentTab ? <button type="button" onClick={startEditTab} className="p-2.5 rounded-xl border border-gray-200 bg-white text-gray-500 hover:text-gray-900" aria-label="Ordner bearbeiten"><Ellipsis className="w-4 h-4" /></button> : null}
+          <button type="button" onClick={startAddTab} className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-blue-700 hover:bg-blue-50 text-sm font-medium"><Plus className="w-4 h-4" /> Unterordner</button>
+        </div> : null}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
-      ) : !activeTab ? (
+      ) : childTabs.length === 0 && visibleMaterials.length === 0 && !currentTab ? (
         <div className="bg-white border border-gray-200 rounded-xl px-5 py-12 text-center">
-          <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-          <p className="font-medium text-gray-600">Noch keine Kategorie vorhanden</p>
-          {canManage ? <button type="button" onClick={startAddTab} className="mt-3 text-sm font-medium text-blue-800">Ersten Tab anlegen</button> : null}
+          <Folder className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+          <p className="font-medium text-gray-600">Noch kein Ordner vorhanden</p>
+          {canManage ? <button type="button" onClick={startAddTab} className="mt-3 text-sm font-medium text-blue-800">Ersten Ordner anlegen</button> : null}
         </div>
       ) : (
-        <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
-            <h2 className="font-semibold text-gray-900">{activeTab.name}</h2>
-            {activeTab.description ? <p className="text-xs text-gray-500 mt-0.5">{activeTab.description}</p> : null}
-          </div>
-          {visibleMaterials.length === 0 ? (
-            <div className="px-5 py-12 text-center text-sm text-gray-500">In diesem Tab sind noch keine Unterlagen veröffentlicht.</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {visibleMaterials.map(item => (
-                <article key={item.id} className="px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="bg-blue-50 text-blue-700 p-2.5 rounded-lg flex-shrink-0">
-                      {item.external_url ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap gap-2 items-center">
-                        <h3 className="font-medium text-gray-900">{item.title}</h3>
-                        {item.important ? <span className="text-xs font-medium bg-red-50 text-red-700 px-2 py-0.5 rounded-full">Wichtig</span> : null}
-                        {canManage && !item.published ? <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Entwurf</span> : null}
+        <div className="space-y-5">
+          {childTabs.length > 0 ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {childTabs.map(tab => <button key={tab.id} type="button" onClick={() => setCurrentFolderId(tab.id)} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-3 text-left hover:border-blue-300 hover:bg-blue-50">
+              <Folder className="w-5 h-5 text-blue-700 flex-shrink-0" />
+              <span className="min-w-0 truncate text-sm font-medium text-gray-900">{tab.name}</span>
+            </button>)}
+          </div> : null}
+          {currentTab ? <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            {visibleMaterials.length === 0 ? (
+              <div className="px-5 py-12 text-center text-sm text-gray-500">In diesem Ordner sind noch keine Unterlagen veröffentlicht.</div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {visibleMaterials.map(item => (
+                  <article key={item.id} className="px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="bg-blue-50 text-blue-700 p-2.5 rounded-lg flex-shrink-0">
+                        {item.external_url ? <LinkIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                       </div>
-                      {item.description ? <p className="text-sm text-gray-500 mt-1">{item.description}</p> : null}
-                      <p className="text-xs text-gray-400 mt-1">{item.file_name || 'Externer Link'}</p>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <h3 className="font-medium text-gray-900">{item.title}</h3>
+                          {item.important ? <span className="text-xs font-medium bg-red-50 text-red-700 px-2 py-0.5 rounded-full">Wichtig</span> : null}
+                          {canManage && !item.published ? <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Entwurf</span> : null}
+                        </div>
+                        {item.description ? <p className="text-sm text-gray-500 mt-1">{item.description}</p> : null}
+                        <p className="text-xs text-gray-400 mt-1">{item.file_name || 'Externer Link'}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button type="button" onClick={() => { void openMaterial(item) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50">
-                      <Download className="w-4 h-4" /> Öffnen
-                    </button>
-                    {canManage ? <button type="button" onClick={() => startManageMaterial(item)} className="p-2.5 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Unterlage verschieben oder löschen"><Ellipsis className="w-4 h-4" /></button> : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button type="button" onClick={() => { void openMaterial(item) }} className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50">
+                        <Download className="w-4 h-4" /> Öffnen
+                      </button>
+                      {canManage ? <button type="button" onClick={() => startManageMaterial(item)} className="p-2.5 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Unterlage verschieben oder löschen"><Ellipsis className="w-4 h-4" /></button> : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section> : null}
+        </div>
       )}
 
       {showTabForm ? (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">{editingTab ? 'Tab bearbeiten' : 'Neuen Tab anlegen'}</h2>
+              <h2 className="font-bold text-gray-900">{editingTab ? 'Ordner bearbeiten' : 'Neuen Unterordner anlegen'}</h2>
               <button type="button" onClick={() => setShowTabForm(false)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
@@ -413,7 +442,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
               {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
             </div>
             <div className="flex flex-wrap gap-3 px-6 py-4 border-t">
-              {editingTab ? <button type="button" onClick={() => { void deleteTab() }} className="mr-auto text-red-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-red-50">Tab löschen</button> : null}
+              {editingTab ? <button type="button" onClick={() => { void deleteTab() }} className="mr-auto text-red-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-red-50">Ordner löschen</button> : null}
               <button type="button" onClick={() => setShowTabForm(false)} className="border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg">Abbrechen</button>
               <button type="button" disabled={saving} onClick={() => { void saveTab() }} className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-medium px-4 py-2.5 rounded-lg">{saving ? 'Speichern…' : 'Speichern'}</button>
             </div>
@@ -463,9 +492,9 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
               <button type="button" onClick={() => setEditingMaterial(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <label className="block text-xs font-medium text-gray-600">In einen anderen Tab verschieben
+              <label className="block text-xs font-medium text-gray-600">In einen anderen Ordner verschieben
                 <select className={`${inputClass} mt-1`} value={targetTabId} onChange={event => setTargetTabId(event.target.value)}>
-                  {tabs.map(tab => <option key={tab.id} value={tab.id}>{tab.name}</option>)}
+                  {tabs.map(tab => <option key={tab.id} value={tab.id}>{tabPath(tab, tabsById).map(item => item.name).join(' / ')}</option>)}
                 </select>
               </label>
               {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}

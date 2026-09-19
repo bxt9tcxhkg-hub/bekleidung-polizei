@@ -400,6 +400,8 @@ export type EinsatzMaterialArea = 'einsatzmittel' | 'einsatztraining' | 'schulun
 export interface EinsatzMaterialTab {
   id: string
   area: EinsatzMaterialArea
+  /** Übergeordneter Ordner, null = oberste Ebene - beliebig tief verschachtelbar. */
+  parent_id: string | null
   name: string
   description: string | null
   sort_order: number
