@@ -69,12 +69,14 @@ const AussendienstEinsaetze = lazy(() => import('./pages/aussendienst/Aussendien
 const KontrollauftraegePage = lazy(() => import('./pages/aussendienst/KontrollauftraegePage'))
 const AussendienstHinweise = lazy(() => import('./pages/aussendienst/AussendienstHinweise'))
 const AussendienstFahrzeug = lazy(() => import('./pages/aussendienst/AussendienstFahrzeug'))
+const AussendienstKontrollbehelfe = lazy(() => import('./pages/aussendienst/AussendienstKontrollbehelfe'))
 const AussendienstSchutzmassnahmen = lazy(() => import('./pages/aussendienst/AussendienstSchutzmassnahmen'))
 const InnendienstShell = lazy(() => import('./pages/innendienst/InnendienstShell'))
 const InnendienstUebersicht = lazy(() => import('./pages/innendienst/InnendienstUebersicht'))
 const InnendienstBescheide = lazy(() => import('./pages/innendienst/InnendienstBescheide'))
 const InnendienstUebergabePage = lazy(() => import('./pages/innendienst/InnendienstUebergabePage'))
 const InnendienstGebuehrenPage = lazy(() => import('./pages/innendienst/InnendienstGebuehrenPage'))
+const InnendienstUnterlagen = lazy(() => import('./pages/innendienst/InnendienstUnterlagen'))
 const RsaRsb = lazy(() => import('./pages/RsaRsb'))
 
 const PageSpinner = () => (
@@ -175,6 +177,7 @@ export default function App() {
               <Route path="/aussendienst/kontrollauftraege" element={<KontrollauftraegePage />} />
               <Route path="/aussendienst/hinweise" element={<AussendienstHinweise />} />
               <Route path="/aussendienst/fahrzeug" element={<AussendienstFahrzeug />} />
+              <Route path="/aussendienst/kontrollbehelfe" element={<AussendienstKontrollbehelfe />} />
               <Route path="/aussendienst/schutzmassnahmen" element={<AussendienstSchutzmassnahmen />} />
             </Route>
           </Route>
@@ -190,6 +193,7 @@ export default function App() {
               <Route path="/innendienst/bescheide" element={<InnendienstBescheide />} />
               <Route path="/innendienst/uebergabe" element={<InnendienstUebergabePage />} />
               <Route path="/innendienst/gebuehren" element={<InnendienstGebuehrenPage />} />
+              <Route path="/innendienst/unterlagen" element={<InnendienstUnterlagen />} />
             </Route>
           </Route>
           <Route

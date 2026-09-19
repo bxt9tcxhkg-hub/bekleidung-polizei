@@ -16,10 +16,11 @@ export default function AussendienstLayout() {
       { to: '/aussendienst/hinweise', label: 'Operative Hinweise', icon: ShieldAlert },
       { to: '/aussendienst/schutzmassnahmen', label: 'Schutzmaßnahmen', icon: UserRoundCheck },
       { to: '/aussendienst/fahrzeug', label: 'Fahrzeug', icon: Car },
-      // Dieselbe Seite wie unter Zentrale/Unterlagen - keine eigene Kopie,
-      // nur bequem von hier erreichbar. RSa/RSb ist kein Außendienst-Unterpunkt,
+      // Eigener Bestand, getrennt von den Unterlagen der Zentrale (gleiche
+      // Tabelle, aber per bereich-Spalte getrennte Inhalte - siehe
+      // UnterlagenRegister.tsx). RSa/RSb ist kein Außendienst-Unterpunkt,
       // sondern bereichsübergreifend und hat eine eigene Portal-Kachel.
-      { to: '/zentrale/unterlagen', label: 'Kontrollbehelfe', icon: BookOpen },
+      { to: '/aussendienst/kontrollbehelfe', label: 'Kontrollbehelfe', icon: BookOpen },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]

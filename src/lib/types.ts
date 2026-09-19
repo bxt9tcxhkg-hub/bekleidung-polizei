@@ -717,6 +717,8 @@ export interface ZentraleAlarmierung {
   updated_at: string
 }
 
+export type UnterlagenBereich = 'zentrale' | 'aussendienst' | 'innendienst'
+
 export interface ZentraleUnterlage {
   id: string
   titel: string
@@ -725,6 +727,7 @@ export interface ZentraleUnterlage {
   gueltig_bis: string | null
   note: string | null
   restricted: boolean
+  bereich: UnterlagenBereich
   created_by: string | null
   created_at: string
   updated_at: string
