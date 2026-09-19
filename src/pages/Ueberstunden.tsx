@@ -228,8 +228,13 @@ export default function Ueberstunden() {
   }
 
   function printMeldung(item: UeberstundenMeldung) {
+    // Vor der Entscheidung gibt es noch keinen genehmiger-Eintrag - druckt
+    // ein Genehmiger die Meldung dennoch (z. B. aus "Zu entscheiden" heraus,
+    // kurz bevor er sie entscheidet), erscheint statt "–" sein eigener Name,
+    // da er es voraussichtlich selbst sein wird, der unterschreibt.
+    const genehmigerName = item.genehmiger?.name ?? (isGenehmiger ? profile?.name ?? null : null)
     generateUeberstundenPdf({
-      beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName: item.genehmiger?.name ?? null,
+      beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName,
       vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
       verguetung: item.verguetung,
       stunden: { std_werktag_50: item.std_werktag_50, std_sonn_100: item.std_sonn_100, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_200: item.std_sonn_200 },
