@@ -312,6 +312,7 @@ export default function Ueberstunden() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatZeitraum(item)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div>
+              {!item.genehmiger && soleGenehmigerName ? <p className="text-xs text-gray-500 mt-1">Genehmiger: {soleGenehmigerName}</p> : null}
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
