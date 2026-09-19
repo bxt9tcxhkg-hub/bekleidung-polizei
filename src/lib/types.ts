@@ -1736,6 +1736,7 @@ export type Database = {
       decide_schulung_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       strassenzustand_bericht_ersetzen: { Args: { p_bericht_id: string; p_anmerkung: string | null; p_zeilen: Record<string, unknown>[] }; Returns: undefined }
       ueberstunden_monatsanteile: { Args: { p_monat_start: string; p_monat_ende: string }; Returns: { meldung_id: string; beamter_id: string; verguetung: string; std_werktag_50: number; std_sonn_100: number; std_19_22: number; std_22_06: number; std_sonn_200: number }[] }
+      sole_genehmiger_name: { Args: Record<PropertyKey, never>; Returns: string | null }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

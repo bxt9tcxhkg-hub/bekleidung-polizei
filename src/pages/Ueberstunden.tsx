@@ -61,6 +61,14 @@ export default function Ueberstunden() {
   const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
   const [uebersichtAnteile, setUebersichtAnteile] = useState<Map<string, Record<UeberstundenKategorieKey, number>>>(new Map())
   const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
+  // Für den Ausdruck einer noch nicht entschiedenen Meldung: gibt es genau
+  // einen möglichen Genehmiger, wird sein Name vorbefüllt statt "–" - er
+  // wird es so oder so sein, der die Meldung vorgelegt bekommt. RPC statt
+  // Client-Abfrage, da ein einfacher Bediensteter die Rollen anderer
+  // Profile laut RLS gar nicht einsehen darf (siehe Migration
+  // 20260919030000_sole_genehmiger_name.sql).
+  const [soleGenehmigerName, setSoleGenehmigerName] = useState<string | null>(null)
+  useEffect(() => { void supabase.rpc('sole_genehmiger_name').then(({ data }) => setSoleGenehmigerName(data ?? null)) }, [])
 
   // "Meine Meldungen" - explizit nach beamter_id gefiltert (nicht nur
   // clientseitig aus einer allgemeinen Liste herausgefiltert): die RLS-
@@ -228,11 +236,10 @@ export default function Ueberstunden() {
   }
 
   function printMeldung(item: UeberstundenMeldung) {
-    // Vor der Entscheidung gibt es noch keinen genehmiger-Eintrag - druckt
-    // ein Genehmiger die Meldung dennoch (z. B. aus "Zu entscheiden" heraus,
-    // kurz bevor er sie entscheidet), erscheint statt "–" sein eigener Name,
-    // da er es voraussichtlich selbst sein wird, der unterschreibt.
-    const genehmigerName = item.genehmiger?.name ?? (isGenehmiger ? profile?.name ?? null : null)
+    // Vor der Entscheidung gibt es noch keinen genehmiger-Eintrag - solange
+    // es aber ohnehin nur einen möglichen Genehmiger gibt, wird dessen Name
+    // statt "–" vorbefüllt, unabhängig davon, wer gerade druckt.
+    const genehmigerName = item.genehmiger?.name ?? soleGenehmigerName
     generateUeberstundenPdf({
       beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName,
       vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
