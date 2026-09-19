@@ -27,48 +27,37 @@ export interface EinsatzPerson {
 
 const SKIP = /^(zmr|auszug|meldeamt|gemeinde|stadt|dornbirn|straße|strasse|gasse|platz|wohnung|top|stiege|stock|geburtsdatum|geboren|geschlecht|männlich|weiblich|familienstand|staatsangehörigkeit|österreich|seite|stand)$/i
 
-async function inflateAsync(bytes: Uint8Array): Promise<string | null> {
-  const tryMode = async (mode: CompressionFormat) => {
-    const stream = new Blob([new Uint8Array(bytes)]).stream().pipeThrough(new DecompressionStream(mode))
-    const out = await new Response(stream).arrayBuffer()
-    return new TextDecoder('latin1').decode(out)
-  }
-  try {
-    return await tryMode(bytes[0] === 0x78 ? 'deflate' : 'deflate-raw')
-  } catch {
-    try {
-      return await tryMode('deflate-raw')
-    } catch {
-      return null
-    }
-  }
-}
-
-function stringsFromPdfText(decoded: string): string[] {
-  const parts: string[] = []
-  for (const match of decoded.matchAll(/\((?:\\.|[^\\)])*\)\s*Tj/g)) {
-    const inner = match[0].slice(1, match[0].lastIndexOf(')'))
-    parts.push(inner.replace(/\\n/g, ' ').replace(/\\(.)/g, '$1'))
-  }
-  for (const match of decoded.matchAll(/\[((?:\s*\((?:\\.|[^\\)])*\)\s*)+)\]\s*TJ/g)) {
-    const chunk = [...match[1].matchAll(/\((?:\\.|[^\\)])*\)/g)].map(item => item[0].slice(1, -1).replace(/\\(.)/g, '$1')).join('')
-    if (chunk.trim()) parts.push(chunk)
-  }
-  return parts
-}
-
+/**
+ * Textextraktion über pdf.js statt eines selbstgebauten PDF-Parsers - ein
+ * früherer Eigenbau (Regex über Tj/TJ-Operatoren) scheiterte an zwei
+ * unabhängigen Stellen: komprimierte Textströme wurden über TextEncoder
+ * (UTF-8) statt Byte-für-Byte zurückkodiert, was die Rohdaten vor dem
+ * Entpacken zerstörte; und PDFs mit eingebetteten Schriftarten (z. B. "Als
+ * PDF drucken" aus Chrome, Skia/PDF) speichern Text als Font-interne
+ * Glyph-IDs, deren Rückübersetzung eine Schriftart-Zuordnungstabelle
+ * (ToUnicode-CMap) braucht - das leistet nur eine echte PDF-Bibliothek.
+ * hasEOL (pdf.js liefert das je Textelement) rekonstruiert Zeilenumbrüche,
+ * ohne die für personenAusText() nötige Zeilenstruktur zu verlieren.
+ */
 export async function extractPdfPlainText(file: File): Promise<string> {
-  const buf = new Uint8Array(await file.arrayBuffer())
-  const latin = new TextDecoder('latin1').decode(buf)
-  const chunks: string[] = [latin]
-  for (const match of latin.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
-    const raw = new TextEncoder().encode(match[1])
-    const inflated = await inflateAsync(raw)
-    if (inflated) chunks.push(inflated)
+  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
+  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
+  GlobalWorkerOptions.workerSrc = workerUrl
+  const data = new Uint8Array(await file.arrayBuffer())
+  const doc = await getDocument({ data }).promise
+  const lines: string[] = []
+  for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+    const page = await doc.getPage(pageNumber)
+    const content = await page.getTextContent()
+    let line = ''
+    for (const item of content.items) {
+      if (!('str' in item)) continue
+      line += item.str
+      if (item.hasEOL) { lines.push(line); line = '' }
+    }
+    if (line) lines.push(line)
   }
-  const textParts = chunks.flatMap(stringsFromPdfText)
-  if (textParts.length > 0) return textParts.join('\n')
-  return latin.replace(/[^\x20-\x7E\u00C0-\u017F\n]/g, ' ')
+  return lines.join('\n')
 }
 
 function looksLikeName(line: string): boolean {
@@ -78,23 +67,44 @@ function looksLikeName(line: string): boolean {
   if (/https?:|www\.|@/.test(clean)) return false
   const words = clean.split(/[\s,]+/).filter(Boolean)
   if (words.length < 2 || words.length > 5) return false
-  const named = words.filter(word => /^[A-ZÄÖÜ][A-Za-zäöüßÄÖÜ-]{1,}$/.test(word) && !SKIP.test(word))
+  // \w kennt keine Umlaute/Akzente (nur [A-Za-z0-9_]) - \p{L} (Unicode-
+  // Buchstabenklasse, braucht das u-Flag) erkennt auch Namen wie "Soyuçok".
+  const named = words.filter(word => /^\p{Lu}[\p{L}-]{1,}$/u.test(word) && !SKIP.test(word))
   return named.length >= 2
 }
 
 const DATE = /\b(\d{1,2}\.\d{1,2}\.\d{4})\b/
 const TOP = /\b(?:Top|Wohnung|Whg)\.?\s*([A-Z0-9/-]+)/i
+// Tatsächliches ZMR-Zeilenformat: optionale ZMR-Zahl, Name (1-4 großgeschriebene
+// Wörter), Geburtsdatum - danach folgen noch Wohnort und Änderungsverlauf in
+// derselben Zeile, zusammen oft mehr als die von looksLikeName() erlaubten 5
+// Wörter. Eine generische "sieht aus wie ein Name"-Prüfung allein reicht
+// hier also nicht, das Geburtsdatum direkt nach dem Namen ist der
+// verlässlichere Anker.
+const ZMR_ZEILE = /^(?:\d[\d\s]{4,}\d\s+)?(\p{Lu}[\p{L}.'-]*(?:\s+\p{Lu}[\p{L}.'-]*){0,3})\s+(\d{1,2}\.\d{1,2}\.\d{4})\b/u
 
 export function personenAusText(text: string): EinsatzPerson[] {
   const lines = text.split(/[\n\r;]+/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
   const found: EinsatzPerson[] = []
   const seen = new Set<string>()
-  for (const line of lines) {
-    const geboren = line.match(DATE)?.[1]
-    const wohnung = line.match(TOP)?.[1]
-    const name = line.replace(DATE, '').replace(TOP, '').replace(/[,;]+/g, ' ').replace(/\s+/g, ' ').trim()
-    if (!looksLikeName(name) && !looksLikeName(line)) continue
-    const label = looksLikeName(name) ? name : line.replace(DATE, '').trim()
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const zmrMatch = line.match(ZMR_ZEILE)
+    let label: string | undefined
+    let geboren: string | undefined
+    if (zmrMatch && !SKIP.test(zmrMatch[1])) {
+      label = zmrMatch[1].trim()
+      geboren = zmrMatch[2]
+    } else {
+      geboren = line.match(DATE)?.[1]
+      const name = line.replace(DATE, '').replace(TOP, '').replace(/[,;]+/g, ' ').replace(/\s+/g, ' ').trim()
+      if (looksLikeName(name)) label = name
+      else if (looksLikeName(line)) label = line.replace(DATE, '').trim()
+    }
+    if (!label) continue
+    // Die Wohnungsnummer steht bei mehrzeiligen ZMR-Einträgen oft erst in der
+    // Zeile mit der Adresse direkt danach, nicht mehr bei Name/Geburtsdatum.
+    const wohnung = line.match(TOP)?.[1] ?? lines[i + 1]?.match(TOP)?.[1]
     const keyName = `${label.toLowerCase()}|${geboren ?? ''}`
     if (seen.has(keyName)) continue
     seen.add(keyName)
