@@ -142,6 +142,12 @@ export default function Portal() {
   }, [rawCanManageZentrale, rawCanManageFuhrpark, rawCanManageEinsatzmittel, rawCanManageSchulungen])
 
   const totalOpenTasks = Object.values(openCounts).reduce((sum: number, value) => sum + (value ?? 0), 0)
+  const openTaskLinks: { key: string; label: string; count: number; to: string }[] = [
+    { key: 'zentrale', label: 'Zentrale · kritische offene Einträge', count: openCounts.zentrale ?? 0, to: '/zentrale' },
+    { key: 'fuhrpark', label: 'Fuhrpark · unvollständig ausgestattete Fahrzeuge', count: openCounts.fuhrpark ?? 0, to: '/fuhrpark' },
+    { key: 'einsatz_mt', label: 'Einsatzmittel · offene Anfragen', count: openCounts.einsatz_mt ?? 0, to: '/einsatz' },
+    { key: 'schulungen', label: 'Schulungen · offene Zuteilungsvorschläge', count: openCounts.schulungen ?? 0, to: '/schulungen' },
+  ].filter(item => item.count > 0)
 
   return (
     <PortalChrome
@@ -176,9 +182,19 @@ export default function Portal() {
       </div>
 
       {totalOpenTasks > 0 ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6 flex flex-wrap items-center gap-3">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-700" />
-          <p className="text-sm font-medium text-gray-800">{totalOpenTasks} offene {totalOpenTasks === 1 ? 'Aufgabe' : 'Aufgaben'} aus deiner Sachbearbeiter-/Genehmiger-Tätigkeit.</p>
+        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-amber-700" />
+            <p className="text-sm font-medium text-gray-800">{totalOpenTasks} offene {totalOpenTasks === 1 ? 'Aufgabe' : 'Aufgaben'} aus deiner Sachbearbeiter-/Genehmiger-Tätigkeit:</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {openTaskLinks.map(item => (
+              <Link key={item.key} to={item.to}
+                className="inline-flex items-center gap-2 bg-white border border-amber-300 hover:border-amber-500 hover:bg-amber-100 rounded-lg px-3 py-1.5 text-sm text-gray-800 transition-colors">
+                <span className="font-semibold text-amber-800">{item.count}</span> {item.label}
+              </Link>
+            ))}
+          </div>
         </section>
       ) : null}
 
