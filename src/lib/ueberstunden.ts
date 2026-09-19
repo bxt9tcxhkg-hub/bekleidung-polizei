@@ -36,6 +36,7 @@ export function todayLocal(): string { const date = new Date(); return `${date.g
 
 export const EMPTY_MELDUNG_FORM = {
   vonDatum: todayLocal(), vonZeit: '', bisDatum: todayLocal(), bisZeit: '', grund: '', verguetung: 'auszahlung' as UeberstundenVerguetung,
+  genehmigerWahlId: null as string | null,
 }
 export type MeldungFormState = typeof EMPTY_MELDUNG_FORM
 
@@ -201,7 +202,7 @@ export function formatZeitraum(item: Pick<UeberstundenMeldung, 'von_datum' | 'vo
 }
 
 export function meldungToForm(item: UeberstundenMeldung): MeldungFormState {
-  return { vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund, verguetung: item.verguetung }
+  return { vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund, verguetung: item.verguetung, genehmigerWahlId: item.genehmiger_wahl_id }
 }
 
 export function formToPayload(form: MeldungFormState) {
@@ -209,7 +210,7 @@ export function formToPayload(form: MeldungFormState) {
   const aufschluesselung = zeitraum ? berechneAufschluesselung(zeitraum.von, zeitraum.bis) : LEERE_AUFSCHLUESSELUNG
   return {
     von_datum: form.vonDatum, von_zeit: form.vonZeit, bis_datum: form.bisDatum, bis_zeit: form.bisZeit,
-    grund: form.grund.trim(), verguetung: form.verguetung, ...aufschluesselung,
+    grund: form.grund.trim(), verguetung: form.verguetung, genehmiger_wahl_id: form.genehmigerWahlId, ...aufschluesselung,
   }
 }
 

@@ -61,14 +61,16 @@ export default function Ueberstunden() {
   const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
   const [uebersichtAnteile, setUebersichtAnteile] = useState<Map<string, Record<UeberstundenKategorieKey, number>>>(new Map())
   const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
-  // Für den Ausdruck einer noch nicht entschiedenen Meldung: gibt es genau
-  // einen möglichen Genehmiger, wird sein Name vorbefüllt statt "–" - er
-  // wird es so oder so sein, der die Meldung vorgelegt bekommt. RPC statt
-  // Client-Abfrage, da ein einfacher Bediensteter die Rollen anderer
-  // Profile laut RLS gar nicht einsehen darf (siehe Migration
-  // 20260919030000_sole_genehmiger_name.sql).
-  const [soleGenehmigerName, setSoleGenehmigerName] = useState<string | null>(null)
-  useEffect(() => { void supabase.rpc('sole_genehmiger_name').then(({ data }) => setSoleGenehmigerName(data ?? null)) }, [])
+  // Feste, vom Kommandanten vorgegebene Genehmiger-Kette (Rang 1 = primär,
+  // Rang 2/3 = Stellvertreter, falls der/die Vorherige nicht da ist) - beim
+  // Anlegen einer Meldung wählt der Ersteller daraus, wer sie vorgelegt
+  // bekommen soll (rein informativ, keine Entscheidung). RPC statt
+  // Client-Abfrage auf profiles, da ein einfacher Bediensteter die Rollen/
+  // den Rang anderer Profile laut RLS gar nicht einsehen darf (siehe
+  // Migration 20260919040000_genehmiger_kette.sql).
+  const [genehmigerKette, setGenehmigerKette] = useState<{ id: string; name: string; rang: number }[]>([])
+  useEffect(() => { void supabase.rpc('genehmiger_kette').then(({ data }) => setGenehmigerKette(data ?? [])) }, [])
+  const kettenName = useCallback((id: string | null) => genehmigerKette.find(row => row.id === id)?.name ?? null, [genehmigerKette])
 
   // "Meine Meldungen" - explizit nach beamter_id gefiltert (nicht nur
   // clientseitig aus einer allgemeinen Liste herausgefiltert): die RLS-
@@ -189,7 +191,14 @@ export default function Ueberstunden() {
   // Sammelansicht zur Weiterleitung an die Lohnberechnung.
   const uebersicht = useMemo(() => monatsUebersicht(uebersichtMeldungen, uebersichtAnteile), [uebersichtMeldungen, uebersichtAnteile])
 
-  function openNew() { setEditing(null); setForm(EMPTY_MELDUNG_FORM); setShowForm(true); setError('') }
+  function openNew() {
+    setEditing(null)
+    // Standardauswahl: der ranghöchste Genehmiger der Kette, der nicht der
+    // Ersteller selbst ist (ein Kommandant meldet z. B. nicht sich selbst).
+    const vorschlag = genehmigerKette.find(row => row.id !== profile?.id)?.id ?? null
+    setForm({ ...EMPTY_MELDUNG_FORM, genehmigerWahlId: vorschlag })
+    setShowForm(true); setError('')
+  }
   function openEdit(item: UeberstundenMeldung) { setEditing(item); setForm(meldungToForm(item)); setShowForm(true); setError('') }
 
   async function saveDraft() {
@@ -237,9 +246,9 @@ export default function Ueberstunden() {
 
   function printMeldung(item: UeberstundenMeldung) {
     // Vor der Entscheidung gibt es noch keinen genehmiger-Eintrag - solange
-    // es aber ohnehin nur einen möglichen Genehmiger gibt, wird dessen Name
-    // statt "–" vorbefüllt, unabhängig davon, wer gerade druckt.
-    const genehmigerName = item.genehmiger?.name ?? soleGenehmigerName
+    // wird stattdessen der vom Ersteller gewählte, voraussichtliche
+    // Genehmiger statt "–" angezeigt, unabhängig davon, wer gerade druckt.
+    const genehmigerName = item.genehmiger?.name ?? kettenName(item.genehmiger_wahl_id)
     generateUeberstundenPdf({
       beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName,
       vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
@@ -312,7 +321,7 @@ export default function Ueberstunden() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{formatZeitraum(item)}</span><span className={`text-xs font-semibold px-2 py-1 rounded-full ${STATUS_COLOR[item.status]}`}>{STATUS_LABEL[item.status]}</span></div>
-              {!item.genehmiger && soleGenehmigerName ? <p className="text-xs text-gray-500 mt-1">Genehmiger: {soleGenehmigerName}</p> : null}
+              {!item.genehmiger && kettenName(item.genehmiger_wahl_id) ? <p className="text-xs text-gray-500 mt-1">Genehmiger: {kettenName(item.genehmiger_wahl_id)}</p> : null}
               <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
               <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
               <StundenBreakdown item={item} />
@@ -348,6 +357,12 @@ export default function Ueberstunden() {
       {!zeitraum ? <p className="text-xs text-amber-700 -mt-2">Bitte Von/Bis vollständig angeben – das Ende muss nach dem Beginn liegen.</p> : null}
       {zeitraum && zeitraumZuLang ? <p className="text-xs text-amber-700 -mt-2">Der Zeitraum einer einzelnen Meldung darf höchstens {MAX_MELDUNG_DAUER_TAGE} Tage umfassen.</p> : null}
       <Area label="Grund der Überstunde(n) *" value={form.grund} onChange={value => setForm(current => ({ ...current, grund: value }))} />
+      {genehmigerKette.length > 0 ? <label className="block text-xs font-medium text-gray-600">Genehmiger
+        <select className={inputClass} value={form.genehmigerWahlId ?? ''} onChange={event => setForm(current => ({ ...current, genehmigerWahlId: event.target.value || null }))}>
+          <option value="">– bitte wählen –</option>
+          {genehmigerKette.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}
+        </select>
+      </label> : null}
       <div>
         <p className="text-xs font-medium text-gray-600 mb-2">Vergütung *</p>
         <div className="flex gap-4">

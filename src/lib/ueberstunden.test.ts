@@ -71,7 +71,7 @@ function meldung(overrides: Partial<UeberstundenMeldung>): UeberstundenMeldung {
     id: 'x', beamter_id: 'b1', von_datum: '2026-09-14', von_zeit: '10:00', bis_datum: '2026-09-14', bis_zeit: '14:00',
     grund: 'Test', verguetung: 'auszahlung',
     std_werktag_50: 4, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0,
-    status: 'genehmigt', eingereicht_at: null, genehmiger_id: null, genehmigt_at: null, genehmiger_note: null,
+    status: 'genehmigt', eingereicht_at: null, genehmiger_id: null, genehmigt_at: null, genehmiger_note: null, genehmiger_wahl_id: null,
     created_by: 'b1', created_at: '', updated_at: '',
     beamter: { id: 'b1', name: 'Max Muster', dienstnummer: '123' },
     ...overrides,

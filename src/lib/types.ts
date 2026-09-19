@@ -1185,6 +1185,8 @@ export interface UeberstundenMeldung {
   genehmiger_id: string | null
   genehmigt_at: string | null
   genehmiger_note: string | null
+  /** Vom Ersteller gewählter, voraussichtlicher Genehmiger (siehe lib/einsatzSchema-artige Genehmiger-Kette) - rein informativ, keine Entscheidung. */
+  genehmiger_wahl_id: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -1667,6 +1669,7 @@ export type Database = {
       ueberstunden_meldungen: { Row: UeberstundenMeldungRow; Insert: Pick<UeberstundenMeldungRow, 'beamter_id' | 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit' | 'grund' | 'created_by'> & Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at' | 'updated_at' | 'beamter_id' | 'von_datum' | 'von_zeit' | 'bis_datum' | 'bis_zeit' | 'grund' | 'created_by'>>; Update: Partial<Omit<UeberstundenMeldungRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'ueberstunden_meldungen_beamter_id_fkey'; columns: ['beamter_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'ueberstunden_meldungen_genehmiger_id_fkey'; columns: ['genehmiger_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ueberstunden_meldungen_genehmiger_wahl_id_fkey'; columns: ['genehmiger_wahl_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'ueberstunden_meldungen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       schulungen_module: { Row: SchulungModuleRow; Insert: Pick<SchulungModuleRow, 'name'> & Partial<Omit<SchulungModuleRow, 'name'>>; Update: Partial<Omit<SchulungModuleRow, 'id' | 'created_at'>>; Relationships: [
@@ -1736,7 +1739,7 @@ export type Database = {
       decide_schulung_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
       strassenzustand_bericht_ersetzen: { Args: { p_bericht_id: string; p_anmerkung: string | null; p_zeilen: Record<string, unknown>[] }; Returns: undefined }
       ueberstunden_monatsanteile: { Args: { p_monat_start: string; p_monat_ende: string }; Returns: { meldung_id: string; beamter_id: string; verguetung: string; std_werktag_50: number; std_sonn_100: number; std_19_22: number; std_22_06: number; std_sonn_200: number }[] }
-      sole_genehmiger_name: { Args: Record<PropertyKey, never>; Returns: string | null }
+      genehmiger_kette: { Args: Record<PropertyKey, never>; Returns: { id: string; name: string; rang: number }[] }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
