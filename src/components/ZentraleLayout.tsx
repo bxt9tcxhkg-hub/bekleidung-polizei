@@ -1,4 +1,4 @@
-import { BookOpen, ClipboardList, LayoutGrid, MapPin, Phone, Radio, ShieldAlert, UserRoundCheck } from 'lucide-react'
+import { BookOpen, ClipboardList, LayoutGrid, MapPin, Radio, ShieldAlert, UserRoundCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
@@ -15,7 +15,10 @@ export default function ZentraleLayout() {
       { to: '/zentrale', label: 'Zentrale', icon: Radio },
       { to: '/zentrale/av-bv-ev', label: 'BV/AV & EV', icon: ShieldAlert },
       { to: '/stammdaten/kontakte', label: 'Kontakte', icon: UserRoundCheck },
-      { to: '/stammdaten/telefonnummern', label: 'Telefonnummern', icon: Phone },
+      // Telefonnummern bewusst kein eigener Sidebar-Punkt hier - die Kachel
+      // "Wichtige Telefonnummern" auf der Zentrale-Hauptseite deckt das
+      // Nachschlagen bereits ab (ZentraleUebersicht.tsx); Pflege weiterhin
+      // über /stammdaten/telefonnummern.
       { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
       { to: '/zentrale/strassenzustand', label: 'Straßenzustand', icon: MapPin },
     ]),
