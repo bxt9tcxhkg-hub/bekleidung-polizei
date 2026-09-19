@@ -51,7 +51,7 @@ export default function StammdatenTelefonnummernPage() {
   }
 
   return <div>
-    <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
+    <Link to="/stammdaten" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zu Stammdaten</Link>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Wichtige Telefonnummern</h1><p className="text-sm text-gray-500 mt-1">Intern (Dienststelle) und extern (andere Dienststellen/Behörden), erscheinen als Kachel auf der Zentrale- und Innendienst-Hauptseite.</p></div>
     {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führen ausschließlich Administration und Genehmiger durch.</div> : null}
     {(error || loadError) && !showForm ? <ErrorMessage text={error || 'Die Telefonnummern konnten nicht geladen werden.'} /> : null}

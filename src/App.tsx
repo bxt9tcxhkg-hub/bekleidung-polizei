@@ -53,6 +53,7 @@ const ZentraleUebersicht = lazy(() => import('./pages/zentrale/ZentraleUebersich
 const ZentraleEinsaetze = lazy(() => import('./pages/zentrale/ZentraleEinsaetze'))
 const ZentraleLagePage = lazy(() => import('./pages/zentrale/ZentraleLagePage'))
 const ZentraleAvBv = lazy(() => import('./pages/zentrale/ZentraleAvBv'))
+const StammdatenUebersicht = lazy(() => import('./pages/stammdaten/StammdatenUebersicht'))
 const StammdatenPersonen = lazy(() => import('./pages/stammdaten/StammdatenPersonen'))
 const StammdatenObjekte = lazy(() => import('./pages/stammdaten/StammdatenObjekte'))
 const StammdatenFahndungen = lazy(() => import('./pages/stammdaten/StammdatenFahndungen'))
@@ -155,7 +156,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/stammdaten" element={<Navigate to="/stammdaten/schluessel" replace />} />
+            <Route path="/stammdaten" element={<StammdatenUebersicht />} />
             <Route path="/stammdaten/schluessel" element={<StammdatenSchluessel />} />
             <Route path="/stammdaten/kontakte" element={<StammdatenKontakte />} />
             <Route path="/stammdaten/telefonnummern" element={<StammdatenTelefonnummern />} />
