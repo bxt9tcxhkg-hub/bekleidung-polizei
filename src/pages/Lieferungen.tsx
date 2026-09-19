@@ -36,7 +36,7 @@ export default function Lieferungen() {
       const ids = deliveryList.map(d => d.id)
       const { data: ordersData } = await supabase
         .from('orders')
-        .select('*, products(name,article_number,category,needs_tailoring)')
+        .select('*, products(name,article_number,category,needs_tailoring,size_mode)')
         .in('delivery_id', ids)
       const ordersByDelivery: Record<string, DeliveryOrder[]> = {}
       ;(ordersData ?? []).forEach((o) => {
@@ -359,7 +359,7 @@ export default function Lieferungen() {
                               </p>
                               <p className="text-xs text-gray-400 font-mono">{o.products?.article_number}</p>
                             </div>
-                            <span className="text-xs text-gray-500 flex-shrink-0">Gr. {o.size} · {o.quantity}×</span>
+                            <span className="text-xs text-gray-500 flex-shrink-0">{o.products?.size_mode === 'sizes' ? `Gr. ${o.size} · ` : ''}{o.quantity}×</span>
                           </div>
                         )
                       })}

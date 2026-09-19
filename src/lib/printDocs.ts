@@ -64,10 +64,19 @@ export function letterheadBlock(sachbearbeiter?: string | null): string {
 
 export type KurzbriefItem = { artNr: string; productName: string; size: string; totalQty: number }
 
-export function generateKurzbrief(items: KurzbriefItem[], senderName: string, now = new Date()): void {
+const MASSA_ADDRESSEE = ['Bundesministerium für Inneres', 'Bekleidungswirtschaftsfonds der Exekutive', 'Liesinger Flur-Gasse 8', '1230 Wien']
+export const EIGENBESCHAFFUNG_ADDRESSEE = ['Eigenbeschaffung', '(Lieferant bitte händisch eintragen)']
+
+export function generateKurzbrief(
+  items: KurzbriefItem[],
+  senderName: string,
+  now = new Date(),
+  options: { addressee?: string[] } = {},
+): void {
   const userName = escHtml(senderName || '–')
+  const addressee = options.addressee ?? MASSA_ADDRESSEE
   const tableRows = items.map(g =>
-    `<tr><td>${escHtml(g.artNr)}</td><td>${escHtml(g.productName)}</td><td class="b">${escHtml(g.size)}</td><td class="b c">${g.totalQty}</td></tr>`,
+    `<tr><td>${escHtml(g.artNr)}</td><td>${escHtml(g.productName)}</td><td class="b">${escHtml(g.size || '–')}</td><td class="b c">${g.totalQty}</td></tr>`,
   ).join('\n')
   const html = `<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><title>Kurzbrief</title><style>
@@ -100,7 +109,7 @@ export function generateKurzbrief(items: KurzbriefItem[], senderName: string, no
 ${letterheadBlock(senderName || '–')}
 <div class="ra">STADT DORNBIRN Polizei, Rathausplatz 2, A-6850 Dornbirn</div>
 <div class="ad">
-  <div class="rc">An<br>Bundesministerium für Inneres<br>Bekleidungswirtschaftsfonds der Exekutive<br>Liesinger Flur-Gasse 8<br>1230 Wien</div>
+  <div class="rc">An<br>${addressee.map(escHtml).join('<br>')}</div>
   <div class="dt">Dornbirn, ${dateLong(now)}</div>
 </div>
 <div class="kt">Kurzbrief</div>

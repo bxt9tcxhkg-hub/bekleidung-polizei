@@ -26,7 +26,7 @@ export default function MyOrders() {
     if (!profile) return
     const [ordersRes, totalBud, used] = await Promise.all([
       supabase.from('orders')
-        .select('*, products(name,category,needs_tailoring,sizes), quarters(name,year,quarter_num)')
+        .select('*, products(name,category,needs_tailoring,sizes,size_mode), quarters(name,year,quarter_num)')
         .eq('user_id', profile.id)
         .not('status', 'eq', 'pending')
         .order('created_at', { ascending: false }),
@@ -86,7 +86,7 @@ export default function MyOrders() {
       setError('Die Menge muss eine ganze Zahl größer als 0 sein.')
       return
     }
-    if (!editSize || !(order.products?.sizes ?? []).includes(editSize)) {
+    if (order.products?.size_mode === 'sizes' && (!editSize || !(order.products?.sizes ?? []).includes(editSize))) {
       setError('Bitte eine gültige Größe auswählen.')
       return
     }
@@ -189,12 +189,12 @@ export default function MyOrders() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-gray-700">
-                            {isEditing ? (
+                            {isEditing && o.products?.size_mode === 'sizes' ? (
                               <select value={editSize} onChange={e => setEditSize(e.target.value)} disabled={saving}
                                 className="border border-gray-300 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 {(o.products?.sizes ?? []).map(size => <option key={size} value={size}>{size}</option>)}
                               </select>
-                            ) : o.size || '–'}
+                            ) : o.products?.size_mode === 'sizes' ? (o.size || '–') : '–'}
                           </td>
                           <td className="px-4 py-3 text-right text-gray-700 tabular-nums">
                             {isEditing ? (

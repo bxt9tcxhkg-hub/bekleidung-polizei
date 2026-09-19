@@ -90,6 +90,7 @@ export function inventoryLineLabel(
   productSizes?: string[] | null,
 ): string {
   const article = name?.trim() || 'Artikel'
+  if (!size) return article
   const sizes = productSizes && productSizes.length > 0 ? productSizes : [size]
   const grouped = groupSizes(sizes) !== null
   return `${article} · Gr. ${sizeLabel(size, grouped)}`
@@ -102,9 +103,10 @@ export function inventoryDeleteConfirm(
   productSizes?: string[] | null,
 ): string {
   const article = name?.trim() || 'Artikel'
+  const qty = Number.isFinite(quantity) ? Math.max(0, quantity) : 0
+  if (!size) return `Soll «${article}» wirklich aus dem Bestand gelöscht werden? Aktueller Bestand: ${qty}×.`
   const sizes = productSizes && productSizes.length > 0 ? productSizes : [size]
   const grouped = groupSizes(sizes) !== null
-  const qty = Number.isFinite(quantity) ? Math.max(0, quantity) : 0
   return `Soll «${article}» Gr. ${sizeLabel(size, grouped)} wirklich aus dem Bestand gelöscht werden? Aktueller Bestand: ${qty}×.`
 }
 

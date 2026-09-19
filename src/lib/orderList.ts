@@ -1,7 +1,7 @@
 import type { Order, OrderStatus } from './types'
 
 export type OrderListLine = Omit<Order, 'products' | 'quarters'> & {
-  products?: { name: string; category?: string; needs_tailoring?: boolean; sizes?: string[] } | null
+  products?: { name: string; category?: string; needs_tailoring?: boolean; sizes?: string[]; size_mode?: string } | null
   quarters?: { name: string; year?: number; quarter_num?: number } | null
 }
 

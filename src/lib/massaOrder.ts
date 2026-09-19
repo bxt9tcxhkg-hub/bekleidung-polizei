@@ -44,19 +44,21 @@ export function aggregateMassaLines(lines: MassaOrderLine[]): MassaOrderLine[] {
 
 export function buildMassaDraft(
   lines: MassaOrderLine[],
-  options: { now?: Date; senderName?: string } = {},
+  options: { now?: Date; senderName?: string; subjectPrefix?: string; introText?: string } = {},
 ): MassaOrderDraft {
   const aggregated = aggregateMassaLines(lines)
   const now = options.now ?? new Date()
   const dateShort = `${String(now.getDate()).padStart(2, '0')}.${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`
-  const subject = `Sammelbestellung Stadtpolizei Dornbirn ${dateShort}`
+  const subjectPrefix = options.subjectPrefix ?? 'Sammelbestellung Stadtpolizei Dornbirn'
+  const subject = `${subjectPrefix} ${dateShort}`
   const csv = buildMassaCsv(aggregated)
   const sender = options.senderName ?? 'Stadtpolizei Dornbirn'
+  const introText = options.introText ?? 'Sammelbestellung an Massa Wien'
   const rows = aggregated.map(l =>
     `<tr><td>${esc(l.articleNumber)}</td><td>${esc(l.name)}</td><td>${esc(l.size)}</td><td>${l.quantity}</td></tr>`,
   ).join('')
   const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>${esc(subject)}</title></head><body>
-<p>Sammelbestellung an Massa Wien</p>
+<p>${esc(introText)}</p>
 <p>Absender: ${esc(sender)} · ${esc(dateShort)}</p>
 <table border="1" cellpadding="4" cellspacing="0">
 <thead><tr><th>Artikelnummer</th><th>Artikel</th><th>Größe</th><th>Anzahl</th></tr></thead>

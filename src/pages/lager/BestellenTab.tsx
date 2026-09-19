@@ -66,16 +66,18 @@ export function BestellenTab({ lager }: { lager: LagerController }) {
                 </span>
 
                 {/* Sizes with stock badges */}
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {sizesWithStock.map(({ size, stock }) => (
-                    <span key={size} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium ${
-                      stock > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {sizeLabel(size, isGrouped)}
-                      {stock > 0 && <span className="text-green-600 font-bold">·{stock}</span>}
-                    </span>
-                  ))}
-                </div>
+                {product.size_mode === 'sizes' && (
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {sizesWithStock.map(({ size, stock }) => (
+                      <span key={size} className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg font-medium ${
+                        stock > 0 ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {sizeLabel(size, isGrouped)}
+                        {stock > 0 && <span className="text-green-600 font-bold">·{stock}</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 <button
                   onClick={() => openSizeModal(product)}

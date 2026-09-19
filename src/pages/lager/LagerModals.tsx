@@ -28,6 +28,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
             </div>
             <div className="px-5 py-4 space-y-4">
               {/* Size selector with stock */}
+              {sizeModal.product.size_mode === 'sizes' && (
               <div>
                 <p className="text-xs font-medium text-gray-600 mb-2">Größe wählen</p>
                 {(() => {
@@ -60,16 +61,17 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                   )
                 })()}
               </div>
+              )}
 
               {/* Current stock info */}
-              {sizeModal.size && (() => {
+              {(sizeModal.product.size_mode !== 'sizes' || sizeModal.size) && (() => {
                 const stock = stockFor(sizeModal.product.id, sizeModal.size)
                 return (
                   <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${stock > 0 ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
                     <Warehouse className="w-4 h-4 flex-shrink-0" />
                     <span>
                       Aktuell lagernd: <strong>{stock}×</strong>
-                      {stock > 0 && <span className="text-xs ml-1 opacity-70">(Gr. {sizeModal.size})</span>}
+                      {stock > 0 && sizeModal.product.size_mode === 'sizes' && <span className="text-xs ml-1 opacity-70">(Gr. {sizeModal.size})</span>}
                     </span>
                   </div>
                 )
@@ -96,7 +98,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                 className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">
                 Abbrechen
               </button>
-              <button onClick={addToCart} disabled={!sizeModal.size}
+              <button onClick={addToCart} disabled={sizeModal.product.size_mode === 'sizes' && !sizeModal.size}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                 <ShoppingBag className="w-4 h-4" /> In Warenkorb
               </button>
@@ -134,7 +136,9 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                       <div key={idx} className="flex items-start gap-3 px-5 py-4">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 leading-snug">{item.product.name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">Gr. {item.size}</p>
+                          {item.product.size_mode === 'sizes' && (
+                            <p className="text-xs text-gray-400 mt-0.5">Gr. {item.size}</p>
+                          )}
                           <p className={`text-xs mt-1 font-medium ${stock > 0 ? 'text-green-600' : 'text-gray-400'}`}>
                             Aktuell lagernd: {stock}×
                           </p>
@@ -192,7 +196,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                 </div>
                 <div>
                   <h2 className="font-bold text-gray-900">Wareneingang gebucht</h2>
-                  <p className="text-xs text-gray-500">{followUp.stockOrder.products?.name} · Gr. {followUp.stockOrder.size} · {followUp.stockOrder.quantity}×</p>
+                  <p className="text-xs text-gray-500">{followUp.stockOrder.products?.name} · {followUp.stockOrder.products?.size_mode === 'sizes' ? `Gr. ${followUp.stockOrder.size} · ` : ''}{followUp.stockOrder.quantity}×</p>
                 </div>
               </div>
             </div>
@@ -205,7 +209,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                 {followUp.orders.map(o => (
                   <div key={o.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
                     <span className="font-medium text-gray-800">{o.profiles?.name ?? '–'}</span>
-                    <span className="text-gray-500">Gr. {o.size} · {o.quantity}×{o.products?.needs_tailoring ? ' · Schneider' : ''}</span>
+                    <span className="text-gray-500">{o.products?.size_mode === 'sizes' ? `Gr. ${o.size} · ` : ''}{o.quantity}×{o.products?.needs_tailoring ? ' · Schneider' : ''}</span>
                   </div>
                 ))}
               </div>
@@ -301,7 +305,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                 )}
                 {addForm.product_id && <p className="text-xs text-green-600 mt-1">✓ Artikel ausgewählt</p>}
               </div>
-              {selectedAddProduct && (
+              {selectedAddProduct && selectedAddProduct.size_mode === 'sizes' && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Größe *</label>
                   <select className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -332,7 +336,7 @@ export function LagerModals({ lager }: { lager: LagerController }) {
             <div className="flex gap-3 px-6 py-4 border-t">
               <button onClick={() => { setAddForm(null); setAddSearch('') }}
                 className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={createInventory} disabled={saving || !addForm.product_id || !addForm.size || addForm.quantity === ''}
+              <button onClick={createInventory} disabled={saving || !addForm.product_id || (selectedAddProduct?.size_mode === 'sizes' && !addForm.size) || addForm.quantity === ''}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
               </button>

@@ -1,7 +1,7 @@
 import { Pencil, X, Check, Info, Trash2 } from 'lucide-react'
 import { fmtEUR } from '../../lib/format'
 import type { Product } from '../../lib/types'
-import { GENDER_LABELS } from './constants'
+import { BEZUGSART_LABELS, GENDER_LABELS, SIZE_MODE_LABELS } from './constants'
 
 function Badge({ active }: { active: boolean }) {
   return (
@@ -40,13 +40,15 @@ export default function ProductsTable({
             <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Geschlecht</th>
             <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Preis</th>
             <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Schneider</th>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden xl:table-cell">Bezug</th>
+            <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden xl:table-cell">Größe</th>
             <th className="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
             {isSachbearbeiter && <th className="px-4 py-3" />}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {products.length === 0 ? (
-            <tr><td colSpan={isSachbearbeiter ? 9 : 8} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
+            <tr><td colSpan={isSachbearbeiter ? 11 : 10} className="text-center py-10 text-gray-400">Keine Produkte gefunden</td></tr>
           ) : products.map(p => (
             <tr key={p.id} className="hover:bg-gray-50">
               <td className="px-4 py-3 font-mono text-xs text-gray-600 hidden sm:table-cell">{p.article_number}</td>
@@ -76,6 +78,12 @@ export default function ProductsTable({
               <td className="px-4 py-3 hidden lg:table-cell">
                 {p.needs_tailoring ? <Check className="w-4 h-4 text-green-600" /> : <span className="text-gray-300">–</span>}
               </td>
+              <td className="px-4 py-3 hidden xl:table-cell">
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${p.bezugsart === 'eigenbeschaffung' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                  {BEZUGSART_LABELS[p.bezugsart ?? 'massa']}
+                </span>
+              </td>
+              <td className="px-4 py-3 text-gray-600 hidden xl:table-cell">{SIZE_MODE_LABELS[p.size_mode ?? 'sizes']}</td>
               <td className="px-4 py-3"><Badge active={p.active} /></td>
               {isSachbearbeiter && (
                 <td className="px-4 py-3">

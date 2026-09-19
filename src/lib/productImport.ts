@@ -1,4 +1,4 @@
-import type { Product } from './types'
+import type { Product, ProductBezugsart, ProductSizeMode } from './types'
 
 export const PRODUCT_CSV_TEMPLATE = `artikel_nr;name;kategorie;geschlecht;groessen;preis;schneider;organisation;grössentabelle
 BP-001;Diensthemd langarm;Hemd;unisex;S|M|L|XL;45.90;nein;Stadtpolizei;
@@ -36,19 +36,30 @@ export function rowToProduct(row: Record<string, string>): Omit<Product, 'id' | 
   const genderFromCol = GENDER_MAP[geschlecht.toLowerCase()]
   const genderFromName = /\bHR\b/i.test(name) ? 'male' : /\bDA\b/i.test(name) ? 'female' : null
   const sizeSep = groessen.includes('|') ? '|' : ';'
+  const sizes = groessen ? groessen.split(sizeSep).map(s => s.trim()).filter(Boolean) : []
+  const bezugText = get('bezugsart', 'bezug', 'lieferant').toLowerCase()
+  const bezugsart: ProductBezugsart = bezugText.includes('eigen') ? 'eigenbeschaffung' : 'massa'
+  const sizeModeText = get('groessenart', 'größenart', 'size_mode', 'sizemode').toLowerCase()
+  const size_mode: ProductSizeMode = sizeModeText.includes('uni')
+    ? 'universal'
+    : sizeModeText.includes('keine') || sizeModeText === 'none'
+      ? 'none'
+      : sizes.length > 0 ? 'sizes' : 'none'
   return {
     article_number,
     name,
     category: get('kategorie', 'category', 'kategory') || 'Sonstiges',
     sub_category: get('subcategory', 'subCategory', 'sub_category', 'unterkategorie', 'unterkat') || null,
     gender: genderFromCol ?? genderFromName ?? 'unisex',
-    sizes: groessen ? groessen.split(sizeSep).map(s => s.trim()).filter(Boolean) : [],
+    sizes: size_mode === 'universal' ? ['Uni'] : size_mode === 'none' ? [] : sizes,
     price: parseFloat(preis.replace(',', '.')) || 0,
     needs_tailoring: ['ja', 'yes', '1', 'true'].includes(schneider.toLowerCase()),
     size_guide: get('grössentabelle', 'groessentabelle', 'size_guide', 'sizeguide', 'größentabelle') || null,
     organisation: (() => { const o = get('organisation', 'org', 'abteilung'); return o.toLowerCase().includes('park') ? 'Parkaufsicht' : 'Stadtpolizei' })(),
     active: true,
     min_quantity: 0,
+    bezugsart,
+    size_mode,
   }
 }
 

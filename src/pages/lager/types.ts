@@ -25,5 +25,5 @@ export interface SizeModal {
 
 export type WaitingUserOrder = Pick<Order, 'id' | 'quantity' | 'size' | 'product_id' | 'quarter_id'> & {
   profiles?: { name: string } | null
-  products?: { name: string; needs_tailoring?: boolean } | null
+  products?: { name: string; needs_tailoring?: boolean; size_mode?: string } | null
 }

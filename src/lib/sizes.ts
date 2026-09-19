@@ -3,6 +3,21 @@ export interface SizeGroup {
   sizes: string[]
 }
 
+/** Fixer Größenwert für Artikel ohne echte Größenauswahl (z. B. Schuhbänder). */
+export const UNIVERSAL_SIZE = 'Uni'
+
+/** Ob für diesen Größenmodus überhaupt eine Größe angezeigt/abgefragt werden soll. */
+export function hasSizeChoice(sizeMode: 'sizes' | 'universal' | 'none'): boolean {
+  return sizeMode === 'sizes'
+}
+
+/** `sizes`-Array passend zum gewählten Größenmodus (für Formular/Import). */
+export function sizesForMode(sizeMode: 'sizes' | 'universal' | 'none', currentSizes: string[]): string[] {
+  if (sizeMode === 'universal') return [UNIVERSAL_SIZE]
+  if (sizeMode === 'none') return []
+  return currentSizes
+}
+
 const NAMED_SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', '3XL', '4XL']
 
 // U/N/S prefix: Untersetzt / Normal / Schlank (male trousers)

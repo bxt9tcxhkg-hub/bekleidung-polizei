@@ -84,12 +84,12 @@ export default function Approvals() {
     const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tRegRes, tAssignRes, sModRes, sSessRes, sRegRes, sAssignRes, refundRes, capRes] = await Promise.all([
       supabase
         .from('orders')
-        .select('*, products(name,category,price), quarters(name), profiles(name,dienstnummer,username)')
+        .select('*, products(name,category,price,size_mode), quarters(name), profiles(name,dienstnummer,username)')
         .eq('status', 'pending_approval')
         .order('created_at', { ascending: true }),
       supabase
         .from('stock_orders')
-        .select('*, products(id,name,article_number,category), requester:profiles!stock_orders_requested_by_fkey(id,name)')
+        .select('*, products(id,name,article_number,category,size_mode), requester:profiles!stock_orders_requested_by_fkey(id,name)')
         .eq('status', 'pending_approval')
         .order('created_at', { ascending: true }),
       supabase
@@ -530,7 +530,7 @@ export default function Approvals() {
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-gray-900">{o.products?.name}</p>
                               <p className="text-xs text-gray-400 mt-0.5">
-                                {o.products?.category} · Gr. {o.size} · {o.quantity}× · {o.quarters?.name}
+                                {o.products?.category} · {o.products?.size_mode === 'sizes' ? `Gr. ${o.size} · ` : ''}{o.quantity}× · {o.quarters?.name}
                               </p>
                             </div>
                             <div className="text-sm font-semibold text-gray-700 whitespace-nowrap">
@@ -569,7 +569,7 @@ export default function Approvals() {
                 head={['Artikel', 'Gr. / Anz.', 'Angefordert von', 'Notiz', 'Status', '']}
                 rows={stockOrders.map(o => [
                   <div key="art"><p className="font-medium text-gray-900">{o.products?.name ?? '–'}</p><p className="text-xs text-gray-400">{o.products?.article_number} · {o.products?.category}</p></div>,
-                  `${o.size} · ${o.quantity}×`,
+                  o.products?.size_mode === 'sizes' ? `${o.size} · ${o.quantity}×` : `${o.quantity}×`,
                   o.requester?.name ?? '–',
                   o.note ?? '–',
                   <span key="st" className={`text-xs font-medium px-2.5 py-1 rounded-full ${STOCK_ORDER_STATUS_COLORS[o.status]}`}>{STOCK_ORDER_STATUS_LABELS[o.status]}</span>,

@@ -44,6 +44,7 @@ export default function ProductsPage() {
     runImport,
     toggleSize,
     addCustomSize,
+    setSizeMode,
     openImport,
     setShowForm,
     setShowImport,
@@ -143,6 +144,7 @@ export default function ProductsPage() {
           setCustomSizeInput={setCustomSizeInput}
           onToggleSize={toggleSize}
           onAddCustomSize={addCustomSize}
+          onSetSizeMode={setSizeMode}
           onSave={save}
           onClose={() => setShowForm(false)}
         />

@@ -74,7 +74,7 @@ export function useLager() {
       supabase.from('products').select('*').eq('active', true).eq('organisation', profile?.organisation ?? 'Stadtpolizei').order('category').order('name'),
       supabase.from('inventory').select('*, products(*)').order('updated_at', { ascending: false }),
       supabase.from('stock_orders')
-        .select('*, products(id,name,article_number,category,needs_tailoring), requester:profiles!stock_orders_requested_by_fkey(id,name), approver:profiles!stock_orders_approved_by_fkey(id,name)')
+        .select('*, products(id,name,article_number,category,needs_tailoring,size_mode), requester:profiles!stock_orders_requested_by_fkey(id,name), approver:profiles!stock_orders_approved_by_fkey(id,name)')
         .order('created_at', { ascending: false }),
     ])
     setProducts(prodsRes.data ?? [])
@@ -187,18 +187,22 @@ export function useLager() {
   }
 
   async function createInventory() {
-    if (!addForm?.product_id || !addForm.size || addForm.quantity === '') return
+    if (!addForm?.product_id || addForm.quantity === '') return
+    const product = products.find(p => p.id === addForm.product_id)
+    const sizeRequired = product?.size_mode === 'sizes'
+    if (sizeRequired && !addForm.size) return
+    const size = sizeRequired ? addForm.size : (product?.sizes[0] ?? '')
     const qty = parseInt(addForm.quantity)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
     const { error: adjError } = await supabase.rpc('adjust_inventory', {
       p_product: addForm.product_id,
-      p_size: addForm.size,
+      p_size: size,
       p_delta: qty,
     })
     setSaving(false)
     if (adjError) { setError('Bestand konnte nicht gebucht werden.'); return }
-    logAudit('Bestand gebucht', `${selectedAddProduct?.name ?? ''} ${addForm.size} +${qty}`.trim())
+    logAudit('Bestand gebucht', `${selectedAddProduct?.name ?? ''} ${size} +${qty}`.trim())
     setAddForm(null)
     setAddSearch('')
     loadAll()
@@ -295,7 +299,7 @@ export function useLager() {
     await loadAll()
     const { data: waiting } = await supabase
       .from('orders')
-      .select('id, quantity, size, product_id, quarter_id, profiles(name), products(name, needs_tailoring)')
+      .select('id, quantity, size, product_id, quarter_id, profiles(name), products(name, needs_tailoring, size_mode)')
       .eq('product_id', order.product_id)
       .eq('size', order.size)
       .eq('status', 'approved')

@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import type { Product } from '../../lib/types'
 import { parseCsv, parseFileToProducts } from '../../lib/productImport'
+import { sizesForMode } from '../../lib/sizes'
+import type { ProductSizeMode } from '../../lib/types'
 import { emptyProduct, type ConfirmDelete, type OrgFilter, type ProductFormData } from './constants'
 
 export function useProducts() {
@@ -52,7 +54,7 @@ export function useProducts() {
   }
 
   function openEdit(p: Product) {
-    setForm({ article_number: p.article_number, name: p.name, category: p.category, sub_category: p.sub_category ?? null, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active, min_quantity: p.min_quantity ?? 0 })
+    setForm({ article_number: p.article_number, name: p.name, category: p.category, sub_category: p.sub_category ?? null, gender: p.gender ?? 'unisex', sizes: p.sizes, price: p.price, needs_tailoring: p.needs_tailoring, size_guide: p.size_guide ?? null, organisation: p.organisation ?? 'Stadtpolizei', active: p.active, min_quantity: p.min_quantity ?? 0, bezugsart: p.bezugsart ?? 'massa', size_mode: p.size_mode ?? 'sizes' })
     setEditId(p.id)
     setError('')
     setShowForm(true)
@@ -189,6 +191,10 @@ export function useProducts() {
     setCustomSizeInput('')
   }
 
+  function setSizeMode(mode: ProductSizeMode) {
+    setForm(f => ({ ...f, size_mode: mode, sizes: sizesForMode(mode, f.sizes) }))
+  }
+
   function openImport() {
     setShowImport(true)
     setImportRows([])
@@ -234,6 +240,7 @@ export function useProducts() {
     runImport,
     toggleSize,
     addCustomSize,
+    setSizeMode,
     openImport,
     setShowForm,
     setShowImport,

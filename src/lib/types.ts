@@ -68,6 +68,9 @@ export interface Profile {
   admin?: boolean
 }
 
+export type ProductBezugsart = 'massa' | 'eigenbeschaffung'
+export type ProductSizeMode = 'sizes' | 'universal' | 'none'
+
 export interface Product {
   id: string
   article_number: string
@@ -82,6 +85,8 @@ export interface Product {
   organisation: string | null
   active: boolean
   min_quantity: number
+  bezugsart: ProductBezugsart
+  size_mode: ProductSizeMode
   created_at: string | null
 }
 

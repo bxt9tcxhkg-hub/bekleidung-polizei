@@ -137,7 +137,7 @@ export default function Grundausstattung() {
         user_id: profile!.id,
         product_id: item.product_id,
         quarter_id: activeQuarter.id,
-        size: selectedSizes[item.product_id] ?? '',
+        size: item.products.size_mode === 'sizes' ? (selectedSizes[item.product_id] ?? '') : (item.products.sizes[0] ?? ''),
         quantity: item.quantity,
         unit_price: item.products.price,
         status: 'pending',
@@ -167,8 +167,8 @@ export default function Grundausstattung() {
     return acc
   }, {})
 
-  const allSizesSelected = items.every(i => !i.products?.sizes?.length || selectedSizes[i.product_id])
-  const missingCount = items.filter(i => i.products?.sizes?.length && !selectedSizes[i.product_id]).length
+  const allSizesSelected = items.every(i => i.products?.size_mode !== 'sizes' || selectedSizes[i.product_id])
+  const missingCount = items.filter(i => i.products?.size_mode === 'sizes' && !selectedSizes[i.product_id]).length
 
   return (
     <div>
@@ -330,7 +330,7 @@ export default function Grundausstattung() {
                     </div>
                     {catItems.map(item => {
                       const p = item.products
-                      const hasSizes = p && p.sizes.length > 0
+                      const hasSizes = p && p.size_mode === 'sizes' && p.sizes.length > 0
                       const chosen = selectedSizes[item.product_id]
                       return (
                         <div key={item.id} className="px-4 py-3 border-t border-gray-50">

@@ -31,6 +31,9 @@ export const SUB_CATEGORIES_BY_ORG: Record<string, Record<string, string[]>> = {
 
 export const GENDER_LABELS: Record<string, string> = { male: 'Herren (HR)', female: 'Damen (DA)', unisex: 'Unisex' }
 
+export const BEZUGSART_LABELS: Record<string, string> = { massa: 'Massa', eigenbeschaffung: 'Eigenbeschaffung' }
+export const SIZE_MODE_LABELS: Record<string, string> = { sizes: 'Größen', universal: 'Universalgröße', none: 'Keine Größenangabe' }
+
 export const emptyProduct = (): ProductFormData => ({
   article_number: '',
   name: '',
@@ -44,4 +47,6 @@ export const emptyProduct = (): ProductFormData => ({
   organisation: 'Stadtpolizei',
   active: true,
   min_quantity: 0,
+  bezugsart: 'massa',
+  size_mode: 'sizes',
 })

@@ -12,7 +12,7 @@ import {
   inventoryKey,
 } from '../../lib/inventory'
 import { buildMassaDraft, sendMassaOrder, type MassaOrderDraft, type MassaSendResult } from '../../lib/massaOrder'
-import { generateKurzbrief } from '../../lib/printDocs'
+import { EIGENBESCHAFFUNG_ADDRESSEE, generateKurzbrief } from '../../lib/printDocs'
 import { ADMIN_TABS, PAGE_SIZE, type AdminTab } from './types'
 
 export function useOrders() {
@@ -41,7 +41,7 @@ export function useOrders() {
     const [ordersRes, invRes] = await Promise.all([
       supabase
         .from('orders')
-        .select('*, products(id,name,category,article_number,needs_tailoring), quarters(id,name), profiles(id,name,username,dienstnummer)')
+        .select('*, products(id,name,category,article_number,needs_tailoring,bezugsart,size_mode), quarters(id,name), profiles(id,name,username,dienstnummer)')
         .not('status', 'in', '("pending","pending_approval")')
         .order('created_at', { ascending: false }),
       supabase.from('inventory').select('product_id,size,quantity'),
@@ -182,44 +182,56 @@ export function useOrders() {
     load()
   }
 
+  // Getrennt nach Bezugsart: Massa-Artikel und eigenbeschaffte Artikel gehen
+  // in zwei eigene Lieferungen mit je eigenem Kurzbrief, statt alles pauschal
+  // an die Massa zu adressieren.
   async function createSammelbestellung() {
     const selected = tabOrders.filter(o => selectedIds.has(o.id))
     if (!selected.length) return
-    const groups: Record<string, { artNr: string; productName: string; size: string; totalQty: number }> = {}
-    selected.forEach(o => {
-      const key = `${o.product_id}__${o.size}`
-      if (!groups[key]) groups[key] = { artNr: o.products?.article_number ?? '–', productName: o.products?.name ?? '–', size: o.size, totalQty: 0 }
-      groups[key].totalQty += o.quantity
-    })
+    const massaOrders = selected.filter(o => o.products?.bezugsart !== 'eigenbeschaffung')
+    const eigenOrders = selected.filter(o => o.products?.bezugsart === 'eigenbeschaffung')
     setSaving(true)
     setError('')
-    // Create delivery and link orders
-    const { data: delivery, error: deliveryErr } = await supabase.from('deliveries').insert({
-      created_by: profile!.id,
-      status: 'ordered',
-    }).select('id').single()
-    if (deliveryErr) {
-      setSaving(false)
-      setError('Sammelbestellung konnte nicht erstellt werden. Bitte erneut versuchen.')
-      return
+    for (const group of [massaOrders, eigenOrders]) {
+      if (!group.length) continue
+      const { data: delivery, error: deliveryErr } = await supabase.from('deliveries').insert({
+        created_by: profile!.id,
+        status: 'ordered',
+      }).select('id').single()
+      if (deliveryErr) {
+        setSaving(false)
+        setError('Sammelbestellung konnte nicht erstellt werden. Bitte erneut versuchen.')
+        return
+      }
+      const deliveryId = delivery?.id ?? null
+      const results = await Promise.all(group.map(o =>
+        supabase.from('orders').update({
+          status: 'ordered_supplier',
+          updated_at: new Date().toISOString(),
+          ...(deliveryId ? { delivery_id: deliveryId } : {}),
+        }).eq('id', o.id)
+      ))
+      if (results.some(r => r.error)) {
+        setSaving(false)
+        setError('Sammelbestellung konnte nicht vollständig gespeichert werden. Bitte erneut versuchen.')
+        load()
+        return
+      }
+      const isEigenbeschaffung = group === eigenOrders
+      const groups: Record<string, { artNr: string; productName: string; size: string; totalQty: number }> = {}
+      group.forEach(o => {
+        const key = `${o.product_id}__${o.size}`
+        const size = o.products?.size_mode === 'sizes' ? o.size : ''
+        if (!groups[key]) groups[key] = { artNr: o.products?.article_number ?? '–', productName: o.products?.name ?? '–', size, totalQty: 0 }
+        groups[key].totalQty += o.quantity
+      })
+      logAudit('Sammelbestellung erstellt', `${group.length} Position(en) (${isEigenbeschaffung ? 'Eigenbeschaffung' : 'Massa'})`)
+      // Kurzbrief erst nach erfolgreichen DB-Updates drucken
+      generateKurzbrief(Object.values(groups), profile?.name ?? '–', new Date(), {
+        addressee: isEigenbeschaffung ? EIGENBESCHAFFUNG_ADDRESSEE : undefined,
+      })
     }
-    const deliveryId = delivery?.id ?? null
-    const results = await Promise.all(selected.map(o =>
-      supabase.from('orders').update({
-        status: 'ordered_supplier',
-        updated_at: new Date().toISOString(),
-        ...(deliveryId ? { delivery_id: deliveryId } : {}),
-      }).eq('id', o.id)
-    ))
     setSaving(false)
-    if (results.some(r => r.error)) {
-      setError('Sammelbestellung konnte nicht vollständig gespeichert werden. Bitte erneut versuchen.')
-      load()
-      return
-    }
-    logAudit('Sammelbestellung erstellt', `${selected.length} Positionen`)
-    // Kurzbrief erst nach erfolgreichen DB-Updates drucken
-    generateKurzbrief(Object.values(groups), profile?.name ?? '–')
     setSelectedIds(new Set()); load()
   }
 
@@ -293,14 +305,16 @@ export function useOrders() {
   }
 
   function openMassaPreview() {
-    const selected = tabOrders.filter(o => selectedIds.has(o.id))
+    // Nur Massa-Artikel gehen in die Massa-Sammelbestellung - eigenbeschaffte
+    // Artikel gehören nicht in diesen Kurzbrief.
+    const selected = tabOrders.filter(o => selectedIds.has(o.id) && o.products?.bezugsart !== 'eigenbeschaffung')
     if (!selected.length) return
     setMassaResult(null)
     setMassaDraft(buildMassaDraft(
       selected.map(o => ({
         articleNumber: o.products?.article_number ?? '',
         name: o.products?.name ?? '–',
-        size: o.size,
+        size: o.products?.size_mode === 'sizes' ? o.size : '–',
         quantity: o.quantity,
       })),
       { senderName: profile?.name ?? undefined },

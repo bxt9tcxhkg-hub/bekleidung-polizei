@@ -56,7 +56,7 @@ export default function Shop() {
   async function loadCart() {
     const { data } = await supabase
       .from('orders')
-      .select('*, products(id,name,category,sizes,price,needs_tailoring), quarters(id,name,status)')
+      .select('*, products(id,name,category,sizes,price,needs_tailoring,size_mode), quarters(id,name,status)')
       .eq('user_id', profile!.id)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
@@ -148,7 +148,8 @@ export default function Shop() {
       const stock = stockOf(sizeModal.product, sizeModal.size)
       const requestedTotal = (existing?.quantity ?? 0) + sizeModal.quantity
       if (requestedTotal > stock) {
-        setError(`Nur noch ${stock}× „${sizeModal.product.name}" (Gr. ${sizeLabel(sizeModal.size, true)}) am Lager – der Artikel wird nicht mehr nachbestellt.`)
+        const sizeSuffix = sizeModal.product.size_mode === 'sizes' ? ` (Gr. ${sizeLabel(sizeModal.size, true)})` : ''
+        setError(`Nur noch ${stock}× „${sizeModal.product.name}"${sizeSuffix} am Lager – der Artikel wird nicht mehr nachbestellt.`)
         return
       }
     }
@@ -375,7 +376,7 @@ export default function Shop() {
               <button onClick={() => setSizeModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-5 py-4 space-y-4">
-              {orderableSizes(sizeModal.product).length > 0 && (() => {
+              {sizeModal.product.size_mode === 'sizes' && orderableSizes(sizeModal.product).length > 0 && (() => {
                 const sizes = sortedSizes(orderableSizes(sizeModal.product))
                 const groups = groupSizes(sizes)
                 const isGrouped = groups !== null
@@ -485,7 +486,9 @@ export default function Shop() {
                     <div key={item.id} className="flex items-start gap-3 px-5 py-4">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 leading-snug">{item.products?.name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">Gr. {sizeLabel(item.size, true)}</p>
+                        {item.products?.size_mode === 'sizes' && (
+                          <p className="text-xs text-gray-400 mt-0.5">Gr. {sizeLabel(item.size, true)}</p>
+                        )}
                         <p className="text-xs font-semibold text-gray-700 mt-1">{fmtEUR(item.unit_price * item.quantity)}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">

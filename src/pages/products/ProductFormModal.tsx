@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction } from 'react'
 import { Plus, X } from 'lucide-react'
-import { CATEGORIES_BY_ORG, GENDER_LABELS, SIZES_COMMON, SUB_CATEGORIES_BY_ORG, type ProductFormData } from './constants'
+import type { ProductSizeMode } from '../../lib/types'
+import { BEZUGSART_LABELS, CATEGORIES_BY_ORG, GENDER_LABELS, SIZES_COMMON, SIZE_MODE_LABELS, SUB_CATEGORIES_BY_ORG, type ProductFormData } from './constants'
 
 interface ProductFormModalProps {
   editId: string | null
@@ -12,6 +13,7 @@ interface ProductFormModalProps {
   setCustomSizeInput: Dispatch<SetStateAction<string>>
   onToggleSize: (size: string) => void
   onAddCustomSize: () => void
+  onSetSizeMode: (mode: ProductSizeMode) => void
   onSave: () => void
   onClose: () => void
 }
@@ -26,6 +28,7 @@ export default function ProductFormModal({
   setCustomSizeInput,
   onToggleSize,
   onAddCustomSize,
+  onSetSizeMode,
   onSave,
   onClose,
 }: ProductFormModalProps) {
@@ -85,6 +88,18 @@ export default function ProductFormModal({
               ))}
             </div>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Bezugsart</label>
+            <div className="flex gap-2">
+              {(['massa', 'eigenbeschaffung'] as const).map(b => (
+                <button key={b} type="button" onClick={() => setForm(f => ({ ...f, bezugsart: b }))}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${form.bezugsart === b ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                  {BEZUGSART_LABELS[b]}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Steuert, in welchen Kurzbrief der Artikel bei Bestellungen einfließt.</p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Preis (€)</label>
@@ -103,45 +118,64 @@ export default function ProductFormModal({
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-2">Größen</label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {SIZES_COMMON.map(s => (
-                <button key={s} type="button" onClick={() => onToggleSize(s)} className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${form.sizes.includes(s) ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
-                  {s}
+            <label className="block text-xs font-medium text-gray-600 mb-2">Größenart</label>
+            <div className="flex gap-2 mb-3">
+              {(['sizes', 'universal', 'none'] as const).map(m => (
+                <button key={m} type="button" onClick={() => onSetSizeMode(m)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-colors ${form.size_mode === m ? 'bg-blue-700 text-white border-blue-700' : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'}`}>
+                  {SIZE_MODE_LABELS[m]}
                 </button>
               ))}
             </div>
-            {form.sizes.filter(s => !SIZES_COMMON.includes(s)).length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-2">
-                {form.sizes.filter(s => !SIZES_COMMON.includes(s)).map(s => (
-                  <span key={s} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-800 text-white rounded-lg text-xs font-medium">
-                    {s}
-                    <button type="button" onClick={() => onToggleSize(s)} className="hover:text-blue-200 ml-0.5">
-                      <X className="w-3 h-3" />
+            {form.size_mode === 'sizes' && (
+              <>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {SIZES_COMMON.map(s => (
+                    <button key={s} type="button" onClick={() => onToggleSize(s)} className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${form.sizes.includes(s) ? 'bg-blue-800 text-white border-blue-800' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
+                      {s}
                     </button>
-                  </span>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {form.sizes.filter(s => !SIZES_COMMON.includes(s)).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {form.sizes.filter(s => !SIZES_COMMON.includes(s)).map(s => (
+                      <span key={s} className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-800 text-white rounded-lg text-xs font-medium">
+                        {s}
+                        <button type="button" onClick={() => onToggleSize(s)} className="hover:text-blue-200 ml-0.5">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Eigene Größe (z.B. 43, 36/32, One Size)..."
+                    value={customSizeInput}
+                    onChange={e => setCustomSizeInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onAddCustomSize() } }}
+                  />
+                  <button type="button" onClick={onAddCustomSize}
+                    className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors">
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Eigene Größe (z.B. 43, 36/32, One Size)..."
-                value={customSizeInput}
-                onChange={e => setCustomSizeInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onAddCustomSize() } }}
-              />
-              <button type="button" onClick={onAddCustomSize}
-                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition-colors">
-                <Plus className="w-4 h-4" />
-              </button>
+            {form.size_mode !== 'sizes' && (
+              <p className="text-xs text-gray-400">
+                {form.size_mode === 'universal' ? 'Der Artikel wird ohne Größenauswahl bestellt (intern als „Uni" geführt).' : 'Der Artikel wird komplett ohne Größe geführt.'}
+              </p>
+            )}
+          </div>
+          {form.size_mode === 'sizes' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Größentabelle (URL, optional)</label>
+              <input type="url" placeholder="https://..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.size_guide ?? ''} onChange={e => setForm(f => ({ ...f, size_guide: e.target.value || null }))} />
             </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Größentabelle (URL, optional)</label>
-            <input type="url" placeholder="https://..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={form.size_guide ?? ''} onChange={e => setForm(f => ({ ...f, size_guide: e.target.value || null }))} />
-          </div>
+          )}
           <div className="flex items-center gap-3">
             <input type="checkbox" id="tailoring" checked={form.needs_tailoring} onChange={e => setForm(f => ({ ...f, needs_tailoring: e.target.checked }))} className="rounded" />
             <label htmlFor="tailoring" className="text-sm text-gray-700">Benötigt Schneiderei</label>
