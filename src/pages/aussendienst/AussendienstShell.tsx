@@ -8,7 +8,8 @@ import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
 import { personDisplayName } from '../../lib/register'
 import { loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
-import { FAHNDUNG_ART_LABEL, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
+import { FAHNDUNG_ART_LABEL, locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
+import { parseKilometerLocation } from '../../lib/roadKilometer'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
@@ -93,6 +94,8 @@ export default function AussendienstShell() {
   const [editingAuftrag, setEditingAuftrag] = useState<ZentraleEntry | null>(null)
   const [auftrag, setAuftrag] = useState<AuftragFormState>(EMPTY_AUFTRAG)
   const [auftragError, setAuftragError] = useState('')
+  const [auftragLocating, setAuftragLocating] = useState(false)
+  const [auftragLocateError, setAuftragLocateError] = useState('')
   const [notice, setNotice] = useState('')
   const [showBaustelleForm, setShowBaustelleForm] = useState(false)
   const [baustelleReport, setBaustelleReport] = useState<BaustelleReportState>(EMPTY_BAUSTELLE_REPORT)
@@ -186,10 +189,44 @@ export default function AussendienstShell() {
     setShowMangelForm(false); setCheckNote(''); await load()
   }
 
-  function openNewAuftrag() { setEditingAuftrag(null); setAuftrag(EMPTY_AUFTRAG); setAuftragError(''); setShowAuftragForm(true) }
-  function openEditAuftrag(item: ZentraleEntry) { setEditingAuftrag(item); setAuftrag({ title: item.title, description: item.description ?? '', location: item.location ?? '', lat: item.location_lat, lng: item.location_lng, zeitfenster: item.zeitfenster ?? '', validFrom: item.valid_from?.slice(0, 10) ?? '', validUntil: item.valid_until?.slice(0, 10) ?? '', targetFunction: item.target_function ?? 'beide' }); setAuftragError(''); setShowAuftragForm(true) }
+  function openNewAuftrag() { setEditingAuftrag(null); setAuftrag(EMPTY_AUFTRAG); setAuftragError(''); setAuftragLocateError(''); setShowAuftragForm(true) }
+  function openEditAuftrag(item: ZentraleEntry) {
+    const kilometerLocation = parseKilometerLocation(item.location)
+    const { street, houseNumber } = kilometerLocation
+      ? { street: kilometerLocation.roadName, houseNumber: '' }
+      : locationParts(item.location)
+    setEditingAuftrag(item)
+    setAuftrag({
+      title: item.title, description: item.description ?? '',
+      locationMode: kilometerLocation ? 'kilometer' : 'address',
+      street, houseNumber,
+      houseNumberUnknown: Boolean(!kilometerLocation && street && !houseNumber),
+      roadQuery: kilometerLocation ? `${kilometerLocation.roadName} (${kilometerLocation.roadNumber})` : '',
+      roadNumber: kilometerLocation?.roadNumber ?? '',
+      roadName: kilometerLocation?.roadName ?? '',
+      kilometer: kilometerLocation?.kilometer ?? '',
+      kilometerFrom: null, kilometerTo: null,
+      location: item.location ?? '', lat: item.location_lat, lng: item.location_lng, coordsPrecise: item.location_lat !== null,
+      zeitfenster: item.zeitfenster ?? '', validFrom: item.valid_from?.slice(0, 10) ?? '', validUntil: item.valid_until?.slice(0, 10) ?? '',
+      targetFunction: item.target_function ?? 'beide',
+    })
+    setAuftragError(''); setAuftragLocateError(''); setShowAuftragForm(true)
+  }
+  async function locateAuftrag(queryOverride?: string) {
+    const queried = (queryOverride ?? auftrag.location).trim()
+    if (!queried) return
+    setAuftragLocating(true); setAuftragLocateError('')
+    const result = await geocodeLocation(queried)
+    setAuftragLocating(false)
+    if (!result) { setAuftragLocateError('Ort konnte nicht gefunden werden.'); return }
+    setAuftrag(current => current.location.trim() === queried ? { ...current, lat: result.lat, lng: result.lng, coordsPrecise: true } : current)
+  }
   async function saveAuftrag() {
     if (!auftrag.title.trim()) { setAuftragError('Bitte eine Bezeichnung eingeben.'); return }
+    if (auftrag.locationMode === 'kilometer' && (!auftrag.roadNumber || !auftrag.kilometer || auftrag.lat === null || auftrag.lng === null || !auftrag.coordsPrecise)) {
+      setAuftragError('Bitte Landesstraße und Kilometer auswählen und den amtlichen Kartenpunkt ermitteln.')
+      return
+    }
     setSaving(true)
     const payload = { category: 'kontrollauftrag' as const, title: auftrag.title.trim(), description: auftrag.description.trim() || null, location: auftrag.location.trim() || null, location_lat: auftrag.lat, location_lng: auftrag.lng, zeitfenster: auftrag.zeitfenster.trim() || null, valid_from: auftrag.validFrom || null, valid_until: auftrag.validUntil || null, target_function: auftrag.targetFunction }
     const response = editingAuftrag ? await supabase.from('zentrale_entries').update(payload).eq('id', editingAuftrag.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
@@ -259,7 +296,7 @@ export default function AussendienstShell() {
 
     {!loading ? <Outlet context={ctx} /> : null}
 
-    {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}
+    {showAuftragForm ? <AuftragModal auftrag={auftrag} setAuftrag={setAuftrag} editing={editingAuftrag} saving={saving} error={auftragError} locating={auftragLocating} locateError={auftragLocateError} locate={locateAuftrag} close={() => setShowAuftragForm(false)} save={saveAuftrag} remove={deleteAuftrag} /> : null}
     {showBaustelleForm ? <BaustelleReportModal report={baustelleReport} setReport={setBaustelleReport} saving={baustelleSaving} error={baustelleError} close={() => setShowBaustelleForm(false)} save={saveBaustelleReport} /> : null}
   </div>
 }

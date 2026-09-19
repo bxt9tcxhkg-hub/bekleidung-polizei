@@ -1,9 +1,13 @@
-import { useState, type Dispatch, type SetStateAction } from 'react'
-import { CheckCircle2, ChevronDown, Circle, MapPin, Pencil, Printer, Trash2 } from 'lucide-react'
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { CheckCircle2, ChevronDown, Circle, Pencil, Printer, Trash2 } from 'lucide-react'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import LeafletMap from '../../components/LeafletMap'
-import { DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
-import { geocodeLocation } from '../../lib/geocode'
+import StreetAutocomplete, { type StreetAutocompleteHandle } from '../../components/StreetAutocomplete'
+import RoadKilometerPicker from '../../components/RoadKilometerPicker'
+import { composeIncidentLocation, DISPOSITION_LABEL, formatTime } from '../../lib/zentraleShared'
+import { reverseGeocode, type StreetSuggestion } from '../../lib/geocode'
+import { lookupParcel } from '../../lib/kataster'
+import { composeKilometerLocation } from '../../lib/roadKilometer'
 import { nearbyByLine, type LatLng } from '../../lib/geo'
 import { ZIELFUNKTION_LABEL, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { useAuth } from '../../contexts/AuthContext'
@@ -115,38 +119,85 @@ export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canM
   })}</div>
 }
 
-export function AuftragModal({ auftrag, setAuftrag, editing, saving, error, close, save, remove }: { auftrag: AuftragFormState; setAuftrag: Dispatch<SetStateAction<AuftragFormState>>; editing: ZentraleEntry | null; saving: boolean; error: string; close: () => void; save: () => Promise<void>; remove: () => Promise<void> }) {
+export function AuftragModal({ auftrag, setAuftrag, editing, saving, error, locating, locateError, locate, close, save, remove }: { auftrag: AuftragFormState; setAuftrag: Dispatch<SetStateAction<AuftragFormState>>; editing: ZentraleEntry | null; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void>; remove: () => Promise<void> }) {
   const patch = (values: Partial<AuftragFormState>) => setAuftrag(current => ({ ...current, ...values }))
-  const [locating, setLocating] = useState(false)
-  const [locateError, setLocateError] = useState('')
-  async function locate() {
-    if (!auftrag.location.trim()) { setLocateError('Bitte zuerst einen Ort eintragen.'); return }
-    setLocating(true); setLocateError('')
-    const result = await geocodeLocation(auftrag.location)
-    setLocating(false)
-    if (!result) { setLocateError('Die Position wurde nicht gefunden. Bitte Ort prüfen oder auf der Karte anklicken.'); return }
-    patch({ lat: result.lat, lng: result.lng })
+  const streetRef = useRef<StreetAutocompleteHandle>(null)
+  const [mapResolving, setMapResolving] = useState(false)
+  const [mapError, setMapError] = useState('')
+
+  async function handleMapClick(lat: number, lng: number) {
+    patch({
+      locationMode: 'address',
+      lat, lng, coordsPrecise: true,
+      roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null,
+    })
+    setMapError('')
+    setMapResolving(true)
+    const [result, parcel] = await Promise.all([reverseGeocode(lat, lng), lookupParcel(lat, lng)])
+    setMapResolving(false)
+    const street = result?.street || auftrag.street
+    const houseNumber = result?.houseNumber || auftrag.houseNumber
+    const base = (result && (result.street || result.houseNumber))
+      ? composeIncidentLocation(street, houseNumber, false)
+      : auftrag.location
+    const location = parcel?.label ? (base ? `${base} · ${parcel.label}` : parcel.label) : base
+    if (!result || (!result.street && !result.houseNumber)) {
+      setMapError('Adresse zum gewählten Punkt konnte nicht ermittelt werden - Koordinate wurde trotzdem übernommen.')
+      if (parcel?.label) patch({ location: location || parcel.label })
+      return
+    }
+    patch({ street, houseNumber, houseNumberUnknown: false, location })
   }
-  return <Modal title={editing ? 'Kontrollauftrag bearbeiten' : 'Kontrollauftrag anlegen'} close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1fr)] gap-5">
+
+  return <Modal title={editing ? 'Kontrollauftrag bearbeiten' : 'Kontrollauftrag anlegen'} close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(480px,1.1fr)] gap-5">
     <div className="space-y-4">
       <Field label="Bezeichnung *" value={auftrag.title} onChange={value => patch({ title: value })} />
       <Area label="Welche Kontrollen sind durchzuführen" value={auftrag.description} onChange={value => patch({ description: value })} />
+      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Ort</p>
+      <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1">
+        <button type="button" onClick={() => patch({ locationMode: 'address', roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, location: composeIncidentLocation(auftrag.street, auftrag.houseNumber, auftrag.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${auftrag.locationMode === 'address' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straße und Hausnummer</button>
+        <button type="button" onClick={() => patch({ locationMode: 'kilometer', roadQuery: auftrag.roadName || auftrag.street, roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, houseNumber: '', houseNumberUnknown: false, location: '', lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${auftrag.locationMode === 'kilometer' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straßenkilometer</button>
+      </div>
+      {auftrag.locationMode === 'address' ? <>
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_auto] gap-4 items-start">
+          <StreetAutocomplete
+            ref={streetRef}
+            label="Straße"
+            value={auftrag.street}
+            onChange={value => patch({ street: value, lat: null, lng: null, coordsPrecise: false, location: composeIncidentLocation(value, auftrag.houseNumber, auftrag.houseNumberUnknown) })}
+            onSelect={(suggestion: StreetSuggestion) => {
+              const houseNumber = suggestion.houseNumber || auftrag.houseNumber
+              const composed = composeIncidentLocation(suggestion.street, houseNumber, suggestion.houseNumber ? false : auftrag.houseNumberUnknown)
+              patch({ street: suggestion.street, houseNumber, houseNumberUnknown: suggestion.houseNumber ? false : auftrag.houseNumberUnknown, lat: suggestion.lat, lng: suggestion.lng, coordsPrecise: Boolean(suggestion.houseNumber), location: composed })
+              void lookupParcel(suggestion.lat, suggestion.lng).then(parcel => { if (parcel?.label) patch({ location: `${composed} · ${parcel.label}` }) })
+              if (houseNumber.trim() && !suggestion.houseNumber) void locate(composed)
+            }}
+          />
+          <div>
+            <Field label="Hausnummer" value={auftrag.houseNumber} disabled={auftrag.houseNumberUnknown} onChange={value => patch({ houseNumber: value, location: composeIncidentLocation(auftrag.street, value, auftrag.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} onBlur={() => { if (auftrag.street.trim() && auftrag.houseNumber.trim()) void locate() }} onKeyDown={event => { if (event.key === 'Enter' && auftrag.street.trim()) { event.preventDefault(); void locate() } }} />
+            <button type="button" onClick={() => { const nextUnknown = !auftrag.houseNumberUnknown; patch({ houseNumberUnknown: nextUnknown, houseNumber: '', location: composeIncidentLocation(auftrag.street, '', nextUnknown), lat: null, lng: null, coordsPrecise: false }) }} className={`mt-2 text-xs font-semibold ${auftrag.houseNumberUnknown ? 'text-blue-700' : 'text-gray-500'}`}>{auftrag.houseNumberUnknown ? '✓ HNr unbekannt' : 'HNr unbekannt'}</button>
+          </div>
+          <button type="button" onClick={() => { if (auftrag.houseNumber.trim() && !auftrag.houseNumberUnknown) void locate(); else streetRef.current?.search() }} disabled={auftrag.street.trim().length < 3} className="mt-5 shrink-0 px-3 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 disabled:opacity-50">Suchen</button>
+        </div>
+        {locating ? <p className="text-xs text-gray-500">Suche…</p> : null}
+        {locateError ? <p className="text-xs text-red-700 mt-1">{locateError}<button type="button" onClick={() => void locate()} className="ml-2 font-semibold text-blue-700">Erneut versuchen</button></p> : null}
+      </> : <RoadKilometerPicker query={auftrag.roadQuery} roadNumber={auftrag.roadNumber} roadName={auftrag.roadName} kilometer={auftrag.kilometer} kilometerFrom={auftrag.kilometerFrom} kilometerTo={auftrag.kilometerTo} onQueryChange={value => patch({ roadQuery: value, roadNumber: '', roadName: '', kilometerFrom: null, kilometerTo: null, street: '', location: '', lat: null, lng: null, coordsPrecise: false })} onRoadSelect={road => patch({ roadQuery: `${road.roadName} (${road.roadNumber})`, roadNumber: road.roadNumber, roadName: road.roadName, kilometerFrom: road.fromKm, kilometerTo: road.toKm, street: road.roadName, location: auftrag.kilometer ? composeKilometerLocation(road.roadName, road.roadNumber, auftrag.kilometer) : '', lat: null, lng: null, coordsPrecise: false })} onKilometerChange={value => patch({ kilometer: value, location: auftrag.roadNumber && value ? composeKilometerLocation(auftrag.roadName, auftrag.roadNumber, value) : '', lat: null, lng: null, coordsPrecise: false })} onResolved={point => patch({ kilometer: point.kilometer, location: composeKilometerLocation(auftrag.roadName, point.roadNumber, point.kilometer), lat: point.lat, lng: point.lng, coordsPrecise: true })} />}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Ort" value={auftrag.location} onChange={value => patch({ location: value, lat: null, lng: null })} />
         <label className="text-xs font-medium text-gray-600">Zielfunktion<select className={inputClass} value={auftrag.targetFunction} onChange={event => patch({ targetFunction: event.target.value as KontrollauftragZielfunktion })}>{Object.entries(ZIELFUNKTION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <Field label="Von" type="date" value={auftrag.validFrom} onChange={value => patch({ validFrom: value })} />
         <Field label="Bis" type="date" value={auftrag.validUntil} onChange={value => patch({ validUntil: value })} />
+        <Field label="Uhrzeit / Zeitfenster (optional)" value={auftrag.zeitfenster} onChange={value => patch({ zeitfenster: value })} />
       </div>
-      <Field label="Uhrzeit / Zeitfenster (optional)" value={auftrag.zeitfenster} onChange={value => patch({ zeitfenster: value })} />
-      <button type="button" onClick={() => void locate()} disabled={locating} className="inline-flex items-center gap-2 rounded-lg border border-blue-300 px-3 py-2 text-sm font-medium text-blue-800 disabled:opacity-60"><MapPin className="w-4 h-4" />{locating ? 'Position wird gesucht…' : 'Ort auf Karte suchen'}</button>
-      {locateError ? <p className="text-xs text-red-700">{locateError}</p> : null}
       {error ? <ErrorMessage text={error} /> : null}
       <div className="flex flex-wrap gap-3 pt-2">{editing ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 text-red-700 text-sm font-medium px-3 py-2.5 rounded-lg hover:bg-red-50"><Trash2 className="w-4 h-4" /> Endgültig löschen</button> : <span className="mr-auto" />}<Actions saving={saving} close={close} save={save} /></div>
     </div>
     <div>
       <p className="text-xs font-medium text-gray-600 mb-1">Ort auf der Karte</p>
-      <LeafletMap markers={auftrag.lat !== null && auftrag.lng !== null ? [{ lat: auftrag.lat, lng: auftrag.lng, popup: auftrag.location || 'Kontrollauftrag' }] : []} onMapClick={(lat, lng) => patch({ lat, lng })} height={480} />
-      <p className="text-xs text-gray-500 mt-1.5">Alternativ zur Adresssuche: auf die Karte klicken, um den Ort direkt dort zu setzen.</p>
+      <LeafletMap markers={auftrag.lat !== null && auftrag.lng !== null ? [{ lat: auftrag.lat, lng: auftrag.lng, popup: auftrag.location || 'Kontrollauftrag' }] : []} onMapClick={(lat, lng) => void handleMapClick(lat, lng)} height={560} incidentKey={editing ? 'bearbeiten' : 'neu'} />
+      <p className="text-xs text-gray-500 mt-1.5">Alternativ zur Eingabe: auf die Karte klicken, um den Ort direkt dort zu setzen.</p>
+      {auftrag.locationMode === 'kilometer' ? <p className="text-[11px] text-gray-500 mt-1">Kilometrierung: Datenquelle Land Vorarlberg – data.vorarlberg.gv.at (CC BY 4.0)</p> : null}
+      {mapResolving ? <p className="text-xs text-gray-500 mt-1">Adresse wird ermittelt…</p> : null}
+      {mapError ? <p className="text-xs text-amber-700 mt-1">{mapError}</p> : null}
     </div>
   </div></Modal>
 }

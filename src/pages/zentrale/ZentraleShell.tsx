@@ -13,15 +13,10 @@ import { personDisplayName, usePersons } from '../../lib/register'
 import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import { IncidentModal } from './zentraleShared'
-import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, operationalToday, startOfOperationalDayIso, type IncidentFormState } from '../../lib/zentraleShared'
+import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, locationParts, operationalToday, startOfOperationalDayIso, type IncidentFormState } from '../../lib/zentraleShared'
 
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
 function normalizePhone(value: string | null | undefined) { return (value ?? '').replace(/\D/g, '') }
-function incidentLocationParts(location: string | null): { street: string; houseNumber: string } {
-  const value = (location ?? '').trim()
-  const match = value.match(/^(.*\D)\s+(\d+[a-zA-Z]?(?:[/-][\w-]+)?)$/)
-  return match ? { street: match[1].trim(), houseNumber: match[2] } : { street: value, houseNumber: '' }
-}
 function addressesMatch(a: string, b: string): boolean {
   const wordsA = normalizeText(a).split(' ').filter(Boolean)
   const wordsB = normalizeText(b).split(' ').filter(Boolean)
@@ -248,7 +243,7 @@ export default function ZentraleShell() {
     const kilometerLocation = parseKilometerLocation(item.location)
     const { street, houseNumber } = kilometerLocation
       ? { street: kilometerLocation.roadName, houseNumber: '' }
-      : incidentLocationParts(item.location)
+      : locationParts(item.location)
     setEditingIncident(item)
     setIncident({
       callerPhone: item.caller_phone ?? '',

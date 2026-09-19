@@ -56,6 +56,13 @@ export function composeIncidentLocation(street: string, houseNumber: string, hou
   return `${trimmedStreet} ${houseNumber.trim()}`
 }
 
+/** Zerlegt eine gespeicherte Ortsangabe ("Straße 12") wieder in Straße/Hausnummer, zum Vorbefüllen beim Bearbeiten. */
+export function locationParts(location: string | null): { street: string; houseNumber: string } {
+  const value = (location ?? '').trim()
+  const match = value.match(/^(.*\D)\s+(\d+[a-zA-Z]?(?:[/-][\w-]+)?)$/)
+  return match ? { street: match[1].trim(), houseNumber: match[2] } : { street: value, houseNumber: '' }
+}
+
 // Analog zu EMPTY_BAUSTELLE_FORM, aber ohne Bezeichnung/Bemerkung/Gültigkeit -
 // hier wird nur einmalig die Position einer Stammdaten-Straße festgelegt
 // (siehe ZentraleStrassenzustand.tsx), nicht ein einzelner Bericht.
