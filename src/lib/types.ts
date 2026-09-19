@@ -220,7 +220,7 @@ export interface Grundausstattung {
   products?: Product
 }
 
-export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen' | 'fuhrpark' | 'zentrale'
+export type PortalArea = 'bekleidung' | 'einsatz_mt' | 'schulungen' | 'fuhrpark' | 'zentrale' | 'datenpflege'
 
 export interface PortalAreaRole {
   user_id: string
@@ -1757,7 +1757,7 @@ export type Database = {
       move_einsatz_material: { Args: { p_material_id: string; p_target_tab_id: string }; Returns: undefined }
       save_portal_profile_v2: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null }; Returns: undefined }
       save_portal_profile_v3: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null }; Returns: undefined }
-      save_portal_profile_v4: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null; p_zentrale_roles: string[] | null }; Returns: undefined }
+      save_portal_profile_v5: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null; p_zentrale_roles: string[] | null; p_datenpflege_roles: string[] | null }; Returns: undefined }
       can_manage_schulungen: { Args: Record<string, never>; Returns: boolean }
       can_manage_fuhrpark: { Args: Record<string, never>; Returns: boolean }
       is_vehicle_responsible: { Args: { p_vehicle_id: string }; Returns: boolean }

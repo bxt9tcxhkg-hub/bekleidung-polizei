@@ -12,7 +12,9 @@ import type { ZentraleFahndung } from '../../lib/types'
 export default function StammdatenFahndungen() {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive, isZentralistOnDuty } = useAuth()
   const roles = areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []
-  const canManage = isStrictAdmin || isGenehmiger || (operativeModeActive && roles.some(role => ['sachbearbeiter', 'admin'].includes(role)))
+  const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
+  const canManage = isStrictAdmin || isGenehmiger
+    || (operativeModeActive && (roles.some(role => ['sachbearbeiter', 'admin'].includes(role)) || datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))))
   const canOperate = canManage || isZentralistOnDuty
   const [items, setItems] = useState<ZentraleFahndung[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,7 +33,7 @@ export default function StammdatenFahndungen() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
 
   async function uploadPdf(files: FileList | File[]) {
     const file = Array.from(files)[0]

@@ -188,21 +188,25 @@ export default function Portal() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <PortalSection title="Operativer Bereich" description="Interne Unterstützung für die tägliche Dienstabwicklung" tone="operativ">
+          {/* Zentrale/Außendienst/Innendienst hängen noch am Bereich "zentrale" -
+              die tagesfunktionsbasierte Zugriffssteuerung (nur die heute
+              zugeteilte Funktion sichtbar, Admin sieht immer alle drei) folgt
+              in einer eigenen, weiteren Migration. */}
           {hasAreaAccess('zentrale') ? <NavTile to="/zentrale" label="Zentrale" description="Operative Lage, Aufträge, Alarmierung und Schichtübergabe" icon={Radio} /> : null}
           {hasAreaAccess('zentrale') ? <NavTile to="/aussendienst" label="Außendienst / Streife" description="Meine Streife, Fahrzeugcheck und Kontrollaufträge" icon={Shield} /> : null}
           {hasAreaAccess('zentrale') ? <NavTile to="/innendienst" label="Innendienst" description="Kasse, Bescheide, Verstöße und Übergabe" icon={Building2} /> : null}
-          {hasAreaAccess('zentrale') ? <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – jederzeit erfassbar, unabhängig vom heutigen Dienst" icon={Mail} /> : null}
         </PortalSection>
 
-        <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung und Fuhrpark" tone="organisation">
-          {hasAreaAccess('zentrale') ? (
+        <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung, Fuhrpark und Datenpflege" tone="organisation">
+          {hasAreaAccess('zentrale') || hasAreaAccess('datenpflege') ? (
             <NavTile
               to="/stammdaten"
               label="Stammdaten & Nachschlagewerke"
-              description={isStrictAdmin ? 'Schlüssel, Kontakte, Personen und Objekte zentral verwalten' : 'Schlüssel, Kontakte, Personen und Objekte nachschlagen'}
+              description={isStrictAdmin || hasAreaAccess('datenpflege') ? 'Schlüssel, Kontakte, Fahndungen und Objekte pflegen' : 'Schlüssel, Kontakte, Personen und Objekte nachschlagen'}
               icon={Database}
             />
           ) : null}
+          <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – für jeden Benutzer jederzeit erfassbar" icon={Mail} />
           {apps.map(app => <AppTile key={app.id} app={app} />)}
           {hasAreaAccess('schulungen') ? <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} /> : null}
           {hasAreaAccess('fuhrpark') ? <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} /> : null}

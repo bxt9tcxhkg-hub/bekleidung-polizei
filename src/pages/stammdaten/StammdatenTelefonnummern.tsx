@@ -12,8 +12,10 @@ const KATEGORIE_LABEL: Record<TelefonnummerKategorie, string> = { intern: 'Inter
 const emptyForm = { kategorie: 'intern' as TelefonnummerKategorie, bezeichnung: '', nummer: '', hinweis: '', sortierung: '0' }
 
 export default function StammdatenTelefonnummernPage() {
-  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger } = useAuth()
-  const canManage = isStrictAdmin || isGenehmiger
+  const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles, operativeModeActive } = useAuth()
+  const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
+  const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isGenehmiger || isDatenpflegeSachbearbeiter
   const { nummern, loading, error: loadError, reload } = useWichtigeTelefonnummern()
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -22,7 +24,7 @@ export default function StammdatenTelefonnummernPage() {
   const [editing, setEditing] = useState<WichtigeTelefonnummer | null>(null)
   const [form, setForm] = useState(emptyForm)
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
 
   function openNew(kategorie: TelefonnummerKategorie) { setEditing(null); setForm({ ...emptyForm, kategorie }); setShowForm(true); setError('') }
   function openEdit(item: WichtigeTelefonnummer) { setEditing(item); setForm({ kategorie: item.kategorie, bezeichnung: item.bezeichnung, nummer: item.nummer, hinweis: item.hinweis ?? '', sortierung: String(item.sortierung) }); setShowForm(true); setError('') }

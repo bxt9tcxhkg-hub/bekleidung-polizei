@@ -220,6 +220,7 @@ Deno.serve(async (req) => {
     schulungen_roles?: string[]
     fuhrpark_roles?: string[]
     zentrale_roles?: string[]
+    datenpflege_roles?: string[]
   }
   try {
     body = await req.json()
@@ -456,6 +457,13 @@ Deno.serve(async (req) => {
       : ['user']
     if (zentraleRoles.length > 0) {
       areaRows.push({ user_id: created.user.id, area: 'zentrale', roles: zentraleRoles })
+    }
+    const requestedDatenpflegeRoles = Array.isArray(body.datenpflege_roles) ? body.datenpflege_roles : ['user']
+    const datenpflegeRoles = callerRoles.includes('admin')
+      ? [...new Set(requestedDatenpflegeRoles.filter((role) => allowedEinsatzRoles.has(role)))]
+      : ['user']
+    if (datenpflegeRoles.length > 0) {
+      areaRows.push({ user_id: created.user.id, area: 'datenpflege', roles: datenpflegeRoles })
     }
   }
   if (areaRows.length > 0) {

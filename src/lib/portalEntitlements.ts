@@ -18,7 +18,7 @@
 
 import type { PortalApp } from './portalApps'
 
-export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen', 'fuhrpark', 'zentrale'] as const
+export const PORTAL_AREAS = ['bekleidung', 'einsatz_mt', 'schulungen', 'fuhrpark', 'zentrale', 'datenpflege'] as const
 export type PortalArea = (typeof PORTAL_AREAS)[number]
 
 export const BEKLEIDUNG_ROLES = ['user', 'sachbearbeiter', 'genehmiger', 'admin'] as const
@@ -26,13 +26,15 @@ export const EINSATZ_MT_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const SCHULUNGEN_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const FUHRPARK_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 export const ZENTRALE_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
+export const DATENPFLEGE_ROLES = ['user', 'sachbearbeiter', 'admin'] as const
 
 export type BekleidungRole = (typeof BEKLEIDUNG_ROLES)[number]
 export type EinsatzMtRole = (typeof EINSATZ_MT_ROLES)[number]
 export type SchulungenRole = (typeof SCHULUNGEN_ROLES)[number]
 export type FuhrparkRole = (typeof FUHRPARK_ROLES)[number]
 export type ZentraleRole = (typeof ZENTRALE_ROLES)[number]
-export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole | FuhrparkRole | ZentraleRole
+export type DatenpflegeRole = (typeof DATENPFLEGE_ROLES)[number]
+export type PortalAreaRoleName = BekleidungRole | EinsatzMtRole | SchulungenRole | FuhrparkRole | ZentraleRole | DatenpflegeRole
 
 export const AREA_ROLES = {
   bekleidung: BEKLEIDUNG_ROLES,
@@ -40,6 +42,7 @@ export const AREA_ROLES = {
   schulungen: SCHULUNGEN_ROLES,
   fuhrpark: FUHRPARK_ROLES,
   zentrale: ZENTRALE_ROLES,
+  datenpflege: DATENPFLEGE_ROLES,
 } as const
 
 export const AREA_LABELS: Record<PortalArea, string> = {
@@ -48,6 +51,7 @@ export const AREA_LABELS: Record<PortalArea, string> = {
   schulungen: 'Schulungen',
   fuhrpark: 'Fuhrpark & Fahrzeuge',
   zentrale: 'Zentrale',
+  datenpflege: 'Datenpflege',
 }
 
 export const AREA_ROLE_LABELS: Record<PortalAreaRoleName, string> = {
@@ -160,6 +164,14 @@ export function parseZentraleRoles(roles: readonly string[] | null | undefined):
 }
 
 export function defaultZentraleRoleForNewUser(): ZentraleRole {
+  return 'user'
+}
+
+export function parseDatenpflegeRoles(roles: readonly string[] | null | undefined): DatenpflegeRole[] {
+  return sortAreaRoles((roles ?? []).filter(role => isAllowedAreaRole('datenpflege', role))) as DatenpflegeRole[]
+}
+
+export function defaultDatenpflegeRoleForNewUser(): DatenpflegeRole {
   return 'user'
 }
 

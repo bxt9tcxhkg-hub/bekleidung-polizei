@@ -10,8 +10,11 @@ import { useAuth } from '../contexts/AuthContext'
  * Innendienst - die Zentrale-Übersicht zeigt dafür nur die Anzahl offener Fälle.
  */
 export default function RsaRsb() {
-  const { hasAreaAccess } = useAuth()
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  // Für jeden aktiven Benutzer der Stadtpolizei offen (unabhängig von jedem
+  // Portalbereich, siehe RLS-Migration 20260919060000) - schwer erreichbare
+  // Personen können unabhängig von der eigenen Tagesfunktion auftauchen.
+  const { profile, loading } = useAuth()
+  if (!loading && !profile) return <Navigate to="/" replace />
 
   return <div>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">RSa/RSb & Vernehmungen</h1><p className="text-sm text-gray-500 mt-1">Schwer erreichbare Personen – unabhängig vom heutigen Dienst erfassbar.</p></div>

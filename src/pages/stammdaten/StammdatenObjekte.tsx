@@ -19,9 +19,13 @@ type LinkCounts = { avBv: number; fahndungen: number; schluessel: number; kontak
 const emptyForm = { strasse: '', hausnummer: '', plz: '', ort: '', label: '', note: '' }
 
 export default function StammdatenObjekte() {
-  const { profile, hasAreaAccess, isStrictAdmin } = useAuth()
-  // Die Register sind für die Zentrale lesbar; ihre Pflege ist ausschließlich Aufgabe der Administration.
-  const canManage = isStrictAdmin
+  const { profile, hasAreaAccess, isStrictAdmin, areaRoles, operativeModeActive } = useAuth()
+  // Objekte entstehen sowohl aus Einsätzen als auch eigenständig über die
+  // Datenpflege (gemeinsames Register) - Pflege obliegt der Administration
+  // oder den Datenpflege-Sachbearbeitern.
+  const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
+  const isDatenpflegeSachbearbeiter = operativeModeActive && datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
+  const canManage = isStrictAdmin || isDatenpflegeSachbearbeiter
   const [objects, setObjects] = useState<OperationalObject[]>([])
   const [links, setLinks] = useState<Record<string, LinkCounts>>({})
   const [loading, setLoading] = useState(true)
@@ -65,7 +69,7 @@ export default function StammdatenObjekte() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  if (!hasAreaAccess('zentrale')) return <Navigate to="/" replace />
+  if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege')) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
   function openEdit(item: OperationalObject) { setEditing(item); setForm({ strasse: item.strasse ?? '', hausnummer: item.hausnummer ?? '', plz: item.plz ?? '', ort: item.ort ?? '', label: item.label ?? '', note: item.note ?? '' }); setShowForm(true); setError('') }
@@ -116,7 +120,7 @@ export default function StammdatenObjekte() {
   return <div>
     <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zum Portal</Link>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Objekte</h1><p className="text-sm text-gray-500 mt-1">Adressen/Gebäude - wird von AV/BV & EV, Fahndungen, Schlüsseln und Kontakten als Verknüpfung genutzt.</p></div>
-    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führt ausschließlich die Administration durch.</div> : null}
+    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führen ausschließlich Administration und Datenpflege-Sachbearbeiter durch.</div> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (
