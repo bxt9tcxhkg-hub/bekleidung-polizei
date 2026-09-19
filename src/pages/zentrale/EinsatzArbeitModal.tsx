@@ -7,8 +7,9 @@ import { EREIGNISSTUFEN, STUFE_META, formatStamp, noteWithoutStufe, readKette, r
 import type { IncidentReport, OperationalPerson } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
 import EinsatzParteien from './EinsatzParteien'
+import EinsatzChecklisten from './EinsatzChecklisten'
 
-type Tab = 'checkliste' | 'parteien' | 'dateien'
+type Tab = 'checkliste' | 'ablauf' | 'parteien' | 'dateien'
 
 export default function EinsatzArbeitModal({
   item, canOperateZentrale, close, openEditIncident, completeIncident, persons, onPersonCreated, createdBy,
@@ -60,6 +61,7 @@ export default function EinsatzArbeitModal({
     <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
     <div className="flex gap-1 border-b border-gray-200">
       <button type="button" className={tabClass('checkliste')} onClick={() => setTab('checkliste')}>Checkliste</button>
+      <button type="button" className={tabClass('ablauf')} onClick={() => setTab('ablauf')}>Ablauf</button>
       <button type="button" className={tabClass('parteien')} onClick={() => setTab('parteien')}>Parteien</button>
       <button type="button" className={tabClass('dateien')} onClick={() => setTab('dateien')}>Dateien & Listen</button>
     </div>
@@ -87,7 +89,7 @@ export default function EinsatzArbeitModal({
         })}</div>
         <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
       </div>}
-    </div> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
+    </div> : tab === 'ablauf' ? <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} /> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
     {canOperateZentrale ? <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
       <button type="button" onClick={() => { close(); openEditIncident(item) }} className="text-sm font-medium border border-gray-300 px-3 py-2 rounded-lg">Meldung ändern</button>
       {item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item).then(close)} className="text-sm font-medium text-green-800 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}

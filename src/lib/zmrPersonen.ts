@@ -3,8 +3,10 @@
 // Build garantiert zur selben gehashten Asset-Datei wie im Bundle-Manifest
 // aufgelöst wird.
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { supabase } from './supabase'
+import type { NamenslistePerson, NamenslisteArt, NamenslistePersonStatus } from './types'
 
-export const LISTENARTEN = ['haus', 'kontrolle', 'evakuierung', 'befragung'] as const
+export const LISTENARTEN = ['haus', 'kontrolle', 'evakuierung', 'befragung', 'unterbringung'] as const
 export type Listenart = (typeof LISTENARTEN)[number]
 
 export const LISTENART_LABEL: Record<Listenart, string> = {
@@ -12,6 +14,7 @@ export const LISTENART_LABEL: Record<Listenart, string> = {
   kontrolle: 'Kontrolle',
   evakuierung: 'Evakuierung',
   befragung: 'Befragung',
+  unterbringung: 'Notunterkunft (Namensliste)',
 }
 
 export const LISTENART_SPALTEN: Record<Listenart, string> = {
@@ -19,17 +22,17 @@ export const LISTENART_SPALTEN: Record<Listenart, string> = {
   kontrolle: 'Name · kontrolliert ja/nein',
   evakuierung: 'Name · im Haus / draußen / unbekannt',
   befragung: 'Name · befragt ja/nein',
+  unterbringung: 'Name · Alter · m/w/d · Sprache · Familie · Telefon · Ort Unterkunft · Anmerkungen',
 }
 
-export type PersonenStatus = 'offen' | 'erledigt' | 'im_haus' | 'draussen' | 'unbekannt'
+export type PersonenStatus = NamenslistePersonStatus
 
-export interface EinsatzPerson {
-  id: string
-  name: string
-  geboren?: string
-  wohnung?: string
-  status: PersonenStatus
-}
+/** Deckungsgleich mit der DB-Zeile (einsatz_namensliste) - anders als die
+ * frühere localStorage-Version (lib/zmrPersonen.ts, Vor-DB-Stand) jetzt
+ * geteilter Server-Zustand, damit Zentrale UND Streife vor Ort dieselbe
+ * Liste sehen/bearbeiten (siehe Migration
+ * 20260919050000_einsatz_checkliste_namensliste.sql). */
+export type EinsatzPerson = NamenslistePerson
 
 const SKIP = /^(zmr|auszug|meldeamt|gemeinde|stadt|dornbirn|straße|strasse|gasse|platz|wohnung|top|stiege|stock|geburtsdatum|geboren|geschlecht|männlich|weiblich|familienstand|staatsangehörigkeit|österreich|seite|stand)$/i
 
@@ -88,9 +91,18 @@ const TOP = /\b(?:Top|Wohnung|Whg)\.?\s*([A-Z0-9/-]+)/i
 // verlässlichere Anker.
 const ZMR_ZEILE = /^(?:\d[\d\s]{4,}\d\s+)?(\p{Lu}[\p{L}.'-]*(?:\s+\p{Lu}[\p{L}.'-]*){0,3})\s+(\d{1,2}\.\d{1,2}\.\d{4})\b/u
 
-export function personenAusText(text: string): EinsatzPerson[] {
+/** Aus einem ZMR-Auszug/einer Abfrage erkannte Person - noch keine DB-Zeile
+ * (kein incident_id, keine id), da personenAusText() rein die Texterkennung
+ * übernimmt. addPersonen() legt daraus dann echte einsatz_namensliste-Zeilen an. */
+export interface ErkannteZmrPerson {
+  name: string
+  geboren?: string
+  wohnung?: string
+}
+
+export function personenAusText(text: string): ErkannteZmrPerson[] {
   const lines = text.split(/[\n\r;]+/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
-  const found: EinsatzPerson[] = []
+  const found: ErkannteZmrPerson[] = []
   const seen = new Set<string>()
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -113,28 +125,47 @@ export function personenAusText(text: string): EinsatzPerson[] {
     const keyName = `${label.toLowerCase()}|${geboren ?? ''}`
     if (seen.has(keyName)) continue
     seen.add(keyName)
-    found.push({ id: crypto.randomUUID(), name: label, geboren, wohnung, status: 'offen' })
+    found.push({ name: label, geboren, wohnung })
   }
   return found
 }
 
-function storageKey(incidentId: string) {
-  return `einsatz-personen:${incidentId}`
+/** Führender numerischer Teil einer Top-/Wohnungsnummer ("12", "3a",
+ * "Erdgeschoss") - für eine echte "nach Top-Nr sortiert"-Reihenfolge statt
+ * lexikografischem String-Vergleich (bei dem "10" vor "2" käme). Einträge
+ * ohne erkennbare Nummer landen ans Ende, alphabetisch sortiert. */
+function topNrSortKey(wohnung: string | null): [number, string] {
+  const match = wohnung?.match(/\d+/)
+  return match ? [Number(match[0]), wohnung ?? ''] : [Number.POSITIVE_INFINITY, wohnung ?? '']
 }
 
-export function readPersonenListe(incidentId: string): { art: Listenart; personen: EinsatzPerson[] } {
-  try {
-    const raw = localStorage.getItem(storageKey(incidentId))
-    if (!raw) return { art: 'haus', personen: [] }
-    const parsed = JSON.parse(raw) as { art?: Listenart; personen?: EinsatzPerson[] }
-    return { art: parsed.art && LISTENARTEN.includes(parsed.art) ? parsed.art : 'haus', personen: parsed.personen ?? [] }
-  } catch {
-    return { art: 'haus', personen: [] }
-  }
+export function sortiertNachTopNr(personen: readonly NamenslistePerson[]): NamenslistePerson[] {
+  return [...personen].sort((a, b) => {
+    const [numA, strA] = topNrSortKey(a.wohnung)
+    const [numB, strB] = topNrSortKey(b.wohnung)
+    return numA - numB || strA.localeCompare(strB, 'de-AT') || a.name.localeCompare(b.name, 'de-AT')
+  })
 }
 
-export function writePersonenListe(incidentId: string, art: Listenart, personen: EinsatzPerson[]) {
-  try {
-    localStorage.setItem(storageKey(incidentId), JSON.stringify({ art, personen }))
-  } catch { /* ignore */ }
+export async function loadPersonenliste(incidentId: string, art: NamenslisteArt): Promise<NamenslistePerson[]> {
+  const result = await supabase.from('einsatz_namensliste').select('*').eq('incident_id', incidentId).eq('listenart', art).order('created_at')
+  if (result.error) throw new Error('Die Liste konnte nicht geladen werden.')
+  return sortiertNachTopNr((result.data ?? []) as unknown as NamenslistePerson[])
+}
+
+export async function addPersonen(incidentId: string, art: NamenslisteArt, personen: readonly ErkannteZmrPerson[], createdBy: string): Promise<NamenslistePerson[]> {
+  const rows = personen.map(person => ({ incident_id: incidentId, listenart: art, name: person.name, geboren: person.geboren ?? null, wohnung: person.wohnung ?? null, created_by: createdBy }))
+  const result = await supabase.from('einsatz_namensliste').insert(rows).select('*')
+  if (result.error) throw new Error('Die Personen konnten nicht übernommen werden.')
+  return (result.data ?? []) as unknown as NamenslistePerson[]
+}
+
+export async function updatePerson(id: string, changes: Partial<Pick<NamenslistePerson, 'name' | 'geboren' | 'wohnung' | 'alter' | 'geschlecht' | 'sprache' | 'familie' | 'telefon' | 'ort_unterkunft' | 'anmerkungen' | 'status'>>): Promise<void> {
+  const result = await supabase.from('einsatz_namensliste').update(changes).eq('id', id)
+  if (result.error) throw new Error('Die Person konnte nicht gespeichert werden.')
+}
+
+export async function removePerson(id: string): Promise<void> {
+  const result = await supabase.from('einsatz_namensliste').delete().eq('id', id)
+  if (result.error) throw new Error('Die Person konnte nicht entfernt werden.')
 }

@@ -902,6 +902,48 @@ export interface EinsatzPartei {
   person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
 }
 
+export type EinsatzChecklisteName = 'erstmeldung' | 'notunterkunft'
+
+/** Ein Punkt der digitalen "Checkliste Notfall/Katastrophe" bzw. "Checkliste
+ * Notunterkunft" (Stadt Dornbirn) - geteilter Server-Zustand statt
+ * localStorage, damit Zentrale UND Streife denselben Bearbeitungsstand sehen. */
+export interface EinsatzChecklistPunkt {
+  id: string
+  incident_id: string
+  checkliste: EinsatzChecklisteName
+  punkt_key: string
+  erledigt: boolean
+  wer: string | null
+  erledigt_at: string | null
+  erledigt_von: string | null
+  updated_at: string
+}
+
+export type NamenslisteArt = 'haus' | 'kontrolle' | 'evakuierung' | 'befragung' | 'unterbringung'
+export type NamenslistePersonStatus = 'offen' | 'erledigt' | 'im_haus' | 'draussen' | 'unbekannt'
+
+/** Personenliste eines Einsatzes (ZMR-Auszug-Erkennung, Kontrollen, Evakuierung,
+ * Befragung, Notunterkunft-Namensliste) - geteilter Server-Zustand statt
+ * localStorage, damit Zentrale UND Streife dieselbe Liste sehen/bearbeiten. */
+export interface NamenslistePerson {
+  id: string
+  incident_id: string
+  listenart: NamenslisteArt
+  name: string
+  geboren: string | null
+  wohnung: string | null
+  alter: number | null
+  geschlecht: 'm' | 'w' | 'd' | null
+  sprache: string | null
+  familie: string | null
+  telefon: string | null
+  ort_unterkunft: string | null
+  anmerkungen: string | null
+  status: NamenslistePersonStatus
+  created_at: string
+  created_by: string | null
+}
+
 /** Zentrales Personen-Register - Verknüpfungspunkt für Personenhinweise, RSa/RSb, AV/BV & EV und Fahndungen. */
 export interface OperationalPerson {
   id: string
@@ -1339,6 +1381,8 @@ type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref' | 'assigned_vehicle' | 'taken_over_by_profile'>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
+type EinsatzChecklistPunktRow = Omit<EinsatzChecklistPunkt, never>
+type NamenslistePersonRow = Omit<NamenslistePerson, never>
 type OperationalPersonRow = Omit<OperationalPerson, 'home_object'>
 type OperationalObjectRow = Omit<OperationalObject, never>
 type OperationalPhoneNumberRow = Omit<OperationalPhoneNumber, 'person' | 'object'>
@@ -1573,6 +1617,14 @@ export type Database = {
         { foreignKeyName: 'einsatz_parteien_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_parteien_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_parteien_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_checklist_punkte: { Row: EinsatzChecklistPunktRow; Insert: Pick<EinsatzChecklistPunktRow, 'incident_id' | 'checkliste' | 'punkt_key'> & Partial<Omit<EinsatzChecklistPunktRow, 'id' | 'incident_id' | 'checkliste' | 'punkt_key'>>; Update: Partial<Omit<EinsatzChecklistPunktRow, 'id' | 'incident_id' | 'checkliste' | 'punkt_key'>>; Relationships: [
+        { foreignKeyName: 'einsatz_checklist_punkte_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_checklist_punkte_erledigt_von_fkey'; columns: ['erledigt_von']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      einsatz_namensliste: { Row: NamenslistePersonRow; Insert: Pick<NamenslistePersonRow, 'incident_id' | 'listenart' | 'name'> & Partial<Omit<NamenslistePersonRow, 'id' | 'incident_id' | 'listenart' | 'name' | 'created_at'>>; Update: Partial<Omit<NamenslistePersonRow, 'id' | 'incident_id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'einsatz_namensliste_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'einsatz_namensliste_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       operational_persons: { Row: OperationalPersonRow; Insert: Partial<Omit<OperationalPersonRow, 'id' | 'created_at' | 'updated_at'>>; Update: Partial<Omit<OperationalPersonRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'operational_persons_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
