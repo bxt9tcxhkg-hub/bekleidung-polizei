@@ -1,3 +1,9 @@
+// Statischer Import statt dynamischem `import(...?url)` - Vites
+// dokumentiertes Standardmuster für pdf.js-Worker-URLs, sodass sie beim
+// Build garantiert zur selben gehashten Asset-Datei wie im Bundle-Manifest
+// aufgelöst wird.
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+
 export const LISTENARTEN = ['haus', 'kontrolle', 'evakuierung', 'befragung'] as const
 export type Listenart = (typeof LISTENARTEN)[number]
 
@@ -41,8 +47,7 @@ const SKIP = /^(zmr|auszug|meldeamt|gemeinde|stadt|dornbirn|straße|strasse|gass
  */
 export async function extractPdfPlainText(file: File): Promise<string> {
   const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
-  GlobalWorkerOptions.workerSrc = workerUrl
+  GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   const data = new Uint8Array(await file.arrayBuffer())
   const doc = await getDocument({ data }).promise
   const lines: string[] = []

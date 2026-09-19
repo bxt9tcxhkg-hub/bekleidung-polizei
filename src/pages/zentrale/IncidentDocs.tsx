@@ -69,7 +69,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
       if ((art === 'zmr' || art === 'abfrage') && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
         const text = await extractPdfPlainText(file)
         const erkannt = personenAusText(text)
-        if (erkannt.length === 0) setHinweis('PDF gespeichert, aber keine Namen erkannt.')
+        if (erkannt.length === 0) setHinweis(text.trim() ? 'PDF gespeichert, aber keine Namen erkannt.' : 'PDF gespeichert, aber der Text konnte nicht gelesen werden (leere/gescannte PDF ohne Textebene?).')
         else {
           const merged = [...personen]
           for (const person of erkannt) {
