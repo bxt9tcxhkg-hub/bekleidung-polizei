@@ -57,8 +57,11 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
   .klein { font-weight: normal; font-size: 8pt; }
   .satz { font-size: 9pt; border-top: 1px solid #000; margin-top: 2mm; padding-top: 1mm; }
   .wert { font-size: 12pt; font-weight: bold; border-top: 1px solid #000; margin-top: 2mm; padding-top: 1mm; }
-  table.unterschrift { width: 100%; border-collapse: collapse; margin-top: 14mm; }
-  table.unterschrift td { width: 50%; padding-top: 2mm; border-top: 1px solid #000; font-size: 10pt; vertical-align: top; }
+  table.unterschrift { width: 100%; border-collapse: collapse; margin-top: 10mm; }
+  table.unterschrift td { width: 50%; padding-right: 8mm; vertical-align: top; font-size: 10pt; }
+  .us-label { font-weight: bold; }
+  .us-platz { height: 14mm; border-bottom: 1px solid #000; }
+  .us-name { padding-top: 1.5mm; font-size: 9pt; color: #333; }
   .foot { margin-top: 16mm; font-size: 8pt; color: #444; display: flex; justify-content: space-between; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
@@ -75,8 +78,8 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
   <table class="grid"><tr>${cols}</tr></table>
   <table class="unterschrift">
     <tr>
-      <td>Bearbeiter/in:<br>${escHtml(input.bearbeiterName)}</td>
-      <td>Genehmiger:<br>${escHtml(input.genehmigerName ?? '–')}</td>
+      <td><div class="us-label">Bearbeiter/in:</div><div class="us-platz"></div><div class="us-name">${escHtml(input.bearbeiterName)}</div></td>
+      <td><div class="us-label">Genehmiger:</div><div class="us-platz"></div><div class="us-name">${escHtml(input.genehmigerName ?? '–')}</div></td>
     </tr>
   </table>
   <div class="foot"><span>Überstundenmeldung · Formularversion</span><span>DVR 0036030</span></div>
