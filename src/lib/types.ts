@@ -304,6 +304,7 @@ export type PoolEmCategory =
   | 'magazine'
   | 'munition'
   | 'pfefferspray_gross'
+  | 'pfefferspray_klein'
   | 'schild'
   | 'ballistischer_helm'
   | 'schwere_westen'
