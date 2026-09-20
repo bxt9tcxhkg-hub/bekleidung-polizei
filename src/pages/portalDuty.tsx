@@ -36,6 +36,8 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
   const [newPatrol, setNewPatrol] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [promptChecked, setPromptChecked] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [shiftInitialized, setShiftInitialized] = useState(false)
 
   const load = useCallback(async () => {
     const [dutyResult, functionResult, vehicleResult] = await Promise.all([
@@ -46,11 +48,23 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
     setAllAssignments((dutyResult.data ?? []) as DutyAssignment[])
     setFunctions((functionResult.data ?? []) as DutyFunctionConfig[])
     setVehicles((vehicleResult.data ?? []) as FleetVehicle[])
+    setLoaded(true)
   }, [])
   useEffect(() => { void load() }, [load])
 
   const ownAssignments = useMemo(() => allAssignments.filter(item => item.user_id === userId), [allAssignments, userId])
   const selected = ownAssignments.find(item => item.shift === shift)
+
+  // Die Schichtauswahl soll die tatsächlich gespeicherte Zuteilung
+  // widerspiegeln - ohne das würde die Anzeige nach jedem Neuladen/
+  // Neumounten (z. B. durch die navigate() in choose()) wieder auf den
+  // hartkodierten Default "Tagdienst" zurückspringen, obwohl eine
+  // Nachtdienst-Zuteilung gespeichert ist.
+  useEffect(() => {
+    if (!loaded || shiftInitialized) return
+    if (ownAssignments.length > 0 && !ownAssignments.some(item => item.shift === 'tag') && ownAssignments.some(item => item.shift === 'nacht')) setShift('nacht')
+    setShiftInitialized(true)
+  }, [loaded, ownAssignments, shiftInitialized])
   const selectedConfig = functions.find(item => item.code === selected?.function)
   useEffect(() => { setVehicleId(selected?.vehicle_id ?? '') }, [selected?.vehicle_id])
 
