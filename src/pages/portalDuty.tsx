@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Car, Clock3, Sparkles, UserRoundCheck, Wrench, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
+import { operationalToday } from '../lib/zentraleShared'
 import type { DutyAssignment, DutyFunction, DutyFunctionConfig, DutyShift, FleetVehicle } from '../lib/types'
 
 const DEFAULT_DUTY_LABEL: Record<string, string> = {
@@ -12,17 +13,12 @@ const DEFAULT_DUTY_LABEL: Record<string, string> = {
   vd: 'Verkehrsdienst (VD)',
 }
 
-function todayLocal() {
-  const date = new Date()
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
 const DUTY_PROMPT_DISMISS_PREFIX = 'dornbirn-portal-duty-prompt-dismissed'
 function dutyPromptDismissedToday(userId: string): boolean {
-  try { return localStorage.getItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`) === todayLocal() } catch { return false }
+  try { return localStorage.getItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`) === operationalToday() } catch { return false }
 }
 function dismissDutyPromptToday(userId: string): void {
-  try { localStorage.setItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`, todayLocal()) } catch { /* ignore */ }
+  try { localStorage.setItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`, operationalToday()) } catch { /* ignore */ }
 }
 
 export function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: boolean }) {
@@ -43,7 +39,7 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
 
   const load = useCallback(async () => {
     const [dutyResult, functionResult, vehicleResult] = await Promise.all([
-      supabase.from('duty_assignments').select('*').eq('duty_date', todayLocal()),
+      supabase.from('duty_assignments').select('*').eq('duty_date', operationalToday()),
       supabase.from('duty_functions').select('*').order('sort_order').order('label'),
       supabase.from('fleet_vehicles').select('*').eq('active', true).order('name'),
     ])
@@ -72,7 +68,7 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
   async function choose(code: DutyFunction) {
     setSaving(true)
     const config = functions.find(item => item.code === code)
-    const { error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: todayLocal(), shift, function: code, vehicle_id: config?.is_patrol ? (vehicleId || null) : null }, { onConflict: 'user_id,duty_date,shift' })
+    const { error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: operationalToday(), shift, function: code, vehicle_id: config?.is_patrol ? (vehicleId || null) : null }, { onConflict: 'user_id,duty_date,shift' })
     setSaving(false)
     if (error) { setMessage('Die Funktion konnte nicht gespeichert werden.'); return }
     setMessage(`${config?.label ?? DEFAULT_DUTY_LABEL[code] ?? code} wurde für heute eingetragen.`)
