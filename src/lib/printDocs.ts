@@ -85,7 +85,7 @@ export function letterheadBlock(sachbearbeiter?: string | null): string {
 
 /** Ersetzt die frühere, redundante Adresswiederholung unter dem Briefkopf: rechtsbündiges Erstellungsdatum des Ausdrucks. */
 export function referenceLineBlock(now = new Date()): string {
-  return `<div class="ra">Erstellt am ${escHtml(dateShort(now))}</div>`
+  return `<div class="ra">${escHtml(dateShort(now))}</div>`
 }
 
 export type KurzbriefItem = { artNr: string; productName: string; size: string; totalQty: number }
