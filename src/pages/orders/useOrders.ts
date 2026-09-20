@@ -12,7 +12,7 @@ import {
   inventoryKey,
 } from '../../lib/inventory'
 import { buildMassaDraft, sendMassaOrder, type MassaOrderDraft, type MassaSendResult } from '../../lib/massaOrder'
-import { EIGENBESCHAFFUNG_ADDRESSEE, generateKurzbrief } from '../../lib/printDocs'
+import { EIGENBESCHAFFUNG_ADDRESSEE, generateKurzbrief, officerPrintName } from '../../lib/printDocs'
 import { ADMIN_TABS, PAGE_SIZE, type AdminTab } from './types'
 
 export function useOrders() {
@@ -227,7 +227,7 @@ export function useOrders() {
       })
       logAudit('Sammelbestellung erstellt', `${group.length} Position(en) (${isEigenbeschaffung ? 'Eigenbeschaffung' : 'Massa'})`)
       // Kurzbrief erst nach erfolgreichen DB-Updates drucken
-      generateKurzbrief(Object.values(groups), profile?.name ?? '–', new Date(), {
+      generateKurzbrief(Object.values(groups), officerPrintName(profile), new Date(), {
         addressee: isEigenbeschaffung ? EIGENBESCHAFFUNG_ADDRESSEE : undefined,
       })
     }

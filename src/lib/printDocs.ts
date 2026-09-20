@@ -1,4 +1,25 @@
-import type { Order } from './types'
+import type { Order, PoliceRank } from './types'
+
+const RANK_ABBREV: Record<PoliceRank, string> = {
+  Aspirant: 'Asp',
+  Inspektor: 'Insp',
+  Revierinspektor: 'RevInsp',
+  Gruppeninspektor: 'GrInsp',
+  Bezirksinspektor: 'BezInsp',
+  Abteilungsinspektor: 'AbtInsp',
+  Kontrollinspektor: 'KontrInsp',
+  Chefinspektor: 'ChefInsp',
+}
+
+/** Name auf Ausdrucken/Formularen: "<Dienstgrad-Abkürzung> <NACHNAME>" statt des vollen Anzeigenamens - ohne hinterlegten Dienstgrad (z. B. Systemkonten) bleibt der Name unverändert. */
+export function officerPrintName(person: { name?: string | null; dienstgrad?: PoliceRank | null } | null | undefined): string {
+  const name = person?.name?.trim()
+  if (!name) return '–'
+  if (!person?.dienstgrad) return name
+  const nachname = name.split(/\s+/).pop()
+  if (!nachname) return name
+  return `${RANK_ABBREV[person.dienstgrad]} ${nachname.toUpperCase()}`
+}
 
 export function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -46,7 +67,7 @@ const DORNBIRN_LOGO_SVG = `<svg class="lh-logo" viewBox="0 0 768 118" xmlns="htt
 // wie im offiziellen Briefkopf. Jedes generierte Dokument ist ein
 // eigenständiges HTML (siehe openPrintHtml), daher muss auch das CSS pro
 // Dokument mitgegeben werden - LETTERHEAD_CSS dort einbinden.
-export const LETTERHEAD_CSS = `.lh{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;margin-bottom:6mm}.lh-address{font-size:8pt;line-height:1.5}.lh-address strong{font-weight:bold}.lh-logo{width:34mm;height:auto;flex-shrink:0}`
+export const LETTERHEAD_CSS = `.lh{display:flex;justify-content:space-between;align-items:flex-start;gap:8mm;margin-bottom:6mm}.lh-address{font-size:8pt;line-height:1.15}.lh-address strong{font-weight:bold}.lh-logo{width:34mm;height:auto;flex-shrink:0}.ra{font-size:8pt;text-align:right;border-bottom:1px solid #666;padding-bottom:1mm;margin-bottom:6mm;color:#333}`
 export function letterheadBlock(sachbearbeiter?: string | null): string {
   return `<div class="lh">
   <div class="lh-address">
@@ -60,6 +81,11 @@ export function letterheadBlock(sachbearbeiter?: string | null): string {
   </div>
   ${DORNBIRN_LOGO_SVG}
 </div>`
+}
+
+/** Ersetzt die frühere, redundante Adresswiederholung unter dem Briefkopf: rechtsbündiges Erstellungsdatum des Ausdrucks. */
+export function referenceLineBlock(now = new Date()): string {
+  return `<div class="ra">Erstellt am ${escHtml(dateShort(now))}</div>`
 }
 
 export type KurzbriefItem = { artNr: string; productName: string; size: string; totalQty: number }
@@ -84,7 +110,6 @@ export function generateKurzbrief(
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Calibri,Arial,sans-serif;font-size:12pt;color:#000;line-height:1.4}
   ${LETTERHEAD_CSS}
-  .ra{font-size:8pt;border-bottom:1px solid #666;padding-bottom:1mm;margin-bottom:4mm;color:#333}
   .ad{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6mm}
   .rc{font-size:12pt;line-height:1.7}
   .dt{font-size:12pt;white-space:nowrap}
@@ -107,7 +132,6 @@ export function generateKurzbrief(
   @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body>
 ${letterheadBlock(senderName || '–')}
-<div class="ra">STADT DORNBIRN Polizei, Rathausplatz 2, A-6850 Dornbirn</div>
 <div class="ad">
   <div class="rc">An<br>${addressee.map(escHtml).join('<br>')}</div>
   <div class="dt">Dornbirn, ${dateLong(now)}</div>

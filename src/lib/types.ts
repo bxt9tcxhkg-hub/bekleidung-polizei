@@ -803,7 +803,7 @@ export interface StrassenzustandBericht {
   pdf_uploaded_by: string | null
   created_at: string
   updated_at: string
-  profiles?: { name: string | null; dienstnummer: string | null } | null
+  profiles?: { name: string | null; dienstnummer: string | null; dienstgrad?: PoliceRank | null } | null
 }
 
 export interface StrassenzustandBerichtzeile {
@@ -1239,7 +1239,7 @@ export interface UeberstundenMeldung {
   created_at: string
   updated_at: string
   beamter?: Pick<Profile, 'id' | 'name' | 'dienstnummer'>
-  genehmiger?: Pick<Profile, 'id' | 'name' | 'dienstnummer'> | null
+  genehmiger?: Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'dienstgrad'> | null
 }
 
 /**

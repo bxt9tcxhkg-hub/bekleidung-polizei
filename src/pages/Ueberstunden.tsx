@@ -6,6 +6,7 @@ import { fetchAllPages, supabase } from '../lib/supabase'
 import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
+import { officerPrintName } from '../lib/printDocs'
 import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsAnteileMap, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type MonatsAnteilRow, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
@@ -85,7 +86,7 @@ export default function Ueberstunden() {
     if (!profileId) return
     setLoading(true)
     const result = await fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
-      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer)')
+      .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer), genehmiger:profiles!ueberstunden_meldungen_genehmiger_id_fkey(id,name,dienstnummer,dienstgrad)')
       .eq('beamter_id', profileId)
       .order('von_datum', { ascending: false }).order('created_at', { ascending: false }).order('id', { ascending: false })
       .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>)
@@ -248,9 +249,9 @@ export default function Ueberstunden() {
     // Vor der Entscheidung gibt es noch keinen genehmiger-Eintrag - solange
     // wird stattdessen der vom Ersteller gewählte, voraussichtliche
     // Genehmiger statt "–" angezeigt, unabhängig davon, wer gerade druckt.
-    const genehmigerName = item.genehmiger?.name ?? kettenName(item.genehmiger_wahl_id)
+    const genehmigerName = item.genehmiger ? officerPrintName(item.genehmiger) : (kettenName(item.genehmiger_wahl_id) ? officerPrintName({ name: kettenName(item.genehmiger_wahl_id) }) : null)
     generateUeberstundenPdf({
-      beamterName: item.beamter?.name ?? '–', bearbeiterName: profile?.name ?? '–', genehmigerName,
+      beamterName: item.beamter?.name ?? '–', bearbeiterName: officerPrintName(profile), genehmigerName,
       vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
       verguetung: item.verguetung,
       stunden: { std_werktag_50: item.std_werktag_50, std_sonn_100: item.std_sonn_100, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_200: item.std_sonn_200 },
@@ -260,7 +261,7 @@ export default function Ueberstunden() {
   function printSammelansicht() {
     const [jahr, monatNr] = monat.split('-').map(Number)
     const monatLabel = new Date(jahr, (monatNr || 1) - 1, 1).toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })
-    generateUeberstundenSammelPdf({ monatLabel, bearbeiterName: profile?.name ?? '–', zeilen: uebersicht })
+    generateUeberstundenSammelPdf({ monatLabel, bearbeiterName: officerPrintName(profile), zeilen: uebersicht })
   }
 
   return <PortalChrome wide>

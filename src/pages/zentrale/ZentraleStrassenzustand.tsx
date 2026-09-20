@@ -7,6 +7,7 @@ import { supabase } from '../../lib/supabase'
 import { geocodeLocation, reverseGeocode, routeAlongRoad } from '../../lib/geocode'
 import { MELDUNGSART_LABEL, ZUSTAND_LABEL, aktiveSperren, formatZeitraum, fromTimestamp, strassenName, toTimestamp } from '../../lib/strassenzustand'
 import { generateStrassenzustandPdf } from '../../lib/strassenzustandPdf'
+import { officerPrintName } from '../../lib/printDocs'
 import { Actions, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { EMPTY_STRASSE_GEOMETRIE_FORM, type StrasseGeometrieFormState } from '../../lib/zentraleShared'
 import { StrasseGeometrieModal } from './zentraleShared'
@@ -119,7 +120,7 @@ export default function ZentraleStrassenzustand() {
       supabase.from('strassenzustand_strassen').select('*').order('sort_order').order('name'),
       supabase.from('strassenzustand_auftraggeber').select('*').order('sort_order').order('name'),
       supabase.from('strassenzustand_melder').select('*').order('sort_order').order('name'),
-      supabase.from('strassenzustand_berichte').select('*, profiles!strassenzustand_berichte_bearbeiter_fkey(name,dienstnummer)').order('created_at', { ascending: false }),
+      supabase.from('strassenzustand_berichte').select('*, profiles!strassenzustand_berichte_bearbeiter_fkey(name,dienstnummer,dienstgrad)').order('created_at', { ascending: false }),
       supabase.from('strassenzustand_berichtzeilen').select('*, strassenzustand_strassen(name), strassenzustand_auftraggeber(name), strassenzustand_melder(name)').order('created_at', { ascending: false }),
     ])
     if (strassenRes.error || berichteRes.error || zeilenRes.error) setError('Die Straßenzustandsdaten konnten nicht vollständig geladen werden.')
@@ -242,7 +243,7 @@ export default function ZentraleStrassenzustand() {
     const berichtZeilen = zeilenByBericht.get(bericht.id) ?? []
     generateStrassenzustandPdf({
       nummer: bericht.nummer,
-      bearbeiterName: bericht.profiles?.name || 'Unbekannt',
+      bearbeiterName: bericht.profiles?.name ? officerPrintName(bericht.profiles) : 'Unbekannt',
       anmerkung: bericht.anmerkung,
       zeilen: berichtZeilen,
     })

@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { loadEinsatzParteien } from '../../lib/einsatzParteien'
 import { readDokumente } from '../../lib/einsatzDokumente'
 import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
+import { officerPrintName } from '../../lib/printDocs'
 import type { IncidentDisposition, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import IncidentDocs from '../zentrale/IncidentDocs'
 import IncidentNamensliste from '../zentrale/IncidentNamensliste'
@@ -47,11 +48,11 @@ function PrintIncidentButton({ item }: { item: IncidentListItem }) {
     try {
       const parteien = await loadEinsatzParteien(item.id)
       const dokumente = readDokumente(item.id)
-      generateEinsatzUebersicht({ incident: item, parteien, dokumente, erstelltVon: profile?.name ?? '–' })
+      generateEinsatzUebersicht({ incident: item, parteien, dokumente, erstelltVon: officerPrintName(profile) })
     } catch {
       // Die Parteien-Abfrage kann fehlschlagen (z.B. keine Verbindung) - der
       // Ausdruck soll trotzdem mit den vorhandenen Meldungsdaten möglich sein.
-      generateEinsatzUebersicht({ incident: item, parteien: [], dokumente: readDokumente(item.id), erstelltVon: profile?.name ?? '–' })
+      generateEinsatzUebersicht({ incident: item, parteien: [], dokumente: readDokumente(item.id), erstelltVon: officerPrintName(profile) })
     } finally {
       setPrinting(false)
     }

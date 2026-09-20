@@ -11,7 +11,7 @@
  * Location betrifft; aktuell die einzige mit Planbeilage hinterlegte
  * Location, bei künftig weiteren Standorten muss das erweitert werden).
  */
-import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
+import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
 import { fmtEUR } from './format'
 import { PLANBEILAGE_KATASTER, PLANBEILAGE_LUFTBILD } from './planbeilageAssets'
 import type { InnendienstRecordKind } from './types'
@@ -104,7 +104,6 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Calibri, sans-serif; font-size: 10pt; color: #000; line-height: 1.45; }
   ${LETTERHEAD_CSS}
-  .ra { font-size: 8pt; border-bottom: 1px solid #666; padding-bottom: 1mm; margin-bottom: 6mm; color: #333; }
   .meta { margin-bottom: 6mm; }
   .meta p { margin-bottom: 1mm; }
   .kt { font-size: 14pt; font-weight: bold; margin-bottom: 1mm; }
@@ -131,7 +130,7 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   ${letterheadBlock(input.bearbeiterName)}
-  <div class="ra">Stadt Dornbirn Rathausplatz 2 A 6850 Dornbirn</div>
+  ${referenceLineBlock(now)}
   <div class="meta">
     <p>Dornbirn, ${escHtml(dateLong(now))}</p>
     <p>Aktenzahl: ${escHtml(input.aktenzahl?.trim() || '–')}</p>

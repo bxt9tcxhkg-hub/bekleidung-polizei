@@ -3,7 +3,7 @@
  * Vorlage nach (Kopfdaten, Tabelle mit den fünf Lohnarten-Kategorien,
  * Bearbeiter/in- und Genehmiger-Zeile).
  */
-import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
+import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
 import { KATEGORIEN, VERGUETUNG_LABEL, formatStunden } from './ueberstunden'
 import type { MonatsZeile, UeberstundenKategorieKey } from './ueberstunden'
 import type { UeberstundenVerguetung } from './types'
@@ -46,7 +46,6 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Calibri, sans-serif; font-size: 10pt; color: #000; line-height: 1.4; }
   ${LETTERHEAD_CSS}
-  .ra { font-size: 8pt; border-bottom: 1px solid #666; padding-bottom: 1mm; margin-bottom: 6mm; color: #333; }
   .kt { font-size: 16pt; font-weight: bold; text-align: center; margin-bottom: 8mm; }
   table.meta { border-collapse: collapse; margin-bottom: 6mm; }
   table.meta td { padding: 1mm 4mm 1mm 0; vertical-align: top; }
@@ -66,7 +65,7 @@ export function buildUeberstundenPdfHtml(input: UeberstundenPdfInput): string {
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   ${letterheadBlock(input.bearbeiterName)}
-  <div class="ra">Stadt Dornbirn Rathausplatz 2 A 6850 Dornbirn</div>
+  ${referenceLineBlock()}
   <div class="kt">Überstundenmeldung</div>
   <table class="meta">
     <tr><td>Name des Beamten:</td><td>${escHtml(input.beamterName)}</td></tr>
@@ -129,7 +128,6 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Calibri, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.4; }
   ${LETTERHEAD_CSS}
-  .ra { font-size: 8pt; border-bottom: 1px solid #666; padding-bottom: 1mm; margin-bottom: 6mm; color: #333; }
   .kt { font-size: 15pt; font-weight: bold; margin-bottom: 1mm; }
   .ut { font-size: 10pt; margin-bottom: 6mm; color: #333; }
   table.sammel { width: 100%; border-collapse: collapse; margin-bottom: 8mm; }
@@ -143,7 +141,7 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   ${letterheadBlock(input.bearbeiterName)}
-  <div class="ra">Stadt Dornbirn Rathausplatz 2 A 6850 Dornbirn</div>
+  ${referenceLineBlock()}
   <div class="kt">Überstunden – Sammelansicht ${escHtml(input.monatLabel)}</div>
   <div class="ut">Genehmigte Überstunden aller Bediensteten, aufgeschlüsselt nach Lohnart – zur Weiterleitung an die Lohnberechnung.</div>
   <table class="sammel">

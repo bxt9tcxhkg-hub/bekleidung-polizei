@@ -10,6 +10,7 @@ import type { CashDenominations, InnendienstGebuehrensatz, InnendienstGebuehrens
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { generateBescheidPdf, type BescheidKind } from '../../lib/innendienstBescheidPdf'
+import { officerPrintName } from '../../lib/printDocs'
 import { BESCHEID_KINDS, DENOMINATIONS, EMPTY_BESCHEID_FORM, KIND_LABEL, countedTotalCents, formatEuro, inputClass, todayLocal, type BescheidFormState } from './innendienstShared'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 
@@ -214,7 +215,7 @@ export default function InnendienstShell() {
     generateBescheidPdf({
       kind: item.kind as BescheidKind,
       aktenzahl: item.reference,
-      bearbeiterName: profile?.name ?? '',
+      bearbeiterName: officerPrintName(profile),
       personName: item.person ? personDisplayName(item.person) : item.subject,
       personBirthDate: item.person?.birth_date ?? null,
       personAddress: address,

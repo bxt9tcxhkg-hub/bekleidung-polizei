@@ -5,7 +5,7 @@
  * Unterkunft/Anmerkungen), bei den übrigen Listenarten an die einfachere
  * Spaltenstruktur der jeweiligen Liste (siehe LISTENART_SPALTEN).
  */
-import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
+import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
 import { LISTENART_LABEL, type Listenart } from './zmrPersonen'
 import type { NamenslistePerson } from './types'
 
@@ -60,7 +60,6 @@ export function generateNamenslistePdf(input: NamenslistePdfInput): void {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Calibri, sans-serif; font-size: 9pt; color: #000; line-height: 1.4; }
   ${LETTERHEAD_CSS}
-  .ra { font-size: 8pt; border-bottom: 1px solid #666; padding-bottom: 1mm; margin-bottom: 4mm; color: #333; }
   .kt { font-size: 14pt; font-weight: bold; margin-bottom: 2mm; }
   .meta { font-size: 9pt; color: #333; margin-bottom: 4mm; }
   table.grid { width: 100%; border-collapse: collapse; }
@@ -70,7 +69,7 @@ export function generateNamenslistePdf(input: NamenslistePdfInput): void {
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   ${letterheadBlock(input.erstelltVon)}
-  <div class="ra">Stadt Dornbirn Rathausplatz 2 A 6850 Dornbirn</div>
+  ${referenceLineBlock(now)}
   <div class="kt">Namensliste – ${escHtml(LISTENART_LABEL[input.listenart])}</div>
   <div class="meta">Einsatz: ${escHtml(input.incidentTitel)} · Datum: ${datumText} · Protokollant: ${escHtml(input.erstelltVon)} · ${input.personen.length} Person(en)</div>
   <table class="grid"><thead>${head}</thead><tbody>${rows}</tbody></table>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Printer } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { generateNamenslistePdf } from '../../lib/einsatzNamenslistePdf'
+import { officerPrintName } from '../../lib/printDocs'
 import { LISTENART_LABEL, LISTENART_SPALTEN, LISTENARTEN, addPersonen, loadPersonenliste, removePerson, sortiertNachTopNr, updatePerson, type Listenart } from '../../lib/zmrPersonen'
 import type { NamenslistePerson } from '../../lib/types'
 
@@ -121,7 +122,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   }
 
   function drucken() {
-    generateNamenslistePdf({ incidentTitel, listenart, personen, erstelltVon: profile?.name ?? '–' })
+    generateNamenslistePdf({ incidentTitel, listenart, personen, erstelltVon: officerPrintName(profile) })
   }
 
   return <div className="space-y-3">
