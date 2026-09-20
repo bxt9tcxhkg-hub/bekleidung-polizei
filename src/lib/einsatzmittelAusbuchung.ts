@@ -108,6 +108,7 @@ export const COUNTABLE_POOL_CATEGORIES = [
   'magazine',
   'munition',
   'pfefferspray_gross',
+  'pfefferspray_klein',
   'schild',
   'ballistischer_helm',
   'schwere_westen',

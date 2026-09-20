@@ -27,12 +27,13 @@ import {
 const empty = emptyPoolEmFormValues()
 
 describe('Kategorien und Verwahrungsorte', () => {
-  it('enthält genau die acht Pool-Typen, ohne persönliche Kategorien', () => {
+  it('enthält genau die neun Pool-Typen, ohne persönliche Kategorien', () => {
     expect([...POOL_EM_CATEGORIES]).toEqual([
       'langwaffe_stg77',
       'magazine',
       'munition',
       'pfefferspray_gross',
+      'pfefferspray_klein',
       'schild',
       'ballistischer_helm',
       'schwere_westen',
@@ -42,6 +43,7 @@ describe('Kategorien und Verwahrungsorte', () => {
     expect(isPoolEmCategory('schutzweste')).toBe(false)
     expect(isPoolEmCategory('glock_17')).toBe(false)
     expect(POOL_EM_CATEGORY_LABELS.pfefferspray_gross).toBe('großes Pfefferspray')
+    expect(POOL_EM_CATEGORY_LABELS.pfefferspray_klein).toBe('Pfefferspray Nachfüllkartusche klein')
     expect(POOL_EM_CATEGORY_LABELS.munition).toBe('Munition (Pool)')
   })
 
@@ -63,6 +65,7 @@ describe('Kategorien und Verwahrungsorte', () => {
     expect([...POOL_EM_FIELDS.magazine]).toEqual(['anzahl'])
     expect([...POOL_EM_FIELDS.munition]).toEqual(['art', 'typ', 'marke', 'anzahl'])
     expect([...POOL_EM_FIELDS.pfefferspray_gross]).toEqual(['marke', 'anzahl', 'ablaufdatum'])
+    expect([...POOL_EM_FIELDS.pfefferspray_klein]).toEqual(['marke', 'anzahl', 'ablaufdatum'])
     expect([...POOL_EM_FIELDS.schild]).toEqual(['marke', 'anzahl'])
     expect([...POOL_EM_FIELDS.ballistischer_helm]).toEqual(['ablaufdatum', 'anzahl'])
     expect([...POOL_EM_FIELDS.schwere_westen]).toEqual(['marke', 'anzahl', 'groessen', 'ablaufdatum'])
@@ -124,6 +127,24 @@ describe('validatePoolEm', () => {
       expect(ok.payload.anzahl).toBe(200)
       expect(ok.payload.art).toBe('Übung')
     }
+  })
+
+  it('nimmt kleine Pfefferspray-Nachfüllkartuschen wie das große Pfefferspray an', () => {
+    const result = validatePoolEm({
+      category: 'pfefferspray_klein',
+      verwahrungsort: 'lager',
+      values: { ...empty, marke: 'RSG', anzahl: '12', ablaufdatum: '2028-01-01' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.payload).toMatchObject({
+      category: 'pfefferspray_klein',
+      marke: 'RSG',
+      anzahl: 12,
+      ablaufdatum: '2028-01-01',
+      typ: null,
+      groessen: null,
+    })
   })
 
   it('erlaubt Spuckschutzhaube nur mit Verwahrungsort', () => {
@@ -240,7 +261,7 @@ describe('Anzeige und Lagerbestand', () => {
       { category: 'pfefferspray_gross', verwahrungsort: 'spind_2', anzahl: 6 },
       { category: 'langwaffe_stg77', verwahrungsort: 'waffentresor_zentrale', anzahl: null },
     ])
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(9)
     const stg = rows.find(r => r.category === 'langwaffe_stg77')
     expect(stg?.byOrt.peter_1).toBe(2)
     expect(stg?.byOrt.lager).toBe(1)
