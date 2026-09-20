@@ -14,7 +14,7 @@ function formatIncidentOption(item: Pick<IncidentReport, 'reported_at' | 'locati
 // (Übersicht/Einsätze/Lage/Übergabe) als auch von den eigenständigen
 // Sidebar-Seiten der übrigen Kategorien verwendet.
 
-export const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
+export const inputClass = 'mt-1 w-full min-w-0 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 export function Empty({ text }: { text: string }) { return <div className="px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
 
