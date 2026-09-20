@@ -222,13 +222,13 @@ export default function Portal() {
               icon={Database}
             />
           ) : null}
-          <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – für jeden Benutzer jederzeit erfassbar" icon={Mail} />
           {apps.map(app => <AppTile key={app.id} app={app} />)}
           {hasAreaAccess('schulungen') ? <NavTile to="/schulungen" label="Schulungen" description="PAD, weitere Schulungen und Rechtsinformationen" icon={GraduationCap} /> : null}
           {hasAreaAccess('fuhrpark') ? <NavTile to="/fuhrpark" label="Fuhrpark & Fahrzeuge" description="Fahrzeuge, Stammdaten und fahrzeugbezogene Aufgaben" icon={Car} /> : null}
         </PortalSection>
 
         <PortalSection title="Mein Bereich" description="Persönliche Meldungen und Anträge" tone="persoenlich">
+          <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – für jeden Benutzer jederzeit erfassbar" icon={Mail} />
           <NavTile to="/ueberstunden" label="Überstundenmeldung" description="Überstunden erfassen und zur Prüfung abgeben" icon={Clock3} />
         </PortalSection>
       </div>
