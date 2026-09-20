@@ -66,7 +66,7 @@ export default function Fuellliste({ vehicle }: { vehicle: FleetVehicle }) {
     }
     void load()
     return () => { cancelled = true }
-  }, [vehicle.id, storageKey])
+  }, [vehicle.id, vehicle.call_sign, vehicle.name, storageKey])
 
   async function setItem(item: FleetEquipmentItem, value: FleetEquipmentStatusValue) {
     if (!profile?.id) return

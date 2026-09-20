@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -96,17 +96,25 @@ export function useLager() {
     setOrdersPage(p => Math.min(p, Math.max(0, Math.ceil(stockOrders.length / PAGE_SIZE) - 1)))
   }, [stockOrders.length])
 
-  // Pre-select product+size when navigating from Analyse page
+  // Pre-select product+size when navigating from Analyse page. Reagiert
+  // direkt auf navState.productId statt nur auf "loading" - so greift die
+  // Vorauswahl auch, falls Lager schon gemountet ist und ein neuer
+  // navState reinkommt (loading bliebe sonst false, Effekt würde nie
+  // erneut feuern). Der Ref verhindert Mehrfachauslösung für denselben
+  // productId (z. B. wenn products erst nach navState.productId lädt).
+  const consumedNavProductId = useRef<string | null>(null)
   useEffect(() => {
     if (loading || !navState?.productId) return
+    if (consumedNavProductId.current === navState.productId) return
     const product = products.find(p => p.id === navState.productId)
     if (!product) return
+    consumedNavProductId.current = navState.productId
     const size = navState.size && product.sizes.includes(navState.size) ? navState.size : product.sizes[0] ?? ''
     setTab('bestellen')
     setSizeModal({ product, size, quantity: navState.qty ?? 1 })
     // Clear the navigation state so it doesn't re-trigger on re-renders
     window.history.replaceState({}, '')
-  }, [loading])
+  }, [loading, navState?.productId, navState?.size, navState?.qty, products])
 
   const invMap = buildInventoryMap(inventory)
 
