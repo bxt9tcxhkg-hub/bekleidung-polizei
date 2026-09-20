@@ -345,11 +345,11 @@ export default function Ueberstunden() {
 
     {showForm ? <Modal title={editing ? 'Überstundenmeldung bearbeiten' : 'Neue Überstundenmeldung'} close={() => setShowForm(false)}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Field label="Von – Datum *" type="date" value={form.vonDatum} onChange={value => setForm(current => ({ ...current, vonDatum: value }))} />
           <Field label="Von – Uhrzeit *" type="time" step={900} value={form.vonZeit} onChange={value => setForm(current => ({ ...current, vonZeit: value }))} />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <Field label="Bis – Datum *" type="date" value={form.bisDatum} onChange={value => setForm(current => ({ ...current, bisDatum: value }))} />
           <Field label="Bis – Uhrzeit *" type="time" step={900} value={form.bisZeit} onChange={value => setForm(current => ({ ...current, bisZeit: value }))} />
         </div>

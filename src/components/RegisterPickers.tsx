@@ -60,11 +60,11 @@ export function PersonPicker({ persons, value, onChange, createdBy, onCreated, l
       </select>
     </label>
     {showCreate ? <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <input className={inputClass} placeholder="Vorname" value={vorname} onChange={event => setVorname(event.target.value)} />
         <input className={inputClass} placeholder="Nachname" value={nachname} onChange={event => setNachname(event.target.value)} />
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <input type="date" className={inputClass} value={birthDate} onChange={event => setBirthDate(event.target.value)} />
         <input className={inputClass} placeholder="Telefon" value={phone} onChange={event => setPhone(event.target.value)} />
       </div>
@@ -197,7 +197,7 @@ export function PersonNameAutocomplete({ persons, value, onChange, createdBy, on
 
   return <div className="relative" onBlur={handleBlur}>
     <p className="block text-xs font-medium text-gray-600 mb-1">{label}{required ? ' *' : ''}</p>
-    <div className={includeBirthDate ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
+    <div className={includeBirthDate ? 'grid grid-cols-1 sm:grid-cols-3 gap-2' : 'grid grid-cols-1 sm:grid-cols-2 gap-2'}>
       <input className={inputClass} placeholder="Vorname" value={vorname} onChange={event => editName(event.target.value, nachname)} onFocus={() => setOpen(true)} />
       <input className={inputClass} placeholder="Nachname" value={nachname} onChange={event => editName(vorname, event.target.value)} onFocus={() => setOpen(true)} />
       {includeBirthDate ? <input type="date" className={inputClass} value={birthDate} onChange={event => editBirthDate(event.target.value)} onFocus={() => setOpen(true)} /> : null}
