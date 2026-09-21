@@ -276,6 +276,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260920100000_pool_em_pfefferspray_klein.sql` | Neue Pool-Einsatzmittel-Kategorie `pfefferspray_klein` (Pfefferspray Nachfüllkartusche klein, analog zu `pfefferspray_gross`): erweitert die CHECK-Constraints `pool_einsatzmittel_category_check` und `pool_einsatzmittel_requests_category_check` um den neuen Wert |
 | `20260921110000_support_messages_delete.sql` | Neue DELETE-Policy `support_messages`: wer den Themenbereich eines Support-Tickets verwaltet (`can_manage_support_topic()`), kann einzelne Nachrichten im Thread löschen (z. B. Fehleintrag/Spam) - eigene Nachrichten bleiben für gewöhnliche Benutzer weiterhin nicht selbst löschbar, bisher gab es für die Tabelle gar keine DELETE-Policy |
 | `20260921120000_support_tickets_delete.sql` | Neue DELETE-Policy `support_tickets`: wer den Themenbereich verwaltet, kann jetzt auch den gesamten Vorgang inkl. Chatverlauf löschen, nicht nur einzelne Nachrichten - `support_messages.ticket_id` hat bereits `ON DELETE CASCADE`, die Nachrichten verschwinden also automatisch mit |
+| `20260921130000_support_delete_grants.sql` | Fix zu den beiden vorherigen Migrationen: `GRANT DELETE` an `authenticated` auf `support_messages`/`support_tickets` nachgetragen - die RLS-Policies allein liefen ins Leere, weil das darunterliegende SQL-Recht fehlte (`permission denied for table ...`) |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
