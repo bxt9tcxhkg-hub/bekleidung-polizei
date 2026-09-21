@@ -450,6 +450,18 @@ describe('canManagePersonalEinsatzmittel', () => {
     })).toBe(true)
   })
 
+  // Regression: reale portal_area_roles-Zeile eines Sachbearbeiters trägt
+  // seit der Mehrfachrollen-Migration weiterhin die Basisrolle 'user' neben
+  // 'sachbearbeiter' (nicht ausschließlich ['sachbearbeiter']). Muss trotzdem
+  // canManage=true ergeben, sonst verliert der Sachbearbeiter Zuweisen-Buttons.
+  it('erlaubt einsatz_mt Sachbearbeiter auch wenn die Zeile zusätzlich die user-Basisrolle enthält', () => {
+    expect(canManagePersonalEinsatzmittel({
+      isStrictAdmin: false,
+      isGenehmiger: false,
+      rows: [{ area: 'einsatz_mt', roles: ['user', 'sachbearbeiter'] }],
+    })).toBe(true)
+  })
+
   it('erlaubt Genehmiger bereichsübergreifend, auch ohne eigene einsatz_mt-Zeile', () => {
     expect(canManagePersonalEinsatzmittel({ isStrictAdmin: false, isGenehmiger: true, rows: [] })).toBe(true)
     expect(canManagePersonalEinsatzmittel({ isStrictAdmin: false, isGenehmiger: true, rows: null })).toBe(true)

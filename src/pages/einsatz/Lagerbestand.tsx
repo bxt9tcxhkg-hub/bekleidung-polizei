@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
-import type { PersonalEinsatzmittel, PoolEinsatzmittel } from '../../lib/types'
+import type { PersonalEinsatzmittel, Profile, PoolEinsatzmittel } from '../../lib/types'
 import {
   POOL_EM_CATEGORY_LABELS,
   VERWAHRUNGSORTE,
@@ -12,30 +14,39 @@ import {
   PERSONAL_EM_CATEGORY_LABELS,
   aggregatePersonalLagerbestand,
   canManagePersonalEinsatzmittel,
+  officerDisplayName,
   personalEmDetailText,
   personalItemsInLager,
 } from '../../lib/personalEinsatzmittel'
+import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList } from '../../lib/portalAdmin'
 import { generateLagerbestandPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
+
+type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 
 export default function LagerbestandPanel() {
   const { isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
   const canManage = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const [poolItems, setPoolItems] = useState<PoolEinsatzmittel[]>([])
   const [personalItems, setPersonalItems] = useState<PersonalEinsatzmittel[]>([])
+  const [officers, setOfficers] = useState<OfficerOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [assigningId, setAssigningId] = useState<string | null>(null)
+  const [assignOfficerId, setAssignOfficerId] = useState('')
+  const [assignSaving, setAssignSaving] = useState(false)
 
   async function load() {
     if (!canManage) {
       setPoolItems([])
       setPersonalItems([])
+      setOfficers([])
       setError('')
       setLoading(false)
       return
     }
     setLoading(true)
-    const [poolRes, personalRes] = await Promise.all([
+    const [poolRes, personalRes, officerRes] = await Promise.all([
       supabase.from('pool_einsatzmittel').select('category,verwahrungsort,anzahl,removed_at').is('removed_at', null),
       supabase
         .from('personal_einsatzmittel')
@@ -43,6 +54,7 @@ export default function LagerbestandPanel() {
         .eq('verwahrungsort', 'lager')
         .is('removed_at', null)
         .order('category'),
+      supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name'),
     ])
     const failures: string[] = []
     if (poolRes.error) {
@@ -57,8 +69,48 @@ export default function LagerbestandPanel() {
     } else {
       setPersonalItems((personalRes.data ?? []) as PersonalEinsatzmittel[])
     }
+    if (officerRes.error) {
+      setOfficers([])
+    } else {
+      setOfficers(excludeAdminsFromOfficerList((officerRes.data ?? []) as OfficerOption[]).filter(o => o.active))
+    }
     setError(failures.length > 0 ? `Lagerbestand konnte nicht vollständig geladen werden (${failures.join(', ')}).` : '')
     setLoading(false)
+  }
+
+  function openAssign(item: PersonalEinsatzmittel) {
+    setAssigningId(item.id)
+    setAssignOfficerId('')
+    setError('')
+  }
+
+  function closeAssign() {
+    setAssigningId(null)
+    setAssignOfficerId('')
+    setAssignSaving(false)
+  }
+
+  async function confirmAssign(item: PersonalEinsatzmittel) {
+    if (!canManage || !assignOfficerId) return
+    setAssignSaving(true)
+    setError('')
+    const { error: updateError } = await supabase
+      .from('personal_einsatzmittel')
+      .update({ officer_id: assignOfficerId, verwahrungsort: null })
+      .eq('id', item.id)
+    if (updateError) {
+      setError(updateError.message || 'Zuweisen fehlgeschlagen.')
+      setAssignSaving(false)
+      return
+    }
+    const officer = officers.find(o => o.id === assignOfficerId)
+    logAudit('Persönliches Einsatzmittel aus Lager zugewiesen', `${PERSONAL_EM_CATEGORY_LABELS[item.category]} · ${officer ? officerDisplayName(officer) : assignOfficerId}`)
+    closeAssign()
+    try {
+      await load()
+    } catch {
+      setError('Zugewiesen, Liste konnte nicht aktualisiert werden.')
+    }
   }
 
   useEffect(() => {
@@ -181,6 +233,7 @@ export default function LagerbestandPanel() {
                       <th className="text-left px-4 py-3 font-semibold text-gray-600">Kategorie</th>
                       <th className="text-left px-4 py-3 font-semibold text-gray-600">Kennung</th>
                       <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden sm:table-cell">Angaben</th>
+                      <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -194,6 +247,50 @@ export default function LagerbestandPanel() {
                         </td>
                         <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">
                           {personalEmDetailText(item) || '–'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {assigningId === item.id ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <select
+                                className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white max-w-[10rem]"
+                                value={assignOfficerId}
+                                onChange={e => setAssignOfficerId(e.target.value)}
+                                aria-label="Polizist wählen"
+                                autoFocus
+                              >
+                                <option value="">Bitte wählen</option>
+                                {officers.map(o => (
+                                  <option key={o.id} value={o.id}>{officerDisplayName(o)}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                disabled={!assignOfficerId || assignSaving}
+                                onClick={() => { void confirmAssign(item) }}
+                                className="bg-blue-800 hover:bg-blue-900 disabled:opacity-60 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg"
+                              >
+                                {assignSaving ? '…' : 'OK'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={assignSaving}
+                                onClick={closeAssign}
+                                className="text-xs text-gray-500 hover:text-gray-800 px-1.5 py-1.5"
+                              >
+                                Abbrechen
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openAssign(item)}
+                              className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 text-xs font-medium px-2.5 py-1.5 rounded-lg hover:bg-gray-50"
+                              title="Polizisten zuweisen"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                              Zuweisen
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
