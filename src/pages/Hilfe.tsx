@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Lightbulb, LifeBuoy, Plus, Send, Sparkles, Wrench, X } from 'lucide-react'
+import { Lightbulb, LifeBuoy, Plus, Send, Sparkles, Trash2, Wrench, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { SupportMessage, SupportTicket, SupportTicketStatus } from '../lib/types'
@@ -53,6 +53,7 @@ export default function Hilfe() {
   const [reply, setReply] = useState('')
   const [saving, setSaving] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const loadTickets = useCallback(async () => {
     if (!profile) return
@@ -172,6 +173,23 @@ export default function Hilfe() {
       setError('Nachricht gesendet, Ansicht konnte nicht aktualisiert werden.')
     }
     setSaving(false)
+  }
+
+  async function deleteMessage(messageId: string) {
+    if (!canManageSelected || !selected) return
+    if (!window.confirm('Diese Nachricht endgültig löschen?')) return
+    setDeletingId(messageId)
+    setError('')
+    const { error: deleteError } = await supabase.from('support_messages').delete().eq('id', messageId)
+    if (deleteError) setError('Nachricht konnte nicht gelöscht werden.')
+    else {
+      try {
+        await loadMessages(selected.id)
+      } catch {
+        setError('Nachricht gelöscht, Ansicht konnte nicht aktualisiert werden.')
+      }
+    }
+    setDeletingId(null)
   }
 
   async function closeTicket() {
@@ -348,7 +366,20 @@ export default function Hilfe() {
                       >
                         <div className="flex items-baseline justify-between gap-2 mb-1">
                           <p className="text-xs font-semibold text-gray-700">{authorLabel(message)}</p>
-                          <p className="text-xs text-gray-400 whitespace-nowrap">{formatWhen(message.created_at)}</p>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <p className="text-xs text-gray-400 whitespace-nowrap">{formatWhen(message.created_at)}</p>
+                            {canManageSelected && (
+                              <button
+                                type="button"
+                                onClick={() => void deleteMessage(message.id)}
+                                disabled={deletingId === message.id}
+                                className="p-1 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded disabled:opacity-60"
+                                aria-label="Nachricht löschen"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{message.body}</p>
                       </div>
