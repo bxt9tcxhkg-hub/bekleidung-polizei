@@ -36,8 +36,12 @@ export default function Shop() {
 
   /** Bei nicht mehr gelisteten (inaktiven) Artikeln nur Größen mit Restbestand anbieten. */
   function orderableSizes(product: Product): string[] {
-    if (product.active) return product.sizes
-    return product.sizes.filter(s => (inventoryMap[inventoryKey(product.id, s)] ?? 0) > 0)
+    if (product.size_mode === 'none') return []
+    const sizes = product.size_mode === 'universal'
+      ? (product.sizes.length ? product.sizes : [UNIVERSAL_SIZE])
+      : product.sizes
+    if (product.active) return sizes.filter(s => s !== '')
+    return sizes.filter(s => s !== '' && (inventoryMap[inventoryKey(product.id, s)] ?? 0) > 0)
   }
 
   function stockOf(product: Product, size: string): number {
@@ -453,7 +457,7 @@ export default function Shop() {
             </div>
             <div className="px-5 py-4 border-t flex gap-3">
               <button onClick={() => setSizeModal(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-xl text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={addToCart} disabled={(orderableSizes(sizeModal.product).length > 0 && !sizeModal.size) || adding === sizeModal.product.id}
+              <button onClick={addToCart} disabled={(sizeModal.product.size_mode === 'sizes' && orderableSizes(sizeModal.product).length > 0 && !sizeModal.size) || adding === sizeModal.product.id}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-xl text-sm disabled:opacity-60 flex items-center justify-center gap-2">
                 <ShoppingCart className="w-4 h-4" /> Hinzufügen
               </button>
