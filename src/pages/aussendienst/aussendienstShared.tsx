@@ -1,5 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { CheckCircle2, ChevronDown, Circle, Pencil, Printer, Trash2 } from 'lucide-react'
+import { CheckCircle2, ChevronDown, Circle, Navigation, Pencil, Printer, Trash2 } from 'lucide-react'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import LeafletMap from '../../components/LeafletMap'
 import StreetAutocomplete, { type StreetAutocompleteHandle } from '../../components/StreetAutocomplete'
@@ -8,7 +8,7 @@ import { composeIncidentLocation, DISPOSITION_LABEL, formatTime } from '../../li
 import { reverseGeocode, type StreetSuggestion } from '../../lib/geocode'
 import { lookupParcel } from '../../lib/kataster'
 import { composeKilometerLocation } from '../../lib/roadKilometer'
-import { nearbyByLine, type LatLng } from '../../lib/geo'
+import { nearbyByLine, navigationUrl, type LatLng } from '../../lib/geo'
 import { ZIELFUNKTION_LABEL, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { useAuth } from '../../contexts/AuthContext'
 import { loadEinsatzParteien } from '../../lib/einsatzParteien'
@@ -21,6 +21,19 @@ import IncidentNamensliste from '../zentrale/IncidentNamensliste'
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
 
 export function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
+
+function NavigationButton({ point, address }: { point: LatLng | null; address: string | null }) {
+  const url = navigationUrl(point, address)
+  if (!url) return null
+  return <a
+    href={url}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="inline-flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg"
+  >
+    <Navigation className="w-3.5 h-3.5" /> Navigation starten
+  </a>
+}
 
 function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; baustellen: readonly ZentraleBaustelle[] }) {
   const nearby = nearbyByLine(point, baustellen)
@@ -82,6 +95,7 @@ function IncidentRow({ item, baustellen, takeOverIncident, releaseIncidentTakeov
     {open ? <div className="px-3 sm:px-4 pb-4 pt-1 border-t border-gray-100 space-y-3">
       <p className="text-sm text-gray-700">{item.summary}</p>
       <p className="text-xs text-gray-500">{DISPOSITION_LABEL[item.disposition]}</p>
+      <NavigationButton point={point} address={item.location} />
       <NearbyBaustellenHint point={point} baustellen={baustellen} />
       <div className="flex flex-wrap items-center gap-4">
         <PrintIncidentButton item={item} />

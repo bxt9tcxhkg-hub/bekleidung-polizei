@@ -65,3 +65,18 @@ export function nearbyByLine<T extends LineItem>(point: LatLng | null, items: re
     .sort((a, b) => a.distance - b.distance)
     .map(({ item }) => item)
 }
+
+/**
+ * Google-Maps-Link als Navigationsziel - öffnet auf dem Diensthandy die
+ * installierte Maps-App (Android/iOS), ohne eigenen API-Key oder
+ * kostenpflichtigen Routing-Dienst. Koordinaten sind genauer als eine
+ * Adresse, deshalb Vorrang; ohne Koordinaten (z. B. Kilometerangabe ohne
+ * Geokodierung) fällt es auf die Textadresse zurück. null = weder
+ * Koordinaten noch Adresse vorhanden, kein Ziel möglich.
+ */
+export function navigationUrl(point: LatLng | null, address: string | null | undefined): string | null {
+  if (point) return `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`
+  const trimmed = address?.trim()
+  if (trimmed) return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(trimmed)}`
+  return null
+}
