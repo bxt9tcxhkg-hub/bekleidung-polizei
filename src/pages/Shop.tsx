@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import type { Order, Product, Quarter } from '../lib/types'
 import { getCurrentBudget, getUsedBudget, DEFAULT_BUDGET } from '../lib/budget'
 import { fmtEUR } from '../lib/format'
-import { groupSizes, sizeLabel, sortedSizes } from '../lib/sizes'
+import { groupSizes, sizeLabel, sortedSizes, UNIVERSAL_SIZE } from '../lib/sizes'
 import { buildInventoryMap, inventoryKey } from '../lib/inventory'
 
 const CURRENT_YEAR = new Date().getFullYear()
@@ -136,7 +136,9 @@ export default function Shop() {
     const prefSize = prefKey ? (profile?.size_preferences ?? {})[prefKey] : undefined
     const hasPref = prefSize && sizes.includes(prefSize)
     const lastSize = lastSizes[product.id]
-    const defaultSize = hasPref ? prefSize : (lastSize && sizes.includes(lastSize) ? lastSize : sizes[0] ?? '')
+    let defaultSize = hasPref ? prefSize : (lastSize && sizes.includes(lastSize) ? lastSize : sizes[0] ?? '')
+    if (product.size_mode === 'universal') defaultSize = sizes[0] ?? UNIVERSAL_SIZE
+    if (product.size_mode === 'none') defaultSize = ''
     setSizeModal({ product, size: defaultSize, quantity: 1 })
   }
 
