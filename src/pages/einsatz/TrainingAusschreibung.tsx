@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Trash2, X } from 'lucide-react'
+import { Pencil, Plus, Trash2, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -131,6 +131,7 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
   const [capacity, setCapacity] = useState('')
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -191,10 +192,21 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
   }, [registrations, assignments])
 
   function openForm() {
+    setEditingId(null)
     setSessionDate('')
     setSessionNote('')
     setModuleId(modules[0]?.id ?? '')
     setCapacity('')
+    setError('')
+    setShowForm(true)
+  }
+
+  function openEdit(session: EinsatzTrainingSession) {
+    setEditingId(session.id)
+    setSessionDate(session.session_date)
+    setSessionNote(session.note ?? '')
+    setModuleId(session.module_id ?? '')
+    setCapacity(session.capacity != null ? String(session.capacity) : '')
     setError('')
     setShowForm(true)
   }
@@ -217,16 +229,20 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
     }
     setSaving(true)
     setError('')
-    const { error: insertError } = await supabase
-      .from('einsatz_training_sessions')
-      .insert({ ...result.payload, created_by: profile?.id ?? null })
-    if (insertError) {
-      setError(insertError.message || 'Anlegen fehlgeschlagen.')
+    const { error: saveError } = editingId
+      ? await supabase.from('einsatz_training_sessions').update(result.payload).eq('id', editingId)
+      : await supabase.from('einsatz_training_sessions').insert({ ...result.payload, created_by: profile?.id ?? null })
+    if (saveError) {
+      setError(saveError.message || (editingId ? 'Ändern fehlgeschlagen.' : 'Anlegen fehlgeschlagen.'))
       setSaving(false)
       return
     }
-    logAudit('Einsatztraining ausgeschrieben', `${module?.name ?? moduleId} ${result.payload.session_date}`)
+    logAudit(
+      editingId ? 'Einsatztraining-Ausschreibung geändert' : 'Einsatztraining ausgeschrieben',
+      `${module?.name ?? moduleId} ${result.payload.session_date}`,
+    )
     setShowForm(false)
+    setEditingId(null)
     setSaving(false)
     try {
       await load()
@@ -546,6 +562,18 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
                       <button
                         type="button"
                         disabled={busyId === session.id}
+                        onClick={() => openEdit(session)}
+                        className="border border-gray-300 text-gray-700 p-2 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+                        title="Ausschreibung bearbeiten"
+                        aria-label="Ausschreibung bearbeiten"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canManage && (
+                      <button
+                        type="button"
+                        disabled={busyId === session.id}
                         onClick={() => { void removeSession(session) }}
                         className="border border-red-200 text-red-700 p-2 rounded-lg hover:bg-red-50 disabled:opacity-60"
                         title="Ausschreibung löschen"
@@ -585,8 +613,8 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Trainingsprogramm ausschreiben</h2>
-              <button type="button" onClick={() => { setShowForm(false); setSaving(false) }} className="p-1.5 hover:bg-gray-100 rounded-lg">
+              <h2 className="font-bold text-gray-900">{editingId ? 'Ausschreibung bearbeiten' : 'Trainingsprogramm ausschreiben'}</h2>
+              <button type="button" onClick={() => { setShowForm(false); setSaving(false); setEditingId(null) }} className="p-1.5 hover:bg-gray-100 rounded-lg">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -617,7 +645,7 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
               )}
             </div>
             <div className="flex gap-3 px-6 py-4 border-t">
-              <button type="button" onClick={() => { setShowForm(false); setSaving(false) }} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">
+              <button type="button" onClick={() => { setShowForm(false); setSaving(false); setEditingId(null) }} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">
                 Abbrechen
               </button>
               <button
@@ -626,7 +654,7 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
                 disabled={saving}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60"
               >
-                {saving ? 'Speichern...' : 'Ausschreiben'}
+                {saving ? 'Speichern...' : editingId ? 'Speichern' : 'Ausschreiben'}
               </button>
             </div>
           </div>
