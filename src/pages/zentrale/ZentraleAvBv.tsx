@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, CheckCircle2, MapPin, Pencil, Plus, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import LeafletMap from '../../components/LeafletMap'
@@ -235,6 +235,25 @@ export default function ZentraleAvBvPage() {
     setShowForm(false); setNotice((editing ? 'Schutzmaßnahme wurde aktualisiert.' : 'Schutzmaßnahme wurde angelegt.') + kontrollHinweis); await load()
   }
 
+  // Löscht den gesamten Schutzfall samt Verknüpfungen. Geschützte Personen
+  // (schutzfall_personen), Schutzbereiche (schutzbereiche), Kontrollnotizen
+  // (schutzkontrollen) und ein eventueller Kontrollauftrag (zentrale_entries
+  // über schutzfall_id) hängen alle per ON DELETE CASCADE an schutzfaelle.id
+  // (siehe 20260915182823_create_schutzmassnahmen.sql und
+  // 20260918230000_schutzfall_kontrollauftrag.sql) - ein einzelnes Löschen
+  // der schutzfaelle-Zeile genügt, kein separater RPC-Aufruf nötig.
+  async function remove() {
+    if (!editing) return
+    const label = `${MASSNAHME_LABEL[editing.massnahme]} · PAD ${editing.pad_aktenzahl}`
+    if (!window.confirm(`${label} endgültig löschen? Geschützte Personen, Schutzbereiche und ein eventueller Kontrollauftrag werden mitgelöscht. Dies kann nicht rückgängig gemacht werden.`)) return
+    setSaving(true); setError('')
+    const result = await supabase.from('schutzfaelle').delete().eq('id', editing.id)
+    setSaving(false)
+    if (result.error) { setError('Schutzmaßnahme konnte nicht gelöscht werden.'); return }
+    logAudit('Schutzmaßnahme endgültig gelöscht', label)
+    setShowForm(false); setSelectedId(current => current === editing.id ? null : current); setNotice('Schutzmaßnahme wurde endgültig gelöscht.'); await load()
+  }
+
   return <div className="space-y-5">
     <div><Link to="/zentrale" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Zentrale</Link><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">BV/AV & einstweilige Verfügungen</h1><p className="text-sm text-gray-500 mt-1">Schutzbereiche und einsatzrelevante Hinweise – ergänzend zum führenden PAD-Akt.</p></div>
     {error && !showForm ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
@@ -286,7 +305,7 @@ export default function ZentraleAvBvPage() {
         {area.lat !== null && area.lng !== null ? <><LeafletMap height={240} markers={[{ lat: area.lat, lng: area.lng, popup: area.label }]} circles={[{ lat: area.lat, lng: area.lng, radiusMeters: form.massnahme === 'bv_av' ? 100 : area.radius, popup: area.label, color: form.massnahme === 'bv_av' ? '#dc2626' : '#7c3aed' }]} onMapClick={(lat, lng) => updateArea(area.key, { lat, lng, confirmed: false })} /><button type="button" onClick={() => updateArea(area.key, { confirmed: true })} className={`w-full rounded-lg px-3 py-2 text-sm font-semibold ${area.confirmed ? 'bg-green-100 text-green-800' : 'bg-blue-800 text-white'}`}>{area.confirmed ? 'Position bestätigt' : 'Diese Position bestätigen'}</button></> : null}
       </div>)}</div>
       <details className="rounded-xl border border-gray-200 p-3"><summary className="cursor-pointer text-sm font-semibold text-gray-700">Weitere Angaben (nur wenn vorhanden)</summary><div className="mt-4 space-y-4"><Field label="Externe / gerichtliche Aktenzahl" value={form.externeAkte} onChange={value => setForm(current => ({ ...current, externeAkte: value }))} /><label className="block text-xs font-medium text-gray-600">Status<select className={inputClass} value={form.status} onChange={event => setForm(current => ({ ...current, status: event.target.value as SchutzfallStatus }))}><option value="aktiv">Aktiv</option><option value="aufgehoben">Aufgehoben</option><option value="abgelaufen">Abgelaufen</option></select></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.waffenverbot} onChange={event => setForm(current => ({ ...current, waffenverbot: event.target.checked }))} />Vorläufiges Waffenverbot beachten</label><label className="block text-xs font-medium text-gray-600">Schlüsselstatus<select className={inputClass} value={form.schluesselStatus} onChange={event => setForm(current => ({ ...current, schluesselStatus: event.target.value as Schutzfall['schluessel_status'] }))}><option value="nicht_erfasst">Nicht erfasst</option><option value="abgenommen">Abgenommen</option><option value="verwahrt">Verwahrt</option><option value="gericht">Bei Gericht</option><option value="ausgefolgt">Ausgefolgt</option></select></label>{form.schluesselStatus !== 'nicht_erfasst' ? <Field label="Verwahrort / Übergabe" value={form.verwahrort} onChange={value => setForm(current => ({ ...current, verwahrort: value }))} /> : null}<Area label="Ausnahmen" value={form.ausnahmen} onChange={value => setForm(current => ({ ...current, ausnahmen: value }))} /><Area label="Einsatzrelevante Hinweise" value={form.hinweise} onChange={value => setForm(current => ({ ...current, hinweise: value }))} /></div></details>
-      {error ? <ErrorMessage text={error} /> : null}<div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm">Abbrechen</button><button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
+      {error ? <ErrorMessage text={error} /> : null}<div className="flex flex-wrap justify-end gap-3 pt-2">{editing && canOperate ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Endgültig löschen</button> : null}<button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm">Abbrechen</button><button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>
     </Modal> : null}
   </div>
 }
