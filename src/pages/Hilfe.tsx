@@ -54,6 +54,7 @@ export default function Hilfe() {
   const [saving, setSaving] = useState(false)
   const [closing, setClosing] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletingTicket, setDeletingTicket] = useState(false)
 
   const loadTickets = useCallback(async () => {
     if (!profile) return
@@ -190,6 +191,26 @@ export default function Hilfe() {
       }
     }
     setDeletingId(null)
+  }
+
+  async function deleteTicket() {
+    if (!selected || !canManageSelected) return
+    if (!window.confirm('Den gesamten Vorgang inklusive Chatverlauf endgültig löschen?')) return
+    setDeletingTicket(true)
+    setError('')
+    const { error: deleteError } = await supabase.from('support_tickets').delete().eq('id', selected.id)
+    if (deleteError) {
+      setError('Vorgang konnte nicht gelöscht werden.')
+      setDeletingTicket(false)
+      return
+    }
+    setSelectedId(null)
+    try {
+      await loadTickets()
+    } catch {
+      setError('Vorgang gelöscht, Liste konnte nicht aktualisiert werden.')
+    }
+    setDeletingTicket(false)
   }
 
   async function closeTicket() {
@@ -347,9 +368,23 @@ export default function Hilfe() {
                         {formatWhen(selected.created_at)}
                       </p>
                     </div>
-                    <span className={`flex-shrink-0 inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_STATUS_COLORS[selected.status]}`}>
-                      {SUPPORT_STATUS_LABELS[selected.status]}
-                    </span>
+                    <div className="flex-shrink-0 flex items-center gap-2">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${SUPPORT_STATUS_COLORS[selected.status]}`}>
+                        {SUPPORT_STATUS_LABELS[selected.status]}
+                      </span>
+                      {canManageSelected && (
+                        <button
+                          type="button"
+                          onClick={() => void deleteTicket()}
+                          disabled={deletingTicket}
+                          className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-60"
+                          aria-label="Gesamten Chatverlauf löschen"
+                          title="Gesamten Chatverlauf löschen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
