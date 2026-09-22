@@ -10,6 +10,7 @@ import {
 } from '../../lib/ereignis'
 import { EREIGNISSTUFEN, STUFE_META, formatStamp, telefonketteFuer } from '../../lib/einsatzSchema'
 import { formatTime } from '../../lib/zentraleShared'
+import { loadEreignisKontakte, telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
 import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport, OperationalPerson } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
@@ -39,6 +40,7 @@ export default function EinsatzArbeitModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [cockpitRefresh, setCockpitRefresh] = useState(0)
+  const [kontakte, setKontakte] = useState<Record<string, EreignisKontaktTreffer[]>>({})
 
   const stufe: EreignisDimension = ereignis?.dimension ?? 'klein'
   const meta = STUFE_META[stufe]
@@ -68,6 +70,15 @@ export default function EinsatzArbeitModal({
   useEffect(() => {
     if (!hatEreignisArbeitsraum && tab === 'ereignis') setTab('uebersicht')
   }, [hatEreignisArbeitsraum, tab])
+
+  useEffect(() => {
+    if (!hatEreignisArbeitsraum) { setKontakte({}); return }
+    let cancelled = false
+    void loadEreignisKontakte(telefonketteFuer(stufe))
+      .then(rows => { if (!cancelled) setKontakte(rows) })
+      .catch(() => { if (!cancelled) setKontakte({}) })
+    return () => { cancelled = true }
+  }, [hatEreignisArbeitsraum, stufe])
 
   async function setStufe(next: EreignisDimension) {
     if (!canOperateZentrale || busy || next === stufe) return
@@ -169,6 +180,7 @@ export default function EinsatzArbeitModal({
         refreshToken={cockpitRefresh}
         onSaved={saved => { setEreignis(saved); setCockpitRefresh(value => value + 1) }}
         onMarkVerstaendigung={markKette}
+        kontakte={kontakte}
         onGoTo={goToEreignisSection}
         onOpenFiles={() => setTab('dateien')}
       />
@@ -190,8 +202,20 @@ export default function EinsatzArbeitModal({
         <div className="space-y-2">{telefonketteFuer(stufe).map(label => {
         const key = verstaendigungKey(label)
         const row = standByKey.get(key)
+        const kontaktTreffer = kontakte[label] ?? []
         return <div key={key} className="rounded-xl border border-gray-200 bg-white p-3">
-          <p className="text-sm font-semibold text-gray-900">{label}</p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{label}</p>
+              {kontaktTreffer.length > 0 ? <div className="mt-1 space-y-0.5">{kontaktTreffer.map(kontakt => <p key={kontakt.id} className="text-xs text-gray-600">
+                {kontakt.name}{kontakt.funktion && kontakt.funktion !== label ? ' · ' + kontakt.funktion : ''}
+                {kontakt.erreichbarkeit ? ' · ' + kontakt.erreichbarkeit : ''}
+              </p>)}</div> : <p className="mt-1 text-xs text-amber-700">Keine gepflegten Kontaktdaten gefunden.</p>}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {kontaktTreffer.filter(kontakt => kontakt.telefon).map(kontakt => <a key={kontakt.id} href={telHref(kontakt.telefon!)} className="rounded-lg bg-blue-800 px-2.5 py-1.5 text-xs font-bold text-white">TEL {kontakt.telefon}</a>)}
+            </div>
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'versucht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.versucht_at ? 'bg-amber-100 border-amber-400' : 'border-gray-300 bg-white')}>
               {row?.versucht_at ? 'Versucht ' + formatStamp(row.versucht_at) : 'Versucht'}
@@ -202,11 +226,12 @@ export default function EinsatzArbeitModal({
           </div>
         </div>
       })}</div>
-        <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
+        <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-gray-500 mt-2">Kontaktdaten verwalten</Link>
       </div>
 
       <div id="ereignis-ablauf" className="scroll-mt-4 border-t border-gray-200 pt-4">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-3">Ablauf / Checklisten</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-1">Offene Maßnahmen</h3>
+        <p className="text-xs text-gray-500 mb-3">Nur das anzeigen, was jetzt noch relevant ist. Erledigtes bleibt im Hintergrund dokumentiert.</p>
         <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} />
       </div>
 
