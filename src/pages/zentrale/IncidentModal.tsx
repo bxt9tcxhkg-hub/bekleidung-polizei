@@ -64,6 +64,43 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
 
   return <Modal title={editing ? 'Meldung bearbeiten' : 'Neue Meldung'} close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(480px,1.1fr)] gap-5">
     <div className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Meldungsleger</p>
+        <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1 mb-3" role="group" aria-label="Art des Meldungslegers">
+          <button
+            type="button"
+            aria-pressed={!orgMode}
+            onClick={() => {
+              if (!orgMode) return
+              setOrgMode(false)
+              patch({ callerOrg: '' })
+            }}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${!orgMode ? 'bg-white text-blue-800 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Person
+          </button>
+          <button
+            type="button"
+            aria-pressed={orgMode}
+            onClick={() => {
+              if (orgMode) return
+              setOrgMode(true)
+              patch({ callerPersonId: null })
+            }}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${orgMode ? 'bg-white text-blue-800 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Meldende Stelle
+          </button>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {orgMode
+            ? <Field label="Stelle / Organisation" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} />
+            : <PersonNameAutocomplete label="Name (optional)" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
+          <Field label="Telefonnummer (optional)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
+        </div>
+        {orgMode ? <p className="mt-2 text-xs text-gray-500">Zum Beispiel RFL, LLZ, Feuerwehr oder andere Einrichtung.</p> : null}
+      </div>
+
       <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Einsatzort *</p>
       <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1">
         <button type="button" onClick={() => patch({ locationMode: 'address', roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, location: composeIncidentLocation(incident.street, incident.houseNumber, incident.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${incident.locationMode === 'address' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straße und Hausnummer</button>
@@ -109,43 +146,6 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
           <option value="">Keine / nicht eindeutig</option>
           {reasonConfigs.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
         </select> : null}
-      </div>
-
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Meldungsleger</p>
-        <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1 mb-3" role="group" aria-label="Art des Meldungslegers">
-          <button
-            type="button"
-            aria-pressed={!orgMode}
-            onClick={() => {
-              if (!orgMode) return
-              setOrgMode(false)
-              patch({ callerOrg: '' })
-            }}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${!orgMode ? 'bg-white text-blue-800 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            Person
-          </button>
-          <button
-            type="button"
-            aria-pressed={orgMode}
-            onClick={() => {
-              if (orgMode) return
-              setOrgMode(true)
-              patch({ callerPersonId: null })
-            }}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${orgMode ? 'bg-white text-blue-800 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
-          >
-            Meldende Stelle
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {orgMode
-            ? <Field label="Stelle / Organisation" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} />
-            : <PersonNameAutocomplete label="Name (optional)" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
-          <Field label="Telefonnummer (optional)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
-        </div>
-        {orgMode ? <p className="mt-2 text-xs text-gray-500">Zum Beispiel RFL, LLZ, Feuerwehr oder andere Einrichtung.</p> : null}
       </div>
 
       <OrtDossier street={incident.street} houseNumber={incident.houseNumber} location={incident.location} />
