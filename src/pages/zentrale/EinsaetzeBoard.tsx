@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatTime } from '../../lib/zentraleShared'
-import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, noteWithoutStufe, readStoredStufe, telefonketteFuer, withStufe, writeStoredStufe, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, telefonketteFuer, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { loadEreignisDimensionen, setIncidentEreignisDimension } from '../../lib/ereignis'
 import type { IncidentReport, ZentraleKontakt } from '../../lib/types'
 
 export default function EinsaetzeBoard({
@@ -30,13 +31,15 @@ export default function EinsaetzeBoard({
   }, [])
 
   useEffect(() => {
-    setLevels(current => {
-      const next = { ...current }
-      for (const item of items) {
-        if (!next[item.id]) next[item.id] = readStoredStufe(item.id, item.note)
-      }
-      return next
-    })
+    let cancelled = false
+    void loadEreignisDimensionen(items.map(item => item.id))
+      .then(result => {
+        if (!cancelled) setLevels(Object.fromEntries(items.map(item => [item.id, result[item.id] ?? 'klein'])))
+      })
+      .catch(() => {
+        if (!cancelled) setLevels(Object.fromEntries(items.map(item => [item.id, 'klein'])))
+      })
+    return () => { cancelled = true }
   }, [items])
 
   const chosen = useMemo(() => items.filter(item => selected[item.id]), [items, selected])
@@ -47,16 +50,14 @@ export default function EinsaetzeBoard({
   }
 
   function stufeOf(item: IncidentReport): Ereignisstufe {
-    return levels[item.id] ?? readStoredStufe(item.id, item.note)
+    return levels[item.id] ?? 'klein'
   }
 
   async function setStufe(item: IncidentReport, stufe: Ereignisstufe, event: { stopPropagation: () => void }) {
     event.stopPropagation()
-    writeStoredStufe(item.id, stufe)
-    setLevels(current => ({ ...current, [item.id]: stufe }))
     setExpanded(item.id)
-    const note = withStufe(noteWithoutStufe(item.note), stufe)
-    await supabase.from('incident_reports').update({ note: note || null }).eq('id', item.id)
+    const saved = await setIncidentEreignisDimension(item.id, stufe)
+    setLevels(current => ({ ...current, [item.id]: saved?.dimension ?? 'klein' }))
   }
 
   function printSelected() {
