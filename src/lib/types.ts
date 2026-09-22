@@ -450,6 +450,8 @@ export interface FleetVehicle {
   license_plate: string | null
   notes: string | null
   responsible_user_id: string | null
+  operational_status: 'verfuegbar' | 'werkstatt' | 'ausser_dienst'
+  operational_status_note: string | null
   active: boolean
   created_by: string | null
   created_at: string
@@ -888,6 +890,9 @@ export interface IncidentReport {
   /** Beamter/in, der/die die Meldung im Außendienst selbst übernommen hat. */
   taken_over_by: string | null
   taken_over_at: string | null
+  taken_over_vehicle_id: string | null
+  completed_by: string | null
+  completed_at: string | null
   created_by: string
   created_at: string
   updated_at: string
@@ -895,6 +900,17 @@ export interface IncidentReport {
   involved_person_ref?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> | null
   assigned_vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign' | 'license_plate'> | null
   taken_over_by_profile?: Pick<Profile, 'id' | 'name'> | null
+}
+
+export interface IncidentSupport {
+  id: string
+  incident_id: string
+  vehicle_id: string
+  started_by: string
+  started_at: string
+  ended_by: string | null
+  ended_at: string | null
+  vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign' | 'license_plate'> | null
 }
 
 export type EinsatzParteiRolle = 'beschuldigter' | 'opfer' | 'zeuge' | 'sonstige'
@@ -1792,6 +1808,12 @@ export type Database = {
       merge_operational_persons: { Args: { p_keep_id: string; p_remove_id: string }; Returns: undefined }
       take_over_incident: { Args: { p_id: string }; Returns: undefined }
       release_incident_takeover: { Args: { p_id: string }; Returns: undefined }
+      suggest_duty_vehicle: { Args: { p_function: string }; Returns: string | null }
+      current_patrol_vehicle: { Args: Record<string, never>; Returns: string | null }
+      support_incident: { Args: { p_id: string }; Returns: undefined }
+      stop_supporting_incident: { Args: { p_id: string }; Returns: undefined }
+      complete_incident: { Args: { p_id: string }; Returns: undefined }
+      reopen_incident: { Args: { p_id: string }; Returns: undefined }
       create_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: string | null }
       remove_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
