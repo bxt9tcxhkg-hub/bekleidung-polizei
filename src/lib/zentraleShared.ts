@@ -109,6 +109,7 @@ export type IncidentFormState = {
   kilometerFrom: number | null
   kilometerTo: number | null
   location: string
+  reasonCode: string
   summary: string
   involvedPersonId: string | null
   disposition: IncidentDisposition
@@ -124,6 +125,6 @@ export const EMPTY_INCIDENT_FORM: IncidentFormState = {
   callerPhone: '', callerPersonId: null, callerOrg: '', locationMode: 'address',
   street: '', houseNumber: '', houseNumberUnknown: false,
   roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null,
-  location: '', summary: '', involvedPersonId: null, disposition: 'jd', assignedVehicleId: null, note: '',
+  location: '', reasonCode: '', summary: '', involvedPersonId: null, disposition: 'jd', assignedVehicleId: null, note: '',
   lat: null, lng: null, coordsPrecise: false, reportedTime: '',
 }
