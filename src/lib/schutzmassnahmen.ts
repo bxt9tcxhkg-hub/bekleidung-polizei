@@ -38,6 +38,9 @@ export interface Schutzfall {
   beginn: string
   ende: string
   status: SchutzfallStatus
+  aufgehoben_am: string | null
+  aufgehoben_durch: string | null
+  aufhebungsgrund: string | null
   waffenverbot: boolean
   schluessel_status: 'nicht_erfasst' | 'abgenommen' | 'verwahrt' | 'gericht' | 'ausgefolgt'
   schluessel_verwahrort: string | null
