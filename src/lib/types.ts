@@ -873,7 +873,10 @@ export interface IncidentReport {
   /** Echte Verknüpfung zum Personen-Register statt Namens-Freitext. */
   caller_person_id: string | null
   reported_at: string
+  reason_code: string | null
   location: string | null
+  location_street: string | null
+  location_house_number: string | null
   location_lat: number | null
   location_lng: number | null
   summary: string
@@ -911,6 +914,22 @@ export interface IncidentSupport {
   ended_by: string | null
   ended_at: string | null
   vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign' | 'license_plate'> | null
+}
+
+export interface IncidentReasonConfig {
+  code: string
+  label: string
+  nearby_radius_m: number
+  sort_order: number
+  active: boolean
+}
+
+export interface IncidentContextItem {
+  kind: string
+  severity: 'sicherheit' | 'operativ' | 'nahbereich'
+  title: string
+  detail: string | null
+  distance_m: number | null
 }
 
 export type EinsatzParteiRolle = 'beschuldigter' | 'opfer' | 'zeuge' | 'sonstige'
@@ -1406,6 +1425,7 @@ type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref' | 'assigned_vehicle' | 'taken_over_by_profile'>
 type IncidentSupportRow = Omit<IncidentSupport, 'vehicle'>
+type IncidentReasonConfigRow = Omit<IncidentReasonConfig, never>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
 type EinsatzChecklistPunktRow = Omit<EinsatzChecklistPunkt, never>
 type NamenslistePersonRow = Omit<NamenslistePerson, never>
@@ -1639,6 +1659,7 @@ export type Database = {
         { foreignKeyName: 'incident_reports_assigned_vehicle_id_fkey'; columns: ['assigned_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_taken_over_by_fkey'; columns: ['taken_over_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      incident_reason_configs: { Row: IncidentReasonConfigRow; Insert: IncidentReasonConfigRow; Update: Partial<IncidentReasonConfigRow>; Relationships: [] }
       incident_supports: { Row: IncidentSupportRow; Insert: Pick<IncidentSupportRow, 'incident_id' | 'vehicle_id' | 'started_by'> & Partial<Omit<IncidentSupportRow, 'id' | 'started_at' | 'incident_id' | 'vehicle_id' | 'started_by'>>; Update: Partial<Omit<IncidentSupportRow, 'id' | 'incident_id' | 'vehicle_id' | 'started_by' | 'started_at'>>; Relationships: [
         { foreignKeyName: 'incident_supports_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_supports_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
@@ -1821,6 +1842,7 @@ export type Database = {
       stop_supporting_incident: { Args: { p_id: string }; Returns: undefined }
       complete_incident: { Args: { p_id: string }; Returns: undefined }
       reopen_incident: { Args: { p_id: string }; Returns: undefined }
+      incident_context: { Args: { p_incident_id: string }; Returns: IncidentContextItem[] }
       create_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: string | null }
       remove_schutzfall_kontrollauftrag: { Args: { p_schutzfall_id: string }; Returns: undefined }
       decide_training_assignment: { Args: { p_assignment_id: string; p_approve: boolean; p_session_id?: string | null; p_note?: string | null }; Returns: string | null }
