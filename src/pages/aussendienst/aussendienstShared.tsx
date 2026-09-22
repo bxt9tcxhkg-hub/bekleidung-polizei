@@ -15,7 +15,7 @@ import { loadEinsatzParteien } from '../../lib/einsatzParteien'
 import { readDokumente } from '../../lib/einsatzDokumente'
 import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
 import { officerPrintName } from '../../lib/printDocs'
-import type { IncidentDisposition, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
+import type { IncidentDisposition, IncidentSupport, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import IncidentDocs from '../zentrale/IncidentDocs'
 import IncidentNamensliste from '../zentrale/IncidentNamensliste'
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
@@ -44,7 +44,7 @@ function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; bau
 type IncidentListItem = {
   id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
   caller_name?: string | null; caller_phone?: string | null; involved_person?: string | null; involved_birth_date?: string | null
-  assigned_vehicle_id?: string | null; taken_over_by?: string | null; taken_over_at?: string | null
+  assigned_vehicle_id?: string | null; taken_over_by?: string | null; taken_over_at?: string | null; taken_over_vehicle_id?: string | null; completed_by?: string | null; completed_at?: string | null
   assigned_vehicle?: { id: string; name: string; call_sign: string | null } | null
   taken_over_by_profile?: { id: string; name: string } | null
 }
@@ -73,56 +73,94 @@ function PrintIncidentButton({ item }: { item: IncidentListItem }) {
   return <button type="button" onClick={() => void print()} disabled={printing} className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 hover:underline disabled:opacity-60"><Printer className="w-3.5 h-3.5" />{printing ? 'Wird vorbereitet…' : 'Übersicht drucken'}</button>
 }
 
-function IncidentRow({ item, baustellen, takeOverIncident, releaseIncidentTakeover }: { item: IncidentListItem; baustellen: readonly ZentraleBaustelle[]; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void> }) {
+function IncidentRow({
+  item, baustellen, ownVehicleId, supports, takeOverIncident, releaseIncidentTakeover,
+  supportIncident, stopSupportingIncident, completeIncident, reopenIncident,
+}: {
+  item: IncidentListItem
+  baustellen: readonly ZentraleBaustelle[]
+  ownVehicleId?: string | null
+  supports: readonly IncidentSupport[]
+  takeOverIncident?: (id: string) => Promise<void>
+  releaseIncidentTakeover?: (id: string) => Promise<void>
+  supportIncident?: (id: string) => Promise<void>
+  stopSupportingIncident?: (id: string) => Promise<void>
+  completeIncident?: (id: string) => Promise<void>
+  reopenIncident?: (id: string) => Promise<void>
+}) {
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null
   const takenOverByMe = Boolean(item.taken_over_by && item.taken_over_by === profile?.id)
-  async function handleTakeOver() { if (!takeOverIncident) return; setBusy(true); try { await takeOverIncident(item.id) } finally { setBusy(false) } }
-  async function handleRelease() { if (!releaseIncidentTakeover) return; setBusy(true); try { await releaseIncidentTakeover(item.id) } finally { setBusy(false) } }
-  return <article className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+  const primaryVehicleId = item.taken_over_vehicle_id || item.assigned_vehicle_id
+  const ownIsPrimary = Boolean(ownVehicleId && primaryVehicleId === ownVehicleId)
+  const activeSupports = supports.filter(row => row.incident_id === item.id && row.ended_at === null)
+  const ownSupport = activeSupports.find(row => row.vehicle_id === ownVehicleId)
+  const canTakeOver = item.status !== 'erledigt' && (!primaryVehicleId || ownIsPrimary)
+  const canComplete = item.status !== 'erledigt' && (ownIsPrimary || takenOverByMe)
+  const canReopen = item.status === 'erledigt' && (ownIsPrimary || item.completed_by === profile?.id)
+
+  async function run(action: (() => Promise<void>) | undefined) {
+    if (!action) return
+    setBusy(true)
+    try { await action() } finally { setBusy(false) }
+  }
+
+  return <article className={`rounded-2xl border bg-white overflow-hidden ${ownIsPrimary ? 'border-blue-300 shadow-sm' : 'border-gray-200'}`}>
     <button type="button" onClick={() => setOpen(!open)} className="w-full flex flex-wrap items-center justify-between gap-2 p-3 sm:p-4 text-left hover:bg-gray-50">
-      <div className="flex flex-wrap items-center gap-2 min-w-0">
-        <span className="font-bold text-gray-900 flex-shrink-0">{formatTime(item.reported_at)}</span>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{statusBadge(item.status)}</span>
-        {item.assigned_vehicle ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 flex-shrink-0">{item.assigned_vehicle.call_sign || item.assigned_vehicle.name}</span> : null}
-        {item.taken_over_by_profile ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 flex-shrink-0">Übernommen: {item.taken_over_by_profile.name}</span> : null}
-        <span className="text-sm text-gray-700 truncate">{item.location || 'Ohne Ortsangabe'}</span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.status === 'erledigt' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{statusBadge(item.status)}</span>
+          {ownIsPrimary ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Meine Streife</span> : null}
+          {item.assigned_vehicle ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">{item.assigned_vehicle.call_sign || item.assigned_vehicle.name}</span> : null}
+          {ownSupport ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">Unterstützung aktiv</span> : null}
+        </div>
+        <p className="text-sm font-medium text-gray-800 mt-1 truncate">{item.location || 'Ohne Ortsangabe'}</p>
+        <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">{item.summary}</p>
       </div>
       <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
-    {open ? <div className="px-3 sm:px-4 pb-4 pt-1 border-t border-gray-100 space-y-3">
-      <p className="text-sm text-gray-700">{item.summary}</p>
-      <p className="text-xs text-gray-500">{DISPOSITION_LABEL[item.disposition]}</p>
-      <NavigationButton point={point} address={item.location} />
-      <NearbyBaustellenHint point={point} baustellen={baustellen} />
-      <div className="flex flex-wrap items-center gap-4">
-        <PrintIncidentButton item={item} />
-        {takeOverIncident && releaseIncidentTakeover ? (takenOverByMe
-          ? <button type="button" onClick={() => void handleRelease()} disabled={busy} className="text-xs font-medium text-gray-600 hover:underline disabled:opacity-60">Übernahme zurücknehmen</button>
-          : <button type="button" onClick={() => void handleTakeOver()} disabled={busy} className="text-xs font-semibold text-purple-700 hover:underline disabled:opacity-60">{item.taken_over_by_profile ? 'Stattdessen selbst übernehmen' : 'Übernehmen'}</button>) : null}
+
+    {open ? <div className="px-3 sm:px-4 pb-4 pt-3 border-t border-gray-100 space-y-3">
+      <div className="flex flex-wrap gap-2">
+        <NavigationButton point={point} address={item.location} />
+        {item.status !== 'erledigt' && !item.taken_over_at && canTakeOver && takeOverIncident ? <button type="button" disabled={busy} onClick={() => void run(() => takeOverIncident(item.id))} className="inline-flex items-center gap-1.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Übernehmen</button> : null}
+        {item.status !== 'erledigt' && item.taken_over_at && (ownIsPrimary || takenOverByMe) && releaseIncidentTakeover ? <button type="button" disabled={busy} onClick={() => void run(() => releaseIncidentTakeover(item.id))} className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-60">Übernahme zurücknehmen</button> : null}
+        {item.status !== 'erledigt' && !ownIsPrimary && ownVehicleId && !ownSupport && supportIncident ? <button type="button" disabled={busy} onClick={() => void run(() => supportIncident(item.id))} className="inline-flex items-center gap-1.5 border border-purple-300 text-purple-800 bg-purple-50 text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Unterstützen</button> : null}
+        {item.status !== 'erledigt' && ownSupport && stopSupportingIncident ? <button type="button" disabled={busy} onClick={() => void run(() => stopSupportingIncident(item.id))} className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-60">Unterstützung beenden</button> : null}
+        {canComplete && completeIncident ? <button type="button" disabled={busy} onClick={() => void run(() => completeIncident(item.id))} className="inline-flex items-center gap-1.5 bg-green-700 hover:bg-green-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Erledigen</button> : null}
+        {canReopen && reopenIncident ? <button type="button" disabled={busy} onClick={() => void run(() => reopenIncident(item.id))} className="inline-flex items-center gap-1.5 border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Wieder öffnen</button> : null}
       </div>
+
+      {activeSupports.length > 0 ? <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2"><p className="text-xs font-semibold text-purple-900">Unterstützende Streifen</p><p className="text-sm text-purple-900 mt-0.5">{activeSupports.map(row => row.vehicle?.call_sign || row.vehicle?.name || 'Streife').join(', ')}</p></div> : null}
+
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Sachverhalt</p>
+        <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{item.summary}</p>
+      </div>
+      {(item.caller_name || item.caller_phone) ? <div><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Meldungsleger</p><p className="text-sm text-gray-700 mt-1">{item.caller_name || 'Name nicht erfasst'}{item.caller_phone ? ` · ${item.caller_phone}` : ''}</p></div> : null}
+      <p className="text-xs text-gray-500">{DISPOSITION_LABEL[item.disposition]}</p>
+      <NearbyBaustellenHint point={point} baustellen={baustellen} />
+      <div><PrintIncidentButton item={item} /></div>
+
       <details className="rounded-xl border border-gray-200 px-3 py-2">
-        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Ablauf-Checkliste (Erstmeldung / Notunterkunft)</summary>
-        <div className="mt-2"><EinsatzChecklisten incidentId={item.id} canOperate /></div>
-      </details>
-      <details className="rounded-xl border border-gray-200 px-3 py-2">
-        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Dateien</summary>
-        <div className="mt-2"><IncidentDocs incidentId={item.id} from="streife" /></div>
-      </details>
-      <details className="rounded-xl border border-gray-200 px-3 py-2">
-        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Listen</summary>
-        <div className="mt-2"><IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} /></div>
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Weitere Einsatzinformationen</summary>
+        <div className="mt-3 space-y-3">
+          <EinsatzChecklisten incidentId={item.id} canOperate />
+          <IncidentDocs incidentId={item.id} from="streife" />
+          <IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} />
+        </div>
       </details>
     </div> : null}
   </article>
 }
 
-export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt, takeOverIncident, releaseIncidentTakeover }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void>; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void> }) {
+export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt, ownVehicleId, incidentSupports, takeOverIncident, releaseIncidentTakeover, supportIncident, stopSupportingIncident, completeIncident, reopenIncident }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void>; ownVehicleId?: string | null; incidentSupports?: IncidentSupport[]; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void>; supportIncident?: (id: string) => Promise<void>; stopSupportingIncident?: (id: string) => Promise<void>; completeIncident?: (id: string) => Promise<void>; reopenIncident?: (id: string) => Promise<void> }) {
   if (kind === 'incidents') {
     if (!incidents || incidents.length === 0) return <Empty text="Heute wurden noch keine Meldungen erfasst." />
-    return <div className="space-y-2">{incidents.map(item => <IncidentRow key={item.id} item={item} baustellen={baustellen ?? []} takeOverIncident={takeOverIncident} releaseIncidentTakeover={releaseIncidentTakeover} />)}</div>
+    return <div className="space-y-2">{incidents.map(item => <IncidentRow key={item.id} item={item} baustellen={baustellen ?? []} ownVehicleId={ownVehicleId} supports={incidentSupports ?? []} takeOverIncident={takeOverIncident} releaseIncidentTakeover={releaseIncidentTakeover} supportIncident={supportIncident} stopSupportingIncident={stopSupportingIncident} completeIncident={completeIncident} reopenIncident={reopenIncident} />)}</div>
   }
   const list = entries ?? []
   if (list.length === 0) return <Empty text="Keine Einträge vorhanden." />
