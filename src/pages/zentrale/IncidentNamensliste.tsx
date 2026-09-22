@@ -59,8 +59,9 @@ function StatusButton({
   >{children}</button>
 }
 
-export default function IncidentNamensliste({ incidentId, incidentTitel, canOperate = true, onChanged }: { incidentId: string; incidentTitel: string; canOperate?: boolean; onChanged?: () => void }) {
+export default function IncidentNamensliste({ incidentId, incidentTitel, canOperate = true, mode = 'feld', onChanged }: { incidentId: string; incidentTitel: string; canOperate?: boolean; mode?: 'zentrale' | 'feld'; onChanged?: () => void }) {
   const { profile } = useAuth()
+  const isZentrale = mode === 'zentrale'
   const [listenart, setListenart] = useState<Listenart>('haus')
   const [personen, setPersonen] = useState<NamenslistePerson[]>([])
   const [counts, setCounts] = useState<Record<Listenart, number>>({ haus: 0, kontrolle: 0, evakuierung: 0, befragung: 0, unterbringung: 0 })
@@ -173,6 +174,9 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   }
 
   return <div className="space-y-3">
+    {isZentrale ? <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+      Die Zentrale stellt Bewohnerdaten und Unterlagen bereit. Wer evakuiert oder untergebracht wird und welchen Status eine Person vor Ort hat, wird von den Kräften vor Ort bzw. der Einsatzleitung geführt.
+    </div> : null}
     <div className="grid grid-cols-3 gap-2">
       {PRIMARY_LISTS.map(key => <button
         key={key}
@@ -204,9 +208,9 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       <span className="rounded-full bg-gray-50 border border-gray-200 px-2 py-1">Unbekannt <strong>{evakuierungStats.unbekannt}</strong></span>
     </div> : null}
 
-    <p className="text-xs text-gray-500">{LISTENART_SPALTEN[listenart]} · nach Top-Nr sortiert</p>
+    <p className="text-xs text-gray-500">{isZentrale && listenart !== 'haus' ? 'Rückmeldung / Bearbeitungsstand der Kräfte vor Ort · ' : ''}{LISTENART_SPALTEN[listenart]} · nach Top-Nr sortiert</p>
 
-    {ausgewaehltePersonen.length > 0 && listenart !== 'unterbringung' ? <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-2">
+    {!isZentrale && ausgewaehltePersonen.length > 0 && listenart !== 'unterbringung' ? <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-2">
       <span className="text-xs font-semibold text-blue-950">{ausgewaehltePersonen.length} ausgewählt</span>
       {listenart !== 'evakuierung' ? <button type="button" disabled={busy} onClick={() => void kopieren('evakuierung')} className="text-xs font-semibold text-blue-800 border border-blue-300 bg-white rounded-md px-2 py-1.5 disabled:opacity-50">→ Evakuierung</button> : null}
       <button type="button" disabled={busy} onClick={() => void kopieren('unterbringung')} className="text-xs font-semibold text-blue-800 border border-blue-300 bg-white rounded-md px-2 py-1.5 disabled:opacity-50">→ Notunterkunft</button>
@@ -217,7 +221,18 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       {listenart === 'haus' ? 'Noch keine Bewohnerdaten. ZMR/Abfrage hochladen oder Person manuell ergänzen.' : 'Noch keine Personen in dieser Liste.'}
     </p> : <ul className="space-y-1.5">{personen.map(person => (
       <li key={person.id} className={listenart === 'unterbringung' ? 'rounded-lg border border-gray-200 p-2' : 'rounded-lg border border-gray-100 p-2 text-xs'}>
-        {listenart === 'unterbringung' ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        {listenart === 'unterbringung' && isZentrale ? <div>
+          <p className="text-sm font-semibold text-gray-900">{person.name}</p>
+          <p className="mt-1 text-xs text-gray-600">{[
+            person.wohnung ? 'Top ' + person.wohnung : null,
+            person.alter != null ? person.alter + ' Jahre' : null,
+            person.geschlecht,
+            person.sprache,
+            person.telefon,
+          ].filter(Boolean).join(' · ') || 'Keine Zusatzangaben'}</p>
+          {person.ort_unterkunft ? <p className="mt-1 text-xs text-gray-600">Unterkunft: {person.ort_unterkunft}</p> : null}
+          {person.anmerkungen ? <p className="mt-1 text-xs text-gray-500">{person.anmerkungen}</p> : null}
+        </div> : listenart === 'unterbringung' ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
           <InlineField value={person.name} placeholder="Name" onCommit={value => void onFieldChange(person, { name: value })} className="text-xs font-medium border border-gray-300 rounded-md px-1.5 py-1 bg-white col-span-2 sm:col-span-1" />
           <InlineField value={person.wohnung ?? ''} placeholder="Top-Nr" onCommit={value => void onFieldChange(person, { wohnung: value || null })} />
           <InlineField value={person.alter != null ? String(person.alter) : ''} placeholder="Alter" onCommit={value => void onFieldChange(person, { alter: value ? Number(value) || null : null })} />
@@ -231,11 +246,11 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
           <InlineField value={person.anmerkungen ?? ''} placeholder="Anmerkungen" onCommit={value => void onFieldChange(person, { anmerkungen: value || null })} className="text-xs border border-gray-300 rounded-md px-1.5 py-1 bg-white col-span-2" />
           {canOperate ? <button type="button" onClick={() => void onRemovePerson(person)} className="text-xs text-red-700 hover:underline text-left">Entfernen</button> : null}
         </div> : <div className="flex flex-wrap items-center gap-2">
-          <input type="checkbox" checked={!!ausgewaehlt[person.id]} onChange={() => setAusgewaehlt(current => ({ ...current, [person.id]: !current[person.id] }))} />
+          {!isZentrale ? <input type="checkbox" checked={!!ausgewaehlt[person.id]} onChange={() => setAusgewaehlt(current => ({ ...current, [person.id]: !current[person.id] }))} /> : null}
           <span className="font-medium text-gray-900">{person.name}</span>
           {person.wohnung ? <span className="text-gray-500">Top {person.wohnung}</span> : null}
           {person.geboren ? <span className="text-gray-500">* {person.geboren}</span> : null}
-          {listenart === 'evakuierung' ? <div className="flex gap-1 sm:ml-auto">
+          {listenart === 'evakuierung' && isZentrale ? <span className="sm:ml-auto rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-700">{statusLabel(listenart, person.status)}</span> : listenart === 'evakuierung' ? <div className="flex gap-1 sm:ml-auto">
             <StatusButton active={person.status === 'im_haus'} disabled={!canOperate} onClick={() => void onFieldChange(person, { status: 'im_haus' })}>Im Haus</StatusButton>
             <StatusButton active={person.status === 'draussen'} disabled={!canOperate} onClick={() => void onFieldChange(person, { status: 'draussen' })}>Draußen</StatusButton>
             <StatusButton active={person.status !== 'im_haus' && person.status !== 'draussen'} disabled={!canOperate} onClick={() => void onFieldChange(person, { status: 'unbekannt' })}>Unbekannt</StatusButton>
@@ -245,12 +260,12 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
             onClick={() => void onFieldChange(person, { status: person.status === 'erledigt' ? 'offen' : 'erledigt' })}
             className="px-2 py-1 rounded-md border border-gray-300 bg-white disabled:opacity-50"
           >{statusLabel(listenart, person.status)}</button> : null}
-          {canOperate ? <button type="button" onClick={() => void onRemovePerson(person)} className="text-red-700 hover:underline sm:ml-auto">Entfernen</button> : null}
+          {canOperate && (!isZentrale || listenart === 'haus') ? <button type="button" onClick={() => void onRemovePerson(person)} className="text-red-700 hover:underline sm:ml-auto">Entfernen</button> : null}
         </div>}
       </li>
     ))}</ul>}
 
-    {canOperate ? <div className="flex items-center gap-2">
+    {canOperate && (!isZentrale || listenart === 'haus') ? <div className="flex items-center gap-2">
       <input type="text" className="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white flex-1 max-w-xs" placeholder="Person manuell ergänzen" value={neuerName} onChange={event => setNeuerName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void onAddManual() }} />
       <button type="button" onClick={() => void onAddManual()} disabled={busy || !neuerName.trim()} className="text-xs font-semibold text-blue-800 border border-blue-200 px-2 py-1.5 rounded-md disabled:opacity-60">Hinzufügen</button>
     </div> : null}
