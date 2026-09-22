@@ -117,6 +117,8 @@ export default function ZentraleUebersicht() {
             openLageForIncident={ctx.openLageForIncident}
             completeIncident={ctx.completeIncident}
             deleteIncident={ctx.deleteIncident}
+            patrolVehicles={ctx.patrolVehicles}
+            setIncidentHandling={ctx.setIncidentHandling}
             visualByIncidentId={incidentVisuals}
             selectedIncidentId={selectedIncidentId}
             onOpenIncident={openWork}
