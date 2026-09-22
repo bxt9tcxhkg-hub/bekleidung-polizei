@@ -160,9 +160,8 @@ export default function EinsatzArbeitModal({
 
       <div className="border-t border-gray-200 pt-4">
         <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Verständigung</p>
-        <p className="text-xs text-gray-500 mt-1">Gemeinsamer serverseitiger Stand für Zentrale und Schichtwechsel.</p>
-      </div>
-      <div className="space-y-2">{telefonketteFuer(stufe).map(label => {
+        <p className="text-xs text-gray-500 mt-1 mb-3">Gemeinsamer serverseitiger Stand für Zentrale und Schichtwechsel.</p>
+        <div className="space-y-2">{telefonketteFuer(stufe).map(label => {
         const key = verstaendigungKey(label)
         const row = standByKey.get(key)
         return <div key={key} className="rounded-xl border border-gray-200 bg-white p-3">
@@ -177,7 +176,7 @@ export default function EinsatzArbeitModal({
           </div>
         </div>
       })}</div>
-      <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800">Telefonnummern in Kontakten</Link>
+        <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
       </div>
 
       <div className="border-t border-gray-200 pt-4">
