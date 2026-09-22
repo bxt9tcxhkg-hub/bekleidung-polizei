@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { DOK_ART_LABEL, DOK_ARTEN, deleteEinsatzdokument, openEinsatzdokument, readDokumente, uploadEinsatzdokument, writeDokumente, type DokArt, type EinsatzDokument } from '../../lib/einsatzDokumente'
+import { DOK_ART_LABEL, DOK_ARTEN, deleteEinsatzdokument, loadDokumente, openEinsatzdokument, registerEinsatzdokument, rollbackUploadedEinsatzdokument, uploadEinsatzdokument, type DokArt, type EinsatzDokument } from '../../lib/einsatzDokumente'
 import { addPersonen, extractPdfPlainText, personenAusText } from '../../lib/zmrPersonen'
 
 // Reine Datei-Ablage (Ausweis/ZMR-Auszug/Abfrage/Sonstiges) - bewusst
@@ -19,7 +19,14 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
   const [hinweis, setHinweis] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setDocs(readDokumente(incidentId)) }, [incidentId])
+  useEffect(() => {
+    let cancelled = false
+    setError('')
+    void loadDokumente(incidentId, profile?.id)
+      .then(rows => { if (!cancelled) setDocs(rows) })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Einsatzunterlagen konnten nicht geladen werden.') })
+    return () => { cancelled = true }
+  }, [incidentId, profile?.id])
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -27,20 +34,24 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
     setError('')
     setHinweis('')
     try {
+      if (!profile?.id) throw new Error('Nicht angemeldet.')
       const uploaded = await uploadEinsatzdokument(incidentId, file)
-      const next: EinsatzDokument = {
-        id: crypto.randomUUID(),
-        incidentId,
-        art,
-        title: DOK_ART_LABEL[art],
-        fileKey: uploaded.key,
-        fileName: uploaded.name,
-        from,
-        at: new Date().toISOString(),
+      let next: EinsatzDokument
+      try {
+        next = await registerEinsatzdokument({
+          incidentId,
+          art,
+          title: DOK_ART_LABEL[art],
+          fileKey: uploaded.key,
+          fileName: uploaded.name,
+          from,
+          uploadedBy: profile.id,
+        })
+      } catch (err) {
+        await rollbackUploadedEinsatzdokument(incidentId, uploaded.key)
+        throw err
       }
-      const list = [...readDokumente(incidentId), next]
-      writeDokumente(incidentId, list)
-      setDocs(list)
+      setDocs(current => [...current, next])
       if ((art === 'zmr' || art === 'abfrage') && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
         const text = await extractPdfPlainText(file)
         const gefunden = personenAusText(text)
@@ -64,10 +75,8 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
     if (!confirm(`${DOK_ART_LABEL[doc.art]} · ${doc.fileName} wirklich löschen?`)) return
     setError('')
     try {
-      await deleteEinsatzdokument(incidentId, doc.fileKey)
-      const list = docs.filter(row => row.id !== doc.id)
-      writeDokumente(incidentId, list)
-      setDocs(list)
+      await deleteEinsatzdokument(incidentId, doc)
+      setDocs(current => current.filter(row => row.id !== doc.id))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unterlage konnte nicht gelöscht werden.')
     }
