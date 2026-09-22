@@ -59,7 +59,7 @@ function StatusButton({
   >{children}</button>
 }
 
-export default function IncidentNamensliste({ incidentId, incidentTitel, canOperate = true }: { incidentId: string; incidentTitel: string; canOperate?: boolean }) {
+export default function IncidentNamensliste({ incidentId, incidentTitel, canOperate = true, onChanged }: { incidentId: string; incidentTitel: string; canOperate?: boolean; onChanged?: () => void }) {
   const { profile } = useAuth()
   const [listenart, setListenart] = useState<Listenart>('haus')
   const [personen, setPersonen] = useState<NamenslistePerson[]>([])
@@ -103,6 +103,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       setPersonen(current => sortiertNachTopNr([...current, ...gespeichert]))
       setCounts(current => ({ ...current, [listenart]: current[listenart] + gespeichert.length }))
       setNeuerName('')
+      onChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Person konnte nicht hinzugefügt werden.')
     } finally {
@@ -114,6 +115,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
     setPersonen(current => sortiertNachTopNr(current.map(row => row.id === person.id ? { ...row, ...changes } : row)))
     try {
       await updatePerson(person.id, changes)
+      onChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Änderung konnte nicht gespeichert werden.')
       await loadListe()
@@ -126,6 +128,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
     setCounts(current => ({ ...current, [listenart]: Math.max(0, current[listenart] - 1) }))
     try {
       await removePerson(person.id)
+      onChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Person konnte nicht entfernt werden.')
       await refresh()
@@ -148,6 +151,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       setHinweis(result.uebersprungen > 0 && result.hinzugefuegt > 0 ? `${text} ${result.uebersprungen} bereits vorhanden.` : text)
       setAusgewaehlt({})
       await loadCounts()
+      onChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Übernahme fehlgeschlagen.')
     } finally {
