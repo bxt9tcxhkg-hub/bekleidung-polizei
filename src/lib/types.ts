@@ -926,7 +926,7 @@ export interface IncidentReasonConfig {
 
 export interface IncidentContextItem {
   kind: string
-  severity: 'sicherheit' | 'operativ' | 'nahbereich'
+  severity: 'sicherheit' | 'achtung' | 'operativ' | 'nahbereich'
   title: string
   detail: string | null
   distance_m: number | null
