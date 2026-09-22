@@ -139,6 +139,26 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   const ausgewaehlteIds = Object.keys(ausgewaehlt).filter(id => ausgewaehlt[id])
   const ausgewaehltePersonen = personen.filter(person => ausgewaehlteIds.includes(person.id))
 
+  async function listeBereitstellen(ziel: 'evakuierung' | 'kontrolle' | 'befragung') {
+    if (!profile?.id || listenart !== 'haus' || personen.length === 0) return
+    setBusy(true)
+    setError('')
+    setHinweis('')
+    try {
+      const result = await copyPersonenInListe(incidentId, ziel, personen, profile.id)
+      const label = LISTENART_LABEL[ziel]
+      setHinweis(result.hinzugefuegt > 0
+        ? `${label} wurde mit ${result.hinzugefuegt} Bewohnerdatensätzen bereitgestellt.`
+        : `${label} ist bereits mit diesen Bewohnerdaten vorbereitet.`)
+      await loadCounts()
+      onChanged?.()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Liste konnte nicht bereitgestellt werden.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function kopieren(ziel: 'evakuierung' | 'unterbringung') {
     if (!profile?.id || ausgewaehltePersonen.length === 0) return
     setBusy(true)
@@ -175,7 +195,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
 
   return <div className="space-y-3">
     {isZentrale ? <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-      Die Zentrale stellt Bewohnerdaten und Unterlagen bereit. Wer evakuiert oder untergebracht wird und welchen Status eine Person vor Ort hat, wird von den Kräften vor Ort bzw. der Einsatzleitung geführt.
+      Die Zentrale übernimmt keine Personenerfassung vor Ort. Sie stellt aus der ZMR-Abfrage Bewohnerdaten und vorbereitete Arbeitslisten bereit. Auswahl, Anwesenheit, Evakuierungs- und Unterkunftsstatus werden von den Kräften vor Ort bzw. der Einsatzleitung geführt.
     </div> : null}
     <div className="grid grid-cols-3 gap-2">
       {PRIMARY_LISTS.map(key => <button
@@ -202,6 +222,22 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       {SECONDARY_LISTS.includes(listenart) ? <button type="button" onClick={() => setListenart('haus')} className="text-xs font-medium text-gray-600">Zurück zu Bewohner</button> : null}
     </div>
 
+    {isZentrale && listenart === 'haus' && personen.length > 0 ? <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Arbeitsliste bereitstellen</p>
+      <p className="mt-1 text-xs text-gray-500">Es werden alle ZMR-Bewohner als neutrale Arbeitsgrundlage übernommen. Die Zentrale entscheidet dabei nicht, wer tatsächlich betroffen oder vor Ort ist.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" disabled={busy} onClick={() => void listeBereitstellen('evakuierung')} className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50">
+          Evakuierungsliste bereitstellen
+        </button>
+        <button type="button" disabled={busy} onClick={() => void listeBereitstellen('kontrolle')} className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50">
+          Kontrollliste bereitstellen
+        </button>
+        <button type="button" disabled={busy} onClick={() => void listeBereitstellen('befragung')} className="rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50">
+          Befragungsliste bereitstellen
+        </button>
+      </div>
+    </div> : null}
+
     {evakuierungStats ? <div className="flex flex-wrap gap-2 text-xs">
       <span className="rounded-full bg-amber-50 border border-amber-200 px-2 py-1">Im Haus <strong>{evakuierungStats.imHaus}</strong></span>
       <span className="rounded-full bg-green-50 border border-green-200 px-2 py-1">Draußen <strong>{evakuierungStats.draussen}</strong></span>
@@ -218,7 +254,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
     </div> : null}
 
     {personen.length === 0 ? <p className="text-xs text-gray-500">
-      {listenart === 'haus' ? 'Noch keine Bewohnerdaten. ZMR/Abfrage hochladen oder Person manuell ergänzen.' : 'Noch keine Personen in dieser Liste.'}
+      {listenart === 'haus' ? (isZentrale ? 'Noch keine Bewohnerdaten. ZMR/Abfrage hochladen.' : 'Noch keine Bewohnerdaten. Person vor Ort ergänzen oder bereitgestellte ZMR-Daten verwenden.') : 'Noch keine Personen in dieser Liste.'}
     </p> : <ul className="space-y-1.5">{personen.map(person => (
       <li key={person.id} className={listenart === 'unterbringung' ? 'rounded-lg border border-gray-200 p-2' : 'rounded-lg border border-gray-100 p-2 text-xs'}>
         {listenart === 'unterbringung' && isZentrale ? <div>
@@ -260,12 +296,12 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
             onClick={() => void onFieldChange(person, { status: person.status === 'erledigt' ? 'offen' : 'erledigt' })}
             className="px-2 py-1 rounded-md border border-gray-300 bg-white disabled:opacity-50"
           >{statusLabel(listenart, person.status)}</button> : null}
-          {canOperate && (!isZentrale || listenart === 'haus') ? <button type="button" onClick={() => void onRemovePerson(person)} className="text-red-700 hover:underline sm:ml-auto">Entfernen</button> : null}
+          {canOperate && !isZentrale ? <button type="button" onClick={() => void onRemovePerson(person)} className="text-red-700 hover:underline sm:ml-auto">Entfernen</button> : null}
         </div>}
       </li>
     ))}</ul>}
 
-    {canOperate && (!isZentrale || listenart === 'haus') ? <div className="flex items-center gap-2">
+    {canOperate && !isZentrale ? <div className="flex items-center gap-2">
       <input type="text" className="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white flex-1 max-w-xs" placeholder="Person manuell ergänzen" value={neuerName} onChange={event => setNeuerName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void onAddManual() }} />
       <button type="button" onClick={() => void onAddManual()} disabled={busy || !neuerName.trim()} className="text-xs font-semibold text-blue-800 border border-blue-200 px-2 py-1.5 rounded-md disabled:opacity-60">Hinzufügen</button>
     </div> : null}
