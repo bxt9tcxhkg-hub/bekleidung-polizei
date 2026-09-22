@@ -5,10 +5,10 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
-import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, IncidentSupport, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, IncidentSupport, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import { personDisplayName } from '../../lib/register'
 import { loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
-import { FAHNDUNG_ART_LABEL, locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
+import { locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
@@ -47,7 +47,6 @@ export interface AussendienstContext {
   incidents: SimpleIncident[]
   entries: ZentraleEntry[]
   avBv: Schutzfall[]
-  fahndungen: ZentraleFahndung[]
   baustellen: ZentraleBaustelle[]
   isGenehmiger: boolean
   saving: boolean
@@ -86,7 +85,6 @@ export default function AussendienstShell() {
   // Kontrollauftrag existiert - sonst würde eine EV ohne angeforderte
   // Kontrolle hier trotzdem wie eine dringende Warnung erscheinen.
   const [kontrolliert, setKontrolliert] = useState<Set<string>>(new Set())
-  const [fahndungen, setFahndungen] = useState<ZentraleFahndung[]>([])
   const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
   // Wie in ZentraleShell.tsx: bei Ladefehler darf "Keine aktuell dringenden
   // Warnungen" nicht fälschlich Entwarnung geben.
@@ -113,7 +111,7 @@ export default function AussendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = operationalToday()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, fahndungResult, baustelleResult, kontrolliertIds] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, baustelleResult, kontrolliertIds] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
@@ -121,9 +119,8 @@ export default function AussendienstShell() {
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
       supabase.from('incident_reports').select('id,reported_at,reason_code,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
       supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').gte('started_at', startOfOperationalDayIso()).order('started_at'),
-      // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
+      // Schutzmaßnahmen werden separat geladen; Fahndungen sind für den aktuellen Ausbaustand bewusst aus dem Außendienst-Kontext herausgenommen.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
-      supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
       // Für "Baustelle in der Nähe" auf der Einsatzliste - erledigte Baustellen wie in der Zentrale ausgeblendet.
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
       loadSchutzfaelleMitKontrollauftrag(),
@@ -138,10 +135,9 @@ export default function AussendienstShell() {
     setIncidents(incidentResult.data ?? [])
     setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
-    setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
     setKontrolliert(kontrolliertIds)
-    setCriticalSourcesError(Boolean(avBvResult.error || fahndungResult.error))
+    setCriticalSourcesError(Boolean(avBvResult.error))
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -203,8 +199,7 @@ export default function AussendienstShell() {
     // angefordert wurde (siehe ZentraleAvBv.tsx) - sonst würde diese Warnung
     // der dort bewusst getroffenen Entscheidung widersprechen.
     ...avBv.filter(item => item.massnahme === 'bv_av' || kontrolliert.has(item.id)).map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · Gefährder: ${item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}`, description: item.ausnahmen ? `Ausnahmen: ${item.ausnahmen}` : `PAD ${item.pad_aktenzahl} · Schutzbereiche prüfen` })),
-    ...fahndungen.filter(item => item.priority === 'kritisch').map(item => ({ id: item.id, title: `Fahndung (${FAHNDUNG_ART_LABEL[item.art]}) · ${(item.person ? personDisplayName(item.person) : (item.object?.address ?? 'ohne Zuordnung'))}`, description: item.beschreibung })),
-  ], [avBv, criticalEntries, fahndungen, kontrolliert])
+  ], [avBv, criticalEntries, kontrolliert])
   const openIncidents = useMemo(() => {
     const relevant = ownAssignment?.function === 'jd' ? incidents.filter(item => item.disposition === 'jd')
       : ownAssignment?.function === 'vd' ? incidents.filter(item => item.disposition === 'vd')
@@ -318,7 +313,7 @@ export default function AussendienstShell() {
   const ctx: AussendienstContext = {
     loading, ownAssignment, ownFunction, ownVehicle, availableVehicles, setDutyVehicle, ownCheck, patrolMates,
     criticalItems, criticalSourcesError, openIncidents, openOrders, kontrollauftraege,
-    incidents, entries, avBv, fahndungen, baustellen, isGenehmiger,
+    incidents, entries, avBv, baustellen, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
     patrolVehicles, takeOverIncident, releaseIncidentTakeover,
