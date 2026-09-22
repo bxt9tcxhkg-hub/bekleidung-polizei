@@ -247,9 +247,10 @@ export default function ZentraleShell() {
   function openEditIncident(item: IncidentReport) {
     const reportedAt = new Date(item.reported_at)
     const kilometerLocation = parseKilometerLocation(item.location)
+    const parsedLocation = locationParts(item.location)
     const { street, houseNumber } = kilometerLocation
       ? { street: kilometerLocation.roadName, houseNumber: '' }
-      : locationParts(item.location)
+      : { street: item.location_street ?? parsedLocation.street, houseNumber: item.location_house_number ?? parsedLocation.houseNumber }
     setEditingIncident(item)
     setIncident({
       callerPhone: item.caller_phone ?? '',
@@ -267,6 +268,7 @@ export default function ZentraleShell() {
       kilometerFrom: null,
       kilometerTo: null,
       location: item.location ?? '',
+      reasonCode: item.reason_code ?? '',
       summary: item.summary,
       involvedPersonId: item.involved_person_id,
       disposition: item.disposition,
@@ -288,7 +290,8 @@ export default function ZentraleShell() {
     setIncident(current => current.location.trim() === queried ? { ...current, lat: result.lat, lng: result.lng, coordsPrecise: true } : current)
   }
   async function saveIncident() {
-    if (!profile?.id || !incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
+    if (!profile?.id || !incident.reasonCode) { setError('Bitte den Grund des Anrufes auswählen.'); return }
+    if (!incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
     if (incident.locationMode === 'kilometer' && (!incident.roadNumber || !incident.kilometer || incident.lat === null || incident.lng === null || !incident.coordsPrecise)) {
       setError('Bitte Landesstraße und Kilometer auswählen und den amtlichen Kartenpunkt ermitteln.')
       return
@@ -307,7 +310,11 @@ export default function ZentraleShell() {
       caller_phone: incident.callerPhone.trim() || null,
       caller_person_id: incident.callerOrg.trim() ? null : incident.callerPersonId,
       caller_name: incident.callerOrg.trim() ? incident.callerOrg.trim() : (callerPerson ? personDisplayName(callerPerson) : null),
-      location: incident.location.trim() || null, location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(),
+      reason_code: incident.reasonCode,
+      location: incident.location.trim() || null,
+      location_street: incident.locationMode === 'address' ? (incident.street.trim() || null) : (incident.roadName.trim() || null),
+      location_house_number: incident.locationMode === 'address' && !incident.houseNumberUnknown ? (incident.houseNumber.trim() || null) : null,
+      location_lat: incident.lat, location_lng: incident.lng, summary: incident.summary.trim(),
       involved_person_id: incident.involvedPersonId, involved_person: involvedPerson ? personDisplayName(involvedPerson) : null, involved_birth_date: involvedPerson?.birth_date ?? null,
       disposition: incident.disposition, assigned_vehicle_id: incident.assignedVehicleId, note: incident.note.trim() || null, status,
       reported_at: reportedAt.toISOString(),
