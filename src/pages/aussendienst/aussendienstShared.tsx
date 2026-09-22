@@ -12,7 +12,7 @@ import { nearbyByLine, navigationUrl, type LatLng } from '../../lib/geo'
 import { ZIELFUNKTION_LABEL, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { useAuth } from '../../contexts/AuthContext'
 import { loadEinsatzParteien } from '../../lib/einsatzParteien'
-import { readDokumente } from '../../lib/einsatzDokumente'
+import { loadDokumente } from '../../lib/einsatzDokumente'
 import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
 import { loadIncidentEreignis } from '../../lib/ereignis'
 import { officerPrintName } from '../../lib/printDocs'
@@ -61,16 +61,16 @@ function PrintIncidentButton({ item }: { item: IncidentListItem }) {
   async function print() {
     setPrinting(true)
     try {
-      const [parteien, ereignis] = await Promise.all([
+      const [parteien, ereignis, dokumente] = await Promise.all([
         loadEinsatzParteien(item.id),
         loadIncidentEreignis(item.id),
+        loadDokumente(item.id, profile?.id),
       ])
-      const dokumente = readDokumente(item.id)
       generateEinsatzUebersicht({ incident: item, parteien, dokumente, ereignisDimension: ereignis?.dimension, erstelltVon: officerPrintName(profile) })
     } catch {
-      // Die Parteien-Abfrage kann fehlschlagen (z.B. keine Verbindung) - der
-      // Ausdruck soll trotzdem mit den vorhandenen Meldungsdaten möglich sein.
-      generateEinsatzUebersicht({ incident: item, parteien: [], dokumente: readDokumente(item.id), erstelltVon: officerPrintName(profile) })
+      // Bei einem Ladefehler bleibt ein Ausdruck der bereits bekannten
+      // Meldungsdaten möglich; fehlende Serverdaten werden nicht erfunden.
+      generateEinsatzUebersicht({ incident: item, parteien: [], dokumente: [], erstelltVon: officerPrintName(profile) })
     } finally {
       setPrinting(false)
     }
