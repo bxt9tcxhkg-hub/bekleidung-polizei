@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
-import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, IncidentSupport, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry, ZentraleFahndung } from '../../lib/types'
 import { personDisplayName } from '../../lib/register'
 import { loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { FAHNDUNG_ART_LABEL, locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
@@ -25,7 +25,7 @@ import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 type SimpleIncident = {
   id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
   caller_name: string | null; caller_phone: string | null; involved_person: string | null; involved_birth_date: string | null
-  assigned_vehicle_id: string | null; taken_over_by: string | null; taken_over_at: string | null
+  assigned_vehicle_id: string | null; taken_over_by: string | null; taken_over_at: string | null; taken_over_vehicle_id: string | null; completed_by: string | null; completed_at: string | null
   assigned_vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign'> | null
   taken_over_by_profile?: { id: string; name: string } | null
 }
@@ -61,6 +61,11 @@ export interface AussendienstContext {
   patrolVehicles: { id: string; name: string; call_sign: string | null; license_plate: string | null }[]
   takeOverIncident: (id: string) => Promise<void>
   releaseIncidentTakeover: (id: string) => Promise<void>
+  incidentSupports: IncidentSupport[]
+  supportIncident: (id: string) => Promise<void>
+  stopSupportingIncident: (id: string) => Promise<void>
+  completeIncident: (id: string) => Promise<void>
+  reopenIncident: (id: string) => Promise<void>
 }
 
 export default function AussendienstShell() {
@@ -85,6 +90,7 @@ export default function AussendienstShell() {
   // Warnungen" nicht fälschlich Entwarnung geben.
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
   const [incidents, setIncidents] = useState<SimpleIncident[]>([])
+  const [incidentSupports, setIncidentSupports] = useState<IncidentSupport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -105,13 +111,14 @@ export default function AussendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = operationalToday()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, avBvResult, fahndungResult, baustelleResult, kontrolliertIds] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, fahndungResult, baustelleResult, kontrolliertIds] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').gte('started_at', startOfOperationalDayIso()).order('started_at'),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       supabase.from('zentrale_fahndungen').select('*, person:operational_persons(id,vorname,nachname,birth_date), object:operational_objects(id,address,label)').eq('status', 'offen'),
@@ -127,6 +134,7 @@ export default function AussendienstShell() {
     setChecks((checkResult.data ?? []) as VehicleCheck[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
     setIncidents(incidentResult.data ?? [])
+    setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
     setFahndungen(fahndungResult.error ? [] : (fahndungResult.data ?? []) as unknown as ZentraleFahndung[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
@@ -154,6 +162,26 @@ export default function AussendienstShell() {
   async function releaseIncidentTakeover(id: string) {
     const result = await supabase.rpc('release_incident_takeover', { p_id: id })
     if (result.error) { setError('Die Übernahme konnte nicht zurückgenommen werden.'); return }
+    await load()
+  }
+  async function supportIncident(id: string) {
+    const result = await supabase.rpc('support_incident', { p_id: id })
+    if (result.error) { setError('Die Unterstützung konnte nicht eingetragen werden.'); return }
+    await load()
+  }
+  async function stopSupportingIncident(id: string) {
+    const result = await supabase.rpc('stop_supporting_incident', { p_id: id })
+    if (result.error) { setError('Die Unterstützung konnte nicht beendet werden.'); return }
+    await load()
+  }
+  async function completeIncident(id: string) {
+    const result = await supabase.rpc('complete_incident', { p_id: id })
+    if (result.error) { setError('Der Einsatz konnte nicht erledigt werden.'); return }
+    await load()
+  }
+  async function reopenIncident(id: string) {
+    const result = await supabase.rpc('reopen_incident', { p_id: id })
+    if (result.error) { setError('Der Einsatz konnte nicht wieder geöffnet werden.'); return }
     await load()
   }
 
