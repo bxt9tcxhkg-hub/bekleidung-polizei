@@ -185,8 +185,15 @@ export default function EinsatzArbeitModal({
       </div>
 
       <div className="border-t border-gray-200 pt-4">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-1">Unterstützung vor Ort</h3>
-        <p className="text-xs text-gray-500 mb-3">ZMR-/Bewohnerdaten und daraus abgeleitete Arbeitslisten für die Kräfte vor Ort.</p>
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Unterstützung vor Ort</h3>
+            <p className="text-xs text-gray-500 mt-1">ZMR-/Bewohnerdaten und daraus abgeleitete Arbeitslisten für die Kräfte vor Ort.</p>
+          </div>
+          <button type="button" onClick={() => setTab('dateien')} className="text-xs font-semibold text-blue-800 border border-blue-200 rounded-lg px-2.5 py-1.5 bg-blue-50">
+            ZMR / Abfrage hochladen
+          </button>
+        </div>
         <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} />
       </div>
     </div> : null}
