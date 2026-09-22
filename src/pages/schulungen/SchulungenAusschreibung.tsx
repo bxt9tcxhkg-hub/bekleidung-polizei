@@ -21,6 +21,7 @@ import {
 } from '../../lib/schulungen'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList, isPortalAdminProfile, type PortalAdminProfile } from '../../lib/portalAdmin'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'organisation' | 'active' | 'roles'> & Pick<Partial<Profile>, 'admin'> & PortalAdminProfile
 
@@ -114,40 +115,50 @@ export default function SchulungenAusschreibungPanel({ canManage, isGenehmiger }
 
   async function load() {
     setLoading(true)
-    const [sessRes, modRes, compRes, regRes, assignRes, profRes] = await Promise.all([
-      supabase.from('schulungen_sessions').select('*, module:schulungen_module(id,name,active)').eq('announced', true).order('session_date', { ascending: true }),
-      supabase.from('schulungen_module').select('*').eq('active', true).order('name'),
-      supabase.from('schulungen_completions').select('*'),
-      canManage
-        ? supabase.from('schulungen_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
-        : supabase.from('schulungen_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('officer_id', profile?.id ?? ''),
-      canManage
-        ? supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').not('session_id', 'is', null)
-        : supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').eq('officer_id', profile?.id ?? ''),
-      canManage
-        ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name')
-        : Promise.resolve({ data: [] as OfficerOption[], error: null }),
-    ])
-    if (sessRes.error) {
-      setError('Ausschreibungen konnten nicht geladen werden.')
+    try {
+      const [sessRes, modRes, compRes, regRes, assignRes, profRes] = await withTimeout(Promise.all([
+        supabase.from('schulungen_sessions').select('*, module:schulungen_module(id,name,active)').eq('announced', true).order('session_date', { ascending: true }),
+        supabase.from('schulungen_module').select('*').eq('active', true).order('name'),
+        supabase.from('schulungen_completions').select('*'),
+        canManage
+          ? supabase.from('schulungen_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`)
+          : supabase.from('schulungen_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('officer_id', profile?.id ?? ''),
+        canManage
+          ? supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').not('session_id', 'is', null)
+          : supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').eq('officer_id', profile?.id ?? ''),
+        canManage
+          ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name')
+          : Promise.resolve({ data: [] as OfficerOption[], error: null }),
+      ]))
+      const failures: string[] = []
+      if (sessRes.error) failures.push('Ausschreibungen')
+      if (modRes.error) failures.push('Module')
+      if (compRes.error) failures.push('Abschlüsse')
+      if (regRes.error) failures.push('Anmeldungen')
+      if (assignRes.error) failures.push('Vorschläge')
+      if (profRes.error) failures.push('Personen')
+      setError(failures.length > 0 ? `Nicht alles konnte geladen werden (${failures.join(', ')}).` : '')
+      setSessions(sessRes.error ? [] : ((sessRes.data ?? []) as SchulungSession[]))
+      setModules(modRes.error ? [] : ((modRes.data ?? []) as SchulungModule[]))
+      setCompletions(compRes.error ? [] : ((compRes.data ?? []) as SchulungCompletion[]))
+      setRegistrations(regRes.error ? [] : ((regRes.data ?? []) as SchulungRegistration[]))
+      setAssignments(assignRes.error ? [] : ((assignRes.data ?? []) as SchulungAssignment[]))
+      setOfficers(profRes.error ? [] : excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Ausschreibungen konnten nicht geladen werden.'))
       setSessions([])
-    } else {
-      setError('')
-      setSessions((sessRes.data ?? []) as SchulungSession[])
+      setModules([])
+      setCompletions([])
+      setRegistrations([])
+      setAssignments([])
+      setOfficers([])
+    } finally {
+      setLoading(false)
     }
-    setModules((modRes.data ?? []) as SchulungModule[])
-    setCompletions((compRes.data ?? []) as SchulungCompletion[])
-    setRegistrations((regRes.data ?? []) as SchulungRegistration[])
-    setAssignments((assignRes.data ?? []) as SchulungAssignment[])
-    setOfficers(excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
-    setLoading(false)
   }
 
   useEffect(() => {
-    load().catch(() => {
-      setError('Ausschreibungen konnten nicht geladen werden.')
-      setLoading(false)
-    })
+    void load()
   }, [canManage, profile?.id])
 
   const regsBySession = useMemo(() => {
@@ -385,6 +396,13 @@ export default function SchulungenAusschreibungPanel({ canManage, isGenehmiger }
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
+        </div>
+      ) : sessions.length === 0 && error ? (
+        <div className="bg-white rounded-xl border border-red-200 px-5 py-8 text-center">
+          <p className="text-sm text-red-700">Ausschreibungen konnten nicht geladen werden.</p>
+          <button type="button" onClick={() => { void load() }} className="mt-3 text-sm font-medium text-blue-800 hover:underline">
+            Erneut versuchen
+          </button>
         </div>
       ) : sessions.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">

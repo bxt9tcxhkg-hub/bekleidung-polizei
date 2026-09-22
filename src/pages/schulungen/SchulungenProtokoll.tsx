@@ -6,6 +6,7 @@ import type { SchulungCompletion, SchulungModule, SchulungRegistration, Schulung
 import { formatCompletedOn } from '../../lib/schulungen'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { OFFICER_LIST_PROFILE_SELECT, isPortalAdminProfile } from '../../lib/portalAdmin'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 
 export default function SchulungenProtokollPanel({ canManage }: { canManage: boolean }) {
   const [sessions, setSessions] = useState<SchulungSession[]>([])
@@ -19,30 +20,36 @@ export default function SchulungenProtokollPanel({ canManage }: { canManage: boo
 
   async function load() {
     setLoading(true)
-    const [sessRes, modRes, regRes, compRes] = await Promise.all([
-      supabase.from('schulungen_sessions').select('*, module:schulungen_module(id,name,active)').order('session_date', { ascending: false }),
-      supabase.from('schulungen_module').select('*').order('name'),
-      supabase.from('schulungen_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
-      supabase.from('schulungen_completions').select('*'),
-    ])
-    if (sessRes.error) {
-      setError('Termine konnten nicht geladen werden.')
+    try {
+      const [sessRes, modRes, regRes, compRes] = await withTimeout(Promise.all([
+        supabase.from('schulungen_sessions').select('*, module:schulungen_module(id,name,active)').order('session_date', { ascending: false }),
+        supabase.from('schulungen_module').select('*').order('name'),
+        supabase.from('schulungen_registrations').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
+        supabase.from('schulungen_completions').select('*'),
+      ]))
+      const failures: string[] = []
+      if (sessRes.error) failures.push('Termine')
+      if (modRes.error) failures.push('Module')
+      if (regRes.error) failures.push('Anmeldungen')
+      if (compRes.error) failures.push('Abschlüsse')
+      setError(failures.length > 0 ? `Nicht alles konnte geladen werden (${failures.join(', ')}).` : '')
+      setSessions(sessRes.error ? [] : ((sessRes.data ?? []) as SchulungSession[]))
+      setModules(modRes.error ? [] : ((modRes.data ?? []) as SchulungModule[]))
+      setRegistrations(regRes.error ? [] : ((regRes.data ?? []) as SchulungRegistration[]))
+      setCompletions(compRes.error ? [] : ((compRes.data ?? []) as SchulungCompletion[]))
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Termine konnten nicht geladen werden.'))
       setSessions([])
-    } else {
-      setError('')
-      setSessions((sessRes.data ?? []) as SchulungSession[])
+      setModules([])
+      setRegistrations([])
+      setCompletions([])
+    } finally {
+      setLoading(false)
     }
-    setModules((modRes.data ?? []) as SchulungModule[])
-    setRegistrations((regRes.data ?? []) as SchulungRegistration[])
-    setCompletions((compRes.data ?? []) as SchulungCompletion[])
-    setLoading(false)
   }
 
   useEffect(() => {
-    load().catch(() => {
-      setError('Termine konnten nicht geladen werden.')
-      setLoading(false)
-    })
+    void load()
   }, [])
 
   const selected = sessions.find(s => s.id === selectedId) ?? null
@@ -142,7 +149,18 @@ export default function SchulungenProtokollPanel({ canManage }: { canManage: boo
     <div>
       <p className="text-sm text-gray-500 mb-4">Termin wählen, um Abschlüsse zu erfassen.</p>
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
-      {sessions.length === 0 ? (
+      {sessions.length === 0 && loading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
+        </div>
+      ) : sessions.length === 0 && error ? (
+        <div className="bg-white rounded-xl border border-red-200 px-5 py-8 text-center">
+          <p className="text-sm text-red-700">Termine konnten nicht geladen werden.</p>
+          <button type="button" onClick={() => { void load() }} className="mt-3 text-sm font-medium text-blue-800 hover:underline">
+            Erneut versuchen
+          </button>
+        </div>
+      ) : sessions.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">
           <p className="text-sm text-gray-500">Noch keine Termine ausgeschrieben.</p>
         </div>

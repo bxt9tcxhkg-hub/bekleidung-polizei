@@ -14,6 +14,7 @@ import { aktiveSperren, strassenName } from '../../lib/strassenzustand'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import { IncidentModal } from './zentraleShared'
 import { DISPOSITION_LABEL, EMPTY_INCIDENT_FORM, formatTime, locationParts, operationalToday, startOfOperationalDayIso, type IncidentFormState } from '../../lib/zentraleShared'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 
 function normalizeText(value: string | null | undefined) { return (value ?? '').toLocaleLowerCase('de-AT').replace(/straße/g, 'strasse').replace(/str\./g, 'strasse').replace(/[^a-z0-9äöüß]+/g, ' ').trim() }
 function normalizePhone(value: string | null | undefined) { return (value ?? '').replace(/\D/g, '') }
@@ -224,11 +225,16 @@ export default function ZentraleShell() {
     const category: ZentraleEntryCategory = editing?.category ?? 'lage'
     if (category === 'lage' && !entry.incidentId) { setError('Bitte die auslösende Einsatzmeldung wählen.'); return }
     setSaving(true)
-    const payload = { category, title: entry.title.trim(), description: entry.description.trim() || null, priority: entry.priority, status: entry.status, valid_from: entry.validFrom || null, valid_until: entry.validUntil || null, location: entry.location.trim() || null, responsible: entry.responsible.trim() || null, reference: entry.reference.trim() || null, restricted: entry.restricted, incident_id: category === 'lage' ? entry.incidentId : null }
-    const response = editing ? await supabase.from('zentrale_entries').update(payload).eq('id', editing.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
-    setSaving(false)
-    if (response.error) { setError('Eintrag konnte nicht gespeichert werden.'); return }
-    logAudit(editing ? 'Zentraleintrag bearbeitet' : 'Zentraleintrag angelegt', `${CATEGORY_LABEL[category]} · ${entry.title.trim()}`); setShowEntryForm(false); setNotice('Eintrag wurde gespeichert.'); await load()
+    try {
+      const payload = { category, title: entry.title.trim(), description: entry.description.trim() || null, priority: entry.priority, status: entry.status, valid_from: entry.validFrom || null, valid_until: entry.validUntil || null, location: entry.location.trim() || null, responsible: entry.responsible.trim() || null, reference: entry.reference.trim() || null, restricted: entry.restricted, incident_id: category === 'lage' ? entry.incidentId : null }
+      const response = editing ? await withTimeout(supabase.from('zentrale_entries').update(payload).eq('id', editing.id)) : await withTimeout(supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null }))
+      if (response.error) { setError('Eintrag konnte nicht gespeichert werden.'); return }
+      logAudit(editing ? 'Zentraleintrag bearbeitet' : 'Zentraleintrag angelegt', `${CATEGORY_LABEL[category]} · ${entry.title.trim()}`); setShowEntryForm(false); setNotice('Eintrag wurde gespeichert.'); await load()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Eintrag konnte nicht gespeichert werden.'))
+    } finally {
+      setSaving(false)
+    }
   }
   async function deleteEntry() { if (!editing || !window.confirm(`Eintrag „${editing.title}“ endgültig löschen?`)) return; const result = await supabase.from('zentrale_entries').delete().eq('id', editing.id); if (result.error) { setError('Eintrag konnte nicht gelöscht werden.'); return } logAudit('Zentraleintrag endgültig gelöscht', editing.title); setShowEntryForm(false); setNotice('Eintrag wurde endgültig gelöscht.'); await load() }
 
@@ -307,13 +313,18 @@ export default function ZentraleShell() {
       reported_at: reportedAt.toISOString(),
     }
     setSaving(true)
-    const result = editingIncident
-      ? await supabase.from('incident_reports').update(payload).eq('id', editingIncident.id)
-      : await supabase.from('incident_reports').insert({ ...payload, created_by: profile.id })
-    setSaving(false)
-    if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
-    logAudit(editingIncident ? 'Einsatzmeldung bearbeitet' : 'Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`)
-    setEditingIncident(null); setShowIncidentForm(false); navigate('/zentrale/einsaetze'); setNotice(editingIncident ? 'Meldung wurde aktualisiert.' : 'Meldung wurde gespeichert.'); await load()
+    try {
+      const result = editingIncident
+        ? await withTimeout(supabase.from('incident_reports').update(payload).eq('id', editingIncident.id))
+        : await withTimeout(supabase.from('incident_reports').insert({ ...payload, created_by: profile.id }))
+      if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
+      logAudit(editingIncident ? 'Einsatzmeldung bearbeitet' : 'Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`)
+      setEditingIncident(null); setShowIncidentForm(false); navigate('/zentrale/einsaetze'); setNotice(editingIncident ? 'Meldung wurde aktualisiert.' : 'Meldung wurde gespeichert.'); await load()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Die Meldung konnte nicht gespeichert werden.'))
+    } finally {
+      setSaving(false)
+    }
   }
   async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
   async function deleteIncident(item: IncidentReport) { if (!window.confirm('Diese Einsatzmeldung endgültig löschen?')) return; const result = await supabase.from('incident_reports').delete().eq('id', item.id); if (result.error) { setError('Die Einsatzmeldung konnte nicht gelöscht werden.'); return } logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80)); await load() }

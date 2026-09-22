@@ -14,6 +14,7 @@ import {
   routeWaitingOrder,
 } from '../../lib/inventory'
 import { ensureOpenTailorJob } from '../../lib/tailorJobs'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 import type { CartItem, InventoryItem, SizeModal, Tab, WaitingUserOrder } from './types'
 
 const PAGE_SIZE = 50
@@ -131,16 +132,21 @@ export function useLager() {
     const qty = parseInt(editQty)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
-    // .select() erzwingen: RLS lässt ein UPDATE ohne Berechtigung sonst
-    // "erfolgreich" mit 0 geänderten Zeilen durchlaufen (kein SQL-Error) -
-    // ohne die Rückgabe zu prüfen, würde die Anzeige einfach unverändert
-    // zurückspringen, ohne dass sichtbar wird, warum.
-    const { data, error: qtyError } = await supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id).select('id')
-    setSaving(false)
-    if (qtyError) { setError('Bestand konnte nicht gespeichert werden.'); return }
-    if (!data || data.length === 0) { setError('Bestand konnte nicht gespeichert werden (keine Berechtigung?).'); return }
-    setEditingId(null)
-    loadAll()
+    try {
+      // .select() erzwingen: RLS lässt ein UPDATE ohne Berechtigung sonst
+      // "erfolgreich" mit 0 geänderten Zeilen durchlaufen (kein SQL-Error) -
+      // ohne die Rückgabe zu prüfen, würde die Anzeige einfach unverändert
+      // zurückspringen, ohne dass sichtbar wird, warum.
+      const { data, error: qtyError } = await withTimeout(supabase.from('inventory').update({ quantity: qty, updated_at: new Date().toISOString() }).eq('id', entry.id).select('id'))
+      if (qtyError) { setError('Bestand konnte nicht gespeichert werden.'); return }
+      if (!data || data.length === 0) { setError('Bestand konnte nicht gespeichert werden (keine Berechtigung?).'); return }
+      setEditingId(null)
+      loadAll()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Bestand konnte nicht gespeichert werden.'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function takeOut(entry: InventoryItem) {
@@ -148,24 +154,34 @@ export function useLager() {
     if (isNaN(amount) || amount < 1) { setError('Bitte eine gültige Menge angeben.'); return }
     if (amount > entry.quantity) { setError('Es sind nicht so viele Stück vorrätig.'); return }
     setTakingOut(true)
-    const { error: adjError } = await supabase.rpc('adjust_inventory', { p_product: entry.product_id, p_size: entry.size, p_delta: -amount })
-    setTakingOut(false)
-    if (adjError) { setError('Entnahme konnte nicht gebucht werden.'); return }
-    logAudit('Bestand entnommen', `${entry.products?.name ?? ''} ${entry.size} -${amount}`.trim())
-    setTakeOutId(null); setTakeOutQty('1')
-    loadAll()
+    try {
+      const { error: adjError } = await withTimeout(supabase.rpc('adjust_inventory', { p_product: entry.product_id, p_size: entry.size, p_delta: -amount }))
+      if (adjError) { setError('Entnahme konnte nicht gebucht werden.'); return }
+      logAudit('Bestand entnommen', `${entry.products?.name ?? ''} ${entry.size} -${amount}`.trim())
+      setTakeOutId(null); setTakeOutQty('1')
+      loadAll()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Entnahme konnte nicht gebucht werden.'))
+    } finally {
+      setTakingOut(false)
+    }
   }
 
   async function saveMinQty(productId: string) {
     const val = parseInt(editMinVal)
     if (isNaN(val) || val < 1) return
     setSavingMin(true)
-    const { data, error: minError } = await supabase.from('products').update({ min_quantity: val }).eq('id', productId).select('id')
-    setSavingMin(false)
-    if (minError) { setError('Mindestmenge konnte nicht gespeichert werden.'); return }
-    if (!data || data.length === 0) { setError('Mindestmenge konnte nicht gespeichert werden (keine Berechtigung?).'); return }
-    setEditingMinId(null)
-    loadAll()
+    try {
+      const { data, error: minError } = await withTimeout(supabase.from('products').update({ min_quantity: val }).eq('id', productId).select('id'))
+      if (minError) { setError('Mindestmenge konnte nicht gespeichert werden.'); return }
+      if (!data || data.length === 0) { setError('Mindestmenge konnte nicht gespeichert werden (keine Berechtigung?).'); return }
+      setEditingMinId(null)
+      loadAll()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Mindestmenge konnte nicht gespeichert werden.'))
+    } finally {
+      setSavingMin(false)
+    }
   }
 
   async function confirmAndDelete() {
@@ -174,24 +190,29 @@ export function useLager() {
     const label = inventoryLineLabel(entry.products?.name, entry.size, entry.products?.sizes)
     setError('')
     setDeleting(true)
-    const { error: delError } = await supabase.from('inventory').delete().eq('id', entry.id)
-    if (delError && isInventoryDeleteBlocked(delError)) {
-      const { error: zeroError } = await supabase
-        .from('inventory')
-        .update({ quantity: 0, updated_at: new Date().toISOString() })
-        .eq('id', entry.id)
-      const result = planInventoryDeleteResult(delError, label, zeroError)
-      if (result.auditAction) logAudit(result.auditAction, label)
-      if (result.error) setError(result.error)
-    } else {
-      const result = planInventoryDeleteResult(delError, label)
-      if (result.auditAction) logAudit(result.auditAction, label)
-      if (result.error) setError(result.error)
+    try {
+      const { error: delError } = await withTimeout(supabase.from('inventory').delete().eq('id', entry.id))
+      if (delError && isInventoryDeleteBlocked(delError)) {
+        const { error: zeroError } = await withTimeout(supabase
+          .from('inventory')
+          .update({ quantity: 0, updated_at: new Date().toISOString() })
+          .eq('id', entry.id))
+        const result = planInventoryDeleteResult(delError, label, zeroError)
+        if (result.auditAction) logAudit(result.auditAction, label)
+        if (result.error) setError(result.error)
+      } else {
+        const result = planInventoryDeleteResult(delError, label)
+        if (result.auditAction) logAudit(result.auditAction, label)
+        if (result.error) setError(result.error)
+      }
+      setEditingId(id => (id === entry.id ? null : id))
+      await loadAll()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Eintrag konnte nicht gelöscht werden.'))
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(null)
     }
-    setDeleting(false)
-    setConfirmDelete(null)
-    setEditingId(id => (id === entry.id ? null : id))
-    await loadAll()
   }
 
   async function createInventory() {
@@ -203,17 +224,22 @@ export function useLager() {
     const qty = parseInt(addForm.quantity)
     if (isNaN(qty) || qty < 0) return
     setSaving(true)
-    const { error: adjError } = await supabase.rpc('adjust_inventory', {
-      p_product: addForm.product_id,
-      p_size: size,
-      p_delta: qty,
-    })
-    setSaving(false)
-    if (adjError) { setError('Bestand konnte nicht gebucht werden.'); return }
-    logAudit('Bestand gebucht', `${selectedAddProduct?.name ?? ''} ${size} +${qty}`.trim())
-    setAddForm(null)
-    setAddSearch('')
-    loadAll()
+    try {
+      const { error: adjError } = await withTimeout(supabase.rpc('adjust_inventory', {
+        p_product: addForm.product_id,
+        p_size: size,
+        p_delta: qty,
+      }))
+      if (adjError) { setError('Bestand konnte nicht gebucht werden.'); return }
+      logAudit('Bestand gebucht', `${selectedAddProduct?.name ?? ''} ${size} +${qty}`.trim())
+      setAddForm(null)
+      setAddSearch('')
+      loadAll()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Bestand konnte nicht gebucht werden.'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const addFilteredProducts = addSearch.trim()

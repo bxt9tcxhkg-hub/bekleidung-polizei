@@ -275,9 +275,9 @@ export function LagerModals({ lager }: { lager: LagerController }) {
       {addForm !== null && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+            <div className="relative z-20 flex items-center justify-between px-6 py-4 border-b bg-white">
               <h2 className="font-bold text-gray-900">Bestand erfassen</h2>
-              <button onClick={() => { setAddForm(null); setAddSearch('') }} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
+              <button onClick={() => { setAddForm(null); setAddSearch(''); setAddDropdown(false) }} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
               <div className="relative">
@@ -289,6 +289,16 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                   onChange={e => { setAddSearch(e.target.value); setAddDropdown(true); if (!e.target.value) setAddForm(f => f ? { ...f, product_id: '', size: '' } : f) }}
                   onFocus={() => setAddDropdown(true)}
                   onBlur={() => setTimeout(() => setAddDropdown(false), 150)}
+                  onKeyDown={e => {
+                    if (e.key !== 'Escape') return
+                    if (addDropdown) {
+                      e.stopPropagation()
+                      setAddDropdown(false)
+                      return
+                    }
+                    setAddForm(null)
+                    setAddSearch('')
+                  }}
                 />
                 {addDropdown && addFilteredProducts.length > 0 && (
                   <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
@@ -333,10 +343,14 @@ export function LagerModals({ lager }: { lager: LagerController }) {
                 <p className="text-xs text-gray-400 mt-1">Die Menge wird zum bestehenden Bestand hinzugebucht.</p>
               </div>
             </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => { setAddForm(null); setAddSearch('') }}
+            <div className="relative z-20 flex gap-3 px-6 py-4 border-t bg-white">
+              <button
+                onMouseDown={() => setAddDropdown(false)}
+                onClick={() => { setAddForm(null); setAddSearch('') }}
                 className="flex-1 border border-gray-300 text-gray-700 font-medium py-2 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={createInventory} disabled={saving || !addForm.product_id || (selectedAddProduct?.size_mode === 'sizes' && !addForm.size) || addForm.quantity === ''}
+              <button
+                onMouseDown={() => setAddDropdown(false)}
+                onClick={createInventory} disabled={saving || !addForm.product_id || (selectedAddProduct?.size_mode === 'sizes' && !addForm.size) || addForm.quantity === ''}
                 className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
               </button>
