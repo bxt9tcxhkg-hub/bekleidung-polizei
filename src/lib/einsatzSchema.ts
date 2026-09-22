@@ -118,60 +118,6 @@ export const ENTSCHEIDUNGSPUNKTE = [
   'Zivilschutzalarm',
 ]
 
-export type KetteStatus = { versucht?: string; erreicht?: string }
-export type KetteStand = Record<string, KetteStatus>
-
-const PREFIX = /^STUFE:(klein|mittel|gross|katastrophe)\n?/
-
-export function parseStufe(note: string | null | undefined): Ereignisstufe {
-  const match = note?.match(PREFIX)
-  return (match?.[1] as Ereignisstufe) ?? 'klein'
-}
-
-export function noteWithoutStufe(note: string | null | undefined): string {
-  return (note ?? '').replace(PREFIX, '')
-}
-
-export function withStufe(note: string | null | undefined, stufe: Ereignisstufe): string {
-  const rest = noteWithoutStufe(note)
-  if (stufe === 'klein') return rest
-  return rest ? `STUFE:${stufe}\n${rest}` : `STUFE:${stufe}`
-}
-
-function stufeKey(id: string) { return `einsatz-stufe:${id}` }
-function ketteKey(id: string) { return `einsatz-kette:${id}` }
-
-export function readStoredStufe(id: string, note?: string | null): Ereignisstufe {
-  try {
-    const stored = localStorage.getItem(stufeKey(id))
-    if (stored && EREIGNISSTUFEN.includes(stored as Ereignisstufe)) return stored as Ereignisstufe
-  } catch { /* ignore */ }
-  return parseStufe(note)
-}
-
-export function writeStoredStufe(id: string, stufe: Ereignisstufe) {
-  try {
-    if (stufe === 'klein') localStorage.removeItem(stufeKey(id))
-    else localStorage.setItem(stufeKey(id), stufe)
-  } catch { /* ignore */ }
-}
-
-export function readKette(id: string): KetteStand {
-  try {
-    const raw = localStorage.getItem(ketteKey(id))
-    if (!raw) return {}
-    return JSON.parse(raw) as KetteStand
-  } catch {
-    return {}
-  }
-}
-
-export function writeKette(id: string, stand: KetteStand) {
-  try {
-    localStorage.setItem(ketteKey(id), JSON.stringify(stand))
-  } catch { /* ignore */ }
-}
-
 export function formatStamp(iso?: string): string {
   if (!iso) return ''
   const date = new Date(iso)
