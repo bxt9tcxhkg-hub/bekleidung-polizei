@@ -97,7 +97,6 @@ export default function EreignisLage({
       onSaved(saved)
     } catch {
       setError('Lagedaten konnten nicht gespeichert werden.')
-      throw new Error('save failed')
     }
   }
 
