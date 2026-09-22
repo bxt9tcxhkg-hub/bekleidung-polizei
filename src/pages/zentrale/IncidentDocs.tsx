@@ -9,7 +9,7 @@ import { addPersonen, extractPdfPlainText, personenAusText } from '../../lib/zmr
 // "Haus/Bewohner"-Liste einträgt: Dateien und Listen sind zwei
 // unterschiedliche Arbeitsschritte und sollen nicht in einer Ansicht
 // vermischt werden.
-export default function IncidentDocs({ incidentId, from, canUpload = true }: { incidentId: string; from: 'zentrale' | 'streife'; canUpload?: boolean }) {
+export default function IncidentDocs({ incidentId, from, canUpload = true, onChanged }: { incidentId: string; from: 'zentrale' | 'streife'; canUpload?: boolean; onChanged?: () => void }) {
   const { profile } = useAuth()
   const [docs, setDocs] = useState<EinsatzDokument[]>([])
   const [art, setArt] = useState<DokArt>(from === 'streife' ? 'ausweis' : 'zmr')
@@ -52,6 +52,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
         throw err
       }
       setDocs(current => [...current, next])
+      onChanged?.()
       if ((art === 'zmr' || art === 'abfrage') && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
         const text = await extractPdfPlainText(file)
         const gefunden = personenAusText(text)
@@ -62,6 +63,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
         // im Ereignis-Arbeitsraum unter „Unterstützung vor Ort“.
         await addPersonen(incidentId, 'haus', gefunden, profile.id)
         setHinweis(`${gefunden.length} Person(en) aus dem PDF in die Liste "Haus/Bewohner" übernommen. Weiterbearbeitung unter Ereignis → Unterstützung vor Ort.`)
+        onChanged?.()
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload fehlgeschlagen.')
@@ -77,6 +79,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
     try {
       await deleteEinsatzdokument(incidentId, doc)
       setDocs(current => current.filter(row => row.id !== doc.id))
+      onChanged?.()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unterlage konnte nicht gelöscht werden.')
     }
