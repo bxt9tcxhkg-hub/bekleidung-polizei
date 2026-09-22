@@ -5,6 +5,7 @@ import { loadDokumente } from '../../lib/einsatzDokumente'
 import { ENTSCHEIDUNGSPUNKTE, ERSTMELDUNG_CHECKLISTE, NOTUNTERKUNFT_CHECKLISTE, telefonketteFuer } from '../../lib/einsatzSchema'
 import { loadEreignisEntscheidungen, updateEreignisLage, verstaendigungKey } from '../../lib/ereignis'
 import { loadPersonenliste } from '../../lib/zmrPersonen'
+import { telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
 import type { Ereignis, EreignisEntscheidung, EreignisVerstaendigung } from '../../lib/types'
 
 type Section = 'lage' | 'verstaendigung' | 'ablauf' | 'unterstuetzung'
@@ -69,6 +70,7 @@ export default function EreignisCockpit({
   refreshToken,
   onSaved,
   onMarkVerstaendigung,
+  kontakte,
   onGoTo,
   onOpenFiles,
 }: {
@@ -80,6 +82,7 @@ export default function EreignisCockpit({
   refreshToken: number
   onSaved: (ereignis: Ereignis) => void
   onMarkVerstaendigung: (label: string, field: 'versucht' | 'erreicht') => Promise<void>
+  kontakte: Record<string, EreignisKontaktTreffer[]>
   onGoTo: (section: Section) => void
   onOpenFiles: () => void
 }) {
@@ -131,6 +134,7 @@ export default function EreignisCockpit({
   const byKey = useMemo(() => new Map(verstaendigungen.map(row => [row.empfaenger_key, row])), [verstaendigungen])
   const erreicht = kette.filter(label => byKey.get(verstaendigungKey(label))?.erreicht_at).length
   const nextKontakt = kette.find(label => !byKey.get(verstaendigungKey(label))?.erreicht_at) ?? null
+  const nextKontaktDaten = nextKontakt ? (kontakte[nextKontakt] ?? []) : []
 
   const offeneEntscheidungen = ENTSCHEIDUNGSPUNKTE.filter(label => {
     const row = snapshot.entscheidungen.find(item => item.punkt_label === label)
@@ -188,10 +192,14 @@ export default function EreignisCockpit({
             <button type="button" disabled={!canOperate || busy} onClick={() => void setPublicSafety(false)} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900 disabled:opacity-50">Nein</button>
           </div> : null}
 
-          {!loading && nextKontakt && ereignis.oeffentliche_sicherheit_beeintraechtigt != null ? <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" disabled={!canOperate || busy} onClick={() => void onMarkVerstaendigung(nextKontakt, 'versucht')} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Versucht</button>
-            <button type="button" disabled={!canOperate || busy} onClick={() => void onMarkVerstaendigung(nextKontakt, 'erreicht')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Erreicht</button>
-          </div> : null}
+          {!loading && nextKontakt && ereignis.oeffentliche_sicherheit_beeintraechtigt != null ? <>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {nextKontaktDaten.filter(kontakt => kontakt.telefon).map(kontakt => <a key={kontakt.id} href={telHref(kontakt.telefon!)} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">TEL {kontakt.telefon}</a>)}
+              <button type="button" disabled={!canOperate || busy} onClick={() => void onMarkVerstaendigung(nextKontakt, 'versucht')} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Versucht</button>
+              <button type="button" disabled={!canOperate || busy} onClick={() => void onMarkVerstaendigung(nextKontakt, 'erreicht')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Erreicht</button>
+            </div>
+            {nextKontaktDaten.length === 0 ? <p className="mt-2 text-xs text-amber-700">Für diesen Verständigungsschritt sind noch keine passenden Kontaktdaten gepflegt.</p> : null}
+          </> : null}
 
           {!loading && nextSection && !(ereignis.oeffentliche_sicherheit_beeintraechtigt == null || nextKontakt) ? <button type="button" onClick={() => onGoTo(nextSection)} className="mt-3 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Direkt öffnen</button> : null}
         </div>
@@ -218,9 +226,9 @@ export default function EreignisCockpit({
         onClick={() => onGoTo('unterstuetzung')}
       />
       <StatusCard
-        title="Ablauf"
-        main={snapshot.erstmeldungErledigt + ' / ' + snapshot.erstmeldungGesamt + ' dokumentiert'}
-        detail={snapshot.notunterkunftAktiv ? 'Notunterkunft ' + snapshot.notunterkunftErledigt + '/' + snapshot.notunterkunftGesamt : 'Notunterkunft nicht aktiviert'}
+        title="Maßnahmen"
+        main={(snapshot.erstmeldungGesamt - snapshot.erstmeldungErledigt) + ' offen'}
+        detail={snapshot.notunterkunftAktiv ? 'Notunterkunft: ' + (snapshot.notunterkunftGesamt - snapshot.notunterkunftErledigt) + ' offen' : 'Notunterkunft nicht aktiviert'}
         onClick={() => onGoTo('ablauf')}
       />
     </div>
