@@ -106,24 +106,6 @@ begin
   where n.active
     and (n.valid_until is null or n.valid_until >= current_date);
 
-  -- Aktive Fahndung zu konkret beteiligten Personen.
-  return query
-  with personen as (
-    select v_inc.involved_person_id as id where v_inc.involved_person_id is not null
-    union
-    select ep.person_id from public.einsatz_parteien ep where ep.incident_id=p_incident_id
-  )
-  select
-    'fahndung'::text,
-    case when f.priority in ('kritisch','hoch') then 'sicherheit' else 'operativ' end,
-    ('Aktive Fahndung · ' || f.art)::text,
-    f.beschreibung::text,
-    null::integer
-  from public.zentrale_fahndungen f
-  join personen p on p.id=f.person_id
-  where f.status='offen'
-    and (f.gueltig_bis is null or f.gueltig_bis >= current_date);
-
   -- Schutzfall mit direktem Bezug zu einer beteiligten Person.
   return query
   with personen as (
@@ -154,60 +136,6 @@ begin
   from faelle s;
 
   -- Exakter Objektbezug über strukturierte Einsatzadresse.
-  return query
-  with objekte as (
-    select o.*
-    from public.operational_objects o
-    where nullif(trim(v_inc.location_street),'') is not null
-      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
-      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
-  )
-  select
-    'objekt'::text,
-    'operativ'::text,
-    ('Objektinformation · ' || coalesce(o.label,o.address))::text,
-    o.note::text,
-    null::integer
-  from objekte o
-  where nullif(trim(o.note),'') is not null;
-
-  return query
-  with objekte as (
-    select o.id
-    from public.operational_objects o
-    where nullif(trim(v_inc.location_street),'') is not null
-      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
-      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
-  )
-  select
-    'schluessel'::text,
-    'operativ'::text,
-    'Schlüssel zum Einsatzobjekt vorhanden'::text,
-    ('Schlüssel ' || k.schluessel_nummer || coalesce(' · ' || k.verwahrort,''))::text,
-    null::integer
-  from public.zentrale_schluessel k
-  where k.object_id in (select id from objekte)
-    and k.status='vorhanden';
-
-  return query
-  with objekte as (
-    select o.id
-    from public.operational_objects o
-    where nullif(trim(v_inc.location_street),'') is not null
-      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
-      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
-  )
-  select
-    'fahndung_objekt'::text,
-    case when f.priority in ('kritisch','hoch') then 'sicherheit' else 'operativ' end,
-    ('Aktive Fahndung zum Einsatzobjekt · ' || f.art)::text,
-    f.beschreibung::text,
-    null::integer
-  from public.zentrale_fahndungen f
-  where f.object_id in (select id from objekte)
-    and f.status='offen'
-    and (f.gueltig_bis is null or f.gueltig_bis >= current_date);
-
   -- Schutzfall mit exaktem Einsatzobjekt.
   return query
   with objekte as (
