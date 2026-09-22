@@ -125,8 +125,6 @@ export default function ZentraleShell() {
   const lageEntries = useMemo(() => entries.filter(item => item.category === 'lage'), [entries])
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const uebergabeIncidents = openIncidentsAllDays
-  const shiftAssignments = assignments.filter(item => item.shift === dutyShift)
-  const vdAvailable = shiftAssignments.some(item => item.function === 'vd')
   const visibleIncidents = useMemo(() => {
     if (ownAssignment?.function === 'jd') return incidents.filter(item => item.disposition === 'jd')
     if (ownAssignment?.function === 'vd') return incidents.filter(item => item.disposition === 'vd')
@@ -241,7 +239,7 @@ export default function ZentraleShell() {
   function openIncident() {
     const now = new Date()
     setEditingIncident(null)
-    setIncident({ ...EMPTY_INCIDENT_FORM, disposition: vdAvailable ? 'vd' : 'jd', reportedTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
+    setIncident({ ...EMPTY_INCIDENT_FORM, disposition: 'offen', assignedVehicleId: null, reportedTime: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` })
     setLocateError(''); setShowIncidentForm(true); setError('')
   }
   function openEditIncident(item: IncidentReport) {
@@ -290,7 +288,8 @@ export default function ZentraleShell() {
     setIncident(current => current.location.trim() === queried ? { ...current, lat: result.lat, lng: result.lng, coordsPrecise: true } : current)
   }
   async function saveIncident() {
-    if (!profile?.id || !incident.reasonCode) { setError('Bitte den Grund des Anrufes auswählen.'); return }
+    if (!profile?.id) return
+    if (!incident.location.trim()) { setError('Bitte einen Einsatzort erfassen.'); return }
     if (!incident.summary.trim()) { setError('Bitte einen kurzen Sachverhalt eingeben.'); return }
     if (incident.locationMode === 'kilometer' && (!incident.roadNumber || !incident.kilometer || incident.lat === null || incident.lng === null || !incident.coordsPrecise)) {
       setError('Bitte Landesstraße und Kilometer auswählen und den amtlichen Kartenpunkt ermitteln.')
@@ -310,7 +309,7 @@ export default function ZentraleShell() {
       caller_phone: incident.callerPhone.trim() || null,
       caller_person_id: incident.callerOrg.trim() ? null : incident.callerPersonId,
       caller_name: incident.callerOrg.trim() ? incident.callerOrg.trim() : (callerPerson ? personDisplayName(callerPerson) : null),
-      reason_code: incident.reasonCode,
+      reason_code: incident.reasonCode || null,
       location: incident.location.trim() || null,
       location_street: incident.locationMode === 'address' ? (incident.street.trim() || null) : (incident.roadName.trim() || null),
       location_house_number: incident.locationMode === 'address' && !incident.houseNumberUnknown ? (incident.houseNumber.trim() || null) : null,
@@ -349,7 +348,7 @@ export default function ZentraleShell() {
     {error && !showEntryForm && !showIncidentForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <Outlet context={ctx} />}
-    {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} vdAvailable={vdAvailable} persons={persons} patrolVehicles={patrolVehicles} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
+    {showIncidentForm ? <IncidentModal editing={Boolean(editingIncident)} incident={incident} setIncident={setIncident} persons={persons} onPersonCreated={person => setPersons(current => [...current, person])} createdBy={profile?.id ?? null} contextEntries={contextEntries} contextPersonNotes={contextPersonNotes} contextAvBv={contextAvBv} priorIncidents={priorIncidents} saving={saving} error={error} locating={locating} locateError={locateError} locate={locateIncident} close={() => { setEditingIncident(null); setShowIncidentForm(false) }} save={saveIncident} /> : null}
     {showEntryForm ? <EntryModal entry={entry} setEntry={setEntry} editing={editing} category="lage" incidents={lageIncidentOptions} saving={saving} error={error} close={() => setShowEntryForm(false)} save={saveEntry} remove={deleteEntry} /> : null}
   </div>
 }
