@@ -17,7 +17,10 @@ Das Portal ergänzt PAD und bestehende Fachsysteme. Es ersetzt diese nicht.
 ## 2. Operative Grundsätze
 
 - wenige Klicks, wenig Tippen
+- Leitfaden: **wenig Klicks, viel Information**
 - Informationen werden möglichst automatisch bereitgestellt
+- Übersichten zeigen zuerst den aktuellen Stand und die nächsten sinnvollen Aktionen; Detailfelder erscheinen erst bei Bedarf
+- bekannte Daten werden weiterverwendet statt erneut abgefragt
 - keine zusätzliche Belastung für Zentrale oder Streifen
 - sicherheitskritische Entscheidungen bleiben beim Menschen
 - keine automatische Einstufung von Mittel-/Großereignis/Katastrophe
