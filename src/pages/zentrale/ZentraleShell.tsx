@@ -50,6 +50,8 @@ export interface ZentraleContext {
   openEditEntry: (item: ZentraleEntry) => void
   completeIncident: (item: IncidentReport) => Promise<void>
   deleteIncident: (item: IncidentReport) => Promise<void>
+  patrolVehicles: { id: string; name: string; call_sign: string | null; license_plate: string | null; function: 'jd' | 'vd' }[]
+  setIncidentHandling: (item: IncidentReport, mode: 'offen' | 'zentrale' | 'bp' | 'streife', vehicleId?: string) => Promise<void>
   persons: OperationalPerson[]
   onPersonCreated: (person: OperationalPerson) => void
   createdBy: string | null
@@ -118,8 +120,11 @@ export default function ZentraleShell() {
   useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
 
   const patrolVehicles = useMemo(() => {
-    const seen = new Map<string, { id: string; name: string; call_sign: string | null; license_plate: string | null }>()
-    for (const item of assignments) if (item.vehicle_id && item.fleet_vehicles && !seen.has(item.vehicle_id)) seen.set(item.vehicle_id, item.fleet_vehicles)
+    const seen = new Map<string, { id: string; name: string; call_sign: string | null; license_plate: string | null; function: 'jd' | 'vd' }>()
+    for (const item of assignments) {
+      if (!item.vehicle_id || !item.fleet_vehicles || (item.function !== 'jd' && item.function !== 'vd') || seen.has(item.vehicle_id)) continue
+      seen.set(item.vehicle_id, { ...item.fleet_vehicles, function: item.function })
+    }
     return [...seen.values()]
   }, [assignments])
   const lageEntries = useMemo(() => entries.filter(item => item.category === 'lage'), [entries])
@@ -332,12 +337,48 @@ export default function ZentraleShell() {
       setSaving(false)
     }
   }
+  async function setIncidentHandling(item: IncidentReport, mode: 'offen' | 'zentrale' | 'bp' | 'streife', vehicleId?: string) {
+    if (item.taken_over_at && mode !== 'offen') {
+      setError('Der Einsatz wurde bereits von einer Streife übernommen. Die Bearbeitung kann nicht stillschweigend überschrieben werden.')
+      return
+    }
+
+    let disposition: IncidentReport['disposition'] = 'offen'
+    let status: IncidentReport['status'] = 'offen'
+    let assignedVehicleId: string | null = null
+
+    if (mode === 'zentrale') disposition = 'zentrale'
+    if (mode === 'bp') { disposition = 'bp'; status = 'weitergegeben' }
+    if (mode === 'streife') {
+      const patrol = patrolVehicles.find(vehicle => vehicle.id === vehicleId)
+      if (!patrol) { setError('Bitte eine aktuell im Dienst befindliche Streife auswählen.'); return }
+      disposition = patrol.function
+      assignedVehicleId = patrol.id
+    }
+
+    const result = await supabase.from('incident_reports').update({
+      disposition,
+      status,
+      assigned_vehicle_id: assignedVehicleId,
+      ...(mode === 'offen' ? { taken_over_by: null, taken_over_at: null, taken_over_vehicle_id: null } : {}),
+    }).eq('id', item.id)
+    if (result.error) { setError('Die Bearbeitung konnte nicht geändert werden.'); return }
+
+    const label = mode === 'zentrale' ? 'Zentrale'
+      : mode === 'bp' ? 'Bundespolizei'
+      : mode === 'streife' ? (patrolVehicles.find(vehicle => vehicle.id === vehicleId)?.call_sign || patrolVehicles.find(vehicle => vehicle.id === vehicleId)?.name || 'Streife')
+      : 'offen'
+    logAudit('Einsatzbearbeitung geändert', `${item.location ?? item.summary.slice(0, 60)} · ${label}`)
+    setNotice(mode === 'bp' ? 'Meldung wurde an die Bundespolizei abgetreten.' : `Bearbeitung: ${label}.`)
+    await load()
+  }
+
   async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
   async function deleteIncident(item: IncidentReport) { if (!window.confirm('Diese Einsatzmeldung endgültig löschen?')) return; const result = await supabase.from('incident_reports').delete().eq('id', item.id); if (result.error) { setError('Die Einsatzmeldung konnte nicht gelöscht werden.'); return } logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80)); await load() }
 
   const ctx: ZentraleContext = {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
-    visibleIncidents, openIncidents, uebergabeIncidents, openIncidentMarkers, sperrenLines,
+    visibleIncidents, openIncidents, uebergabeIncidents, patrolVehicles, setIncidentHandling, openIncidentMarkers, sperrenLines,
     criticalEntries, criticalAvBv, criticalStrassensperren, criticalSourcesError,
     openIncident, openEditIncident, openLageForIncident, openEditEntry, completeIncident, deleteIncident,
     persons, onPersonCreated: person => setPersons(current => [...current, person]), createdBy: profile?.id ?? null,
