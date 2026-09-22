@@ -23,7 +23,7 @@ import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 // location_lat/-lng zusätzlich zur Zentrale-Ansicht: damit sich eine Baustelle
 // in der Nähe des Einsatzorts auch hier anzeigen lässt (siehe baustellen unten).
 type SimpleIncident = {
-  id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
+  id: string; reported_at: string; reason_code: string | null; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
   caller_name: string | null; caller_phone: string | null; involved_person: string | null; involved_birth_date: string | null
   assigned_vehicle_id: string | null; taken_over_by: string | null; taken_over_at: string | null; taken_over_vehicle_id: string | null; completed_by: string | null; completed_at: string | null
   assigned_vehicle?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign'> | null
@@ -119,7 +119,7 @@ export default function AussendienstShell() {
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select('id,reported_at,reason_code,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
       supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').gte('started_at', startOfOperationalDayIso()).order('started_at'),
       // AV/BV & EV und Fahndungen liegen in eigenen Tabellen (siehe ZentraleAvBv/ZentraleFahndungen) - hier nur lesend für den Außendienst.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
