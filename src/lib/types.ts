@@ -1638,6 +1638,8 @@ export type Database = {
         { foreignKeyName: 'incident_reports_involved_person_id_fkey'; columns: ['involved_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_assigned_vehicle_id_fkey'; columns: ['assigned_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_taken_over_by_fkey'; columns: ['taken_over_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_taken_over_vehicle_id_fkey'; columns: ['taken_over_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_reports_completed_by_fkey'; columns: ['completed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       incident_supports: { Row: IncidentSupportRow; Insert: Pick<IncidentSupportRow, 'incident_id' | 'vehicle_id' | 'started_by'> & Partial<Omit<IncidentSupportRow, 'id' | 'started_at' | 'incident_id' | 'vehicle_id' | 'started_by'>>; Update: Partial<Omit<IncidentSupportRow, 'id' | 'incident_id' | 'vehicle_id' | 'started_by' | 'started_at'>>; Relationships: [
         { foreignKeyName: 'incident_supports_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
