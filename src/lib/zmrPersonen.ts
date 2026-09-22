@@ -160,6 +160,66 @@ export async function addPersonen(incidentId: string, art: NamenslisteArt, perso
   return (result.data ?? []) as unknown as NamenslistePerson[]
 }
 
+function alterAusGeburtsdatum(geboren: string | null): number | null {
+  if (!geboren) return null
+  const match = geboren.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/)
+  if (!match) return null
+  const [, tagText, monatText, jahrText] = match
+  const tag = Number(tagText)
+  const monat = Number(monatText)
+  const jahr = Number(jahrText)
+  const heute = new Date()
+  let alter = heute.getFullYear() - jahr
+  const hatteGeburtstag = heute.getMonth() + 1 > monat || (heute.getMonth() + 1 === monat && heute.getDate() >= tag)
+  if (!hatteGeburtstag) alter--
+  return alter >= 0 && alter < 130 ? alter : null
+}
+
+function listenPersonKey(person: Pick<NamenslistePerson, 'name' | 'geboren' | 'wohnung'>): string {
+  return [person.name.trim().toLocaleLowerCase('de-AT'), person.geboren ?? '', person.wohnung ?? ''].join('|')
+}
+
+/**
+ * Kopiert bewusst ausgewählte Personen in eine Arbeitsliste. Bereits vorhandene
+ * identische Personen werden übersprungen, damit wiederholte Klicks keine
+ * Dubletten erzeugen.
+ */
+export async function copyPersonenInListe(
+  incidentId: string,
+  ziel: NamenslisteArt,
+  personen: readonly NamenslistePerson[],
+  createdBy: string,
+): Promise<{ hinzugefuegt: number; uebersprungen: number }> {
+  if (personen.length === 0) return { hinzugefuegt: 0, uebersprungen: 0 }
+
+  const vorhanden = await loadPersonenliste(incidentId, ziel)
+  const keys = new Set(vorhanden.map(listenPersonKey))
+  const neu = personen.filter(person => !keys.has(listenPersonKey(person)))
+
+  if (neu.length > 0) {
+    const rows = neu.map(person => ({
+      incident_id: incidentId,
+      listenart: ziel,
+      name: person.name,
+      geboren: person.geboren,
+      wohnung: person.wohnung,
+      alter: ziel === 'unterbringung' ? (person.alter ?? alterAusGeburtsdatum(person.geboren)) : person.alter,
+      geschlecht: person.geschlecht,
+      sprache: person.sprache,
+      familie: person.familie,
+      telefon: person.telefon,
+      ort_unterkunft: person.ort_unterkunft,
+      anmerkungen: person.anmerkungen,
+      status: ziel === 'evakuierung' ? 'unbekannt' : 'offen',
+      created_by: createdBy,
+    }))
+    const result = await supabase.from('einsatz_namensliste').insert(rows)
+    if (result.error) throw new Error('Die ausgewählten Personen konnten nicht übernommen werden.')
+  }
+
+  return { hinzugefuegt: neu.length, uebersprungen: personen.length - neu.length }
+}
+
 export async function updatePerson(id: string, changes: Partial<Pick<NamenslistePerson, 'name' | 'geboren' | 'wohnung' | 'alter' | 'geschlecht' | 'sprache' | 'familie' | 'telefon' | 'ort_unterkunft' | 'anmerkungen' | 'status'>>): Promise<void> {
   const result = await supabase.from('einsatz_namensliste').update(changes).eq('id', id)
   if (result.error) throw new Error('Die Person konnte nicht gespeichert werden.')
