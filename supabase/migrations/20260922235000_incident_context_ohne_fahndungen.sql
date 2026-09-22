@@ -37,8 +37,11 @@ begin
   )
   select
     'personenhinweis'::text,
-    case when n.category in ('aggressiv','waffenverbot','fluchtgefahr','suizidgefahr','infektionsschutz')
-      then 'sicherheit' else 'operativ' end,
+    case
+      when n.category in ('aggressiv','waffenverbot','suizidgefahr') then 'sicherheit'
+      when n.category in ('fluchtgefahr','infektionsschutz') then 'achtung'
+      else 'operativ'
+    end,
     ('Personenhinweis: ' || case n.category
       when 'aggressiv' then 'Aggressionshinweis'
       when 'waffenverbot' then 'Waffenverbot'
@@ -46,7 +49,11 @@ begin
       when 'suizidgefahr' then 'Suizidgefahr'
       when 'infektionsschutz' then 'Infektionsschutz'
       else 'Hinweis' end)::text,
-    n.note::text,
+    (n.note ||
+      case when nullif(trim(n.action_guidance),'') is not null
+        then ' · Vorgehen: ' || n.action_guidance
+        else ''
+      end)::text,
     null::integer
   from public.operational_person_notes n
   join personen p on p.id=n.person_id
