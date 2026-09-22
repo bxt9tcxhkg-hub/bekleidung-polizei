@@ -5,11 +5,42 @@ import type { IncidentDisposition, OperationalPersonNoteCategory, AvBvArt, Fahnd
 // Hilfsfunktionen - eigene .ts-Datei, weil Komponenten-Dateien laut
 // react-refresh/only-export-components nur Komponenten exportieren dürfen.
 
-export const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { jd: 'JD fährt an', vd: 'VD fährt an', bp: 'An Bundespolizei (BP) weitergegeben', keine_anfahrt: 'Keine Anfahrt erforderlich' }
+export const DISPOSITION_LABEL: Record<IncidentDisposition, string> = { offen: 'Offen / noch nicht zugewiesen', zentrale: 'Bearbeitung durch Zentrale', jd: 'JD', vd: 'VD', bp: 'An Bundespolizei (BP) abgetreten', keine_anfahrt: 'Keine Anfahrt erforderlich' }
 export const PERSON_NOTE_LABEL: Record<OperationalPersonNoteCategory, string> = { infektionsschutz: 'Infektionsschutz', aggressiv: 'Aggressives Verhalten', waffenverbot: 'Waffenverbot', fluchtgefahr: 'Fluchtgefahr', suizidgefahr: 'Suizidgefahr', sonstiges: 'Sonstiger Sicherheitshinweis' }
 export const AV_BV_ART_LABEL: Record<AvBvArt, string> = { amtsverbot: 'Amtsverbot', betretungsverbot: 'Betretungsverbot', einreiseverbot: 'Einreiseverbot' }
 export const FAHNDUNG_ART_LABEL: Record<FahndungArt, string> = { person: 'Person', fahrzeug: 'Fahrzeug', objekt: 'Objekt', sonstiges: 'Sonstiges' }
 export function formatTime(value: string) { return new Date(value).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }) }
+
+const INCIDENT_REASON_RULES: { code: string; patterns: RegExp[] }[] = [
+  { code: 'haeuslicher_streit', patterns: [/\bhäuslich(?:er|en|e)?\s+streit\b/i, /\bfamili(?:en|ärer|aerer)streit\b/i] },
+  { code: 'hilfeschreie', patterns: [/\bhilfeschrei/i, /\bschrei(?:t|e|en).*\bhilfe\b/i, /\bruft.*\bhilfe\b/i] },
+  { code: 'schuesse_knall', patterns: [/\bsch[uü]ss/i, /\bknallgeräusch/i, /\bknall(?:e|geräusche)?\b/i] },
+  { code: 'verkehrsunfall', patterns: [/\bverkehrsunfall\b/i, /\bunfall\b.*\b(?:pkw|auto|fahrzeug|motorrad|rad)\b/i, /\b(?:pkw|auto|fahrzeug|motorrad|rad).*\bunfall\b/i] },
+  { code: 'verkehrsbehinderung', patterns: [/\bverkehrsbehinderung\b/i, /\bfahrbahn.*\bblockiert\b/i, /\bblockiert.*\bfahrbahn\b/i] },
+  { code: 'falschparker', patterns: [/\bfalschpark/i, /\bverkehrsbehindernd\s+geparkt\b/i] },
+  { code: 'vermisste_person', patterns: [/\bvermisst/i, /\bvermisste\s+person\b/i] },
+  { code: 'person_in_not', patterns: [/\bperson.*\bnotlage\b/i, /\bhilflose\s+person\b/i, /\bperson.*\bverletzt\b/i] },
+  { code: 'einbruch', patterns: [/\beinbruch/i, /\beingebrochen\b/i] },
+  { code: 'alarmanlage', patterns: [/\balarmanlage\b/i, /\beinbruchalarm\b/i, /\balarm ausgelöst\b/i] },
+  { code: 'ruhestoerung', patterns: [/\bruhestörung\b/i, /\blärmbelästigung\b/i, /\blärm\b/i] },
+  { code: 'sachbeschaedigung', patterns: [/\bsachbeschädigung\b/i, /\bbeschädigt\b/i, /\bvandalismus\b/i] },
+  { code: 'verdaechtige_wahrnehmung', patterns: [/\bverdächtig/i, /\bauffällige\s+person\b/i, /\bauffälliges\s+fahrzeug\b/i] },
+  { code: 'streit', patterns: [/\bstreit\b/i, /\bauseinandersetzung\b/i] },
+  { code: 'tier_fund', patterns: [/\bfundtier\b/i, /\btier gefunden\b/i, /\bfreilaufend(?:er|es|e)?\s+(?:hund|tier)\b/i] },
+]
+
+/**
+ * Deterministische, bewusst konservative Zuordnung. Nur wenn genau eine
+ * fachliche Kategorie passt, wird ein interner Grund gesetzt. Keine KI,
+ * keine sicherheitsrelevante Ableitung aus unscharfen Treffern.
+ */
+export function detectIncidentReason(summary: string): string | null {
+  const text = summary.trim()
+  if (!text) return null
+  const matches = INCIDENT_REASON_RULES.filter(rule => rule.patterns.some(pattern => pattern.test(text))).map(rule => rule.code)
+  const unique = [...new Set(matches)]
+  return unique.length === 1 ? unique[0] : null
+}
 
 /**
  * ISO-Zeitpunkt für "Mitternacht heute" in der lokalen Zeitzone des Geräts,
@@ -125,6 +156,6 @@ export const EMPTY_INCIDENT_FORM: IncidentFormState = {
   callerPhone: '', callerPersonId: null, callerOrg: '', locationMode: 'address',
   street: '', houseNumber: '', houseNumberUnknown: false,
   roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null,
-  location: '', reasonCode: '', summary: '', involvedPersonId: null, disposition: 'jd', assignedVehicleId: null, note: '',
+  location: '', reasonCode: '', summary: '', involvedPersonId: null, disposition: 'offen', assignedVehicleId: null, note: '',
   lat: null, lng: null, coordsPrecise: false, reportedTime: '',
 }
