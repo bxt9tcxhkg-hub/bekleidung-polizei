@@ -113,11 +113,39 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
 
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Meldungsleger</p>
+        <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1 mb-3" role="group" aria-label="Art des Meldungslegers">
+          <button
+            type="button"
+            aria-pressed={!orgMode}
+            onClick={() => {
+              if (!orgMode) return
+              setOrgMode(false)
+              patch({ callerOrg: '' })
+            }}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${!orgMode ? 'bg-white text-blue-800 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Person
+          </button>
+          <button
+            type="button"
+            aria-pressed={orgMode}
+            onClick={() => {
+              if (orgMode) return
+              setOrgMode(true)
+              patch({ callerPersonId: null })
+            }}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${orgMode ? 'bg-white text-blue-800 shadow-sm ring-1 ring-gray-200' : 'text-gray-600 hover:text-gray-900'}`}
+          >
+            Meldende Stelle
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {orgMode ? <Field label="Meldende Stelle" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} /> : <PersonNameAutocomplete label="Name (optional)" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
+          {orgMode
+            ? <Field label="Stelle / Organisation" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} />
+            : <PersonNameAutocomplete label="Name (optional)" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
           <Field label="Telefonnummer (optional)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
         </div>
-        <button type="button" onClick={() => { setOrgMode(!orgMode); patch(orgMode ? { callerOrg: '' } : { callerOrg: '', callerPersonId: null }) }} className={`mt-2 text-xs font-semibold ${orgMode ? 'text-blue-700' : 'text-gray-500'}`}>{orgMode ? '✓ Meldende Stelle (statt Person)' : 'Meldende Stelle statt Person (z. B. RFL, LLZ, Feuerwehr)'}</button>
+        {orgMode ? <p className="mt-2 text-xs text-gray-500">Zum Beispiel RFL, LLZ, Feuerwehr oder andere Einrichtung.</p> : null}
       </div>
 
       <OrtDossier street={incident.street} houseNumber={incident.houseNumber} location={incident.location} />
