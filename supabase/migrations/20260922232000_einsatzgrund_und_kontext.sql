@@ -1,0 +1,264 @@
+-- Strukturierter Einsatzgrund + automatische, streng kontextbezogene Hinweise.
+-- Keine zusätzlichen Radius-/Hinweis-Klicks: der Einsatzgrund steuert die
+-- Nahbereichsprüfung automatisch.
+
+create table if not exists public.incident_reason_configs (
+  code text primary key,
+  label text not null,
+  nearby_radius_m integer not null default 0 check (nearby_radius_m between 0 and 1000),
+  sort_order integer not null default 100,
+  active boolean not null default true
+);
+
+alter table public.incident_reason_configs enable row level security;
+revoke all on table public.incident_reason_configs from public, anon;
+grant select, insert, update, delete on table public.incident_reason_configs to authenticated;
+
+drop policy if exists "Einsatzgruende lesen" on public.incident_reason_configs;
+create policy "Einsatzgruende lesen"
+on public.incident_reason_configs for select to authenticated
+using (exists(select 1 from public.profiles p where p.id=(select auth.uid()) and p.active));
+
+drop policy if exists "Einsatzgruende verwalten" on public.incident_reason_configs;
+create policy "Einsatzgruende verwalten"
+on public.incident_reason_configs for all to authenticated
+using (public.can_manage_zentrale())
+with check (public.can_manage_zentrale());
+
+insert into public.incident_reason_configs(code,label,nearby_radius_m,sort_order) values
+('hilfeschreie','Hilfeschreie / Schreie gehört',100,10),
+('streit','Streit / Auseinandersetzung',100,20),
+('schuesse_knall','Schüsse / auffällige Knallgeräusche',250,30),
+('verdaechtige_wahrnehmung','Verdächtige Wahrnehmung / Person',100,40),
+('einbruch','Einbruch / Einbruchsverdacht',100,50),
+('alarmanlage','Alarmanlage / Sicherheitsalarm',75,60),
+('ruhestoerung','Ruhestörung',50,70),
+('haeuslicher_streit','Häuslicher Streit / Gewalt',75,80),
+('person_in_not','Person in Not / medizinischer Anlass',75,90),
+('vermisste_person','Vermisste / gesuchte Person',200,100),
+('sachbeschaedigung','Sachbeschädigung / Vandalismus',75,110),
+('verkehrsunfall','Verkehrsunfall',0,120),
+('verkehrsbehinderung','Verkehrsbehinderung',0,130),
+('falschparker','Falschparker / Verkehrsdelikt',0,140),
+('tier_fund','Tier / Fundgegenstand',0,150),
+('sonstiges','Sonstiger Anlass',0,999)
+on conflict (code) do update
+set label=excluded.label, nearby_radius_m=excluded.nearby_radius_m, sort_order=excluded.sort_order;
+
+alter table public.incident_reports
+  add column if not exists reason_code text references public.incident_reason_configs(code) on delete set null,
+  add column if not exists location_street text,
+  add column if not exists location_house_number text;
+
+create index if not exists incident_reports_reason_code_idx on public.incident_reports(reason_code);
+
+create or replace function public.incident_context(p_incident_id uuid)
+returns table(
+  kind text,
+  severity text,
+  title text,
+  detail text,
+  distance_m integer
+)
+language plpgsql
+security definer
+set search_path=public
+as $$
+declare
+  v_inc public.incident_reports%rowtype;
+  v_radius integer := 0;
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Nicht angemeldet';
+  end if;
+  if not (public.has_portal_area_access('zentrale') or public.is_operative_duty_today()) then
+    raise exception 'Keine operative Berechtigung';
+  end if;
+
+  select * into v_inc from public.incident_reports where id=p_incident_id;
+  if not found then raise exception 'Einsatz nicht gefunden'; end if;
+
+  select coalesce(nearby_radius_m,0) into v_radius
+  from public.incident_reason_configs where code=v_inc.reason_code and active;
+
+  -- Aktive Hinweise zu konkret beteiligten Personen.
+  return query
+  with personen as (
+    select v_inc.involved_person_id as id where v_inc.involved_person_id is not null
+    union
+    select ep.person_id from public.einsatz_parteien ep where ep.incident_id=p_incident_id
+  )
+  select
+    'personenhinweis'::text,
+    case when n.category in ('aggressiv','waffenverbot','fluchtgefahr','suizidgefahr','infektionsschutz')
+      then 'sicherheit' else 'operativ' end,
+    ('Personenhinweis: ' || case n.category
+      when 'aggressiv' then 'Aggressionshinweis'
+      when 'waffenverbot' then 'Waffenverbot'
+      when 'fluchtgefahr' then 'Fluchtgefahr'
+      when 'suizidgefahr' then 'Suizidgefahr'
+      when 'infektionsschutz' then 'Infektionsschutz'
+      else 'Hinweis' end)::text,
+    n.note::text,
+    null::integer
+  from public.operational_person_notes n
+  join personen p on p.id=n.person_id
+  where n.active
+    and (n.valid_until is null or n.valid_until >= current_date);
+
+  -- Aktive Fahndung zu konkret beteiligten Personen.
+  return query
+  with personen as (
+    select v_inc.involved_person_id as id where v_inc.involved_person_id is not null
+    union
+    select ep.person_id from public.einsatz_parteien ep where ep.incident_id=p_incident_id
+  )
+  select
+    'fahndung'::text,
+    case when f.priority in ('kritisch','hoch') then 'sicherheit' else 'operativ' end,
+    ('Aktive Fahndung · ' || f.art)::text,
+    f.beschreibung::text,
+    null::integer
+  from public.zentrale_fahndungen f
+  join personen p on p.id=f.person_id
+  where f.status='offen'
+    and (f.gueltig_bis is null or f.gueltig_bis >= current_date);
+
+  -- Schutzfall mit direktem Bezug zu einer beteiligten Person.
+  return query
+  with personen as (
+    select v_inc.involved_person_id as id where v_inc.involved_person_id is not null
+    union
+    select ep.person_id from public.einsatz_parteien ep where ep.incident_id=p_incident_id
+  ),
+  faelle as (
+    select distinct s.*
+    from public.schutzfaelle s
+    where s.status='aktiv' and s.ende >= now()
+      and (
+        s.gefaehrder_id in (select id from personen)
+        or exists (
+          select 1 from public.schutzfall_personen sp
+          where sp.schutzfall_id=s.id and sp.person_id in (select id from personen)
+        )
+      )
+  )
+  select
+    'schutzfall_person'::text,
+    'sicherheit'::text,
+    ('Aktiver Schutzfall zu beteiligter Person' ||
+      case when s.waffenverbot then ' · Waffenverbot' else '' end)::text,
+    ('PAD ' || s.pad_aktenzahl ||
+      coalesce(' · ' || nullif(s.hinweise,''),''))::text,
+    null::integer
+  from faelle s;
+
+  -- Exakter Objektbezug über strukturierte Einsatzadresse.
+  return query
+  with objekte as (
+    select o.*
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'objekt'::text,
+    'operativ'::text,
+    ('Objektinformation · ' || coalesce(o.label,o.address))::text,
+    o.note::text,
+    null::integer
+  from objekte o
+  where nullif(trim(o.note),'') is not null;
+
+  return query
+  with objekte as (
+    select o.id
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'schluessel'::text,
+    'operativ'::text,
+    'Schlüssel zum Einsatzobjekt vorhanden'::text,
+    ('Schlüssel ' || k.schluessel_nummer || coalesce(' · ' || k.verwahrort,''))::text,
+    null::integer
+  from public.zentrale_schluessel k
+  where k.object_id in (select id from objekte)
+    and k.status='vorhanden';
+
+  return query
+  with objekte as (
+    select o.id
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'fahndung_objekt'::text,
+    case when f.priority in ('kritisch','hoch') then 'sicherheit' else 'operativ' end,
+    ('Aktive Fahndung zum Einsatzobjekt · ' || f.art)::text,
+    f.beschreibung::text,
+    null::integer
+  from public.zentrale_fahndungen f
+  where f.object_id in (select id from objekte)
+    and f.status='offen'
+    and (f.gueltig_bis is null or f.gueltig_bis >= current_date);
+
+  -- Schutzfall mit exaktem Einsatzobjekt.
+  return query
+  with objekte as (
+    select o.id
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'schutzfall_objekt'::text,
+    'sicherheit'::text,
+    'Aktiver Schutzfall am Einsatzobjekt'::text,
+    (b.bezeichnung || ' · PAD ' || s.pad_aktenzahl)::text,
+    0::integer
+  from public.schutzbereiche b
+  join public.schutzfaelle s on s.id=b.schutzfall_id
+  where b.object_id in (select id from objekte)
+    and s.status='aktiv' and s.ende >= now();
+
+  -- Nur bei dafür konfigurierten Einsatzgründen: aktive Schutzbereiche im
+  -- Nahbereich. Der Treffer wird ausdrücklich als räumlicher, nicht sicherer
+  -- Zusammenhang gekennzeichnet.
+  if v_radius > 0 and v_inc.location_lat is not null and v_inc.location_lng is not null then
+    return query
+    with dist as (
+      select b.*, s.pad_aktenzahl,
+        round(6371000 * 2 * asin(sqrt(
+          power(sin(radians(b.lat - v_inc.location_lat)/2),2) +
+          cos(radians(v_inc.location_lat))*cos(radians(b.lat))*
+          power(sin(radians(b.lng - v_inc.location_lng)/2),2)
+        )))::integer as d
+      from public.schutzbereiche b
+      join public.schutzfaelle s on s.id=b.schutzfall_id
+      where s.status='aktiv' and s.ende >= now() and b.position_bestaetigt
+    )
+    select
+      'schutzfall_nahbereich'::text,
+      'nahbereich'::text,
+      ('Aktiver Schutzbereich im Nahbereich · ' || d.bezeichnung)::text,
+      ('PAD ' || d.pad_aktenzahl || ' · räumlicher Hinweis, Zusammenhang zum Einsatz nicht bestätigt')::text,
+      d.d::integer
+    from dist d
+    where d.d <= v_radius
+    order by d.d;
+  end if;
+end;
+$$;
+
+revoke all on function public.incident_context(uuid) from public, anon;
+grant execute on function public.incident_context(uuid) to authenticated;
+
+comment on function public.incident_context(uuid) is
+  'Liefert ausschließlich konkrete aktive Einsatzkontexte; Nahbereich nur nach Einsatzgrund-Konfiguration.';
