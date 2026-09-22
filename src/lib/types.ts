@@ -1716,7 +1716,7 @@ export type Database = {
         { foreignKeyName: 'ereignis_verlauf_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
         { foreignKeyName: 'ereignis_verlauf_changed_by_fkey'; columns: ['changed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      ereignis_verstaendigungen: { Row: EreignisVerstaendigungRow; Insert: Pick<EreignisVerstaendigungRow, 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'> & Partial<Omit<EreignisVerstaendigungRow, 'id' | 'updated_at' | 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'>>; Update: Partial<Omit<EreignisVerstaendigungRow, 'id' | 'ereignis_id'>>; Relationships: [
+      ereignis_verstaendigungen: { Row: EreignisVerstaendigungRow; Insert: Pick<EreignisVerstaendigungRow, 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'> & Partial<Omit<EreignisVerstaendigungRow, 'id' | 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'>>; Update: Partial<Omit<EreignisVerstaendigungRow, 'id' | 'ereignis_id'>>; Relationships: [
         { foreignKeyName: 'ereignis_verstaendigungen_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
         { foreignKeyName: 'ereignis_verstaendigungen_updated_by_fkey'; columns: ['updated_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
