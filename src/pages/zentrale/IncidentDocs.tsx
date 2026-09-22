@@ -59,7 +59,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
         if (!profile?.id) return
         // Landen immer in "Haus/Bewohner" - die Übernahme in eine andere
         // Liste (z. B. Notunterkunft-Namensliste) passiert bewusst getrennt
-        // im Listen-Tab (IncidentNamensliste.tsx), nicht hier beim Upload.
+        // im Ereignis-Arbeitsraum unter „Unterstützung vor Ort“.
         await addPersonen(incidentId, 'haus', gefunden, profile.id)
         setHinweis(`${gefunden.length} Person(en) aus dem PDF in die Liste "Haus/Bewohner" übernommen. Weiterbearbeitung unter Ereignis → Unterstützung vor Ort.`)
       }
