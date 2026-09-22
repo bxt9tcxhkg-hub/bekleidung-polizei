@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, CircleAlert, Users } from 'lucide-react'
-import { loadChecklistPunkte } from '../../lib/einsatzChecklisten'
+import { CheckCircle2, CircleAlert, FileText, Users } from 'lucide-react'
 import { loadDokumente } from '../../lib/einsatzDokumente'
-import { ENTSCHEIDUNGSPUNKTE, ERSTMELDUNG_CHECKLISTE, NOTUNTERKUNFT_CHECKLISTE, telefonketteFuer } from '../../lib/einsatzSchema'
-import { loadEreignisEntscheidungen, updateEreignisLage, verstaendigungKey } from '../../lib/ereignis'
+import { telefonketteFuer } from '../../lib/einsatzSchema'
+import { verstaendigungKey } from '../../lib/ereignis'
 import { loadPersonenliste } from '../../lib/zmrPersonen'
 import { telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
-import type { Ereignis, EreignisEntscheidung, EreignisVerstaendigung } from '../../lib/types'
+import type { Ereignis, EreignisVerstaendigung } from '../../lib/types'
 
-type Section = 'lage' | 'verstaendigung' | 'ablauf' | 'unterstuetzung'
+type Section = 'lage' | 'verstaendigung' | 'unterstuetzung'
 
 type Snapshot = {
+  dokumente: number
   zmrDocs: number
   bewohner: number
   evakuierung: number
@@ -18,19 +18,10 @@ type Snapshot = {
   evakuierungDraussen: number
   evakuierungUnbekannt: number
   unterbringung: number
-  erstmeldungErledigt: number
-  erstmeldungGesamt: number
-  notunterkunftErledigt: number
-  notunterkunftGesamt: number
-  notunterkunftAktiv: boolean
-  entscheidungen: EreignisEntscheidung[]
 }
 
-const ERSTMELDUNG_ARBEITSPUNKTE = ERSTMELDUNG_CHECKLISTE.filter(
-  punkt => punkt.key !== 'meldungszettel' && punkt.key !== 'oeffentliche_sicherheit',
-)
-
 const EMPTY: Snapshot = {
+  dokumente: 0,
   zmrDocs: 0,
   bewohner: 0,
   evakuierung: 0,
@@ -38,12 +29,6 @@ const EMPTY: Snapshot = {
   evakuierungDraussen: 0,
   evakuierungUnbekannt: 0,
   unterbringung: 0,
-  erstmeldungErledigt: 0,
-  erstmeldungGesamt: ERSTMELDUNG_ARBEITSPUNKTE.length,
-  notunterkunftErledigt: 0,
-  notunterkunftGesamt: NOTUNTERKUNFT_CHECKLISTE.length,
-  notunterkunftAktiv: false,
-  entscheidungen: [],
 }
 
 function StatusCard({
@@ -66,9 +51,7 @@ export default function EreignisCockpit({
   ereignis,
   verstaendigungen,
   canOperate,
-  userId,
   refreshToken,
-  onSaved,
   onMarkVerstaendigung,
   kontakte,
   onGoTo,
@@ -78,9 +61,7 @@ export default function EreignisCockpit({
   ereignis: Ereignis
   verstaendigungen: EreignisVerstaendigung[]
   canOperate: boolean
-  userId: string | null
   refreshToken: number
-  onSaved: (ereignis: Ereignis) => void
   onMarkVerstaendigung: (label: string, field: 'versucht' | 'erreicht') => Promise<void>
   kontakte: Record<string, EreignisKontaktTreffer[]>
   onGoTo: (section: Section) => void
@@ -88,25 +69,20 @@ export default function EreignisCockpit({
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(EMPTY)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [docs, bewohner, evakuierung, unterbringung, erstmeldung, notunterkunft, entscheidungen] = await Promise.all([
+      const [docs, bewohner, evakuierung, unterbringung] = await Promise.all([
         loadDokumente(incidentId),
         loadPersonenliste(incidentId, 'haus'),
         loadPersonenliste(incidentId, 'evakuierung'),
         loadPersonenliste(incidentId, 'unterbringung'),
-        loadChecklistPunkte(incidentId, 'erstmeldung'),
-        loadChecklistPunkte(incidentId, 'notunterkunft'),
-        loadEreignisEntscheidungen(ereignis.id),
       ])
-      const erstMap = new Map(erstmeldung.map(row => [row.punkt_key, row]))
-      const notMap = new Map(notunterkunft.map(row => [row.punkt_key, row]))
       setSnapshot({
+        dokumente: docs.length,
         zmrDocs: docs.filter(doc => doc.art === 'zmr' || doc.art === 'abfrage').length,
         bewohner: bewohner.length,
         evakuierung: evakuierung.length,
@@ -114,68 +90,41 @@ export default function EreignisCockpit({
         evakuierungDraussen: evakuierung.filter(row => row.status === 'draussen').length,
         evakuierungUnbekannt: evakuierung.filter(row => row.status !== 'im_haus' && row.status !== 'draussen').length,
         unterbringung: unterbringung.length,
-        erstmeldungErledigt: ERSTMELDUNG_ARBEITSPUNKTE.filter(punkt => erstMap.get(punkt.key)?.erledigt).length,
-        erstmeldungGesamt: ERSTMELDUNG_ARBEITSPUNKTE.length,
-        notunterkunftErledigt: NOTUNTERKUNFT_CHECKLISTE.filter(punkt => notMap.get(punkt.key)?.erledigt).length,
-        notunterkunftGesamt: NOTUNTERKUNFT_CHECKLISTE.length,
-        notunterkunftAktiv: unterbringung.length > 0 || notunterkunft.length > 0,
-        entscheidungen,
       })
     } catch {
       setError('Prozessstand konnte nicht vollständig geladen werden.')
     } finally {
       setLoading(false)
     }
-  }, [ereignis.id, incidentId])
+  }, [incidentId])
 
   useEffect(() => { void load() }, [load, refreshToken])
 
   const kette = telefonketteFuer(ereignis.dimension)
   const byKey = useMemo(() => new Map(verstaendigungen.map(row => [row.empfaenger_key, row])), [verstaendigungen])
-  const erreicht = kette.filter(label => byKey.get(verstaendigungKey(label))?.erreicht_at).length
-  const nextKontakt = kette.find(label => !byKey.get(verstaendigungKey(label))?.erreicht_at) ?? null
+  const bearbeitet = kette.filter(label => {
+    const row = byKey.get(verstaendigungKey(label))
+    return Boolean(row?.versucht_at || row?.erreicht_at)
+  }).length
+  const erreicht = kette.filter(label => Boolean(byKey.get(verstaendigungKey(label))?.erreicht_at)).length
+
+  // Für die Prozessführung genügt ein dokumentierter Versuch. Ein nicht
+  // erreichter Kontakt bleibt im Detail sichtbar, blockiert aber nicht den
+  // nächsten vorgesehenen Verständigungsschritt.
+  const nextKontakt = kette.find(label => {
+    const row = byKey.get(verstaendigungKey(label))
+    return !row?.versucht_at && !row?.erreicht_at
+  }) ?? null
   const nextKontaktDaten = nextKontakt ? (kontakte[nextKontakt] ?? []) : []
 
-  const offeneEntscheidungen = ENTSCHEIDUNGSPUNKTE.filter(label => {
-    const row = snapshot.entscheidungen.find(item => item.punkt_label === label)
-    return !row || row.status === 'offen'
-  }).length
-  const koordinationsBlockAktiv = (ereignis.dimension === 'gross' || ereignis.dimension === 'katastrophe') && ereignis.koordinierung_noetig === true
-
-  async function setPublicSafety(value: boolean) {
-    if (!userId || busy) return
-    setBusy(true)
-    setError('')
-    try {
-      const saved = await updateEreignisLage(ereignis.id, { oeffentliche_sicherheit_beeintraechtigt: value }, userId)
-      onSaved(saved)
-    } catch {
-      setError('Angabe konnte nicht gespeichert werden.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  let nextTitle = 'Prozessstand aktuell'
-  let nextText = 'Die zentralen geführten Schritte sind derzeit bearbeitet. Lageänderungen weiter beobachten.'
+  let nextTitle = 'Verständigungsauftrag abgearbeitet'
+  let nextText = 'Weitere Daten oder Dokumente bereitstellen, sobald sie von den Kräften vor Ort oder der Einsatzleitung angefordert werden.'
   let nextSection: Section | null = null
 
-  if (ereignis.oeffentliche_sicherheit_beeintraechtigt == null) {
-    nextTitle = 'Öffentliche Sicherheit beurteilen'
-    nextText = 'Diese Entscheidung steuert die weitere Ereignisbearbeitung.'
-    nextSection = 'lage'
-  } else if (nextKontakt) {
-    nextTitle = 'Verständigung fortsetzen'
-    nextText = nextKontakt + ' ist noch nicht als erreicht dokumentiert.'
+  if (nextKontakt) {
+    nextTitle = 'Nächste Verständigung'
+    nextText = nextKontakt
     nextSection = 'verstaendigung'
-  } else if (koordinationsBlockAktiv && offeneEntscheidungen > 0) {
-    nextTitle = 'Entscheidungen dokumentieren'
-    nextText = offeneEntscheidungen + ' Koordinationspunkt(e) sind noch offen.'
-    nextSection = 'lage'
-  } else if (snapshot.erstmeldungErledigt < snapshot.erstmeldungGesamt) {
-    nextTitle = 'Weitere Maßnahmen prüfen'
-    nextText = (snapshot.erstmeldungGesamt - snapshot.erstmeldungErledigt) + ' Punkt(e) aus dem vorgesehenen Ablauf sind noch offen.'
-    nextSection = 'ablauf'
   }
 
   return <div className="space-y-3">
@@ -183,62 +132,57 @@ export default function EreignisCockpit({
       <div className="flex items-start gap-3">
         {nextSection ? <CircleAlert className="mt-0.5 h-5 w-5 flex-none text-blue-800" /> : <CheckCircle2 className="mt-0.5 h-5 w-5 flex-none text-green-700" />}
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-blue-700">Nächster Schritt</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-blue-700">Nächster Schritt für die Zentrale</p>
           <p className="mt-0.5 text-base font-bold text-gray-950">{loading ? 'Prozessstand wird geladen…' : nextTitle}</p>
           {!loading ? <p className="mt-1 text-sm text-gray-700">{nextText}</p> : null}
 
-          {!loading && ereignis.oeffentliche_sicherheit_beeintraechtigt == null ? <div className="mt-3 flex gap-2">
-            <button type="button" disabled={!canOperate || busy} onClick={() => void setPublicSafety(true)} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Ja</button>
-            <button type="button" disabled={!canOperate || busy} onClick={() => void setPublicSafety(false)} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900 disabled:opacity-50">Nein</button>
-          </div> : null}
-
-          {!loading && nextKontakt && ereignis.oeffentliche_sicherheit_beeintraechtigt != null ? <>
+          {!loading && nextKontakt ? <>
             <div className="mt-3 flex flex-wrap gap-2">
               {nextKontaktDaten.filter(kontakt => kontakt.telefon).map(kontakt => <a key={kontakt.id} href={telHref(kontakt.telefon!)} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">TEL {kontakt.telefon}</a>)}
-              <button type="button" disabled={!canOperate || busy} onClick={() => void onMarkVerstaendigung(nextKontakt, 'versucht')} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Versucht</button>
-              <button type="button" disabled={!canOperate || busy} onClick={() => void onMarkVerstaendigung(nextKontakt, 'erreicht')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Erreicht</button>
+              <button type="button" disabled={!canOperate} onClick={() => void onMarkVerstaendigung(nextKontakt, 'versucht')} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Versucht</button>
+              <button type="button" disabled={!canOperate} onClick={() => void onMarkVerstaendigung(nextKontakt, 'erreicht')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Erreicht</button>
             </div>
             {nextKontaktDaten.length === 0 ? <p className="mt-2 text-xs text-amber-700">Für diesen Verständigungsschritt sind noch keine passenden Kontaktdaten gepflegt.</p> : null}
-          </> : null}
-
-          {!loading && nextSection && !(ereignis.oeffentliche_sicherheit_beeintraechtigt == null || nextKontakt) ? <button type="button" onClick={() => onGoTo(nextSection)} className="mt-3 rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Direkt öffnen</button> : null}
+          </> : <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={onOpenFiles} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Dokument / ZMR bereitstellen</button>
+            <button type="button" onClick={() => onGoTo('unterstuetzung')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Unterstützung öffnen</button>
+          </div>}
         </div>
       </div>
     </div>
 
     <div className="grid grid-cols-2 gap-2">
       <StatusCard
-        title="Lage"
-        main={ereignis.betroffene_anzahl == null ? 'Betroffene offen' : ereignis.betroffene_anzahl + ' Betroffene'}
-        detail={ereignis.opfer_anzahl == null ? 'Opferzahl noch offen' : ereignis.opfer_anzahl + ' Opfer'}
-        onClick={() => onGoTo('lage')}
-      />
-      <StatusCard
         title="Verständigung"
-        main={erreicht + ' / ' + kette.length + ' erreicht'}
-        detail={nextKontakt ? 'Offen: ' + nextKontakt : 'Informationskette dokumentiert'}
+        main={bearbeitet + ' / ' + kette.length + ' bearbeitet'}
+        detail={erreicht + ' erreicht' + (nextKontakt ? ' · als Nächstes: ' + nextKontakt : '')}
         onClick={() => onGoTo('verstaendigung')}
       />
       <StatusCard
-        title="Unterstützung"
-        main={snapshot.bewohner + ' Bewohner · ' + snapshot.evakuierung + ' Evakuierung'}
-        detail={snapshot.zmrDocs > 0 ? snapshot.zmrDocs + ' ZMR/Abfrage · ' + snapshot.evakuierungUnbekannt + ' Status unbekannt' : 'Noch kein ZMR/Abfrage hinterlegt'}
+        title="Daten / Dokumente"
+        main={snapshot.dokumente + ' Unterlagen'}
+        detail={snapshot.zmrDocs > 0 ? snapshot.zmrDocs + ' ZMR / Abfrage' : 'Noch kein ZMR / Abfrage'}
+        onClick={onOpenFiles}
+      />
+      <StatusCard
+        title="Bewohnerdaten"
+        main={snapshot.bewohner + ' Personen'}
+        detail="Von der Zentrale bereitgestellte Datenbasis"
         onClick={() => onGoTo('unterstuetzung')}
       />
       <StatusCard
-        title="Maßnahmen"
-        main={(snapshot.erstmeldungGesamt - snapshot.erstmeldungErledigt) + ' offen'}
-        detail={snapshot.notunterkunftAktiv ? 'Notunterkunft: ' + (snapshot.notunterkunftGesamt - snapshot.notunterkunftErledigt) + ' offen' : 'Notunterkunft nicht aktiviert'}
-        onClick={() => onGoTo('ablauf')}
+        title="Rückmeldung vor Ort"
+        main={snapshot.evakuierung + ' Evakuierung · ' + snapshot.unterbringung + ' Unterkunft'}
+        detail="Status wird von den Kräften vor Ort geführt"
+        onClick={() => onGoTo('unterstuetzung')}
       />
     </div>
 
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
       <Users className="h-4 w-4 text-gray-500" />
-      <span className="text-xs text-gray-700">Evakuierung: <strong>{snapshot.evakuierungImHaus}</strong> im Haus · <strong>{snapshot.evakuierungDraussen}</strong> draußen · <strong>{snapshot.evakuierungUnbekannt}</strong> unbekannt</span>
-      <span className="text-xs text-gray-400">·</span>
-      <span className="text-xs text-gray-700">Notunterkunft: <strong>{snapshot.unterbringung}</strong></span>
-      {snapshot.zmrDocs === 0 ? <button type="button" onClick={onOpenFiles} className="ml-auto text-xs font-bold text-blue-800">ZMR / Abfrage</button> : <button type="button" onClick={() => onGoTo('unterstuetzung')} className="ml-auto text-xs font-bold text-blue-800">Personen öffnen</button>}
+      <span className="text-xs text-gray-700">Vor-Ort-Status: <strong>{snapshot.evakuierungImHaus}</strong> im Haus · <strong>{snapshot.evakuierungDraussen}</strong> draußen · <strong>{snapshot.evakuierungUnbekannt}</strong> unbekannt</span>
+      <FileText className="ml-auto h-4 w-4 text-gray-400" />
+      {snapshot.zmrDocs === 0 ? <button type="button" onClick={onOpenFiles} className="text-xs font-bold text-blue-800">ZMR / Abfrage bereitstellen</button> : <button type="button" onClick={() => onGoTo('unterstuetzung')} className="text-xs font-bold text-blue-800">Daten ansehen</button>}
     </div>
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
