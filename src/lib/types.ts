@@ -905,6 +905,51 @@ export interface IncidentReport {
   taken_over_by_profile?: Pick<Profile, 'id' | 'name'> | null
 }
 
+export type EreignisDimension = 'klein' | 'mittel' | 'gross' | 'katastrophe'
+
+export interface Ereignis {
+  id: string
+  titel: string
+  dimension: EreignisDimension
+  status: 'aktiv' | 'abgeschlossen'
+  lage: string | null
+  started_at: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EreignisEinsatz {
+  ereignis_id: string
+  incident_id: string
+  linked_by: string
+  linked_at: string
+  ereignis?: Ereignis | null
+}
+
+export interface EreignisVerlauf {
+  id: string
+  ereignis_id: string
+  aktion: string
+  alte_dimension: EreignisDimension | null
+  neue_dimension: EreignisDimension | null
+  bemerkung: string | null
+  changed_by: string
+  changed_at: string
+}
+
+export interface EreignisVerstaendigung {
+  id: string
+  ereignis_id: string
+  empfaenger_key: string
+  empfaenger_label: string
+  versucht_at: string | null
+  erreicht_at: string | null
+  bemerkung: string | null
+  updated_by: string
+  updated_at: string
+}
+
 export interface IncidentSupport {
   id: string
   incident_id: string
@@ -1424,6 +1469,10 @@ type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref' | 'assigned_vehicle' | 'taken_over_by_profile'>
+type EreignisRow = Omit<Ereignis, never>
+type EreignisEinsatzRow = Omit<EreignisEinsatz, 'ereignis'>
+type EreignisVerlaufRow = Omit<EreignisVerlauf, never>
+type EreignisVerstaendigungRow = Omit<EreignisVerstaendigung, never>
 type IncidentSupportRow = Omit<IncidentSupport, 'vehicle'>
 type IncidentReasonConfigRow = Omit<IncidentReasonConfig, never>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
@@ -1655,6 +1704,22 @@ export type Database = {
         { foreignKeyName: 'duty_assignments_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
       ] }
       duty_functions: { Row: DutyFunctionConfigRow; Insert: Pick<DutyFunctionConfigRow, 'code' | 'label'> & Partial<Omit<DutyFunctionConfigRow, 'created_at' | 'updated_at' | 'code' | 'label'>>; Update: Partial<Omit<DutyFunctionConfigRow, 'code' | 'created_at'>>; Relationships: [] }
+      ereignisse: { Row: EreignisRow; Insert: Pick<EreignisRow, 'titel' | 'dimension' | 'created_by'> & Partial<Omit<EreignisRow, 'id' | 'created_at' | 'updated_at' | 'titel' | 'dimension' | 'created_by'>>; Update: Partial<Omit<EreignisRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
+        { foreignKeyName: 'ereignisse_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      ereignis_einsaetze: { Row: EreignisEinsatzRow; Insert: Pick<EreignisEinsatzRow, 'ereignis_id' | 'incident_id' | 'linked_by'> & Partial<Omit<EreignisEinsatzRow, 'ereignis_id' | 'incident_id' | 'linked_by'>>; Update: Partial<EreignisEinsatzRow>; Relationships: [
+        { foreignKeyName: 'ereignis_einsaetze_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ereignis_einsaetze_incident_id_fkey'; columns: ['incident_id']; isOneToOne: true; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ereignis_einsaetze_linked_by_fkey'; columns: ['linked_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      ereignis_verlauf: { Row: EreignisVerlaufRow; Insert: Pick<EreignisVerlaufRow, 'ereignis_id' | 'aktion' | 'changed_by'> & Partial<Omit<EreignisVerlaufRow, 'id' | 'changed_at' | 'ereignis_id' | 'aktion' | 'changed_by'>>; Update: Partial<EreignisVerlaufRow>; Relationships: [
+        { foreignKeyName: 'ereignis_verlauf_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ereignis_verlauf_changed_by_fkey'; columns: ['changed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      ereignis_verstaendigungen: { Row: EreignisVerstaendigungRow; Insert: Pick<EreignisVerstaendigungRow, 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'> & Partial<Omit<EreignisVerstaendigungRow, 'id' | 'updated_at' | 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'>>; Update: Partial<Omit<EreignisVerstaendigungRow, 'id' | 'ereignis_id'>>; Relationships: [
+        { foreignKeyName: 'ereignis_verstaendigungen_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ereignis_verstaendigungen_updated_by_fkey'; columns: ['updated_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_caller_person_id_fkey'; columns: ['caller_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
