@@ -13,11 +13,12 @@ function keyFor(label: string): string {
 }
 
 export default function EreignisEntscheidungen({
-  ereignisId, canOperate, userId,
+  ereignisId, canOperate, userId, onChanged,
 }: {
   ereignisId: string
   canOperate: boolean
   userId: string | null
+  onChanged?: () => void
 }) {
   const [rows, setRows] = useState<EreignisEntscheidung[]>([])
   const [busyKey, setBusyKey] = useState<string | null>(null)
@@ -51,6 +52,7 @@ export default function EreignisEntscheidungen({
         userId,
       })
       setRows(old => [...old.filter(row => row.id !== saved.id), saved])
+      onChanged?.()
     } catch {
       setError('Entscheidungsstand konnte nicht gespeichert werden.')
     } finally {
