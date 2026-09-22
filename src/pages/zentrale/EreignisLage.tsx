@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { updateEreignisLage } from '../../lib/ereignis'
 import type { Ereignis, IncidentReport } from '../../lib/types'
+import EreignisEntscheidungen from './EreignisEntscheidungen'
 
 function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -163,6 +164,10 @@ export default function EreignisLage({
           className="px-2 text-xs font-medium text-gray-500"
         >Zurücksetzen</button> : null}
       </div>
+    </div> : null}
+
+    {showKoordination && ereignis.koordinierung_noetig === true ? <div className="border-t border-gray-200 pt-4">
+      <EreignisEntscheidungen ereignisId={ereignis.id} canOperate={canOperate} userId={userId} />
     </div> : null}
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
