@@ -30,7 +30,7 @@ function ChecklistZeile({ punkt, stand, canOperate, onToggle, onWerChange }: {
   </li>
 }
 
-function ChecklistAbschnitt({ incidentId, checkliste, punkte, canOperate }: { incidentId: string; checkliste: EinsatzChecklisteName; punkte: ChecklistPunktDef[]; canOperate: boolean }) {
+function ChecklistAbschnitt({ incidentId, checkliste, punkte, canOperate, onChanged }: { incidentId: string; checkliste: EinsatzChecklisteName; punkte: ChecklistPunktDef[]; canOperate: boolean; onChanged?: () => void }) {
   const { profile } = useAuth()
   const [stand, setStand] = useState<Map<string, EinsatzChecklistPunkt>>(new Map())
 
@@ -44,12 +44,14 @@ function ChecklistAbschnitt({ incidentId, checkliste, punkte, canOperate }: { in
     const erledigt = !bisher?.erledigt
     setStand(current => new Map(current).set(punktKey, { ...(bisher ?? { id: '', incident_id: incidentId, checkliste, punkt_key: punktKey, wer: null, erledigt_at: null, erledigt_von: null, updated_at: '' }), erledigt }))
     await setChecklistPunktErledigt(incidentId, checkliste, punktKey, erledigt, bisher?.wer ?? '', profile.id)
+    onChanged?.()
   }
 
   async function changeWer(punktKey: string, wer: string) {
     const bisher = stand.get(punktKey)
     setStand(current => new Map(current).set(punktKey, { ...(bisher ?? { id: '', incident_id: incidentId, checkliste, punkt_key: punktKey, erledigt: false, erledigt_at: null, erledigt_von: null, updated_at: '' }), wer }))
     await setChecklistPunktWer(incidentId, checkliste, punktKey, wer)
+    onChanged?.()
   }
 
   const erledigtCount = punkte.filter(punkt => stand.get(punkt.key)?.erledigt).length
@@ -59,19 +61,19 @@ function ChecklistAbschnitt({ incidentId, checkliste, punkte, canOperate }: { in
   </div>
 }
 
-export default function EinsatzChecklisten({ incidentId, canOperate }: { incidentId: string; canOperate: boolean }) {
+export default function EinsatzChecklisten({ incidentId, canOperate, onChanged }: { incidentId: string; canOperate: boolean; onChanged?: () => void }) {
   const [notunterkunftOffen, setNotunterkunftOffen] = useState(false)
   return <div className="space-y-5">
     <div>
       <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-1">Weitere Schritte aus der Erstmeldung</h3>
       <p className="text-xs text-gray-500 mb-2">Meldungszettel und die Frage zur öffentlichen Sicherheit werden bereits im Lagebereich geführt.</p>
-      <ChecklistAbschnitt incidentId={incidentId} checkliste="erstmeldung" punkte={WEITERE_ERSTMELDUNG_CHECKLISTE} canOperate={canOperate} />
+      <ChecklistAbschnitt incidentId={incidentId} checkliste="erstmeldung" punkte={WEITERE_ERSTMELDUNG_CHECKLISTE} canOperate={canOperate} onChanged={onChanged} />
     </div>
     <div className="border-t border-gray-200 pt-3">
       <button type="button" onClick={() => setNotunterkunftOffen(current => !current)} className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
         Sonderprozess Notunterkunft {notunterkunftOffen ? '▾' : '▸'}
       </button>
-      {notunterkunftOffen ? <ChecklistAbschnitt incidentId={incidentId} checkliste="notunterkunft" punkte={NOTUNTERKUNFT_CHECKLISTE} canOperate={canOperate} /> : null}
+      {notunterkunftOffen ? <ChecklistAbschnitt incidentId={incidentId} checkliste="notunterkunft" punkte={NOTUNTERKUNFT_CHECKLISTE} canOperate={canOperate} onChanged={onChanged} /> : null}
     </div>
   </div>
 }
