@@ -958,6 +958,17 @@ export interface EreignisVerstaendigung {
   updated_at: string
 }
 
+export interface EreignisEntscheidung {
+  id: string
+  ereignis_id: string
+  punkt_key: string
+  punkt_label: string
+  status: 'offen' | 'festgelegt' | 'nicht_erforderlich'
+  notiz: string | null
+  updated_by: string
+  updated_at: string
+}
+
 export interface IncidentSupport {
   id: string
   incident_id: string
@@ -1481,6 +1492,7 @@ type EreignisRow = Omit<Ereignis, never>
 type EreignisEinsatzRow = Omit<EreignisEinsatz, 'ereignis'>
 type EreignisVerlaufRow = Omit<EreignisVerlauf, never>
 type EreignisVerstaendigungRow = Omit<EreignisVerstaendigung, never>
+type EreignisEntscheidungRow = Omit<EreignisEntscheidung, never>
 type IncidentSupportRow = Omit<IncidentSupport, 'vehicle'>
 type IncidentReasonConfigRow = Omit<IncidentReasonConfig, never>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
@@ -1723,6 +1735,10 @@ export type Database = {
       ereignis_verlauf: { Row: EreignisVerlaufRow; Insert: Pick<EreignisVerlaufRow, 'ereignis_id' | 'aktion' | 'changed_by'> & Partial<Omit<EreignisVerlaufRow, 'id' | 'changed_at' | 'ereignis_id' | 'aktion' | 'changed_by'>>; Update: Partial<EreignisVerlaufRow>; Relationships: [
         { foreignKeyName: 'ereignis_verlauf_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
         { foreignKeyName: 'ereignis_verlauf_changed_by_fkey'; columns: ['changed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      ereignis_entscheidungen: { Row: EreignisEntscheidungRow; Insert: Pick<EreignisEntscheidungRow, 'ereignis_id' | 'punkt_key' | 'punkt_label' | 'updated_by'> & Partial<Omit<EreignisEntscheidungRow, 'id' | 'ereignis_id' | 'punkt_key' | 'punkt_label' | 'updated_by'>>; Update: Partial<Omit<EreignisEntscheidungRow, 'id' | 'ereignis_id'>>; Relationships: [
+        { foreignKeyName: 'ereignis_entscheidungen_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
+        { foreignKeyName: 'ereignis_entscheidungen_updated_by_fkey'; columns: ['updated_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       ereignis_verstaendigungen: { Row: EreignisVerstaendigungRow; Insert: Pick<EreignisVerstaendigungRow, 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'> & Partial<Omit<EreignisVerstaendigungRow, 'id' | 'ereignis_id' | 'empfaenger_key' | 'empfaenger_label' | 'updated_by'>>; Update: Partial<Omit<EreignisVerstaendigungRow, 'id' | 'ereignis_id'>>; Relationships: [
         { foreignKeyName: 'ereignis_verstaendigungen_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
