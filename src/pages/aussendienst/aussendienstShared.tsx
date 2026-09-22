@@ -15,7 +15,8 @@ import { loadEinsatzParteien } from '../../lib/einsatzParteien'
 import { readDokumente } from '../../lib/einsatzDokumente'
 import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
 import { officerPrintName } from '../../lib/printDocs'
-import type { IncidentDisposition, IncidentSupport, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
+import { supabase } from '../../lib/supabase'
+import type { IncidentContextItem, IncidentDisposition, IncidentSupport, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import IncidentDocs from '../zentrale/IncidentDocs'
 import IncidentNamensliste from '../zentrale/IncidentNamensliste'
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
@@ -42,7 +43,7 @@ function NearbyBaustellenHint({ point, baustellen }: { point: LatLng | null; bau
 }
 
 type IncidentListItem = {
-  id: string; reported_at: string; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
+  id: string; reported_at: string; reason_code?: string | null; location: string | null; location_lat: number | null; location_lng: number | null; summary: string; disposition: IncidentDisposition; status: string; note: string | null
   caller_name?: string | null; caller_phone?: string | null; involved_person?: string | null; involved_birth_date?: string | null
   assigned_vehicle_id?: string | null; taken_over_by?: string | null; taken_over_at?: string | null; taken_over_vehicle_id?: string | null; completed_by?: string | null; completed_at?: string | null
   assigned_vehicle?: { id: string; name: string; call_sign: string | null } | null
@@ -91,6 +92,9 @@ function IncidentRow({
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [contextItems, setContextItems] = useState<IncidentContextItem[]>([])
+  const [contextLoaded, setContextLoaded] = useState(false)
+  const [contextLoading, setContextLoading] = useState(false)
   const point = item.location_lat !== null && item.location_lng !== null ? { lat: item.location_lat, lng: item.location_lng } : null
   const takenOverByMe = Boolean(item.taken_over_by && item.taken_over_by === profile?.id)
   const primaryVehicleId = item.taken_over_vehicle_id || item.assigned_vehicle_id
@@ -101,6 +105,18 @@ function IncidentRow({
   const canComplete = item.status !== 'erledigt' && (ownIsPrimary || takenOverByMe)
   const canReopen = item.status === 'erledigt' && (ownIsPrimary || item.completed_by === profile?.id)
 
+  async function toggleOpen() {
+    const next = !open
+    setOpen(next)
+    if (next && !contextLoaded && !contextLoading) {
+      setContextLoading(true)
+      const { data } = await supabase.rpc('incident_context', { p_incident_id: item.id })
+      setContextItems((data ?? []) as IncidentContextItem[])
+      setContextLoaded(true)
+      setContextLoading(false)
+    }
+  }
+
   async function run(action: (() => Promise<void>) | undefined) {
     if (!action) return
     setBusy(true)
@@ -108,7 +124,7 @@ function IncidentRow({
   }
 
   return <article className={`rounded-2xl border bg-white overflow-hidden ${ownIsPrimary ? 'border-blue-300 shadow-sm' : 'border-gray-200'}`}>
-    <button type="button" onClick={() => setOpen(!open)} className="w-full flex flex-wrap items-center justify-between gap-2 p-3 sm:p-4 text-left hover:bg-gray-50">
+    <button type="button" onClick={() => void toggleOpen()} className="w-full flex flex-wrap items-center justify-between gap-2 p-3 sm:p-4 text-left hover:bg-gray-50">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span>
@@ -135,6 +151,15 @@ function IncidentRow({
       </div>
 
       {activeSupports.length > 0 ? <div className="rounded-lg bg-purple-50 border border-purple-100 px-3 py-2"><p className="text-xs font-semibold text-purple-900">Unterstützende Streifen</p><p className="text-sm text-purple-900 mt-0.5">{activeSupports.map(row => row.vehicle?.call_sign || row.vehicle?.name || 'Streife').join(', ')}</p></div> : null}
+
+      {contextLoading ? <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-500">Relevante Einsatzinformationen werden geprüft…</div> : null}
+      {contextItems.length > 0 ? <div className="space-y-2">
+        <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Relevante Hinweise</p>
+        {contextItems.map((ctx, index) => <div key={`${ctx.kind}-${index}`} className={`rounded-lg border px-3 py-2 ${ctx.severity === 'sicherheit' ? 'border-red-200 bg-red-50' : ctx.severity === 'nahbereich' ? 'border-amber-200 bg-amber-50' : 'border-blue-100 bg-blue-50'}`}>
+          <p className={`text-sm font-semibold ${ctx.severity === 'sicherheit' ? 'text-red-900' : ctx.severity === 'nahbereich' ? 'text-amber-900' : 'text-blue-900'}`}>{ctx.title}{ctx.distance_m !== null ? ` · ${ctx.distance_m} m` : ''}</p>
+          {ctx.detail ? <p className={`text-xs mt-0.5 ${ctx.severity === 'sicherheit' ? 'text-red-800' : ctx.severity === 'nahbereich' ? 'text-amber-800' : 'text-blue-800'}`}>{ctx.detail}</p> : null}
+        </div>)}
+      </div> : null}
 
       <div>
         <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Sachverhalt</p>
