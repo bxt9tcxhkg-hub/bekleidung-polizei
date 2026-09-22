@@ -14,6 +14,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { loadEinsatzParteien } from '../../lib/einsatzParteien'
 import { readDokumente } from '../../lib/einsatzDokumente'
 import { generateEinsatzUebersicht } from '../../lib/einsatzUebersichtPdf'
+import { loadIncidentEreignis } from '../../lib/ereignis'
 import { officerPrintName } from '../../lib/printDocs'
 import { supabase } from '../../lib/supabase'
 import type { IncidentContextItem, IncidentDisposition, IncidentSupport, KontrollauftragZielfunktion, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
@@ -60,9 +61,12 @@ function PrintIncidentButton({ item }: { item: IncidentListItem }) {
   async function print() {
     setPrinting(true)
     try {
-      const parteien = await loadEinsatzParteien(item.id)
+      const [parteien, ereignis] = await Promise.all([
+        loadEinsatzParteien(item.id),
+        loadIncidentEreignis(item.id),
+      ])
       const dokumente = readDokumente(item.id)
-      generateEinsatzUebersicht({ incident: item, parteien, dokumente, erstelltVon: officerPrintName(profile) })
+      generateEinsatzUebersicht({ incident: item, parteien, dokumente, ereignisDimension: ereignis?.dimension, erstelltVon: officerPrintName(profile) })
     } catch {
       // Die Parteien-Abfrage kann fehlschlagen (z.B. keine Verbindung) - der
       // Ausdruck soll trotzdem mit den vorhandenen Meldungsdaten möglich sein.
