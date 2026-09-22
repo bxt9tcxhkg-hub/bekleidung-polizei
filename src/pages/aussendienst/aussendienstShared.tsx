@@ -155,9 +155,9 @@ function IncidentRow({
       {contextLoading ? <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-500">Relevante Einsatzinformationen werden geprüft…</div> : null}
       {contextItems.length > 0 ? <div className="space-y-2">
         <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Relevante Hinweise</p>
-        {contextItems.map((ctx, index) => <div key={`${ctx.kind}-${index}`} className={`rounded-lg border px-3 py-2 ${ctx.severity === 'sicherheit' ? 'border-red-200 bg-red-50' : ctx.severity === 'nahbereich' ? 'border-amber-200 bg-amber-50' : 'border-blue-100 bg-blue-50'}`}>
-          <p className={`text-sm font-semibold ${ctx.severity === 'sicherheit' ? 'text-red-900' : ctx.severity === 'nahbereich' ? 'text-amber-900' : 'text-blue-900'}`}>{ctx.title}{ctx.distance_m !== null ? ` · ${ctx.distance_m} m` : ''}</p>
-          {ctx.detail ? <p className={`text-xs mt-0.5 ${ctx.severity === 'sicherheit' ? 'text-red-800' : ctx.severity === 'nahbereich' ? 'text-amber-800' : 'text-blue-800'}`}>{ctx.detail}</p> : null}
+        {contextItems.map((ctx, index) => <div key={`${ctx.kind}-${index}`} className={`rounded-lg border px-3 py-2 ${ctx.severity === 'sicherheit' ? 'border-red-200 bg-red-50' : ctx.severity === 'achtung' ? 'border-orange-200 bg-orange-50' : ctx.severity === 'nahbereich' ? 'border-amber-200 bg-amber-50' : 'border-blue-100 bg-blue-50'}`}>
+          <p className={`text-sm font-semibold ${ctx.severity === 'sicherheit' ? 'text-red-900' : ctx.severity === 'achtung' ? 'text-orange-900' : ctx.severity === 'nahbereich' ? 'text-amber-900' : 'text-blue-900'}`}>{ctx.title}{ctx.distance_m !== null ? ` · ${ctx.distance_m} m` : ''}</p>
+          {ctx.detail ? <p className={`text-xs mt-0.5 ${ctx.severity === 'sicherheit' ? 'text-red-800' : ctx.severity === 'achtung' ? 'text-orange-800' : ctx.severity === 'nahbereich' ? 'text-amber-800' : 'text-blue-800'}`}>{ctx.detail}</p> : null}
         </div>)}
       </div> : null}
 
