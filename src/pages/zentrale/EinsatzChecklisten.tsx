@@ -1,79 +1,154 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { loadChecklistPunkte, setChecklistPunktErledigt, setChecklistPunktWer } from '../../lib/einsatzChecklisten'
 import { ERSTMELDUNG_CHECKLISTE, NOTUNTERKUNFT_CHECKLISTE, type ChecklistPunktDef } from '../../lib/einsatzSchema'
 import type { EinsatzChecklisteName, EinsatzChecklistPunkt } from '../../lib/types'
 
-// Digitale "Checkliste Notfall/Katastrophe" (Erstmeldung) und "Checkliste
-// Notunterkunft" - geteilter Server-Zustand (einsatz_checklist_punkte),
-// damit Zentrale UND Streife vor Ort denselben Bearbeitungsstand sehen.
-// Ereignisdimension und Verständigungsstand sind ebenfalls serverseitig.
-
 const WEITERE_ERSTMELDUNG_CHECKLISTE = ERSTMELDUNG_CHECKLISTE.filter(
   punkt => punkt.key !== 'meldungszettel' && punkt.key !== 'oeffentliche_sicherheit',
 )
 
-function ChecklistZeile({ punkt, stand, canOperate, onToggle, onWerChange }: {
-  punkt: ChecklistPunktDef
-  stand?: EinsatzChecklistPunkt
+function MassnahmenAbschnitt({
+  incidentId,
+  checkliste,
+  punkte,
+  canOperate,
+  onChanged,
+  startCollapsed = false,
+}: {
+  incidentId: string
+  checkliste: EinsatzChecklisteName
+  punkte: ChecklistPunktDef[]
   canOperate: boolean
-  onToggle: () => void
-  onWerChange: (wer: string) => void
+  onChanged?: () => void
+  startCollapsed?: boolean
 }) {
-  const [wer, setWer] = useState(stand?.wer ?? '')
-  useEffect(() => setWer(stand?.wer ?? ''), [stand?.wer])
-  return <li className={`flex flex-wrap items-start gap-2 rounded-lg px-2 py-1.5 ${stand?.erledigt ? 'bg-green-50' : ''}`}>
-    <button type="button" disabled={!canOperate} onClick={onToggle} className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded border ${stand?.erledigt ? 'bg-green-600 border-green-600' : 'border-gray-400 bg-white'}`} aria-label={stand?.erledigt ? 'Erledigt' : 'Offen'} />
-    <p className={`text-sm flex-1 min-w-[12rem] ${stand?.erledigt ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{punkt.text}</p>
-    {canOperate ? <input type="text" placeholder="Wer?" value={wer} onChange={event => setWer(event.target.value)} onBlur={() => { if (wer !== (stand?.wer ?? '')) onWerChange(wer) }} className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white w-28 flex-shrink-0" />
-      : stand?.wer ? <span className="text-xs text-gray-500 flex-shrink-0">{stand.wer}</span> : null}
-  </li>
-}
-
-function ChecklistAbschnitt({ incidentId, checkliste, punkte, canOperate, onChanged }: { incidentId: string; checkliste: EinsatzChecklisteName; punkte: ChecklistPunktDef[]; canOperate: boolean; onChanged?: () => void }) {
   const { profile } = useAuth()
   const [stand, setStand] = useState<Map<string, EinsatzChecklistPunkt>>(new Map())
+  const [showAll, setShowAll] = useState(false)
+  const [showDone, setShowDone] = useState(false)
+  const [collapsed, setCollapsed] = useState(startCollapsed)
+  const [editingWer, setEditingWer] = useState<string | null>(null)
+  const [werDraft, setWerDraft] = useState('')
 
   useEffect(() => {
     void loadChecklistPunkte(incidentId, checkliste).then(rows => setStand(new Map(rows.map(row => [row.punkt_key, row]))))
   }, [incidentId, checkliste])
 
+  const offen = useMemo(() => punkte.filter(punkt => !stand.get(punkt.key)?.erledigt), [punkte, stand])
+  const erledigt = useMemo(() => punkte.filter(punkt => stand.get(punkt.key)?.erledigt), [punkte, stand])
+  const visible = showAll ? offen : offen.slice(0, 4)
+
   async function toggle(punktKey: string) {
     if (!profile?.id) return
     const bisher = stand.get(punktKey)
-    const erledigt = !bisher?.erledigt
-    setStand(current => new Map(current).set(punktKey, { ...(bisher ?? { id: '', incident_id: incidentId, checkliste, punkt_key: punktKey, wer: null, erledigt_at: null, erledigt_von: null, updated_at: '' }), erledigt }))
-    await setChecklistPunktErledigt(incidentId, checkliste, punktKey, erledigt, bisher?.wer ?? '', profile.id)
+    const next = !bisher?.erledigt
+    setStand(current => new Map(current).set(punktKey, {
+      ...(bisher ?? { id: '', incident_id: incidentId, checkliste, punkt_key: punktKey, wer: null, erledigt_at: null, erledigt_von: null, updated_at: '' }),
+      erledigt: next,
+    }))
+    await setChecklistPunktErledigt(incidentId, checkliste, punktKey, next, bisher?.wer ?? '', profile.id)
     onChanged?.()
   }
 
-  async function changeWer(punktKey: string, wer: string) {
+  async function saveWer(punktKey: string) {
+    await setChecklistPunktWer(incidentId, checkliste, punktKey, werDraft)
     const bisher = stand.get(punktKey)
-    setStand(current => new Map(current).set(punktKey, { ...(bisher ?? { id: '', incident_id: incidentId, checkliste, punkt_key: punktKey, erledigt: false, erledigt_at: null, erledigt_von: null, updated_at: '' }), wer }))
-    await setChecklistPunktWer(incidentId, checkliste, punktKey, wer)
+    setStand(current => new Map(current).set(punktKey, {
+      ...(bisher ?? { id: '', incident_id: incidentId, checkliste, punkt_key: punktKey, erledigt: false, erledigt_at: null, erledigt_von: null, updated_at: '' }),
+      wer: werDraft,
+    }))
+    setEditingWer(null)
     onChanged?.()
   }
 
-  const erledigtCount = punkte.filter(punkt => stand.get(punkt.key)?.erledigt).length
-  return <div>
-    <p className="text-xs text-gray-500 mb-1.5">{erledigtCount} / {punkte.length} erledigt</p>
-    <ul className="space-y-0.5">{punkte.map(punkt => <ChecklistZeile key={punkt.key} punkt={punkt} stand={stand.get(punkt.key)} canOperate={canOperate} onToggle={() => void toggle(punkt.key)} onWerChange={wer => void changeWer(punkt.key, wer)} />)}</ul>
+  return <div className="space-y-2">
+    <button type="button" onClick={() => setCollapsed(current => !current)} className="flex w-full items-center justify-between gap-2 text-left">
+      <div>
+        <p className="text-sm font-bold text-gray-900">{offen.length === 0 ? 'Alles erledigt' : offen.length + ' offen'}</p>
+        <p className="text-xs text-gray-500">{erledigt.length} erledigt</p>
+      </div>
+      {collapsed ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+    </button>
+
+    {!collapsed ? <>
+      {offen.length === 0 ? <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">Keine offene Maßnahme.</div> : <div className="space-y-2">
+        {visible.map((punkt, index) => {
+          const row = stand.get(punkt.key)
+          const isEditing = editingWer === punkt.key
+          return <div key={punkt.key} className={'rounded-xl border p-3 ' + (index === 0 ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-white')}>
+            {index === 0 ? <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-blue-700">Als Nächstes</p> : null}
+            <div className="flex items-start gap-2">
+              <button
+                type="button"
+                disabled={!canOperate}
+                onClick={() => void toggle(punkt.key)}
+                className="mt-0.5 flex h-5 w-5 flex-none items-center justify-center rounded border border-gray-400 bg-white disabled:opacity-50"
+                aria-label="Als erledigt markieren"
+              ><Check className="h-3.5 w-3.5 text-transparent" /></button>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-gray-900">{punkt.text}</p>
+                {row?.wer ? <p className="mt-1 text-xs text-gray-500">Zuständig: {row.wer}</p> : null}
+                {canOperate ? <button type="button" onClick={() => { setEditingWer(isEditing ? null : punkt.key); setWerDraft(row?.wer ?? '') }} className="mt-1 text-xs font-medium text-gray-500">
+                  {row?.wer ? 'Zuständigkeit ändern' : 'Zuständigkeit optional'}
+                </button> : null}
+                {isEditing ? <div className="mt-2 flex gap-2">
+                  <input type="text" value={werDraft} onChange={event => setWerDraft(event.target.value)} placeholder="Wer?" className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-xs" />
+                  <button type="button" onClick={() => void saveWer(punkt.key)} className="rounded-md bg-blue-800 px-2.5 py-1.5 text-xs font-bold text-white">Speichern</button>
+                </div> : null}
+              </div>
+            </div>
+          </div>
+        })}
+      </div>}
+
+      {offen.length > 4 ? <button type="button" onClick={() => setShowAll(current => !current)} className="text-xs font-semibold text-blue-800">
+        {showAll ? 'Nur nächste Maßnahmen' : 'Weitere ' + (offen.length - 4) + ' anzeigen'}
+      </button> : null}
+
+      {erledigt.length > 0 ? <div className="pt-1">
+        <button type="button" onClick={() => setShowDone(current => !current)} className="text-xs font-medium text-gray-500">
+          {showDone ? 'Erledigte ausblenden' : erledigt.length + ' erledigte anzeigen'}
+        </button>
+        {showDone ? <ul className="mt-2 space-y-1">{erledigt.map(punkt => <li key={punkt.key} className="flex items-start gap-2 text-xs text-gray-500">
+          <button type="button" disabled={!canOperate} onClick={() => void toggle(punkt.key)} className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded bg-green-600 text-white"><Check className="h-3 w-3" /></button>
+          <span className="line-through">{punkt.text}</span>
+        </li>)}</ul> : null}
+      </div> : null}
+    </> : null}
   </div>
 }
 
 export default function EinsatzChecklisten({ incidentId, canOperate, onChanged }: { incidentId: string; canOperate: boolean; onChanged?: () => void }) {
   const [notunterkunftOffen, setNotunterkunftOffen] = useState(false)
-  return <div className="space-y-5">
-    <div>
-      <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-1">Weitere Schritte aus der Erstmeldung</h3>
-      <p className="text-xs text-gray-500 mb-2">Meldungszettel und die Frage zur öffentlichen Sicherheit werden bereits im Lagebereich geführt.</p>
-      <ChecklistAbschnitt incidentId={incidentId} checkliste="erstmeldung" punkte={WEITERE_ERSTMELDUNG_CHECKLISTE} canOperate={canOperate} onChanged={onChanged} />
-    </div>
+
+  return <div className="space-y-4">
+    <MassnahmenAbschnitt
+      incidentId={incidentId}
+      checkliste="erstmeldung"
+      punkte={WEITERE_ERSTMELDUNG_CHECKLISTE}
+      canOperate={canOperate}
+      onChanged={onChanged}
+    />
+
     <div className="border-t border-gray-200 pt-3">
-      <button type="button" onClick={() => setNotunterkunftOffen(current => !current)} className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
-        Sonderprozess Notunterkunft {notunterkunftOffen ? '▾' : '▸'}
+      <button type="button" onClick={() => setNotunterkunftOffen(current => !current)} className="flex w-full items-center justify-between gap-2 text-left">
+        <div>
+          <p className="text-sm font-bold text-gray-900">Sonderprozess Notunterkunft</p>
+          <p className="text-xs text-gray-500">Nur öffnen, wenn tatsächlich benötigt.</p>
+        </div>
+        {notunterkunftOffen ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
       </button>
-      {notunterkunftOffen ? <ChecklistAbschnitt incidentId={incidentId} checkliste="notunterkunft" punkte={NOTUNTERKUNFT_CHECKLISTE} canOperate={canOperate} onChanged={onChanged} /> : null}
+      {notunterkunftOffen ? <div className="mt-3">
+        <MassnahmenAbschnitt
+          incidentId={incidentId}
+          checkliste="notunterkunft"
+          punkte={NOTUNTERKUNFT_CHECKLISTE}
+          canOperate={canOperate}
+          onChanged={onChanged}
+        />
+      </div> : null}
     </div>
   </div>
 }
