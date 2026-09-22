@@ -50,7 +50,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true }: { i
         // Liste (z. B. Notunterkunft-Namensliste) passiert bewusst getrennt
         // im Listen-Tab (IncidentNamensliste.tsx), nicht hier beim Upload.
         await addPersonen(incidentId, 'haus', gefunden, profile.id)
-        setHinweis(`${gefunden.length} Person(en) aus dem PDF in die Liste "Haus/Bewohner" übernommen (siehe Tab Listen).`)
+        setHinweis(`${gefunden.length} Person(en) aus dem PDF in die Liste "Haus/Bewohner" übernommen. Weiterbearbeitung unter Ereignis → Unterstützung vor Ort.`)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload fehlgeschlagen.')
