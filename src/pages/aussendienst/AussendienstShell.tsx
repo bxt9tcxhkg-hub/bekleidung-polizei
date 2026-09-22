@@ -312,6 +312,7 @@ export default function AussendienstShell() {
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
     patrolVehicles, takeOverIncident, releaseIncidentTakeover,
+    incidentSupports, supportIncident, stopSupportingIncident, completeIncident, reopenIncident,
   }
 
   return <div>
