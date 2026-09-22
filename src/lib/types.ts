@@ -1638,6 +1638,12 @@ export type Database = {
         { foreignKeyName: 'incident_reports_assigned_vehicle_id_fkey'; columns: ['assigned_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_taken_over_by_fkey'; columns: ['taken_over_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      incident_supports: { Row: IncidentSupport; Insert: Pick<IncidentSupport, 'incident_id' | 'vehicle_id' | 'started_by'> & Partial<Omit<IncidentSupport, 'id' | 'started_at' | 'incident_id' | 'vehicle_id' | 'started_by'>>; Update: Partial<Omit<IncidentSupport, 'id' | 'incident_id' | 'vehicle_id' | 'started_by' | 'started_at'>>; Relationships: [
+        { foreignKeyName: 'incident_supports_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_supports_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_supports_started_by_fkey'; columns: ['started_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_supports_ended_by_fkey'; columns: ['ended_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
       einsatz_parteien: { Row: EinsatzParteiRow; Insert: Pick<EinsatzParteiRow, 'incident_id' | 'person_id' | 'rolle' | 'created_by'> & Partial<Omit<EinsatzParteiRow, 'id' | 'created_at' | 'incident_id' | 'person_id' | 'rolle' | 'created_by'>>; Update: Partial<Omit<EinsatzParteiRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'einsatz_parteien_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_parteien_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
