@@ -1405,6 +1405,7 @@ type ZentraleEntryRow = Omit<ZentraleEntry, never>
 type DutyAssignmentRow = Omit<DutyAssignment, 'profiles' | 'fleet_vehicles'>
 type DutyFunctionConfigRow = Omit<DutyFunctionConfig, never>
 type IncidentReportRow = Omit<IncidentReport, 'caller_person' | 'involved_person_ref' | 'assigned_vehicle' | 'taken_over_by_profile'>
+type IncidentSupportRow = Omit<IncidentSupport, 'vehicle'>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
 type EinsatzChecklistPunktRow = Omit<EinsatzChecklistPunkt, never>
 type NamenslistePersonRow = Omit<NamenslistePerson, never>
@@ -1638,7 +1639,7 @@ export type Database = {
         { foreignKeyName: 'incident_reports_assigned_vehicle_id_fkey'; columns: ['assigned_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_taken_over_by_fkey'; columns: ['taken_over_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      incident_supports: { Row: IncidentSupport; Insert: Pick<IncidentSupport, 'incident_id' | 'vehicle_id' | 'started_by'> & Partial<Omit<IncidentSupport, 'id' | 'started_at' | 'incident_id' | 'vehicle_id' | 'started_by'>>; Update: Partial<Omit<IncidentSupport, 'id' | 'incident_id' | 'vehicle_id' | 'started_by' | 'started_at'>>; Relationships: [
+      incident_supports: { Row: IncidentSupportRow; Insert: Pick<IncidentSupportRow, 'incident_id' | 'vehicle_id' | 'started_by'> & Partial<Omit<IncidentSupportRow, 'id' | 'started_at' | 'incident_id' | 'vehicle_id' | 'started_by'>>; Update: Partial<Omit<IncidentSupportRow, 'id' | 'incident_id' | 'vehicle_id' | 'started_by' | 'started_at'>>; Relationships: [
         { foreignKeyName: 'incident_supports_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_supports_vehicle_id_fkey'; columns: ['vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_supports_started_by_fkey'; columns: ['started_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
