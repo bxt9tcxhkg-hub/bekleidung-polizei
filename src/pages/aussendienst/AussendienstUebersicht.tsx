@@ -1,45 +1,131 @@
-import { AlertTriangle, Car, CheckCircle2, Circle, Construction, ListChecks, Plus, Radio, ShieldAlert, UsersRound } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, Car, CheckCircle2, Circle, ListChecks, Mail, Navigation, Search, ShieldCheck, Wrench } from 'lucide-react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { formatTime } from '../../lib/zentraleShared'
 import type { AussendienstContext } from './AussendienstShell'
-import Fuellliste from './Fuellliste'
+import { EntryOrIncidentList } from './aussendienstShared'
 
 export default function AussendienstUebersicht() {
   const ctx = useOutletContext<AussendienstContext>()
+  const [changingVehicle, setChangingVehicle] = useState(false)
   if (!ctx.ownAssignment) return null
-  const { ownAssignment, ownFunction, ownVehicle, ownCheck, patrolMates } = ctx
+
+  const functionLabel = ctx.ownFunction?.label ?? ctx.ownAssignment.function.toUpperCase()
+  const openOrders = ctx.openOrders
+  const incidentList = (
+    <EntryOrIncidentList
+      kind="incidents"
+      incidents={ctx.openIncidents}
+      baustellen={ctx.baustellen}
+      ownVehicleId={ctx.ownVehicle?.id ?? null}
+      incidentSupports={ctx.incidentSupports}
+      takeOverIncident={ctx.takeOverIncident}
+      releaseIncidentTakeover={ctx.releaseIncidentTakeover}
+      supportIncident={ctx.supportIncident}
+      stopSupportingIncident={ctx.stopSupportingIncident}
+      completeIncident={ctx.completeIncident}
+      reopenIncident={ctx.reopenIncident}
+    />
+  )
+
   return <div className="space-y-4 mb-6">
-    <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ShieldAlert className="w-4 h-4 text-blue-700" /> Wichtige Hinweise</h2>
-      {ctx.criticalSourcesError ? <p className="text-xs font-medium text-amber-700 flex items-center gap-1.5 mt-2"><AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> Schutzmaßnahmen bzw. Fahndungen konnten nicht vollständig geladen werden - es könnten weitere Warnungen fehlen. Bitte Seite neu laden.</p> : null}
-      {ctx.criticalItems.length === 0 ? (ctx.criticalSourcesError ? null : <p className="text-sm text-gray-500 mt-2">Keine aktuell dringenden Warnungen.</p>) : <div className="mt-2 space-y-2">{ctx.criticalItems.map(item => <div key={item.id} className="rounded-lg border-2 border-red-300 bg-red-50 px-3 py-2"><p className="font-bold text-red-900 text-sm">{item.title}</p>{item.description ? <p className="text-sm text-red-800">{item.description}</p> : null}</div>)}</div>}
+    <section className="rounded-2xl border border-blue-200 bg-white p-4 sm:p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Meine Streife</p>
+          <h2 className="text-xl font-bold text-gray-900 mt-1">{functionLabel}</h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {ctx.ownVehicle ? <>{ctx.ownVehicle.call_sign || ctx.ownVehicle.name}{ctx.ownVehicle.license_plate ? ` · ${ctx.ownVehicle.license_plate}` : ''}</> : 'Kein Fahrzeug zugewiesen'}
+          </p>
+        </div>
+        <button type="button" onClick={() => setChangingVehicle(value => !value)} className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50">
+          <Car className="w-4 h-4" /> Fahrzeug ändern
+        </button>
+      </div>
+      {changingVehicle ? <div className="mt-3 max-w-md">
+        <select
+          className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm"
+          value={ctx.ownVehicle?.id ?? ''}
+          onChange={event => { void ctx.setDutyVehicle(event.target.value); setChangingVehicle(false) }}
+          aria-label="Fahrzeug für diesen Dienst"
+        >
+          <option value="">Kein Fahrzeug</option>
+          {ctx.availableVehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>
+            {vehicle.call_sign || vehicle.name}{vehicle.license_plate ? ` · ${vehicle.license_plate}` : ''}{vehicle.operational_status !== 'verfuegbar' ? ' · derzeit nicht verfügbar' : ''}
+          </option>)}
+        </select>
+        <p className="text-[11px] text-gray-500 mt-1">Die Änderung gilt nur für den heutigen Dienst. Nicht verfügbare Fahrzeuge werden nicht als neue Auswahl angeboten.</p>
+      </div> : null}
     </section>
 
-    <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Car className="w-4 h-4 text-blue-700" /> Vor Dienstbeginn – Fahrzeug- und Materialcheck</h2>
-      {!ownVehicle ? <p className="text-sm text-gray-500 mt-2">Erst nach Fahrzeugzuweisung möglich.</p>
-      : ownCheck ? <div className={`mt-2 rounded-xl px-4 py-3 flex items-center gap-2 text-sm ${ownCheck.status === 'ok' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>{ownCheck.status === 'ok' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}<span>{ownCheck.status === 'ok' ? 'Kontrolliert – in Ordnung' : `Mangel gemeldet${ownCheck.note ? `: ${ownCheck.note}` : ''}`}</span></div>
-      : <div className="mt-2"><p className="text-sm text-amber-700 mb-2">Noch nicht kontrolliert – bitte vor Dienstantritt durchführen (kein Zwang, nur Erinnerung).</p><div className="flex flex-wrap gap-2"><button type="button" disabled={ctx.saving} onClick={() => void ctx.saveVehicleCheck('ok', '')} className="bg-green-700 hover:bg-green-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Kontrolliert – in Ordnung</button><button type="button" onClick={() => ctx.setShowMangelForm(true)} className="border border-amber-300 text-amber-800 text-sm font-medium px-4 py-2 rounded-lg">Mangel melden</button></div>
-        {ctx.showMangelForm ? <div className="mt-3 flex flex-col sm:flex-row gap-2"><input className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Was fehlt / ist beschädigt?" value={ctx.checkNote} onChange={event => ctx.setCheckNote(event.target.value)} /><button type="button" disabled={ctx.saving} onClick={() => void ctx.saveVehicleCheck('mangel', ctx.checkNote)} className="bg-amber-700 hover:bg-amber-800 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-60">Melden</button></div> : null}</div>}
-    </section>
+    {ctx.openIncidents.length > 0 ? <section>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div><p className="text-xs font-bold uppercase tracking-wider text-red-700">Jetzt</p><h2 className="text-lg font-bold text-gray-900">Aktuelle Einsätze</h2></div>
+        <Link to="/aussendienst/einsaetze" className="text-xs font-semibold text-blue-700 hover:underline">Alle ansehen</Link>
+      </div>
+      {incidentList}
+    </section> : null}
 
-    {ownVehicle ? <Fuellliste vehicle={ownVehicle} /> : null}
+    <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-gray-900 flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-blue-700" /> Fahrzeugcheck</h2>
+          <p className="text-xs text-gray-500 mt-1">Vor Dienstbeginn prüfen. Danach bleibt der Punkt nur noch als Status sichtbar.</p>
+        </div>
+        {ctx.ownVehicle ? <Link to="/aussendienst/fahrzeug" className="text-xs font-semibold text-blue-700 hover:underline">Fahrzeugdetails</Link> : null}
+      </div>
+      {!ctx.ownVehicle ? <p className="text-sm text-amber-700 mt-3">Bitte zuerst ein Fahrzeug auswählen.</p>
+      : ctx.ownCheck ? <div className={`mt-3 rounded-xl px-4 py-3 flex items-start gap-2 text-sm ${ctx.ownCheck.status === 'ok' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+          {ctx.ownCheck.status === 'ok' ? <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
+          <div><p className="font-semibold">{ctx.ownCheck.status === 'ok' ? 'Fahrzeugcheck erledigt' : 'Mangel gemeldet'}</p>{ctx.ownCheck.note ? <p className="mt-0.5">{ctx.ownCheck.note}</p> : null}</div>
+        </div>
+      : <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" disabled={ctx.saving} onClick={() => void ctx.saveVehicleCheck('ok', '')} className="bg-green-700 hover:bg-green-800 text-white text-sm font-semibold px-4 py-2.5 rounded-lg disabled:opacity-60">
+            In Ordnung
+          </button>
+          <button type="button" onClick={() => ctx.setShowMangelForm(true)} className="inline-flex items-center gap-2 border border-amber-300 text-amber-800 text-sm font-medium px-4 py-2.5 rounded-lg">
+            <Wrench className="w-4 h-4" /> Mangel
+          </button>
+        </div>}
+      {ctx.showMangelForm && !ctx.ownCheck ? <div className="mt-3 flex flex-col sm:flex-row gap-2">
+        <input className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm" placeholder="Was fehlt oder ist beschädigt?" value={ctx.checkNote} onChange={event => ctx.setCheckNote(event.target.value)} />
+        <button type="button" disabled={ctx.saving || !ctx.checkNote.trim()} onClick={() => void ctx.saveVehicleCheck('mangel', ctx.checkNote)} className="bg-amber-700 hover:bg-amber-800 text-white text-sm font-semibold px-4 py-2.5 rounded-lg disabled:opacity-60">Melden</button>
+      </div> : null}
+    </section>
 
     <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-      <div className="p-4 sm:p-5 border-b border-gray-100"><h2 className="font-bold text-gray-900 flex items-center gap-2"><ListChecks className="w-4 h-4 text-blue-700" /> Kontrollaufträge</h2><p className="text-xs text-gray-500 mt-1">Mit Klick erledigt markieren - die Uhrzeit ist nur eine Gedankenstütze für die spätere Protokollierung im PAD, kein Nachweis.</p></div>
-      {ctx.kontrollauftraege.length === 0 ? <p className="text-sm text-gray-500 p-4 sm:p-5">Keine Kontrollaufträge für die heutige Funktion.</p> : <div className="divide-y divide-gray-100">{ctx.kontrollauftraege.map(item => {
-        const erledigt = item.status === 'erledigt'
-        return <div key={item.id} className="p-4 sm:p-5 flex items-start gap-3">
-          <button type="button" onClick={() => void ctx.toggleKontrollauftragErledigt(item)} className={`mt-0.5 flex-shrink-0 ${erledigt ? 'text-green-600' : 'text-gray-300 hover:text-gray-400'}`} aria-label={erledigt ? 'Als offen markieren' : 'Als erledigt markieren'}>{erledigt ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
-          <div className="min-w-0"><p className={`text-sm font-semibold ${erledigt ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{item.title}</p>{item.description ? <p className={`text-sm mt-0.5 whitespace-pre-wrap ${erledigt ? 'text-gray-400' : 'text-gray-600'}`}>{item.description}</p> : null}{item.location ? <p className="text-xs text-gray-500 mt-1">Ort: {item.location}</p> : null}{erledigt && item.erledigt_at ? <p className="text-xs text-gray-400 mt-1">Erledigt um {formatTime(item.erledigt_at)}</p> : null}</div>
+      <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div><h2 className="font-bold text-gray-900 flex items-center gap-2"><ListChecks className="w-4 h-4 text-blue-700" /> Kontrollaufträge</h2><p className="text-xs text-gray-500 mt-1">Nur offene Aufträge für die heutige Funktion.</p></div>
+        <Link to="/aussendienst/kontrollauftraege" className="text-xs font-semibold text-blue-700 hover:underline">Alle</Link>
+      </div>
+      {openOrders.length === 0 ? <p className="text-sm text-gray-500 p-4 sm:p-5">Keine offenen Kontrollaufträge.</p> : <div className="divide-y divide-gray-100">{openOrders.map(item => <div key={item.id} className="p-4 sm:p-5 flex items-start gap-3">
+        <button type="button" onClick={() => void ctx.toggleKontrollauftragErledigt(item)} className="mt-0.5 text-gray-300 hover:text-green-600 flex-shrink-0" aria-label="Als erledigt markieren"><Circle className="w-5 h-5" /></button>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold text-gray-900">{item.title}</p>{item.zeitfenster ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{item.zeitfenster}</span> : null}</div>
+          {item.description ? <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{item.description}</p> : null}
+          {item.location ? <p className="text-xs text-gray-500 mt-1">{item.location}</p> : null}
+          <div className="flex flex-wrap gap-3 mt-2">
+            {item.location_lat !== null && item.location_lng !== null ? <a href={`https://www.google.com/maps/dir/?api=1&destination=${item.location_lat},${item.location_lng}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"><Navigation className="w-3.5 h-3.5" /> Navigation</a> : null}
+            <button type="button" onClick={() => void ctx.toggleKontrollauftragErledigt(item)} className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 hover:underline"><CheckCircle2 className="w-3.5 h-3.5" /> Erledigt</button>
+          </div>
         </div>
-      })}</div>}
+      </div>)}</div>}
     </section>
 
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Radio className="w-4 h-4 text-blue-700" /> Jetzt offen</h2>{ctx.openIncidents.length === 0 ? <p className="text-sm text-gray-500 mt-2">Keine offenen Einsätze.</p> : <ul className="mt-2 space-y-1.5 text-sm text-gray-700">{ctx.openIncidents.slice(0, 4).map(item => <li key={item.id}>• {formatTime(item.reported_at)} – {item.location || item.summary.slice(0, 40)}</li>)}</ul>}<Link to="/aussendienst/einsaetze" className="inline-block text-xs font-semibold text-blue-700 mt-2 hover:underline">Alle Einsätze ansehen →</Link></section>
+    {ctx.openIncidents.length === 0 ? <section className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
+      <CheckCircle2 className="w-7 h-7 text-gray-300 mx-auto mb-2" />
+      <p className="font-medium text-gray-700">Keine offenen Einsätze</p>
+      <p className="text-sm text-gray-500 mt-1">Neue disponierte Einsätze erscheinen automatisch hier.</p>
+    </section> : null}
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><h2 className="font-bold text-gray-900 flex items-center gap-2"><UsersRound className="w-4 h-4 text-blue-700" /> Meine Streife</h2><p className="text-sm text-gray-500 mt-1">{ownFunction?.label ?? ownAssignment.function} · {ownAssignment.shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}</p><p className="text-sm text-gray-700 mt-2">{patrolMates.length === 0 ? 'Keine weiteren Kolleginnen/Kollegen in dieser Funktion eingetragen.' : `Mit: ${patrolMates.map(item => item.profiles?.name).filter(Boolean).join(', ')}`}</p>{ownVehicle ? <p className="text-sm font-semibold text-blue-700 mt-2">Fahrzeug: {ownVehicle.call_sign || ownVehicle.name}{ownVehicle.license_plate ? ` · ${ownVehicle.license_plate}` : ''}</p> : <p className="text-sm text-gray-500 mt-2">Kein Fahrzeug zugewiesen (auf der Startseite wählbar).</p>}</section>
-    </div>
-
-    <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-bold text-gray-900 flex items-center gap-2"><Construction className="w-4 h-4 text-blue-700" /> Baustelle wahrgenommen?</h2><button type="button" onClick={ctx.openBaustelleReport} className="inline-flex items-center gap-2 border border-blue-200 text-blue-800 text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Baustelle melden</button></div><p className="text-sm text-gray-500 mt-1">Wird von der Zentrale geprüft und dort auf der Karte bestätigt.</p></section>
+    <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Schnellzugriff</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <Link to="/rsa-rsb" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Mail className="w-4 h-4 text-blue-700" /> RSa/RSb</Link>
+        <Link to="/stammdaten/personen" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Search className="w-4 h-4 text-blue-700" /> Personen</Link>
+        <Link to="/aussendienst/kontrollbehelfe" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><ListChecks className="w-4 h-4 text-blue-700" /> Behelfe</Link>
+        <Link to="/aussendienst/fahrzeug" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Car className="w-4 h-4 text-blue-700" /> Fahrzeug</Link>
+      </div>
+    </section>
   </div>
 }
