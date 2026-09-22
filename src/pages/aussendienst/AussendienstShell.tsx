@@ -224,9 +224,11 @@ export default function AussendienstShell() {
     ...avBv.filter(item => item.massnahme === 'bv_av' || kontrolliert.has(item.id)).map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · Gefährder: ${item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}`, description: item.ausnahmen ? `Ausnahmen: ${item.ausnahmen}` : `PAD ${item.pad_aktenzahl} · Schutzbereiche prüfen` })),
   ], [avBv, criticalEntries, kontrolliert])
   const openIncidents = useMemo(() => {
-    const relevant = ownAssignment?.function === 'jd' ? incidents.filter(item => item.disposition === 'jd')
-      : ownAssignment?.function === 'vd' ? incidents.filter(item => item.disposition === 'vd')
-      : incidents
+    const relevant = ownAssignment?.function === 'jd'
+      ? incidents.filter(item => item.disposition === 'jd' || item.disposition === 'offen')
+      : ownAssignment?.function === 'vd'
+        ? incidents.filter(item => item.disposition === 'vd' || item.disposition === 'offen')
+        : incidents
     return relevant.filter(item => item.status === 'offen')
   }, [incidents, ownAssignment?.function])
   const ownFunctionOrders = useCallback((item: ZentraleEntry) => item.category === 'kontrollauftrag' && (!ownAssignment || item.target_function == null || item.target_function === 'beide' || item.target_function === ownAssignment.function), [ownAssignment])
