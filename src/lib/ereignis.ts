@@ -1,0 +1,125 @@
+import { supabase } from './supabase'
+import type { Ereignis, EreignisDimension, EreignisVerstaendigung } from './types'
+
+export async function loadIncidentEreignis(incidentId: string): Promise<Ereignis | null> {
+  const link = await supabase
+    .from('ereignis_einsaetze')
+    .select('ereignis_id')
+    .eq('incident_id', incidentId)
+    .maybeSingle()
+
+  if (link.error) throw link.error
+  if (!link.data) return null
+
+  const result = await supabase.from('ereignisse').select('*').eq('id', link.data.ereignis_id).single()
+  if (result.error) throw result.error
+  return result.data
+}
+
+export async function setIncidentEreignisDimension(incidentId: string, dimension: EreignisDimension): Promise<Ereignis | null> {
+  const result = await supabase.rpc('set_incident_event_dimension', {
+    p_incident_id: incidentId,
+    p_dimension: dimension,
+  })
+  if (result.error) throw result.error
+  if (!result.data) return null
+
+  const eventResult = await supabase.from('ereignisse').select('*').eq('id', result.data).single()
+  if (eventResult.error) throw eventResult.error
+  return eventResult.data
+}
+
+export async function loadEreignisDimensionen(incidentIds: string[]): Promise<Record<string, EreignisDimension>> {
+  if (incidentIds.length === 0) return {}
+
+  const links = await supabase
+    .from('ereignis_einsaetze')
+    .select('incident_id,ereignis_id')
+    .in('incident_id', incidentIds)
+
+  if (links.error) throw links.error
+  if (!links.data?.length) return {}
+
+  const eventIds = [...new Set(links.data.map(row => row.ereignis_id))]
+  const events = await supabase.from('ereignisse').select('id,dimension').in('id', eventIds)
+  if (events.error) throw events.error
+
+  const byId = new Map((events.data ?? []).map(row => [row.id, row.dimension]))
+  return Object.fromEntries(
+    links.data.flatMap(row => {
+      const dimension = byId.get(row.ereignis_id)
+      return dimension ? [[row.incident_id, dimension]] : []
+    }),
+  )
+}
+
+export async function loadVerstaendigungen(ereignisId: string): Promise<EreignisVerstaendigung[]> {
+  const result = await supabase
+    .from('ereignis_verstaendigungen')
+    .select('*')
+    .eq('ereignis_id', ereignisId)
+    .order('updated_at')
+
+  if (result.error) throw result.error
+  return result.data ?? []
+}
+
+export async function setVerstaendigungStatus({
+  ereignisId,
+  key,
+  label,
+  field,
+  current,
+  userId,
+}: {
+  ereignisId: string
+  key: string
+  label: string
+  field: 'versucht' | 'erreicht'
+  current?: EreignisVerstaendigung
+  userId: string
+}): Promise<EreignisVerstaendigung> {
+  const now = new Date().toISOString()
+  let versuchtAt = current?.versucht_at ?? null
+  let erreichtAt = current?.erreicht_at ?? null
+
+  if (field === 'versucht') {
+    if (versuchtAt) {
+      versuchtAt = null
+      erreichtAt = null
+    } else {
+      versuchtAt = now
+    }
+  } else if (erreichtAt) {
+    erreichtAt = null
+  } else {
+    erreichtAt = now
+    versuchtAt = versuchtAt ?? now
+  }
+
+  const result = await supabase
+    .from('ereignis_verstaendigungen')
+    .upsert({
+      ereignis_id: ereignisId,
+      empfaenger_key: key,
+      empfaenger_label: label,
+      versucht_at: versuchtAt,
+      erreicht_at: erreichtAt,
+      updated_by: userId,
+      updated_at: now,
+    }, { onConflict: 'ereignis_id,empfaenger_key' })
+    .select('*')
+    .single()
+
+  if (result.error) throw result.error
+  return result.data
+}
+
+export function verstaendigungKey(label: string): string {
+  return label
+    .toLocaleLowerCase('de-AT')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+}
