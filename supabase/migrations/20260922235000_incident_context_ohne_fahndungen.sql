@@ -82,10 +82,15 @@ begin
   select
     'schutzfall_person'::text,
     'sicherheit'::text,
-    ('Aktiver Schutzfall zu beteiligter Person' ||
+    ((case when s.massnahme='bv_av' then 'Betretungs- und Annäherungsverbot' else 'Einstweilige Verfügung' end) ||
+      ' · direkter Personenbezug' ||
       case when s.waffenverbot then ' · Waffenverbot' else '' end)::text,
-    ('PAD ' || s.pad_aktenzahl ||
-      coalesce(' · ' || nullif(s.hinweise,''),''))::text,
+    (
+      'gültig bis ' || to_char(s.ende at time zone 'Europe/Vienna','DD.MM.YYYY HH24:MI') ||
+      coalesce(' · Ausnahmen: ' || nullif(trim(s.ausnahmen),''),'') ||
+      coalesce(' · Hinweis: ' || nullif(trim(s.hinweise),''),'') ||
+      ' · PAD ' || s.pad_aktenzahl
+    )::text,
     null::integer
   from faelle s;
 
@@ -137,8 +142,16 @@ begin
   select
     'schutzfall_objekt'::text,
     'sicherheit'::text,
-    'Aktiver Schutzfall am Einsatzobjekt'::text,
-    (b.bezeichnung || ' · PAD ' || s.pad_aktenzahl)::text,
+    ((case when s.massnahme='bv_av' then 'Betretungs- und Annäherungsverbot' else 'Einstweilige Verfügung' end) ||
+      ' · direkt am Einsatzobjekt' ||
+      case when s.waffenverbot then ' · Waffenverbot' else '' end)::text,
+    (
+      b.bezeichnung || ' · Schutzradius ' || b.radius_m || ' m' ||
+      ' · gültig bis ' || to_char(s.ende at time zone 'Europe/Vienna','DD.MM.YYYY HH24:MI') ||
+      coalesce(' · Ausnahmen: ' || nullif(trim(s.ausnahmen),''),'') ||
+      coalesce(' · Hinweis: ' || nullif(trim(s.hinweise),''),'') ||
+      ' · PAD ' || s.pad_aktenzahl
+    )::text,
     0::integer
   from public.schutzbereiche b
   join public.schutzfaelle s on s.id=b.schutzfall_id
@@ -151,7 +164,7 @@ begin
   if v_radius > 0 and v_inc.location_lat is not null and v_inc.location_lng is not null then
     return query
     with dist as (
-      select b.*, s.pad_aktenzahl,
+      select b.*, s.pad_aktenzahl, s.massnahme, s.ende, s.waffenverbot, s.ausnahmen,
         round(6371000 * 2 * asin(sqrt(
           power(sin(radians(b.lat - v_inc.location_lat)/2),2) +
           cos(radians(v_inc.location_lat))*cos(radians(b.lat))*
@@ -164,8 +177,16 @@ begin
     select
       'schutzfall_nahbereich'::text,
       'nahbereich'::text,
-      ('Aktiver Schutzbereich im Nahbereich · ' || d.bezeichnung)::text,
-      ('PAD ' || d.pad_aktenzahl || ' · räumlicher Hinweis, Zusammenhang zum Einsatz nicht bestätigt')::text,
+      ((case when d.massnahme='bv_av' then 'Betretungs- und Annäherungsverbot' else 'Einstweilige Verfügung' end) ||
+        ' im Nahbereich · ' || d.bezeichnung ||
+        case when d.waffenverbot then ' · Waffenverbot' else '' end)::text,
+      (
+        'Schutzradius ' || d.radius_m || ' m' ||
+        ' · gültig bis ' || to_char(d.ende at time zone 'Europe/Vienna','DD.MM.YYYY HH24:MI') ||
+        coalesce(' · Ausnahmen: ' || nullif(trim(d.ausnahmen),''),'') ||
+        ' · PAD ' || d.pad_aktenzahl ||
+        ' · räumlicher Hinweis, Zusammenhang zum Einsatz nicht bestätigt'
+      )::text,
       d.d::integer
     from dist d
     where d.d <= v_radius
