@@ -115,6 +115,30 @@ export async function setVerstaendigungStatus({
   return result.data
 }
 
+export async function updateEreignisLage(
+  ereignisId: string,
+  changes: Partial<Pick<Ereignis,
+    'betroffene_anzahl' |
+    'opfer_anzahl' |
+    'sachschaden' |
+    'erforderliche_massnahmen' |
+    'ereignisgrund' |
+    'oeffentliche_sicherheit_beeintraechtigt' |
+    'koordinierung_noetig'
+  >>,
+  userId: string,
+): Promise<Ereignis> {
+  const result = await supabase
+    .from('ereignisse')
+    .update({ ...changes, updated_by: userId, updated_at: new Date().toISOString() })
+    .eq('id', ereignisId)
+    .select('*')
+    .single()
+
+  if (result.error) throw result.error
+  return result.data
+}
+
 export function verstaendigungKey(label: string): string {
   return label
     .toLocaleLowerCase('de-AT')
