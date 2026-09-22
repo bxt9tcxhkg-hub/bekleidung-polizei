@@ -1,16 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Modal } from '../../components/ZentraleEntryEditor'
-import { supabase } from '../../lib/supabase'
+import {
+  loadIncidentEreignis,
+  loadVerstaendigungen,
+  setIncidentEreignisDimension,
+  setVerstaendigungStatus,
+  verstaendigungKey,
+} from '../../lib/ereignis'
+import { EREIGNISSTUFEN, STUFE_META, formatStamp, telefonketteFuer } from '../../lib/einsatzSchema'
 import { formatTime } from '../../lib/zentraleShared'
-import { EREIGNISSTUFEN, STUFE_META, formatStamp, noteWithoutStufe, readKette, readStoredStufe, telefonketteFuer, withStufe, writeKette, writeStoredStufe, type Ereignisstufe, type KetteStand } from '../../lib/einsatzSchema'
-import type { IncidentReport, OperationalPerson } from '../../lib/types'
+import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport, OperationalPerson } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EinsatzParteien from './EinsatzParteien'
 import EinsatzChecklisten from './EinsatzChecklisten'
 
-type Tab = 'checkliste' | 'ablauf' | 'parteien' | 'dateien' | 'listen'
+type Tab = 'uebersicht' | 'ereignis' | 'parteien' | 'dateien'
 
 export default function EinsatzArbeitModal({
   item, canOperateZentrale, close, openEditIncident, completeIncident, persons, onPersonCreated, createdBy,
@@ -24,74 +30,162 @@ export default function EinsatzArbeitModal({
   onPersonCreated: (person: OperationalPerson) => void
   createdBy: string | null
 }) {
-  const [tab, setTab] = useState<Tab>('checkliste')
-  const [stufe, setStufeState] = useState<Ereignisstufe>(() => readStoredStufe(item.id, item.note))
-  const [stand, setStand] = useState<KetteStand>(() => readKette(item.id))
-  useEffect(() => {
-    setStufeState(readStoredStufe(item.id, item.note))
-    setStand(readKette(item.id))
-    setTab('checkliste')
-  }, [item.id, item.note])
+  const [tab, setTab] = useState<Tab>('uebersicht')
+  const [ereignis, setEreignis] = useState<Ereignis | null>(null)
+  const [verstaendigungen, setVerstaendigungen] = useState<EreignisVerstaendigung[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
-  async function setStufe(next: Ereignisstufe) {
-    writeStoredStufe(item.id, next)
-    setStufeState(next)
-    await supabase.from('incident_reports').update({ note: withStufe(noteWithoutStufe(item.note), next) || null }).eq('id', item.id)
-  }
-
-  function markKette(name: string, field: 'versucht' | 'erreicht') {
-    const now = new Date().toISOString()
-    setStand(current => {
-      const row = { ...current[name] }
-      if (row[field]) delete row[field]
-      else {
-        row[field] = now
-        if (field === 'erreicht' && !row.versucht) row.versucht = now
-      }
-      const next = { ...current, [name]: row }
-      writeKette(item.id, next)
-      return next
-    })
-  }
-
+  const stufe: EreignisDimension = ereignis?.dimension ?? 'klein'
   const meta = STUFE_META[stufe]
-  const tabClass = (id: Tab) => `px-3 py-2 text-sm font-semibold rounded-t-lg border-b-2 whitespace-nowrap flex-shrink-0 ${tab === id ? 'border-blue-800 text-blue-900' : 'border-transparent text-gray-500 hover:text-gray-800'}`
+  const hatEreignisArbeitsraum = stufe !== 'klein'
 
-  return <Modal wide title={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} close={close}>
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    setTab('uebersicht')
+    void loadIncidentEreignis(item.id)
+      .then(async next => {
+        if (cancelled) return
+        setEreignis(next)
+        if (next) {
+          const rows = await loadVerstaendigungen(next.id)
+          if (!cancelled) setVerstaendigungen(rows)
+        } else {
+          setVerstaendigungen([])
+        }
+      })
+      .catch(() => { if (!cancelled) setError('Ereignisdaten konnten nicht geladen werden.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [item.id])
+
+  useEffect(() => {
+    if (!hatEreignisArbeitsraum && tab === 'ereignis') setTab('uebersicht')
+  }, [hatEreignisArbeitsraum, tab])
+
+  async function setStufe(next: EreignisDimension) {
+    if (!canOperateZentrale || busy || next === stufe) return
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await setIncidentEreignisDimension(item.id, next)
+      setEreignis(saved)
+      if (saved) setVerstaendigungen(await loadVerstaendigungen(saved.id))
+      else setVerstaendigungen([])
+    } catch {
+      setError('Ereignisdimension konnte nicht gespeichert werden.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const standByKey = useMemo(
+    () => new Map(verstaendigungen.map(row => [row.empfaenger_key, row])),
+    [verstaendigungen],
+  )
+
+  async function markKette(label: string, field: 'versucht' | 'erreicht') {
+    if (!ereignis || !createdBy || busy) return
+    const key = verstaendigungKey(label)
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await setVerstaendigungStatus({
+        ereignisId: ereignis.id,
+        key,
+        label,
+        field,
+        current: standByKey.get(key),
+        userId: createdBy,
+      })
+      setVerstaendigungen(current => [...current.filter(row => row.id !== saved.id), saved])
+    } catch {
+      setError('Verständigungsstand konnte nicht gespeichert werden.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const tabClass = (id: Tab) => 'px-2 py-2 text-sm font-semibold border-b-2 ' + (tab === id ? 'border-blue-800 text-blue-900' : 'border-transparent text-gray-500 hover:text-gray-800')
+
+  return <Modal wide title={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} close={close}>
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
     <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
-    <div className="flex gap-1 border-b border-gray-200 overflow-x-auto -mx-1 px-1">
-      <button type="button" className={tabClass('checkliste')} onClick={() => setTab('checkliste')}>Checkliste</button>
-      <button type="button" className={tabClass('ablauf')} onClick={() => setTab('ablauf')}>Ablauf</button>
+
+    <div className={'grid ' + (hatEreignisArbeitsraum ? 'grid-cols-4' : 'grid-cols-3') + ' border-b border-gray-200'}>
+      <button type="button" className={tabClass('uebersicht')} onClick={() => setTab('uebersicht')}>Übersicht</button>
+      {hatEreignisArbeitsraum ? <button type="button" className={tabClass('ereignis')} onClick={() => setTab('ereignis')}>Ereignis</button> : null}
       <button type="button" className={tabClass('parteien')} onClick={() => setTab('parteien')}>Parteien</button>
       <button type="button" className={tabClass('dateien')} onClick={() => setTab('dateien')}>Dateien</button>
-      <button type="button" className={tabClass('listen')} onClick={() => setTab('listen')}>Listen</button>
     </div>
-    {tab === 'checkliste' ? <div className="space-y-4">
+
+    {loading ? <p className="text-sm text-gray-500 py-3">Ereignisdaten werden geladen…</p> : null}
+
+    {!loading && tab === 'uebersicht' ? <div className="space-y-4">
       <div>
-        <p className="text-xs font-semibold text-gray-600 mb-1.5">Wie stark ist die Bevölkerung betroffen?</p>
+        <p className="text-xs font-semibold text-gray-600 mb-1.5">Ereignisdimension</p>
         {canOperateZentrale ? <div className="flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
           const row = STUFE_META[key]
-          return <button key={key} type="button" onClick={() => void setStufe(key)} className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border" style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}>{row.label}</button>
+          return <button
+            key={key}
+            type="button"
+            disabled={busy}
+            onClick={() => void setStufe(key)}
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border disabled:opacity-60"
+            style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}
+          >{row.label}</button>
         })}</div> : <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>}
         <p className="text-xs text-gray-600 mt-2"><span className="font-semibold">{meta.label}:</span> {meta.wann}</p>
+        {stufe === 'klein' ? <p className="text-xs text-gray-500 mt-1">Tagesgeschäft: kein zusätzlicher Ereignis-Arbeitsraum.</p> : null}
       </div>
-      {stufe === 'klein' ? <p className="text-sm text-gray-600">Kleinereignis: keine Telefonkette.</p> : <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-        <p className="font-bold">Verständigung telefonisch</p>
-        <p className="text-xs text-amber-800 mb-2">Versucht = angerufen. Erreicht = Person informiert.</p>
-        <div className="space-y-2">{telefonketteFuer(stufe).map(name => {
-          const row = stand[name] ?? {}
-          return <div key={name} className="rounded-lg bg-white/70 px-2 py-2">
-            <p className="font-medium">{name}</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <button type="button" onClick={() => markKette(name, 'versucht')} className={`text-xs px-2 py-1 rounded-md border ${row.versucht ? 'bg-amber-100 border-amber-400' : 'border-gray-300 bg-white'}`}>Versucht{row.versucht ? ` ${formatStamp(row.versucht)}` : ''}</button>
-              <button type="button" onClick={() => markKette(name, 'erreicht')} className={`text-xs px-2 py-1 rounded-md border ${row.erreicht ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white'}`}>Erreicht{row.erreicht ? ` ${formatStamp(row.erreicht)}` : ''}</button>
-            </div>
+      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Bearbeitung</p>
+        <p className="mt-1 text-sm text-gray-800">Status: {item.status === 'offen' ? 'Offen' : item.status === 'weitergegeben' ? 'An Bundespolizei weitergegeben' : 'Erledigt'}</p>
+        <p className="text-sm text-gray-800">Zuweisung: {item.disposition === 'zentrale' ? 'Zentrale' : item.disposition === 'jd' ? 'JD' : item.disposition === 'vd' ? 'VD' : item.disposition === 'bp' ? 'Bundespolizei' : 'Nicht zugewiesen'}</p>
+      </div>
+    </div> : null}
+
+    {!loading && tab === 'ereignis' && ereignis ? <div className="space-y-5">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Verständigung</p>
+        <p className="text-xs text-gray-500 mt-1">Gemeinsamer serverseitiger Stand für Zentrale und Schichtwechsel.</p>
+      </div>
+      <div className="space-y-2">{telefonketteFuer(stufe).map(label => {
+        const key = verstaendigungKey(label)
+        const row = standByKey.get(key)
+        return <div key={key} className="rounded-xl border border-gray-200 bg-white p-3">
+          <p className="text-sm font-semibold text-gray-900">{label}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'versucht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.versucht_at ? 'bg-amber-100 border-amber-400' : 'border-gray-300 bg-white')}>
+              {row?.versucht_at ? 'Versucht ' + formatStamp(row.versucht_at) : 'Versucht'}
+            </button>
+            <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'erreicht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.erreicht_at ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white')}>
+              {row?.erreicht_at ? 'Erreicht ' + formatStamp(row.erreicht_at) : 'Erreicht'}
+            </button>
           </div>
-        })}</div>
-        <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
-      </div>}
-    </div> : tab === 'ablauf' ? <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} /> : tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : tab === 'listen' ? <IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} canOperate={canOperateZentrale} /> : <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} />}
+        </div>
+      })}</div>
+      <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800">Telefonnummern in Kontakten</Link>
+
+      <div className="border-t border-gray-200 pt-4">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-3">Ablauf / Checklisten</h3>
+        <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} />
+      </div>
+
+      <div className="border-t border-gray-200 pt-4">
+        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-1">Unterstützung vor Ort</h3>
+        <p className="text-xs text-gray-500 mb-3">ZMR-/Bewohnerdaten und daraus abgeleitete Arbeitslisten für die Kräfte vor Ort.</p>
+        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} />
+      </div>
+    </div> : null}
+
+    {!loading && tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : null}
+    {!loading && tab === 'dateien' ? <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} /> : null}
+
+    {error ? <p className="text-xs text-red-700">{error}</p> : null}
     {canOperateZentrale ? <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
       <button type="button" onClick={() => { close(); openEditIncident(item) }} className="text-sm font-medium border border-gray-300 px-3 py-2 rounded-lg">Meldung ändern</button>
       {item.status === 'offen' ? <button type="button" onClick={() => void completeIncident(item).then(close)} className="text-sm font-medium text-green-800 border border-green-200 px-3 py-2 rounded-lg">Erledigt</button> : null}
