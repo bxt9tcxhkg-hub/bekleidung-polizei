@@ -6,7 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation } from '../../lib/geocode'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
-import type { DutyAssignment, DutyShift, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleEntry, ZentraleEntryCategory } from '../../lib/types'
+import type { DutyAssignment, IncidentReport, OperationalPerson, OperationalPersonNote, StrassenzustandBerichtzeile, ZentraleAvBv, ZentraleEntry, ZentraleEntryCategory } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { personDisplayName, usePersons } from '../../lib/register'
@@ -78,7 +78,6 @@ export default function ZentraleShell() {
   const [showEntryForm, setShowEntryForm] = useState(false)
   const [editing, setEditing] = useState<ZentraleEntry | null>(null)
   const [entry, setEntry] = useState<EntryFormState>(EMPTY_ENTRY_FORM)
-  const [dutyShift, setDutyShift] = useState<DutyShift>('tag')
   const [showIncidentForm, setShowIncidentForm] = useState(false)
   const [editingIncident, setEditingIncident] = useState<IncidentReport | null>(null)
   const [incident, setIncident] = useState<IncidentFormState>(EMPTY_INCIDENT_FORM)
@@ -117,7 +116,6 @@ export default function ZentraleShell() {
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
-  useEffect(() => { if (ownAssignment) setDutyShift(ownAssignment.shift) }, [ownAssignment])
 
   const patrolVehicles = useMemo(() => {
     const seen = new Map<string, { id: string; name: string; call_sign: string | null; license_plate: string | null; function: 'jd' | 'vd' }>()
