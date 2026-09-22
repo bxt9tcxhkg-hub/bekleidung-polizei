@@ -57,7 +57,7 @@ describe('buildEinsatzUebersichtHtml', () => {
   it('zeigt einen Hinweis, wenn keine Parteien oder Unterlagen vorliegen', () => {
     const html = buildEinsatzUebersichtHtml(input())
     expect(html).toContain('Keine Parteien erfasst.')
-    expect(html).toContain('Keine Unterlagen auf diesem Gerät hinterlegt.')
+    expect(html).toContain('Keine Unterlagen hinterlegt.')
   })
 
   it('listet beigefügte Unterlagen mit Art und Dateiname', () => {
