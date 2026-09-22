@@ -2,14 +2,14 @@ import { useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 import { Empty } from '../../components/ZentraleEntryEditor'
 import { formatTime } from '../../lib/zentraleShared'
-import { STUFE_META, readStoredStufe } from '../../lib/einsatzSchema'
-import type { IncidentReport, ZentraleEntry } from '../../lib/types'
+import { STUFE_META } from '../../lib/einsatzSchema'
+import type { EreignisDimension, IncidentReport, ZentraleEntry } from '../../lib/types'
 
 type IncidentVisual = { color: string; label: string }
 
 export function IncidentCards({
   visibleIncidents, canOperateZentrale, openEditIncident, completeIncident, deleteIncident,
-  patrolVehicles = [], setIncidentHandling, visualByIncidentId = {}, selectedIncidentId = null, onOpenIncident,
+  patrolVehicles = [], setIncidentHandling, visualByIncidentId = {}, eventDimensionByIncidentId = {}, selectedIncidentId = null, onOpenIncident,
 }: {
   visibleIncidents: IncidentReport[]
   lageByIncidentId: Record<string, ZentraleEntry>
@@ -24,6 +24,7 @@ export function IncidentCards({
   expandedIncidentId?: string | null
   onToggleIncident?: (item: IncidentReport) => void
   visualByIncidentId?: Record<string, IncidentVisual>
+  eventDimensionByIncidentId?: Record<string, EreignisDimension>
   selectedIncidentId?: string | null
   onOpenIncident?: (item: IncidentReport) => void
 }) {
@@ -33,7 +34,7 @@ export function IncidentCards({
     ? <Empty text="Keine Einsätze." />
     : visibleIncidents.map(item => {
       const visual = visualByIncidentId[item.id]
-      const stufe = readStoredStufe(item.id, item.note)
+      const stufe = eventDimensionByIncidentId[item.id] ?? 'klein'
       const meta = STUFE_META[stufe]
       const done = item.status === 'erledigt'
       const selected = selectedIncidentId === item.id
@@ -58,7 +59,7 @@ export function IncidentCards({
             <div className="flex flex-wrap items-center gap-2">
               {visual && !done ? <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-extrabold text-white" style={{ backgroundColor: visual.color }}>{visual.label}</span> : null}
               <span className="font-bold text-gray-900">{formatTime(item.reported_at)}</span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+              {stufe !== 'klein' ? <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span> : null}
               <span className={`text-xs font-semibold px-2 py-1 rounded-full ${done ? 'bg-gray-200 text-gray-600' : item.status === 'weitergegeben' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>{done ? 'Abgeschlossen' : item.status === 'weitergegeben' ? 'An BP' : 'Offen'}</span>
               {!done ? <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">Bearbeitung: {handlingLabel}</span> : null}
             </div>
