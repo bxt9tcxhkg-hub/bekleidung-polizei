@@ -118,13 +118,20 @@ export default function EreignisCockpit({
   const nextKontaktDaten = nextKontakt ? (kontakte[nextKontakt] ?? []) : []
 
   let nextTitle = 'Verständigungsauftrag abgearbeitet'
-  let nextText = 'Weitere Daten oder Dokumente bereitstellen, sobald sie von den Kräften vor Ort oder der Einsatzleitung angefordert werden.'
+  let nextText = 'Auf Anforderungen von vor Ort reagieren und benötigte Daten oder Unterlagen bereitstellen.'
   let nextSection: Section | null = null
 
   if (nextKontakt) {
     nextTitle = 'Nächste Verständigung'
     nextText = nextKontakt
     nextSection = 'verstaendigung'
+  } else if (snapshot.zmrDocs === 0) {
+    nextTitle = 'Datenunterstützung vorbereiten'
+    nextText = 'Falls für die Lage erforderlich: ZMR-Abfrage durchführen und den Auszug bereitstellen.'
+  } else if (snapshot.bewohner > 0 && snapshot.evakuierung === 0) {
+    nextTitle = 'Arbeitsliste bereitstellen'
+    nextText = 'Die ZMR-Bewohnerdaten sind vorhanden. Bei Bedarf kann daraus eine neutrale Arbeitsliste für die Kräfte vor Ort bereitgestellt werden.'
+    nextSection = 'unterstuetzung'
   }
 
   return <div className="space-y-3">
@@ -144,8 +151,8 @@ export default function EreignisCockpit({
             </div>
             {nextKontaktDaten.length === 0 ? <p className="mt-2 text-xs text-amber-700">Für diesen Verständigungsschritt sind noch keine passenden Kontaktdaten gepflegt.</p> : null}
           </> : <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={onOpenFiles} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Dokument / ZMR bereitstellen</button>
-            <button type="button" onClick={() => onGoTo('unterstuetzung')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Unterstützung öffnen</button>
+            {snapshot.zmrDocs === 0 ? <button type="button" onClick={onOpenFiles} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">ZMR / Abfrage bereitstellen</button> : null}
+            <button type="button" onClick={() => onGoTo('unterstuetzung')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Datenunterstützung öffnen</button>
           </div>}
         </div>
       </div>
@@ -165,15 +172,15 @@ export default function EreignisCockpit({
         onClick={onOpenFiles}
       />
       <StatusCard
-        title="Bewohnerdaten"
-        main={snapshot.bewohner + ' Personen'}
+        title="ZMR-Daten"
+        main={snapshot.bewohner + ' Bewohnerdatensätze'}
         detail="Von der Zentrale bereitgestellte Datenbasis"
         onClick={() => onGoTo('unterstuetzung')}
       />
       <StatusCard
-        title="Rückmeldung vor Ort"
+        title="Arbeitslisten / Rückmeldung"
         main={snapshot.evakuierung + ' Evakuierung · ' + snapshot.unterbringung + ' Unterkunft'}
-        detail="Status wird von den Kräften vor Ort geführt"
+        detail="Listen durch Zentrale bereitgestellt, Status durch Kräfte vor Ort geführt"
         onClick={() => onGoTo('unterstuetzung')}
       />
     </div>
