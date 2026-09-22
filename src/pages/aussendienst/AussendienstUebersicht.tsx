@@ -23,7 +23,7 @@ export default function AussendienstUebersicht() {
       supportIncident={ctx.supportIncident}
       stopSupportingIncident={ctx.stopSupportingIncident}
       completeIncident={ctx.completeIncident}
-      reopenIncident={ctx.reopenIncident}
+      reopenIncident={ctx.reopenIncident} incidentContextSummary={ctx.incidentContextSummary}
     />
   )
 
