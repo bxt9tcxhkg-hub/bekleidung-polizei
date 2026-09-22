@@ -1,5 +1,8 @@
 -- Testdaten-Kennzeichnung + Wipe (eine DB, kein Supabase-Branching).
 -- Konvention: siehe docs/TESTDATEN.md
+--   profiles.is_test = true, username test_…, name [TEST] …
+--   Fachdaten: Eigentümer-FK auf Test-Profil ODER Textspalte wie [TEST]%
+--   R2 test./[TEST] wird NICHT gelöscht
 
 alter table public.profiles
   add column if not exists is_test boolean not null default false;
@@ -20,13 +23,17 @@ as $fn$
 declare
   v_test_ids uuid[];
   v_n bigint;
-  v_fk record;
-  v_tbl text;
-  v_owners text[];
-  v_titles text[];
-  v_col text;
-  v_conds text[];
+  v_rec record;
   v_sql text;
+  v_owner_cols text[] := array[
+    'created_by','user_id','officer_id','beamter_id','requester_id','requested_by','actor_id'
+  ];
+  v_title_cols text[] := array[
+    'title','name','titel','subject','bezeichnung','beschreibung','anlass','grund','label',
+    'schluessel_nummer','nummer'
+  ];
+  v_conds text[];
+  v_col text;
 begin
   if not (public.has_role('admin') or session_user = 'service_role') then
     raise exception 'wipe_test_data: nicht autorisiert (nur Admin oder Service-Role)'
@@ -45,104 +52,58 @@ begin
     return;
   end if;
 
-  for v_tbl, v_owners, v_titles in
-    select * from (values
-      ('audit_log', array['user_id','actor_id'], null::text[]),
-      ('duty_assignments', array['user_id'], null),
-      ('einsatz_materials', array['created_by'], array['title','name']),
-      ('einsatz_material_tabs', array['created_by'], array['name','title']),
-      ('einsatz_namensliste', array['created_by'], null),
-      ('einsatz_parteien', array['created_by'], null),
-      ('einsatz_training_assignments', array['officer_id','created_by'], null),
-      ('einsatz_training_attendance', array['officer_id'], null),
-      ('einsatz_training_completions', array['officer_id'], null),
-      ('einsatz_training_registrations', array['officer_id'], null),
-      ('einsatz_training_participations', array['officer_id'], null),
-      ('einsatz_training_sessions', array['created_by'], array['name','title']),
-      ('einsatz_training_modules', array['created_by'], array['name','title']),
-      ('fleet_appointments', array['created_by'], array['subject','title','name']),
-      ('fleet_care_tasks', array['created_by'], array['subject','title','name']),
-      ('fleet_check_items', array['created_by'], array['name']),
-      ('fleet_equipment_items', array['created_by'], array['name']),
-      ('fleet_vehicles', array['created_by'], array['name','label']),
-      ('grundausstattung', array['created_by','user_id'], null),
-      ('innendienst_records', array['created_by'], array['subject','title']),
-      ('innendienst_shift_tasks', array['user_id'], null),
-      ('innendienst_gebuehrenpositionen', array['created_by'], array['name']),
-      ('innendienst_gebuehrensaetze', array['created_by'], array['name']),
-      ('mail_deliveries', array['created_by'], null),
-      ('operational_person_notes', array['created_by'], null),
-      ('operational_phone_numbers', array['created_by'], null),
-      ('operational_persons', array['created_by'], array['name','nachname']),
-      ('operational_objects', array['created_by'], array['label','name']),
-      ('orders', array['user_id'], null),
-      ('personal_einsatzmittel', array['officer_id','user_id'], null),
-      ('personal_einsatzmittel_requests', array['requester_id','created_by'], null),
-      ('pool_einsatzmittel', array['created_by'], array['name']),
-      ('pool_einsatzmittel_requests', array['requested_by','created_by'], null),
-      ('portal_area_roles', array['user_id'], null),
-      ('products', array['created_by'], array['name']),
-      ('quarters', array['created_by'], array['name']),
-      ('schulungen_assignments', array['officer_id'], null),
-      ('schulungen_completions', array['officer_id'], null),
-      ('schulungen_registrations', array['officer_id'], null),
-      ('schulungen_sessions', array['created_by'], array['name','title']),
-      ('schulungen_module', array['created_by'], array['name']),
-      ('schutzkontrollen', array['created_by'], null),
-      ('schutzfaelle', array['created_by'], array['title','name']),
-      ('shoe_refund_caps', array['created_by'], null),
-      ('shoe_refunds', array['user_id'], null),
-      ('stock_orders', array['requested_by','created_by'], null),
-      ('support_tickets', array['user_id','created_by'], array['subject','title']),
-      ('ueberstunden_meldungen', array['beamter_id','user_id'], null),
-      ('user_budgets', array['user_id'], null),
-      ('wichtige_telefonnummern', array['created_by'], array['bezeichnung','name']),
-      ('zentrale_entries', array['created_by'], array['title','name']),
-      ('incident_reports', array['created_by'], array['title','name']),
-      ('deliveries', array['created_by','user_id'], array['name']),
-      ('strassenzustand_berichte', array['created_by','bearbeiter'], array['nummer']),
-      ('strassenzustand_auftraggeber', array['created_by'], array['name']),
-      ('strassenzustand_melder', array['created_by'], array['name']),
-      ('strassenzustand_strassen', array['created_by'], array['name'])
-    ) as t(tbl, owners, titles)
+  -- 1) Pro public-Tabelle: lösche Zeilen mit Eigentümer-Spalte in Test-IDs
+  --    und/oder Textspalte LIKE '[TEST]%'
+  for v_rec in
+    select c.relname as tbl
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relkind = 'r'
+      and c.relname <> 'profiles'
+    order by c.relname
   loop
-    if to_regclass('public.' || v_tbl) is null then
-      continue;
-    end if;
     v_conds := '{}';
-    if v_owners is not null then
-      foreach v_col in array v_owners loop
-        if exists (
-          select 1 from information_schema.columns
-          where table_schema='public' and table_name=v_tbl and column_name=v_col
-        ) then
-          v_conds := v_conds || format('%I = any($1)', v_col);
-        end if;
-      end loop;
-    end if;
-    if v_titles is not null then
-      foreach v_col in array v_titles loop
-        if exists (
-          select 1 from information_schema.columns
-          where table_schema='public' and table_name=v_tbl and column_name=v_col
-        ) then
-          v_conds := v_conds || format('%I like %L', v_col, '[TEST]%');
-        end if;
-      end loop;
-    end if;
-    if coalesce(array_length(v_conds,1),0) = 0 then
+    foreach v_col in array v_owner_cols loop
+      if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_rec.tbl and column_name = v_col
+      ) then
+        v_conds := v_conds || format('%I = any($1)', v_col);
+      end if;
+    end loop;
+    foreach v_col in array v_title_cols loop
+      if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_rec.tbl and column_name = v_col
+          and data_type in ('text','character varying','character')
+      ) then
+        v_conds := v_conds || format('%I like %L', v_col, '[TEST]%');
+      end if;
+    end loop;
+
+    if coalesce(array_length(v_conds, 1), 0) = 0 then
       continue;
     end if;
-    v_sql := format('delete from public.%I where %s', v_tbl, array_to_string(v_conds, ' or '));
-    execute v_sql using v_test_ids;
-    get diagnostics v_n = row_count;
-    if v_n > 0 then
-      insert into _wipe_report(tabelle, geloescht) values (v_tbl, v_n);
-    end if;
+
+    begin
+      v_sql := format('delete from public.%I where %s', v_rec.tbl, array_to_string(v_conds, ' or '));
+      execute v_sql using v_test_ids;
+      get diagnostics v_n = row_count;
+      if v_n > 0 then
+        insert into _wipe_report(tabelle, geloescht) values (v_rec.tbl, v_n);
+      end if;
+    exception when foreign_key_violation then
+      -- Kind-Tabellen zuerst; bei FK-Konflikt späterer Pass nach NULL-Setzen
+      null;
+    when others then
+      insert into _wipe_report(tabelle, geloescht)
+      values (format('%s (SKIP: %s)', v_rec.tbl, sqlerrm), 0);
+    end;
   end loop;
 
-  -- Nullable FKs auf profiles → NULL
-  for v_fk in
+  -- 2) Nullable FKs auf profiles → NULL (sekundäre Bearbeiter-Spalten)
+  for v_rec in
     select c.conrelid::regclass::text as tbl, a.attname as col
     from pg_constraint c
     join pg_class cl on cl.oid = c.conrelid
@@ -157,27 +118,66 @@ begin
       and not a.attnotnull
   loop
     begin
-      execute format('update %s set %I = null where %I = any($1)', v_fk.tbl, v_fk.col, v_fk.col)
+      execute format('update %s set %I = null where %I = any($1)', v_rec.tbl, v_rec.col, v_rec.col)
         using v_test_ids;
       get diagnostics v_n = row_count;
       if v_n > 0 then
         insert into _wipe_report(tabelle, geloescht)
-        values (format('%s.%s -> NULL', v_fk.tbl, v_fk.col), v_n);
+        values (format('%s.%s -> NULL', v_rec.tbl, v_rec.col), v_n);
       end if;
     exception when others then
       null;
     end;
   end loop;
 
+  -- 3) Nochmal Owner-Deletes (nach NULL-Setzen / Reihenfolge)
+  for v_rec in
+    select c.relname as tbl
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'r' and c.relname <> 'profiles'
+    order by c.relname
+  loop
+    v_conds := '{}';
+    foreach v_col in array v_owner_cols loop
+      if exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = v_rec.tbl and column_name = v_col
+      ) then
+        v_conds := v_conds || format('%I = any($1)', v_col);
+      end if;
+    end loop;
+    if coalesce(array_length(v_conds, 1), 0) = 0 then
+      continue;
+    end if;
+    begin
+      execute format('delete from public.%I where %s', v_rec.tbl, array_to_string(v_conds, ' or '))
+        using v_test_ids;
+      get diagnostics v_n = row_count;
+      if v_n > 0 then
+        insert into _wipe_report(tabelle, geloescht) values (v_rec.tbl || ' (pass2)', v_n);
+      end if;
+    exception when others then
+      null;
+    end;
+  end loop;
+
+  -- 4) Test-Profile / auth.users
   begin
     delete from auth.users where id = any(v_test_ids);
     get diagnostics v_n = row_count;
     insert into _wipe_report(tabelle, geloescht) values ('auth.users (+ profiles cascade)', v_n);
   exception when others then
-    delete from public.profiles where id = any(v_test_ids);
-    get diagnostics v_n = row_count;
-    insert into _wipe_report(tabelle, geloescht)
-    values ('profiles (auth.users NICHT gelöscht — manuell im Dashboard)', v_n);
+    begin
+      delete from public.profiles where id = any(v_test_ids);
+      get diagnostics v_n = row_count;
+      insert into _wipe_report(tabelle, geloescht)
+      values ('profiles (auth.users NICHT gelöscht — manuell im Dashboard)', v_n);
+    exception when foreign_key_violation then
+      insert into _wipe_report(tabelle, geloescht)
+      values ('profiles (FK-Blockade — Restfks manuell prüfen)', 0);
+      raise;
+    end;
   end;
 
   return query select r.tabelle, r.geloescht from _wipe_report r order by r.tabelle;
@@ -188,4 +188,4 @@ revoke all on function public.wipe_test_data() from public;
 grant execute on function public.wipe_test_data() to authenticated, service_role;
 
 comment on function public.wipe_test_data() is
-  'Löscht is_test-Profile und abhängige/[TEST]-Fachdaten. Aufruf: select * from wipe_test_data(); siehe docs/TESTDATEN.md.';
+  'Löscht is_test-Profile und abhängige/[TEST]-Fachdaten dynamisch aus dem Schema. Aufruf: select * from wipe_test_data(); siehe docs/TESTDATEN.md.';
