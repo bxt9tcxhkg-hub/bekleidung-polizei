@@ -6,9 +6,12 @@ import type { EinsatzChecklisteName, EinsatzChecklistPunkt } from '../../lib/typ
 
 // Digitale "Checkliste Notfall/Katastrophe" (Erstmeldung) und "Checkliste
 // Notunterkunft" - geteilter Server-Zustand (einsatz_checklist_punkte),
-// damit Zentrale UND Streife vor Ort denselben Bearbeitungsstand sehen (im
-// Gegensatz zur Stufen-/Telefonketten-Checkliste, die weiterhin rein
-// geräte-lokal über localStorage läuft, siehe einsatzSchema.ts).
+// damit Zentrale UND Streife vor Ort denselben Bearbeitungsstand sehen.
+// Ereignisdimension und Verständigungsstand sind ebenfalls serverseitig.
+
+const WEITERE_ERSTMELDUNG_CHECKLISTE = ERSTMELDUNG_CHECKLISTE.filter(
+  punkt => punkt.key !== 'meldungszettel' && punkt.key !== 'oeffentliche_sicherheit',
+)
 
 function ChecklistZeile({ punkt, stand, canOperate, onToggle, onWerChange }: {
   punkt: ChecklistPunktDef
@@ -60,12 +63,13 @@ export default function EinsatzChecklisten({ incidentId, canOperate }: { inciden
   const [notunterkunftOffen, setNotunterkunftOffen] = useState(false)
   return <div className="space-y-5">
     <div>
-      <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">Checkliste Erstmeldung</h3>
-      <ChecklistAbschnitt incidentId={incidentId} checkliste="erstmeldung" punkte={ERSTMELDUNG_CHECKLISTE} canOperate={canOperate} />
+      <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-1">Weitere Schritte aus der Erstmeldung</h3>
+      <p className="text-xs text-gray-500 mb-2">Meldungszettel und die Frage zur öffentlichen Sicherheit werden bereits im Lagebereich geführt.</p>
+      <ChecklistAbschnitt incidentId={incidentId} checkliste="erstmeldung" punkte={WEITERE_ERSTMELDUNG_CHECKLISTE} canOperate={canOperate} />
     </div>
     <div className="border-t border-gray-200 pt-3">
       <button type="button" onClick={() => setNotunterkunftOffen(current => !current)} className="text-xs font-bold text-gray-800 uppercase tracking-wide mb-2">
-        Checkliste Notunterkunft {notunterkunftOffen ? '▾' : '▸'}
+        Sonderprozess Notunterkunft {notunterkunftOffen ? '▾' : '▸'}
       </button>
       {notunterkunftOffen ? <ChecklistAbschnitt incidentId={incidentId} checkliste="notunterkunft" punkte={NOTUNTERKUNFT_CHECKLISTE} canOperate={canOperate} /> : null}
     </div>
