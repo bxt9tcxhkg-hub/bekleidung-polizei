@@ -35,6 +35,8 @@ export interface AussendienstContext {
   ownAssignment: DutyAssignment | undefined
   ownFunction: DutyFunctionConfig | undefined
   ownVehicle: FleetVehicle | undefined
+  availableVehicles: FleetVehicle[]
+  setDutyVehicle: (vehicleId: string) => Promise<void>
   ownCheck: VehicleCheck | undefined
   patrolMates: DutyAssignment[]
   criticalItems: { id: string; title: string; description: string | null }[]
@@ -147,6 +149,7 @@ export default function AussendienstShell() {
   const ownAssignment = assignments.find(item => item.user_id === profile?.id)
   const ownFunction = functions.find(item => item.code === ownAssignment?.function)
   const ownVehicle = vehicles.find(item => item.id === ownAssignment?.vehicle_id)
+  const availableVehicles = useMemo(() => vehicles.filter(item => item.operational_status === 'verfuegbar' || item.id === ownAssignment?.vehicle_id), [vehicles, ownAssignment?.vehicle_id])
   const ownCheck = checks.find(item => item.vehicle_id === ownAssignment?.vehicle_id && item.shift === ownAssignment?.shift)
   const patrolMates = useMemo(() => ownAssignment ? assignments.filter(item => item.user_id !== profile?.id && item.function === ownAssignment.function && item.shift === ownAssignment.shift) : [], [assignments, ownAssignment, profile?.id])
   const patrolVehicles = useMemo(() => {
@@ -154,6 +157,13 @@ export default function AussendienstShell() {
     for (const item of assignments) if (item.vehicle_id && item.fleet_vehicles && !seen.has(item.vehicle_id)) seen.set(item.vehicle_id, item.fleet_vehicles)
     return [...seen.values()]
   }, [assignments])
+  async function setDutyVehicle(vehicleId: string) {
+    if (!ownAssignment) return
+    const result = await supabase.from('duty_assignments').update({ vehicle_id: vehicleId || null }).eq('id', ownAssignment.id)
+    if (result.error) { setError('Das Fahrzeug konnte nicht geändert werden.'); return }
+    await load()
+  }
+
   async function takeOverIncident(id: string) {
     const result = await supabase.rpc('take_over_incident', { p_id: id })
     if (result.error) { setError('Die Meldung konnte nicht übernommen werden.'); return }
@@ -306,7 +316,7 @@ export default function AussendienstShell() {
   if (!hasAreaAccess('zentrale') && !isStrictAdmin && !eigeneBereicheHeute.has('aussendienst')) return <Navigate to="/" replace />
 
   const ctx: AussendienstContext = {
-    loading, ownAssignment, ownFunction, ownVehicle, ownCheck, patrolMates,
+    loading, ownAssignment, ownFunction, ownVehicle, availableVehicles, setDutyVehicle, ownCheck, patrolMates,
     criticalItems, criticalSourcesError, openIncidents, openOrders, kontrollauftraege,
     incidents, entries, avBv, fahndungen, baustellen, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
