@@ -80,13 +80,14 @@ function NumberField({
 }
 
 export default function EreignisLage({
-  ereignis, incident, canOperate, userId, onSaved,
+  ereignis, incident, canOperate, userId, onSaved, onProcessChanged,
 }: {
   ereignis: Ereignis
   incident: IncidentReport
   canOperate: boolean
   userId: string | null
   onSaved: (ereignis: Ereignis) => void
+  onProcessChanged?: () => void
 }) {
   const [error, setError] = useState('')
 
@@ -96,6 +97,7 @@ export default function EreignisLage({
     try {
       const saved = await updateEreignisLage(ereignis.id, changes, userId)
       onSaved(saved)
+      onProcessChanged?.()
     } catch {
       setError('Lagedaten konnten nicht gespeichert werden.')
     }
@@ -167,7 +169,7 @@ export default function EreignisLage({
     </div> : null}
 
     {showKoordination && ereignis.koordinierung_noetig === true ? <div className="border-t border-gray-200 pt-4">
-      <EreignisEntscheidungen ereignisId={ereignis.id} canOperate={canOperate} userId={userId} />
+      <EreignisEntscheidungen ereignisId={ereignis.id} canOperate={canOperate} userId={userId} onChanged={onProcessChanged} />
     </div> : null}
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
