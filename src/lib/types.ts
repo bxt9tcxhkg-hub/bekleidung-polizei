@@ -66,6 +66,8 @@ export interface Profile {
   force_username_set?: boolean
   /** Optionales Legacy-Flag; Portal-Admin auch über roles / gebundenes Konto. */
   admin?: boolean
+  /** Test-/Demo-Account (Konvention: username `test_…`, name `[TEST] …`). Siehe docs/TESTDATEN.md. */
+  is_test?: boolean
 }
 
 export type ProductBezugsart = 'massa' | 'eigenbeschaffung'

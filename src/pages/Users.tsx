@@ -664,7 +664,10 @@ export default function Users() {
                 <article key={user.id} className={`bg-white rounded-xl border border-gray-200 p-4 ${!user.active ? 'opacity-60' : ''}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="font-semibold text-gray-900 truncate">{user.name}</h2>
+                      <h2 className="font-semibold text-gray-900 truncate flex items-center gap-1.5">
+                        {user.name}
+                        {user.is_test && <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-dashed border-gray-400 text-gray-500">TEST</span>}
+                      </h2>
                       {!isPortalAdmin(user) && user.organisation === 'Stadtpolizei' && user.dienstgrad && <p className="text-xs font-medium text-blue-700 mt-0.5">{user.dienstgrad}</p>}
                       <p className="text-xs text-gray-500 mt-0.5">{user.dienstnummer ? `DNr. ${user.dienstnummer}` : 'Keine Dienstnummer'}{user.username ? ` · ${user.username}` : ''}</p>
                     </div>
@@ -736,6 +739,7 @@ export default function Users() {
                         {u.roles.includes('admin') || u.roles.includes('sachbearbeiter') || u.roles.includes('genehmiger') ? <Shield className={`w-3.5 h-3.5 ${u.roles.includes('admin') ? 'text-purple-700' : 'text-blue-700'}`} /> : <User className="w-3.5 h-3.5 text-gray-500" />}
                       </div>
                       <span className="font-medium text-gray-900 truncate max-w-xs">{u.name}</span>
+                      {u.is_test && <span className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-dashed border-gray-400 text-gray-500">TEST</span>}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{u.username || '—'}</td>
