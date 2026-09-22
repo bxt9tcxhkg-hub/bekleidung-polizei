@@ -8,18 +8,20 @@ import { reverseGeocode, type StreetSuggestion } from '../../lib/geocode'
 import { supabase } from '../../lib/supabase'
 import { lookupParcel } from '../../lib/kataster'
 import { composeKilometerLocation } from '../../lib/roadKilometer'
-import { composeIncidentLocation, DISPOSITION_LABEL, type IncidentFormState } from '../../lib/zentraleShared'
+import { composeIncidentLocation, detectIncidentReason, type IncidentFormState } from '../../lib/zentraleShared'
 import { ContextHints } from './ContextHints'
 import { OrtDossier } from './OrtDossier'
-import type { IncidentDisposition, IncidentReasonConfig, IncidentReport, OperationalPerson, OperationalPersonNote, ZentraleAvBv, ZentraleEntry } from '../../lib/types'
+import type { IncidentReasonConfig, IncidentReport, OperationalPerson, OperationalPersonNote, ZentraleAvBv, ZentraleEntry } from '../../lib/types'
 
-export function IncidentModal({ editing, incident, setIncident, persons, patrolVehicles, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, priorIncidents, saving, error, locating, locateError, locate, close, save }: { editing: boolean; incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; vdAvailable: boolean; persons: OperationalPerson[]; patrolVehicles: { id: string; name: string; call_sign: string | null; license_plate: string | null }[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
+export function IncidentModal({ editing, incident, setIncident, persons, onPersonCreated, createdBy, contextEntries, contextPersonNotes, contextAvBv, priorIncidents, saving, error, locating, locateError, locate, close, save }: { editing: boolean; incident: IncidentFormState; setIncident: Dispatch<SetStateAction<IncidentFormState>>; persons: OperationalPerson[]; onPersonCreated: (person: OperationalPerson) => void; createdBy: string | null; contextEntries: ZentraleEntry[]; contextPersonNotes: OperationalPersonNote[]; contextAvBv: ZentraleAvBv[]; priorIncidents: IncidentReport[]; saving: boolean; error: string; locating: boolean; locateError: string; locate: (queryOverride?: string) => Promise<void>; close: () => void; save: () => Promise<void> }) {
   const patch = (values: Partial<IncidentFormState>) => setIncident(current => ({ ...current, ...values }))
   const streetRef = useRef<StreetAutocompleteHandle>(null)
   const [mapResolving, setMapResolving] = useState(false)
   const [mapError, setMapError] = useState('')
   const [orgMode, setOrgMode] = useState(Boolean(incident.callerOrg))
   const [reasonConfigs, setReasonConfigs] = useState<IncidentReasonConfig[]>([])
+  const [showReasonSelect, setShowReasonSelect] = useState(false)
+  const [reasonOverridden, setReasonOverridden] = useState(editing)
 
   useEffect(() => {
     let cancelled = false
@@ -28,6 +30,13 @@ export function IncidentModal({ editing, incident, setIncident, persons, patrolV
     })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (editing || reasonOverridden) return
+    const detected = detectIncidentReason(incident.summary)
+    const next = detected ?? ''
+    setIncident(current => current.reasonCode === next ? current : { ...current, reasonCode: next })
+  }, [editing, incident.summary, reasonOverridden, setIncident])
 
   async function handleMapClick(lat: number, lng: number) {
     patch({
@@ -55,18 +64,7 @@ export function IncidentModal({ editing, incident, setIncident, persons, patrolV
 
   return <Modal title={editing ? 'Meldung bearbeiten' : 'Neue Meldung'} close={close} wide><div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(480px,1.1fr)] gap-5">
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {orgMode ? <Field label="Meldende Stelle" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} /> : <PersonNameAutocomplete label="Melder" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
-        <Field label="Telefonnummer" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
-      </div>
-      <button type="button" onClick={() => { setOrgMode(!orgMode); patch(orgMode ? { callerOrg: '' } : { callerOrg: '', callerPersonId: null }) }} className={`text-xs font-semibold ${orgMode ? 'text-blue-700' : 'text-gray-500'}`}>{orgMode ? '✓ Meldende Stelle (statt Person)' : 'Meldende Stelle statt Person (z. B. RFL, LLZ, Feuerwehr)'}</button>
-      <label className="block text-xs font-medium text-gray-600">Grund des Anrufes *
-        <select className={inputClass} value={incident.reasonCode} onChange={event => patch({ reasonCode: event.target.value })}>
-          <option value="">Bitte wählen</option>
-          {reasonConfigs.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
-        </select>
-      </label>
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Einsatzort</p>
+      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Einsatzort *</p>
       <div className="rounded-xl bg-gray-50 border border-gray-200 p-1 flex gap-1">
         <button type="button" onClick={() => patch({ locationMode: 'address', roadQuery: '', roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, location: composeIncidentLocation(incident.street, incident.houseNumber, incident.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${incident.locationMode === 'address' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straße und Hausnummer</button>
         <button type="button" onClick={() => patch({ locationMode: 'kilometer', roadQuery: incident.roadName || incident.street, roadNumber: '', roadName: '', kilometer: '', kilometerFrom: null, kilometerTo: null, houseNumber: '', houseNumberUnknown: false, location: '', lat: null, lng: null, coordsPrecise: false })} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${incident.locationMode === 'kilometer' ? 'bg-white text-blue-800 shadow-sm' : 'text-gray-600'}`}>Straßenkilometer</button>
@@ -95,12 +93,34 @@ export function IncidentModal({ editing, incident, setIncident, persons, patrolV
         {locating ? <p className="text-xs text-gray-500">Suche…</p> : null}
         {locateError ? <p className="text-xs text-red-700 mt-1">{locateError}<button type="button" onClick={() => void locate()} className="ml-2 font-semibold text-blue-700">Erneut versuchen</button></p> : null}
       </> : <RoadKilometerPicker query={incident.roadQuery} roadNumber={incident.roadNumber} roadName={incident.roadName} kilometer={incident.kilometer} kilometerFrom={incident.kilometerFrom} kilometerTo={incident.kilometerTo} onQueryChange={value => patch({ roadQuery: value, roadNumber: '', roadName: '', kilometerFrom: null, kilometerTo: null, street: '', location: '', lat: null, lng: null, coordsPrecise: false })} onRoadSelect={road => patch({ roadQuery: `${road.roadName} (${road.roadNumber})`, roadNumber: road.roadNumber, roadName: road.roadName, kilometerFrom: road.fromKm, kilometerTo: road.toKm, street: road.roadName, location: incident.kilometer ? composeKilometerLocation(road.roadName, road.roadNumber, incident.kilometer) : '', lat: null, lng: null, coordsPrecise: false })} onKilometerChange={value => patch({ kilometer: value, location: incident.roadNumber && value ? composeKilometerLocation(incident.roadName, incident.roadNumber, value) : '', lat: null, lng: null, coordsPrecise: false })} onResolved={point => patch({ kilometer: point.kilometer, location: composeKilometerLocation(incident.roadName, point.roadNumber, point.kilometer), lat: point.lat, lng: point.lng, coordsPrecise: true })} />}
-      <OrtDossier street={incident.street} houseNumber={incident.houseNumber} location={incident.location} />
+
       <Area label="Sachverhalt *" value={incident.summary} onChange={value => patch({ summary: value })} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <label className="block text-xs font-medium text-gray-600">Zuständigkeit<select className={inputClass} value={incident.disposition} onChange={event => patch({ disposition: event.target.value as IncidentDisposition })}>{Object.entries(DISPOSITION_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label className="block text-xs font-medium text-gray-600">Zugewiesene Streife<select className={inputClass} value={incident.assignedVehicleId ?? ''} onChange={event => patch({ assignedVehicleId: event.target.value || null })}><option value="">Keine bestimmte Streife</option>{patrolVehicles.map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.call_sign || vehicle.name}{vehicle.license_plate ? ` · ${vehicle.license_plate}` : ''}</option>)}</select></label>
+
+      <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-gray-600">
+            {incident.reasonCode
+              ? <>Intern erkannt: <span className="font-semibold text-gray-800">{reasonConfigs.find(item => item.code === incident.reasonCode)?.label ?? incident.reasonCode}</span></>
+              : 'Keine eindeutige interne Kategorie erkannt.'}
+          </p>
+          <button type="button" onClick={() => setShowReasonSelect(current => !current)} className="text-xs font-semibold text-blue-700">{showReasonSelect ? 'Schließen' : 'Ändern'}</button>
+        </div>
+        {showReasonSelect ? <select className={inputClass} value={incident.reasonCode} onChange={event => { setReasonOverridden(true); patch({ reasonCode: event.target.value }) }}>
+          <option value="">Keine / nicht eindeutig</option>
+          {reasonConfigs.map(item => <option key={item.code} value={item.code}>{item.label}</option>)}
+        </select> : null}
       </div>
+
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Meldungsleger</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {orgMode ? <Field label="Meldende Stelle" value={incident.callerOrg} onChange={value => patch({ callerOrg: value })} /> : <PersonNameAutocomplete label="Name (optional)" persons={persons} value={incident.callerPersonId} onChange={value => patch({ callerPersonId: value })} createdBy={createdBy} onCreated={onPersonCreated} phone={incident.callerPhone} />}
+          <Field label="Telefonnummer (optional)" value={incident.callerPhone} onChange={value => patch({ callerPhone: value })} />
+        </div>
+        <button type="button" onClick={() => { setOrgMode(!orgMode); patch(orgMode ? { callerOrg: '' } : { callerOrg: '', callerPersonId: null }) }} className={`mt-2 text-xs font-semibold ${orgMode ? 'text-blue-700' : 'text-gray-500'}`}>{orgMode ? '✓ Meldende Stelle (statt Person)' : 'Meldende Stelle statt Person (z. B. RFL, LLZ, Feuerwehr)'}</button>
+      </div>
+
+      <OrtDossier street={incident.street} houseNumber={incident.houseNumber} location={incident.location} />
       <ContextHints entries={contextEntries} personNotes={contextPersonNotes} avBv={contextAvBv} priorIncidents={priorIncidents} />
       {error ? <ErrorMessage text={error} /> : null}
       <Actions saving={saving} close={close} save={save} />
