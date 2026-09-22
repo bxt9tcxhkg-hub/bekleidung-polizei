@@ -85,7 +85,7 @@ export function buildEinsatzUebersichtHtml(input: EinsatzUebersichtInput): strin
     }).join('\n')
 
   const dokumenteList = input.dokumente.length === 0
-    ? '<p class="dim">Keine Unterlagen auf diesem Gerät hinterlegt.</p>'
+    ? '<p class="dim">Keine Unterlagen hinterlegt.</p>'
     : `<ul class="doks">${input.dokumente.map(item => `<li>${escHtml(DOK_ART_LABEL[item.art])}: ${escHtml(item.fileName)}</li>`).join('\n')}</ul>`
 
   return `<!DOCTYPE html>
