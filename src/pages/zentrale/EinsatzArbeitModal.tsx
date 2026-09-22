@@ -15,7 +15,6 @@ import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentRepor
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EinsatzParteien from './EinsatzParteien'
-import EinsatzChecklisten from './EinsatzChecklisten'
 import EreignisLage from './EreignisLage'
 import EreignisCockpit from './EreignisCockpit'
 
@@ -127,7 +126,7 @@ export default function EinsatzArbeitModal({
 
   const tabClass = (id: Tab) => 'px-2 py-2 text-sm font-semibold border-b-2 ' + (tab === id ? 'border-blue-800 text-blue-900' : 'border-transparent text-gray-500 hover:text-gray-800')
 
-  function goToEreignisSection(section: 'lage' | 'verstaendigung' | 'ablauf' | 'unterstuetzung') {
+  function goToEreignisSection(section: 'lage' | 'verstaendigung' | 'unterstuetzung') {
     window.requestAnimationFrame(() => {
       document.getElementById('ereignis-' + section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -176,9 +175,7 @@ export default function EinsatzArbeitModal({
         ereignis={ereignis}
         verstaendigungen={verstaendigungen}
         canOperate={canOperateZentrale}
-        userId={createdBy}
         refreshToken={cockpitRefresh}
-        onSaved={saved => { setEreignis(saved); setCockpitRefresh(value => value + 1) }}
         onMarkVerstaendigung={markKette}
         kontakte={kontakte}
         onGoTo={goToEreignisSection}
@@ -229,23 +226,17 @@ export default function EinsatzArbeitModal({
         <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-gray-500 mt-2">Kontaktdaten verwalten</Link>
       </div>
 
-      <div id="ereignis-ablauf" className="scroll-mt-4 border-t border-gray-200 pt-4">
-        <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-1">Offene Maßnahmen</h3>
-        <p className="text-xs text-gray-500 mb-3">Nur das anzeigen, was jetzt noch relevant ist. Erledigtes bleibt im Hintergrund dokumentiert.</p>
-        <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} />
-      </div>
-
       <div id="ereignis-unterstuetzung" className="scroll-mt-4 border-t border-gray-200 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Unterstützung vor Ort</h3>
-            <p className="text-xs text-gray-500 mt-1">ZMR-/Bewohnerdaten und daraus abgeleitete Arbeitslisten für die Kräfte vor Ort.</p>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Daten- und Dokumentenunterstützung</h3>
+            <p className="text-xs text-gray-500 mt-1">Die Zentrale stellt Daten und Unterlagen bereit. Evakuierungs- und Unterkunftsentscheidungen kommen von den Kräften vor Ort bzw. der Einsatzleitung.</p>
           </div>
           <button type="button" onClick={() => setTab('dateien')} className="text-xs font-semibold text-blue-800 border border-blue-200 rounded-lg px-2.5 py-1.5 bg-blue-50">
             ZMR / Abfrage hochladen
           </button>
         </div>
-        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} />
+        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} mode="zentrale" onChanged={() => setCockpitRefresh(value => value + 1)} />
       </div>
     </div> : null}
 
