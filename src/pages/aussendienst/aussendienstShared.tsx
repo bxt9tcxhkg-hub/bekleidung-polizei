@@ -1,5 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { CheckCircle2, ChevronDown, Circle, Navigation, Pencil, Printer, Trash2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, Circle, Navigation, Pencil, Printer, Trash2 } from 'lucide-react'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import LeafletMap from '../../components/LeafletMap'
 import StreetAutocomplete, { type StreetAutocompleteHandle } from '../../components/StreetAutocomplete'
@@ -76,7 +76,7 @@ function PrintIncidentButton({ item }: { item: IncidentListItem }) {
 
 function IncidentRow({
   item, baustellen, ownVehicleId, supports, takeOverIncident, releaseIncidentTakeover,
-  supportIncident, stopSupportingIncident, completeIncident, reopenIncident,
+  supportIncident, stopSupportingIncident, completeIncident, reopenIncident, contextSummary,
 }: {
   item: IncidentListItem
   baustellen: readonly ZentraleBaustelle[]
@@ -88,6 +88,7 @@ function IncidentRow({
   stopSupportingIncident?: (id: string) => Promise<void>
   completeIncident?: (id: string) => Promise<void>
   reopenIncident?: (id: string) => Promise<void>
+  contextSummary?: { safety: number; attention: number }
 }) {
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
@@ -135,6 +136,9 @@ function IncidentRow({
         </div>
         <p className="text-sm font-medium text-gray-800 mt-1 truncate">{item.location || 'Ohne Ortsangabe'}</p>
         <p className="text-sm text-gray-600 mt-0.5 line-clamp-2">{item.summary}</p>
+        {contextSummary?.safety ? <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-800"><AlertTriangle className="w-3.5 h-3.5" />{contextSummary.safety === 1 ? 'Sicherheitsrelevanter Hinweis' : `${contextSummary.safety} sicherheitsrelevante Hinweise`}</div>
+        : contextSummary?.attention ? <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800"><AlertTriangle className="w-3.5 h-3.5" />Besondere Aufmerksamkeit</div>
+        : null}
       </div>
       <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
     </button>
@@ -182,10 +186,10 @@ function IncidentRow({
   </article>
 }
 
-export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt, ownVehicleId, incidentSupports, takeOverIncident, releaseIncidentTakeover, supportIncident, stopSupportingIncident, completeIncident, reopenIncident }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void>; ownVehicleId?: string | null; incidentSupports?: IncidentSupport[]; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void>; supportIncident?: (id: string) => Promise<void>; stopSupportingIncident?: (id: string) => Promise<void>; completeIncident?: (id: string) => Promise<void>; reopenIncident?: (id: string) => Promise<void> }) {
+export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt, ownVehicleId, incidentSupports, takeOverIncident, releaseIncidentTakeover, supportIncident, stopSupportingIncident, completeIncident, reopenIncident, incidentContextSummary }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void>; ownVehicleId?: string | null; incidentSupports?: IncidentSupport[]; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void>; supportIncident?: (id: string) => Promise<void>; stopSupportingIncident?: (id: string) => Promise<void>; completeIncident?: (id: string) => Promise<void>; reopenIncident?: (id: string) => Promise<void>; incidentContextSummary?: Record<string, { safety: number; attention: number }> }) {
   if (kind === 'incidents') {
     if (!incidents || incidents.length === 0) return <Empty text="Heute wurden noch keine Meldungen erfasst." />
-    return <div className="space-y-2">{incidents.map(item => <IncidentRow key={item.id} item={item} baustellen={baustellen ?? []} ownVehicleId={ownVehicleId} supports={incidentSupports ?? []} takeOverIncident={takeOverIncident} releaseIncidentTakeover={releaseIncidentTakeover} supportIncident={supportIncident} stopSupportingIncident={stopSupportingIncident} completeIncident={completeIncident} reopenIncident={reopenIncident} />)}</div>
+    return <div className="space-y-2">{incidents.map(item => <IncidentRow key={item.id} item={item} baustellen={baustellen ?? []} ownVehicleId={ownVehicleId} supports={incidentSupports ?? []} takeOverIncident={takeOverIncident} releaseIncidentTakeover={releaseIncidentTakeover} supportIncident={supportIncident} stopSupportingIncident={stopSupportingIncident} completeIncident={completeIncident} reopenIncident={reopenIncident} contextSummary={incidentContextSummary?.[item.id]} />)}</div>
   }
   const list = entries ?? []
   if (list.length === 0) return <Empty text="Keine Einträge vorhanden." />
