@@ -862,7 +862,7 @@ export interface DutyAssignment {
   fleet_vehicles?: Pick<FleetVehicle, 'id' | 'name' | 'call_sign' | 'license_plate'> | null
 }
 
-export type IncidentDisposition = 'jd' | 'vd' | 'bp' | 'keine_anfahrt'
+export type IncidentDisposition = 'offen' | 'zentrale' | 'jd' | 'vd' | 'bp' | 'keine_anfahrt'
 export type IncidentStatus = 'offen' | 'erledigt' | 'weitergegeben'
 
 export interface IncidentReport {
@@ -888,7 +888,7 @@ export interface IncidentReport {
   disposition: IncidentDisposition
   note: string | null
   status: IncidentStatus
-  /** Von der Zentrale zugewiesene Streife (Fahrzeug), zusätzlich zur groben Disposition (JD/VD/BP). */
+  /** Von der Zentrale zugewiesene Streife (Fahrzeug), falls die Bearbeitung an eine eigene Streife disponiert wurde. */
   assigned_vehicle_id: string | null
   /** Beamter/in, der/die die Meldung im Außendienst selbst übernommen hat. */
   taken_over_by: string | null
