@@ -16,6 +16,7 @@ import IncidentNamensliste from './IncidentNamensliste'
 import EinsatzParteien from './EinsatzParteien'
 import EinsatzChecklisten from './EinsatzChecklisten'
 import EreignisLage from './EreignisLage'
+import EreignisCockpit from './EreignisCockpit'
 
 type Tab = 'uebersicht' | 'ereignis' | 'parteien' | 'dateien'
 
@@ -37,6 +38,7 @@ export default function EinsatzArbeitModal({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [cockpitRefresh, setCockpitRefresh] = useState(0)
 
   const stufe: EreignisDimension = ereignis?.dimension ?? 'klein'
   const meta = STUFE_META[stufe]
@@ -76,6 +78,7 @@ export default function EinsatzArbeitModal({
       setEreignis(saved)
       if (saved) setVerstaendigungen(await loadVerstaendigungen(saved.id))
       else setVerstaendigungen([])
+      setCockpitRefresh(value => value + 1)
     } catch {
       setError('Ereignisdimension konnte nicht gespeichert werden.')
     } finally {
@@ -103,6 +106,7 @@ export default function EinsatzArbeitModal({
         userId: createdBy,
       })
       setVerstaendigungen(current => [...current.filter(row => row.id !== saved.id), saved])
+      setCockpitRefresh(value => value + 1)
     } catch {
       setError('Verständigungsstand konnte nicht gespeichert werden.')
     } finally {
@@ -111,6 +115,12 @@ export default function EinsatzArbeitModal({
   }
 
   const tabClass = (id: Tab) => 'px-2 py-2 text-sm font-semibold border-b-2 ' + (tab === id ? 'border-blue-800 text-blue-900' : 'border-transparent text-gray-500 hover:text-gray-800')
+
+  function goToEreignisSection(section: 'lage' | 'verstaendigung' | 'ablauf' | 'unterstuetzung') {
+    window.requestAnimationFrame(() => {
+      document.getElementById('ereignis-' + section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
 
   return <Modal wide title={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} close={close}>
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
@@ -150,15 +160,31 @@ export default function EinsatzArbeitModal({
     </div> : null}
 
     {!loading && tab === 'ereignis' && ereignis ? <div className="space-y-5">
-      <EreignisLage
+      <EreignisCockpit
+        incidentId={item.id}
         ereignis={ereignis}
-        incident={item}
+        verstaendigungen={verstaendigungen}
         canOperate={canOperateZentrale}
         userId={createdBy}
-        onSaved={setEreignis}
+        refreshToken={cockpitRefresh}
+        onSaved={saved => { setEreignis(saved); setCockpitRefresh(value => value + 1) }}
+        onMarkVerstaendigung={markKette}
+        onGoTo={goToEreignisSection}
+        onOpenFiles={() => setTab('dateien')}
       />
 
-      <div className="border-t border-gray-200 pt-4">
+      <div id="ereignis-lage" className="scroll-mt-4 border-t border-gray-200 pt-4">
+        <EreignisLage
+          ereignis={ereignis}
+          incident={item}
+          canOperate={canOperateZentrale}
+          userId={createdBy}
+          onSaved={setEreignis}
+          onProcessChanged={() => setCockpitRefresh(value => value + 1)}
+        />
+      </div>
+
+      <div id="ereignis-verstaendigung" className="scroll-mt-4 border-t border-gray-200 pt-4">
         <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Verständigung</p>
         <p className="text-xs text-gray-500 mt-1 mb-3">Gemeinsamer serverseitiger Stand für Zentrale und Schichtwechsel.</p>
         <div className="space-y-2">{telefonketteFuer(stufe).map(label => {
@@ -179,12 +205,12 @@ export default function EinsatzArbeitModal({
         <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Telefonnummern in Kontakten</Link>
       </div>
 
-      <div className="border-t border-gray-200 pt-4">
+      <div id="ereignis-ablauf" className="scroll-mt-4 border-t border-gray-200 pt-4">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-3">Ablauf / Checklisten</h3>
-        <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} />
+        <EinsatzChecklisten incidentId={item.id} canOperate={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} />
       </div>
 
-      <div className="border-t border-gray-200 pt-4">
+      <div id="ereignis-unterstuetzung" className="scroll-mt-4 border-t border-gray-200 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Unterstützung vor Ort</h3>
@@ -194,12 +220,12 @@ export default function EinsatzArbeitModal({
             ZMR / Abfrage hochladen
           </button>
         </div>
-        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} />
+        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} />
       </div>
     </div> : null}
 
     {!loading && tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : null}
-    {!loading && tab === 'dateien' ? <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} /> : null}
+    {!loading && tab === 'dateien' ? <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} /> : null}
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
     {canOperateZentrale ? <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
