@@ -15,6 +15,7 @@ import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EinsatzParteien from './EinsatzParteien'
 import EinsatzChecklisten from './EinsatzChecklisten'
+import EreignisLage from './EreignisLage'
 
 type Tab = 'uebersicht' | 'ereignis' | 'parteien' | 'dateien'
 
@@ -149,7 +150,15 @@ export default function EinsatzArbeitModal({
     </div> : null}
 
     {!loading && tab === 'ereignis' && ereignis ? <div className="space-y-5">
-      <div>
+      <EreignisLage
+        ereignis={ereignis}
+        incident={item}
+        canOperate={canOperateZentrale}
+        userId={createdBy}
+        onSaved={setEreignis}
+      />
+
+      <div className="border-t border-gray-200 pt-4">
         <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Verständigung</p>
         <p className="text-xs text-gray-500 mt-1">Gemeinsamer serverseitiger Stand für Zentrale und Schichtwechsel.</p>
       </div>
@@ -169,6 +178,7 @@ export default function EinsatzArbeitModal({
         </div>
       })}</div>
       <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800">Telefonnummern in Kontakten</Link>
+      </div>
 
       <div className="border-t border-gray-200 pt-4">
         <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800 mb-3">Ablauf / Checklisten</h3>
