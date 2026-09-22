@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Ereignis, EreignisDimension, EreignisVerstaendigung } from './types'
+import type { Ereignis, EreignisDimension, EreignisEntscheidung, EreignisVerstaendigung } from './types'
 
 export async function loadIncidentEreignis(incidentId: string): Promise<Ereignis | null> {
   const link = await supabase
@@ -51,6 +51,50 @@ export async function loadEreignisDimensionen(incidentIds: string[]): Promise<Re
       return dimension ? [[row.incident_id, dimension]] : []
     }),
   )
+}
+
+export async function loadEreignisEntscheidungen(ereignisId: string): Promise<EreignisEntscheidung[]> {
+  const result = await supabase
+    .from('ereignis_entscheidungen')
+    .select('*')
+    .eq('ereignis_id', ereignisId)
+    .order('updated_at')
+
+  if (result.error) throw result.error
+  return result.data ?? []
+}
+
+export async function setEreignisEntscheidung({
+  ereignisId,
+  key,
+  label,
+  status,
+  notiz,
+  userId,
+}: {
+  ereignisId: string
+  key: string
+  label: string
+  status: EreignisEntscheidung['status']
+  notiz?: string | null
+  userId: string
+}): Promise<EreignisEntscheidung> {
+  const result = await supabase
+    .from('ereignis_entscheidungen')
+    .upsert({
+      ereignis_id: ereignisId,
+      punkt_key: key,
+      punkt_label: label,
+      status,
+      notiz: notiz ?? null,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'ereignis_id,punkt_key' })
+    .select('*')
+    .single()
+
+  if (result.error) throw result.error
+  return result.data
 }
 
 export async function loadVerstaendigungen(ereignisId: string): Promise<EreignisVerstaendigung[]> {
