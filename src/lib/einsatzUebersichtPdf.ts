@@ -6,10 +6,10 @@
  */
 import { DISPOSITION_LABEL } from './zentraleShared'
 import { EINSATZ_PARTEI_ROLLE_LABEL } from './einsatzParteien'
-import { noteWithoutStufe, parseStufe, STUFE_META } from './einsatzSchema'
+import { STUFE_META } from './einsatzSchema'
 import { DOK_ART_LABEL, type EinsatzDokument } from './einsatzDokumente'
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml } from './printDocs'
-import type { EinsatzPartei, IncidentDisposition } from './types'
+import type { EinsatzPartei, EreignisDimension, IncidentDisposition } from './types'
 
 const DE_MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
 
@@ -39,6 +39,7 @@ export interface EinsatzUebersichtInput {
   parteien: EinsatzPartei[]
   dokumente: EinsatzDokument[]
   erstelltVon: string
+  ereignisDimension?: EreignisDimension
   now?: Date
 }
 
@@ -50,11 +51,20 @@ function statusText(status: string): string {
   return status === 'weitergegeben' ? 'An BP weitergegeben' : status === 'erledigt' ? 'Erledigt' : 'Offen'
 }
 
+function legacyDimension(note: string | null): EreignisDimension {
+  const match = note?.match(/^STUFE:(klein|mittel|gross|katastrophe)\n?/)
+  return (match?.[1] as EreignisDimension | undefined) ?? 'klein'
+}
+
+function cleanLegacyNote(note: string | null): string {
+  return (note ?? '').replace(/^STUFE:(klein|mittel|gross|katastrophe)\n?/, '')
+}
+
 export function buildEinsatzUebersichtHtml(input: EinsatzUebersichtInput): string {
   const now = input.now ?? new Date()
   const { incident } = input
-  const stufe = STUFE_META[parseStufe(incident.note)]
-  const sachverhaltsnotiz = noteWithoutStufe(incident.note)
+  const stufe = STUFE_META[input.ereignisDimension ?? legacyDimension(incident.note)]
+  const sachverhaltsnotiz = cleanLegacyNote(incident.note)
 
   const factsRows = [
     factRow('Gemeldet', dateTimeLong(incident.reported_at)),
