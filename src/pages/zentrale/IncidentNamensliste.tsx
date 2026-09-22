@@ -70,6 +70,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [hinweis, setHinweis] = useState('')
+  const [manuellOffen, setManuellOffen] = useState(false)
 
   const loadCounts = useCallback(async () => {
     const arten: Listenart[] = ['haus', 'kontrolle', 'evakuierung', 'befragung', 'unterbringung']
@@ -195,7 +196,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
 
   return <div className="space-y-3">
     {isZentrale ? <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-      Die Zentrale übernimmt keine Personenerfassung vor Ort. Sie stellt aus der ZMR-Abfrage Bewohnerdaten und vorbereitete Arbeitslisten bereit. Auswahl, Anwesenheit, Evakuierungs- und Unterkunftsstatus werden von den Kräften vor Ort bzw. der Einsatzleitung geführt.
+      Die Zentrale stellt aus der ZMR-Abfrage Bewohnerdaten und vorbereitete Arbeitslisten bereit. Personen können bei Bedarf manuell ergänzt werden, z. B. wenn jemand in der Abfrage fehlt oder zusätzliche Informationen übermittelt werden. Auswahl, Anwesenheit, Evakuierungs- und Unterkunftsstatus werden von den Kräften vor Ort bzw. der Einsatzleitung geführt.
     </div> : null}
     <div className="grid grid-cols-3 gap-2">
       {PRIMARY_LISTS.map(key => <button
@@ -254,7 +255,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
     </div> : null}
 
     {personen.length === 0 ? <p className="text-xs text-gray-500">
-      {listenart === 'haus' ? (isZentrale ? 'Noch keine Bewohnerdaten. ZMR/Abfrage hochladen.' : 'Noch keine Bewohnerdaten. Person vor Ort ergänzen oder bereitgestellte ZMR-Daten verwenden.') : 'Noch keine Personen in dieser Liste.'}
+      {listenart === 'haus' ? (isZentrale ? 'Noch keine Bewohnerdaten. ZMR/Abfrage hochladen oder bei Bedarf manuell ergänzen.' : 'Noch keine Bewohnerdaten. Person vor Ort ergänzen oder bereitgestellte ZMR-Daten verwenden.') : 'Noch keine Personen in dieser Liste.'}
     </p> : <ul className="space-y-1.5">{personen.map(person => (
       <li key={person.id} className={listenart === 'unterbringung' ? 'rounded-lg border border-gray-200 p-2' : 'rounded-lg border border-gray-100 p-2 text-xs'}>
         {listenart === 'unterbringung' && isZentrale ? <div>
@@ -301,9 +302,26 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       </li>
     ))}</ul>}
 
-    {canOperate && !isZentrale ? <div className="flex items-center gap-2">
-      <input type="text" className="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white flex-1 max-w-xs" placeholder="Person manuell ergänzen" value={neuerName} onChange={event => setNeuerName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void onAddManual() }} />
-      <button type="button" onClick={() => void onAddManual()} disabled={busy || !neuerName.trim()} className="text-xs font-semibold text-blue-800 border border-blue-200 px-2 py-1.5 rounded-md disabled:opacity-60">Hinzufügen</button>
+    {canOperate && (!isZentrale || listenart === 'haus') ? <div>
+      {isZentrale ? <button
+        type="button"
+        onClick={() => setManuellOffen(current => !current)}
+        className="text-xs font-medium text-gray-600 hover:text-blue-800"
+      >
+        {manuellOffen ? 'Manuelle Ergänzung schließen' : '+ Person manuell ergänzen'}
+      </button> : null}
+      {(!isZentrale || manuellOffen) ? <div className="mt-2 flex items-center gap-2">
+        <input
+          type="text"
+          className="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white flex-1 max-w-xs"
+          placeholder={isZentrale ? 'Zusätzliche Person ergänzen' : 'Person manuell ergänzen'}
+          value={neuerName}
+          onChange={event => setNeuerName(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter') void onAddManual() }}
+        />
+        <button type="button" onClick={() => void onAddManual()} disabled={busy || !neuerName.trim()} className="text-xs font-semibold text-blue-800 border border-blue-200 px-2 py-1.5 rounded-md disabled:opacity-60">Hinzufügen</button>
+      </div> : null}
+      {isZentrale && manuellOffen ? <p className="mt-1 text-[11px] text-gray-500">Nur als Ergänzung, wenn eine Person in der ZMR-Liste fehlt oder zusätzliche Angaben von außen übermittelt wurden.</p> : null}
     </div> : null}
 
     {hinweis ? <p className="text-xs text-gray-600">{hinweis}</p> : null}
