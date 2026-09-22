@@ -67,6 +67,7 @@ export interface AussendienstContext {
   stopSupportingIncident: (id: string) => Promise<void>
   completeIncident: (id: string) => Promise<void>
   reopenIncident: (id: string) => Promise<void>
+  incidentContextSummary: Record<string, { safety: number; attention: number }>
 }
 
 export default function AussendienstShell() {
@@ -91,6 +92,7 @@ export default function AussendienstShell() {
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
   const [incidents, setIncidents] = useState<SimpleIncident[]>([])
   const [incidentSupports, setIncidentSupports] = useState<IncidentSupport[]>([])
+  const [incidentContextSummary, setIncidentContextSummary] = useState<Record<string, { safety: number; attention: number }>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -141,6 +143,27 @@ export default function AussendienstShell() {
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    let cancelled = false
+    const active = incidents.filter(item => item.status === 'offen')
+    if (active.length === 0) {
+      setIncidentContextSummary({})
+      return () => { cancelled = true }
+    }
+    void Promise.all(active.map(async item => {
+      const { data, error } = await supabase.rpc('incident_context', { p_incident_id: item.id })
+      if (error) return [item.id, { safety: 0, attention: 0 }] as const
+      const rows = data ?? []
+      return [item.id, {
+        safety: rows.filter(row => row.severity === 'sicherheit').length,
+        attention: rows.filter(row => row.severity === 'achtung').length,
+      }] as const
+    })).then(entries => {
+      if (!cancelled) setIncidentContextSummary(Object.fromEntries(entries))
+    })
+    return () => { cancelled = true }
+  }, [incidents])
 
   const ownAssignment = assignments.find(item => item.user_id === profile?.id)
   const ownFunction = functions.find(item => item.code === ownAssignment?.function)
@@ -317,7 +340,7 @@ export default function AussendienstShell() {
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
     patrolVehicles, takeOverIncident, releaseIncidentTakeover,
-    incidentSupports, supportIncident, stopSupportingIncident, completeIncident, reopenIncident,
+    incidentSupports, supportIncident, stopSupportingIncident, completeIncident, reopenIncident, incidentContextSummary,
   }
 
   return <div>
