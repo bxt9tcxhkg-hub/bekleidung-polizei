@@ -4,9 +4,10 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import LeafletMap from '../../components/LeafletMap'
 import WichtigeTelefonnummernCard from '../../components/WichtigeTelefonnummernCard'
 import { firstControlDeadline, hasInitialControl, loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
+import { loadEreignisDimensionen } from '../../lib/ereignis'
 import { supabase } from '../../lib/supabase'
 import { ZUSTAND_LABEL, formatZeitraum, strassenName } from '../../lib/strassenzustand'
-import type { IncidentReport } from '../../lib/types'
+import type { EreignisDimension, IncidentReport } from '../../lib/types'
 import type { ZentraleContext } from './ZentraleShell'
 import { IncidentCards, SofortWichtig } from './zentraleShared'
 import { formatTime } from '../../lib/zentraleShared'
@@ -25,6 +26,7 @@ export default function ZentraleUebersicht() {
   const [kontrolliert, setKontrolliert] = useState<Set<string>>(new Set())
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null)
   const [workIncident, setWorkIncident] = useState<IncidentReport | null>(null)
+  const [eventDimensionByIncidentId, setEventDimensionByIncidentId] = useState<Record<string, EreignisDimension>>({})
   const previousOpenCountRef = useRef(0)
   const [now] = useState(() => new Date().getTime())
   useEffect(() => {
@@ -55,6 +57,14 @@ export default function ZentraleUebersicht() {
     color: INCIDENT_COLORS[index % INCIDENT_COLORS.length],
     label: String(index + 1),
   }])), [ctx.openIncidents])
+  const incidentIds = useMemo(() => listIncidents.map(item => item.id), [listIncidents])
+  useEffect(() => {
+    let cancelled = false
+    void loadEreignisDimensionen(incidentIds)
+      .then(rows => { if (!cancelled) setEventDimensionByIncidentId(rows) })
+      .catch(() => { if (!cancelled) setEventDimensionByIncidentId({}) })
+    return () => { cancelled = true }
+  }, [incidentIds, workIncident])
   function openWork(item: IncidentReport) {
     setSelectedIncidentId(item.id)
     setWorkIncident(item)
@@ -120,6 +130,7 @@ export default function ZentraleUebersicht() {
             patrolVehicles={ctx.patrolVehicles}
             setIncidentHandling={ctx.setIncidentHandling}
             visualByIncidentId={incidentVisuals}
+            eventDimensionByIncidentId={eventDimensionByIncidentId}
             selectedIncidentId={selectedIncidentId}
             onOpenIncident={openWork}
           />
