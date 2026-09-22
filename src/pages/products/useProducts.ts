@@ -7,6 +7,7 @@ import { parseCsv, parseFileToProducts } from '../../lib/productImport'
 import { sizesForMode } from '../../lib/sizes'
 import type { ProductSizeMode } from '../../lib/types'
 import { emptyProduct, type ConfirmDelete, type OrgFilter, type ProductFormData } from './constants'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([])
@@ -64,15 +65,20 @@ export function useProducts() {
     setError('')
     if (!form.article_number || !form.name) { setError('Artikelnummer und Name sind Pflichtfelder.'); return }
     setSaving(true)
-    const payload = { ...form, size_guide: form.size_guide?.trim() || null }
-    const result = editId
-      ? await supabase.from('products').update(payload).eq('id', editId)
-      : await supabase.from('products').insert(payload)
-    setSaving(false)
-    if (result.error) { setError(result.error.message); return }
-    logAudit(editId ? 'Produkt bearbeitet' : 'Produkt angelegt', form.name)
-    setShowForm(false)
-    load()
+    try {
+      const payload = { ...form, size_guide: form.size_guide?.trim() || null }
+      const result = editId
+        ? await withTimeout(supabase.from('products').update(payload).eq('id', editId))
+        : await withTimeout(supabase.from('products').insert(payload))
+      if (result.error) { setError(result.error.message); return }
+      logAudit(editId ? 'Produkt bearbeitet' : 'Produkt angelegt', form.name)
+      setShowForm(false)
+      load()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Speichern fehlgeschlagen.'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function toggleActive(p: Product) {
@@ -86,42 +92,47 @@ export function useProducts() {
     if (!confirmDelete) return
     setError('')
     setDeleting(true)
-    if (confirmDelete.mode === 'single') {
-      const p = confirmDelete.product
-      const { error: delError } = await supabase.from('products').delete().eq('id', p.id)
-      if (delError) {
-        if (delError.code === '23503') {
-          const { error: deactError } = await supabase.from('products').update({ active: false }).eq('id', p.id)
-          if (!deactError) logAudit('Produkt deaktiviert', p.name)
-          setError(deactError
-            ? `„${p.name}" wird noch verwendet und konnte weder gelöscht noch deaktiviert werden.`
-            : `„${p.name}" wird bereits in Bestellungen oder im Lager verwendet und kann nicht gelöscht werden – das Produkt wurde stattdessen deaktiviert.`)
+    try {
+      if (confirmDelete.mode === 'single') {
+        const p = confirmDelete.product
+        const { error: delError } = await withTimeout(supabase.from('products').delete().eq('id', p.id))
+        if (delError) {
+          if (delError.code === '23503') {
+            const { error: deactError } = await withTimeout(supabase.from('products').update({ active: false }).eq('id', p.id))
+            if (!deactError) logAudit('Produkt deaktiviert', p.name)
+            setError(deactError
+              ? `„${p.name}" wird noch verwendet und konnte weder gelöscht noch deaktiviert werden.`
+              : `„${p.name}" wird bereits in Bestellungen oder im Lager verwendet und kann nicht gelöscht werden – das Produkt wurde stattdessen deaktiviert.`)
+          } else {
+            setError(`Löschen fehlgeschlagen: ${delError.message}`)
+          }
         } else {
-          setError(`Löschen fehlgeschlagen: ${delError.message}`)
+          logAudit('Produkt gelöscht', p.name)
         }
       } else {
-        logAudit('Produkt gelöscht', p.name)
-      }
-    } else {
-      const ids = filtered.map(p => p.id)
-      const { error: delError } = await supabase.from('products').delete().in('id', ids)
-      if (delError) {
-        if (delError.code === '23503') {
-          const { error: deactError } = await supabase.from('products').update({ active: false }).in('id', ids)
-          if (!deactError) logAudit('Produkte deaktiviert', `${ids.length} Produkte`)
-          setError(deactError
-            ? 'Einige Produkte werden noch verwendet und konnten weder gelöscht noch deaktiviert werden.'
-            : 'Einige Produkte werden bereits in Bestellungen oder im Lager verwendet und können nicht gelöscht werden – sie wurden stattdessen deaktiviert.')
+        const ids = filtered.map(p => p.id)
+        const { error: delError } = await withTimeout(supabase.from('products').delete().in('id', ids))
+        if (delError) {
+          if (delError.code === '23503') {
+            const { error: deactError } = await withTimeout(supabase.from('products').update({ active: false }).in('id', ids))
+            if (!deactError) logAudit('Produkte deaktiviert', `${ids.length} Produkte`)
+            setError(deactError
+              ? 'Einige Produkte werden noch verwendet und konnten weder gelöscht noch deaktiviert werden.'
+              : 'Einige Produkte werden bereits in Bestellungen oder im Lager verwendet und können nicht gelöscht werden – sie wurden stattdessen deaktiviert.')
+          } else {
+            setError(`Löschen fehlgeschlagen: ${delError.message}`)
+          }
         } else {
-          setError(`Löschen fehlgeschlagen: ${delError.message}`)
+          logAudit('Produkte gelöscht', `${ids.length} Produkte`)
         }
-      } else {
-        logAudit('Produkte gelöscht', `${ids.length} Produkte`)
       }
+      load()
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Löschen fehlgeschlagen.'))
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(null)
     }
-    setDeleting(false)
-    setConfirmDelete(null)
-    load()
   }
 
   function handleFile(e: ChangeEvent<HTMLInputElement>) {

@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import type { SchulungCompletion, SchulungModule } from '../../lib/types'
 import { formatCompletedOn, validateSchulungModuleName } from '../../lib/schulungen'
 import { OFFICER_LIST_PROFILE_SELECT, isPortalAdminProfile } from '../../lib/portalAdmin'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500'
 
@@ -24,26 +25,28 @@ export default function SchulungenModulePanel({ canManage }: { canManage: boolea
 
   async function load() {
     setLoading(true)
-    const [{ data, error: loadError }, { data: completionRows }] = await Promise.all([
-      supabase.from('schulungen_module').select('*').order('name'),
-      supabase.from('schulungen_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
-    ])
-    if (loadError) {
-      setError('Module konnten nicht geladen werden.')
+    try {
+      const [{ data, error: loadError }, { data: completionRows, error: completionError }] = await withTimeout(Promise.all([
+        supabase.from('schulungen_module').select('*').order('name'),
+        supabase.from('schulungen_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
+      ]))
+      const failures: string[] = []
+      if (loadError) failures.push('Module')
+      if (completionError) failures.push('Abschlüsse')
+      setError(failures.length > 0 ? `Nicht alles konnte geladen werden (${failures.join(', ')}).` : '')
+      setItems(loadError ? [] : ((data ?? []) as SchulungModule[]))
+      setCompletions(completionError ? [] : ((completionRows ?? []) as SchulungCompletion[]))
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Module konnten nicht geladen werden.'))
       setItems([])
-    } else {
-      setError('')
-      setItems((data ?? []) as SchulungModule[])
+      setCompletions([])
+    } finally {
+      setLoading(false)
     }
-    setCompletions((completionRows ?? []) as SchulungCompletion[])
-    setLoading(false)
   }
 
   useEffect(() => {
-    load().catch(() => {
-      setError('Module konnten nicht geladen werden.')
-      setLoading(false)
-    })
+    void load()
   }, [])
 
   const audienceCompletions = useMemo(() => completions.filter(row => !isPortalAdminProfile(row.officer)), [completions])
@@ -144,6 +147,13 @@ export default function SchulungenModulePanel({ canManage }: { canManage: boolea
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
+        </div>
+      ) : items.length === 0 && error ? (
+        <div className="bg-white rounded-xl border border-red-200 px-5 py-8 text-center">
+          <p className="text-sm text-red-700">Module konnten nicht geladen werden.</p>
+          <button type="button" onClick={() => { void load() }} className="mt-3 text-sm font-medium text-blue-800 hover:underline">
+            Erneut versuchen
+          </button>
         </div>
       ) : items.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 px-5 py-8">

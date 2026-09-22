@@ -7,6 +7,7 @@ import type { SchulungAssignment, SchulungCompletion, SchulungModule, SchulungSe
 import { formatCompletedOn, officersCompletedForModule, officersOpenForModule } from '../../lib/schulungen'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList, type PortalAdminProfile } from '../../lib/portalAdmin'
+import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 import type { Profile } from '../../lib/types'
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -32,36 +33,42 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
 
   async function load() {
     setLoading(true)
-    const [modRes, compRes, profRes, sessRes, assignRes] = await Promise.all([
-      supabase.from('schulungen_module').select('*').eq('active', true).order('name'),
-      supabase.from('schulungen_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
-      canManage ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name') : Promise.resolve({ data: [] as OfficerOption[], error: null }),
-      supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
-      canManage
-        ? supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').is('session_id', null)
-        : Promise.resolve({ data: [] as SchulungAssignment[], error: null }),
-    ])
-    if (modRes.error || compRes.error || profRes.error) {
-      setError('Offene Liste konnte nicht geladen werden.')
+    try {
+      const [modRes, compRes, profRes, sessRes, assignRes] = await withTimeout(Promise.all([
+        supabase.from('schulungen_module').select('*').eq('active', true).order('name'),
+        supabase.from('schulungen_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
+        canManage ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name') : Promise.resolve({ data: [] as OfficerOption[], error: null }),
+        supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
+        canManage
+          ? supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').is('session_id', null)
+          : Promise.resolve({ data: [] as SchulungAssignment[], error: null }),
+      ]))
+      const failures: string[] = []
+      if (modRes.error) failures.push('Module')
+      if (compRes.error) failures.push('Abschlüsse')
+      if (profRes.error) failures.push('Personen')
+      if (sessRes.error) failures.push('Termine')
+      if (assignRes.error) failures.push('Vorschläge')
+      setError(failures.length > 0 ? `Nicht alles konnte geladen werden (${failures.join(', ')}).` : '')
+      setModules(modRes.error ? [] : ((modRes.data ?? []) as SchulungModule[]))
+      setCompletions(compRes.error ? [] : ((compRes.data ?? []) as SchulungCompletion[]))
+      setOfficers(profRes.error ? [] : excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
+      setSessions(sessRes.error ? [] : ((sessRes.data ?? []) as SchulungSession[]))
+      setAssignments(assignRes.error ? [] : ((assignRes.data ?? []) as SchulungAssignment[]))
+    } catch (err) {
+      setError(loadErrorMessage(err, 'Offene Liste konnte nicht geladen werden.'))
       setModules([])
       setCompletions([])
       setOfficers([])
-    } else {
-      setError('')
-      setModules((modRes.data ?? []) as SchulungModule[])
-      setCompletions((compRes.data ?? []) as SchulungCompletion[])
-      setOfficers(excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
+      setSessions([])
+      setAssignments([])
+    } finally {
+      setLoading(false)
     }
-    setSessions((sessRes.data ?? []) as SchulungSession[])
-    setAssignments((assignRes.data ?? []) as SchulungAssignment[])
-    setLoading(false)
   }
 
   useEffect(() => {
-    load().catch(() => {
-      setError('Offene Liste konnte nicht geladen werden.')
-      setLoading(false)
-    })
+    void load()
   }, [canManage])
 
   const selected = modules.find(m => m.id === moduleId) ?? modules[0] ?? null
@@ -154,6 +161,13 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" />
+        </div>
+      ) : modules.length === 0 && error ? (
+        <div className="bg-white rounded-xl border border-red-200 px-5 py-8 text-center">
+          <p className="text-sm text-red-700">Offene Liste konnte nicht geladen werden.</p>
+          <button type="button" onClick={() => { void load() }} className="mt-3 text-sm font-medium text-blue-800 hover:underline">
+            Erneut versuchen
+          </button>
         </div>
       ) : modules.length === 0 ? (
         <p className="text-sm text-gray-500">Zuerst ein Modul anlegen.</p>
