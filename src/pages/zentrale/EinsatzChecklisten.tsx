@@ -5,8 +5,22 @@ import { loadChecklistPunkte, setChecklistPunktErledigt, setChecklistPunktWer } 
 import { ERSTMELDUNG_CHECKLISTE, NOTUNTERKUNFT_CHECKLISTE, type ChecklistPunktDef } from '../../lib/einsatzSchema'
 import type { EinsatzChecklisteName, EinsatzChecklistPunkt } from '../../lib/types'
 
+// Verständigungen werden ausschließlich im eigenen serverseitigen
+// Verständigungsbereich geführt (Versucht/Erreicht). Sie dürfen nicht ein
+// zweites Mal als Checklistenaufgabe erscheinen.
+const NICHT_ALS_MASSNAHME = new Set([
+  'meldungszettel',
+  'oeffentliche_sicherheit',
+  'meldung_katschutz',
+  'meldung_bgm',
+  'meldung_sad',
+  'meldung_recht',
+  'meldung_oeffentlichkeitsarbeit',
+  'personen_verstaendigen',
+])
+
 const WEITERE_ERSTMELDUNG_CHECKLISTE = ERSTMELDUNG_CHECKLISTE.filter(
-  punkt => punkt.key !== 'meldungszettel' && punkt.key !== 'oeffentliche_sicherheit',
+  punkt => !NICHT_ALS_MASSNAHME.has(punkt.key),
 )
 
 function MassnahmenAbschnitt({
