@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, Car, CheckCircle2, Circle, ListChecks, Mail, Navigation, Search, ShieldCheck, Wrench } from 'lucide-react'
 import { Link, useOutletContext } from 'react-router-dom'
-import { formatTime } from '../../lib/zentraleShared'
 import type { AussendienstContext } from './AussendienstShell'
 import { EntryOrIncidentList } from './aussendienstShared'
 
