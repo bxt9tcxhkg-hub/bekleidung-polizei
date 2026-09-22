@@ -913,8 +913,16 @@ export interface Ereignis {
   dimension: EreignisDimension
   status: 'aktiv' | 'abgeschlossen'
   lage: string | null
+  betroffene_anzahl: number | null
+  opfer_anzahl: number | null
+  sachschaden: string | null
+  erforderliche_massnahmen: string | null
+  ereignisgrund: string | null
+  oeffentliche_sicherheit_beeintraechtigt: boolean | null
+  koordinierung_noetig: boolean | null
   started_at: string
   created_by: string
+  updated_by: string | null
   created_at: string
   updated_at: string
 }
