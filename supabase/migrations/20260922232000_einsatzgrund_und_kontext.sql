@@ -136,6 +136,41 @@ begin
   from faelle s;
 
   -- Exakter Objektbezug über strukturierte Einsatzadresse.
+  return query
+  with objekte as (
+    select o.*
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'objekt'::text,
+    'operativ'::text,
+    ('Objektinformation · ' || coalesce(o.label,o.address))::text,
+    o.note::text,
+    null::integer
+  from objekte o
+  where nullif(trim(o.note),'') is not null;
+
+  return query
+  with objekte as (
+    select o.id
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'schluessel'::text,
+    'operativ'::text,
+    'Schlüssel zum Einsatzobjekt vorhanden'::text,
+    ('Schlüssel ' || k.schluessel_nummer || coalesce(' · ' || k.verwahrort,''))::text,
+    null::integer
+  from public.zentrale_schluessel k
+  where k.object_id in (select id from objekte)
+    and k.status='vorhanden';
+
   -- Schutzfall mit exaktem Einsatzobjekt.
   return query
   with objekte as (
