@@ -210,7 +210,7 @@ export async function copyPersonenInListe(
       telefon: person.telefon,
       ort_unterkunft: person.ort_unterkunft,
       anmerkungen: person.anmerkungen,
-      status: ziel === 'evakuierung' ? 'unbekannt' : 'offen',
+      status: (ziel === 'evakuierung' ? 'unbekannt' : 'offen') as NamenslistePerson['status'],
       created_by: createdBy,
     }))
     const result = await supabase.from('einsatz_namensliste').insert(rows)
