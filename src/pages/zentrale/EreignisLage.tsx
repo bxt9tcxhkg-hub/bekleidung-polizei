@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { updateEreignisLage } from '../../lib/ereignis'
 import type { Ereignis, IncidentReport } from '../../lib/types'
-import EreignisEntscheidungen from './EreignisEntscheidungen'
 
 function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -99,7 +98,7 @@ export default function EreignisLage({
       onSaved(saved)
       onProcessChanged?.()
     } catch {
-      setError('Lagedaten konnten nicht gespeichert werden.')
+      setError('Lageinformation konnte nicht gespeichert werden.')
     }
   }
 
@@ -107,12 +106,11 @@ export default function EreignisLage({
   const wann = new Date(incident.reported_at).toLocaleString('de-AT', {
     day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
-  const showKoordination = ereignis.dimension === 'gross' || ereignis.dimension === 'katastrophe'
 
   return <div className="space-y-4">
     <div>
-      <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Meldungszettel / Lage</h3>
-      <p className="mt-1 text-xs text-gray-500">Bereits bekannte Einsatzdaten werden automatisch übernommen. Nur zusätzliche Lageinformationen ergänzen.</p>
+      <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Lageinformation</h3>
+      <p className="mt-1 text-xs text-gray-500">Die Zentrale dokumentiert vorhandene Meldungen und Rückmeldungen. Sie trifft hier keine Entscheidungen für die Kräfte vor Ort.</p>
     </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -122,55 +120,24 @@ export default function EreignisLage({
       <Info label="Melder / Kontakt" value={melder} />
     </div>
 
-    <div className="grid grid-cols-2 gap-3">
-      <NumberField label="Betroffene Personen" value={ereignis.betroffene_anzahl} disabled={!canOperate} onCommit={value => save({ betroffene_anzahl: value })} />
-      <NumberField label="Opfer" value={ereignis.opfer_anzahl} disabled={!canOperate} onCommit={value => save({ opfer_anzahl: value })} />
-    </div>
-
-    <TextField label="Sachschäden" value={ereignis.sachschaden} disabled={!canOperate} placeholder="Bekannte Sachschäden, falls relevant" onCommit={value => save({ sachschaden: value })} />
-    <TextField label="Grund des Ereignisses" value={ereignis.ereignisgrund} disabled={!canOperate} placeholder="Bekannte Ursache / Ereignisgrund" onCommit={value => save({ ereignisgrund: value })} />
-    <TextField label="Was wäre zu tun / erforderliche Maßnahmen" value={ereignis.erforderliche_massnahmen} disabled={!canOperate} rows={3} placeholder="Erforderliche bzw. bereits erkannte Maßnahmen" onCommit={value => save({ erforderliche_massnahmen: value })} />
-
-    <div className="rounded-xl border border-gray-200 p-3">
-      <p className="text-sm font-semibold text-gray-900">Öffentliche Sicherheit beeinträchtigt?</p>
-      <div className="mt-2 flex gap-2">
-        {([true, false] as const).map(value => <button
-          key={String(value)}
-          type="button"
-          disabled={!canOperate}
-          onClick={() => void save({ oeffentliche_sicherheit_beeintraechtigt: value })}
-          className={'rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50 ' + (ereignis.oeffentliche_sicherheit_beeintraechtigt === value ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700')}
-        >{value ? 'Ja' : 'Nein'}</button>)}
-        {ereignis.oeffentliche_sicherheit_beeintraechtigt != null && canOperate ? <button
-          type="button"
-          onClick={() => void save({ oeffentliche_sicherheit_beeintraechtigt: null })}
-          className="px-2 text-xs font-medium text-gray-500"
-        >Zurücksetzen</button> : null}
+    <div>
+      <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2">Rückmeldung von vor Ort</p>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField label="Gemeldete Betroffene" value={ereignis.betroffene_anzahl} disabled={!canOperate} onCommit={value => save({ betroffene_anzahl: value })} />
+        <NumberField label="Gemeldete Verletzte / Opfer" value={ereignis.opfer_anzahl} disabled={!canOperate} onCommit={value => save({ opfer_anzahl: value })} />
       </div>
     </div>
 
-    {showKoordination ? <div className="rounded-xl border border-gray-200 p-3">
-      <p className="text-sm font-semibold text-gray-900">Koordination notwendig?</p>
-      <p className="mt-1 text-xs text-gray-500">Relevant bei Großereignis / Katastrophe für die weiteren Koordinations- und Führungsentscheidungen.</p>
-      <div className="mt-2 flex gap-2">
-        {([true, false] as const).map(value => <button
-          key={String(value)}
-          type="button"
-          disabled={!canOperate}
-          onClick={() => void save({ koordinierung_noetig: value })}
-          className={'rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50 ' + (ereignis.koordinierung_noetig === value ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700')}
-        >{value ? 'Ja' : 'Nein'}</button>)}
-        {ereignis.koordinierung_noetig != null && canOperate ? <button
-          type="button"
-          onClick={() => void save({ koordinierung_noetig: null })}
-          className="px-2 text-xs font-medium text-gray-500"
-        >Zurücksetzen</button> : null}
-      </div>
-    </div> : null}
-
-    {showKoordination && ereignis.koordinierung_noetig === true ? <div className="border-t border-gray-200 pt-4">
-      <EreignisEntscheidungen ereignisId={ereignis.id} canOperate={canOperate} userId={userId} onChanged={onProcessChanged} />
-    </div> : null}
+    <TextField label="Gemeldete Sachschäden" value={ereignis.sachschaden} disabled={!canOperate} placeholder="Nur übermittelte Informationen dokumentieren" onCommit={value => save({ sachschaden: value })} />
+    <TextField label="Gemeldete Ursache / Hintergrund" value={ereignis.ereignisgrund} disabled={!canOperate} placeholder="Nur soweit bekannt bzw. gemeldet" onCommit={value => save({ ereignisgrund: value })} />
+    <TextField
+      label="Auftrag / Unterstützungsbedarf an die Zentrale"
+      value={ereignis.erforderliche_massnahmen}
+      disabled={!canOperate}
+      rows={3}
+      placeholder="z. B. ZMR-Abfrage, Unterlage vorbereiten, Kontakt herstellen"
+      onCommit={value => save({ erforderliche_massnahmen: value })}
+    />
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
   </div>
