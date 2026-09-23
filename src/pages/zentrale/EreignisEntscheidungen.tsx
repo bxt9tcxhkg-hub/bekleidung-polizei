@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ENTSCHEIDUNGSPUNKTE } from '../../lib/einsatzSchema'
 import { loadEreignisEntscheidungen, setEreignisEntscheidung } from '../../lib/ereignis'
 import type { EreignisEntscheidung } from '../../lib/types'
+import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
 
 function keyFor(label: string): string {
   return label
@@ -13,16 +14,18 @@ function keyFor(label: string): string {
 }
 
 export default function EreignisEntscheidungen({
-  ereignisId, canOperate, userId, onChanged,
+  ereignisId, canOperate, userId, organisation, onChanged,
 }: {
   ereignisId: string
   canOperate: boolean
   userId: string | null
+  organisation: WorkspaceOrganisation
   onChanged?: () => void
 }) {
   const [rows, setRows] = useState<EreignisEntscheidung[]>([])
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const policy = workspacePolicy(organisation)
 
   const load = useCallback(async () => {
     try {
@@ -32,7 +35,9 @@ export default function EreignisEntscheidungen({
     }
   }, [ereignisId])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (policy.decisionProtocol) void load()
+  }, [load, policy.decisionProtocol])
 
   const byKey = useMemo(() => new Map(rows.map(row => [row.punkt_key, row])), [rows])
 
@@ -59,6 +64,8 @@ export default function EreignisEntscheidungen({
       setBusyKey(null)
     }
   }
+
+  if (!policy.decisionProtocol) return null
 
   return <div className="space-y-3">
     <div>
