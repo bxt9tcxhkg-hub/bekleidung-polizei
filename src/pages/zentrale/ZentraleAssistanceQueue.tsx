@@ -186,8 +186,8 @@ export default function ZentraleAssistanceQueue({
   return <section className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
     <div className="flex items-center justify-between gap-3">
       <div>
-        <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Unterstützungsanfragen an die Stadtpolizei-Zentrale</p>
-        <h2 className="mt-0.5 font-bold text-gray-950">{rows.length} offene {rows.length === 1 ? 'Anfrage' : 'Anfragen'}</h2>
+        <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Offene Abfragen / Bereitstellungen</p>
+        <h2 className="mt-0.5 font-bold text-gray-950">{rows.length} offene {rows.length === 1 ? 'Aufgabe' : 'Aufgaben'}</h2>
       </div>
       <Radio className="h-5 w-5 text-blue-700" />
     </div>
@@ -218,7 +218,7 @@ export default function ZentraleAssistanceQueue({
 
         {active ? <div className="mt-3 border-t border-gray-100 pt-3">
           {sourceFileKey ? <button type="button" onClick={() => void openEinsatzdokument(sourceFileKey).catch(() => setError('Ausweisdokument konnte nicht geöffnet werden.'))} className="mb-2 text-xs font-semibold text-blue-800 underline">Ausweisdokument öffnen</button> : null}
-          <p className="text-xs text-gray-600">Abfrage außerhalb des Portals durchführen. Falls ein Ergebnisdokument vorliegt, hier hochladen; die Anfrage wird dadurch automatisch abgeschlossen.</p>
+          <p className="text-xs text-gray-600">Abfrage im vorgesehenen Fachsystem durchführen. Falls ein Ergebnisdokument vorliegt, hier bereitstellen; die Aufgabe wird dadurch abgeschlossen.</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {(row.incident_id || row.ereignis_id) ? <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">
               <Upload className="h-3.5 w-3.5" /> Ergebnis hochladen
