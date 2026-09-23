@@ -12,6 +12,7 @@ import { addPersonen, extractPdfPlainText, personenAusText } from '../../lib/zmr
 export default function IncidentDocs({ incidentId, from, canUpload = true, onChanged }: { incidentId: string; from: 'zentrale' | 'streife'; canUpload?: boolean; onChanged?: () => void }) {
   const { profile } = useAuth()
   const [docs, setDocs] = useState<EinsatzDokument[]>([])
+  const allowedArten: DokArt[] = from === 'streife' ? ['ausweis', 'sonstiges'] : ['zmr', 'abfrage', 'sonstiges']
   const [art, setArt] = useState<DokArt>(from === 'streife' ? 'ausweis' : 'zmr')
   const [busy, setBusy] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -58,11 +59,10 @@ export default function IncidentDocs({ incidentId, from, canUpload = true, onCha
         const gefunden = personenAusText(text)
         if (gefunden.length === 0) { setHinweis(text.trim() ? 'PDF gespeichert, aber keine Namen erkannt.' : 'PDF gespeichert, aber der Text konnte nicht gelesen werden (leere/gescannte PDF ohne Textebene?).'); return }
         if (!profile?.id) return
-        // Landen immer in "Haus/Bewohner" - die Übernahme in eine andere
-        // Liste (z. B. Notunterkunft-Namensliste) passiert bewusst getrennt
-        // im Ereignis-Arbeitsraum unter „Unterstützung vor Ort“.
+        // ZMR-/Abfragedaten bilden nur die bereitgestellte Bewohner-Datenbasis.
+        // Ob und wie daraus vor Ort gearbeitet wird, entscheiden die Kräfte vor Ort.
         await addPersonen(incidentId, 'haus', gefunden, profile.id)
-        setHinweis(`${gefunden.length} Person(en) aus dem PDF in die Liste "Haus/Bewohner" übernommen. Weiterbearbeitung unter Ereignis → Unterstützung vor Ort.`)
+        setHinweis(`${gefunden.length} Person(en) aus dem PDF in die Bewohner-Datenbasis übernommen.`)
         onChanged?.()
       }
     } catch (err) {
@@ -112,7 +112,7 @@ export default function IncidentDocs({ incidentId, from, canUpload = true, onCha
         <p className="text-xs text-gray-500 mt-1">PDF oder Bild. Oder Ordner umgehen und nur die Datei ablegen.</p>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
           <select className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white" value={art} onChange={event => setArt(event.target.value as DokArt)}>
-            {DOK_ARTEN.map(key => <option key={key} value={key}>{DOK_ART_LABEL[key]}</option>)}
+            {allowedArten.map(key => <option key={key} value={key}>{DOK_ART_LABEL[key]}</option>)}
           </select>
           <label className="text-xs font-semibold text-blue-800 cursor-pointer">
             Datei wählen
