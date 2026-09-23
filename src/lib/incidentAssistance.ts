@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type {
+  IncidentAssistanceOrganisation,
   IncidentAssistanceRequest,
   IncidentAssistanceRequestType,
 } from './types'
@@ -32,19 +33,25 @@ export async function loadOpenAssistanceRequests(): Promise<IncidentAssistanceRe
 }
 
 export async function createAssistanceRequest(input: {
-  incidentId: string
+  incidentId?: string | null
+  ereignisId?: string | null
   requestType: IncidentAssistanceRequestType
   requestedBy: string
+  requesterOrganisation?: IncidentAssistanceOrganisation
   requestedVehicleId?: string | null
   requestText?: string | null
   subjectData?: Record<string, unknown>
   sourceDocumentId?: string | null
 }): Promise<IncidentAssistanceRequest> {
+  if (!input.incidentId && !input.ereignisId) throw new Error('Unterstützungsanfrage benötigt einen Einsatz- oder Ereignisbezug.')
   const result = await supabase
     .from('incident_assistance_requests')
     .insert({
-      incident_id: input.incidentId,
+      incident_id: input.incidentId ?? null,
+      ereignis_id: input.ereignisId ?? null,
       request_type: input.requestType,
+      requester_organisation: input.requesterOrganisation ?? 'Stadtpolizei',
+      target_organisation: 'Stadtpolizei',
       requested_by: input.requestedBy,
       requested_vehicle_id: input.requestedVehicleId ?? null,
       request_text: input.requestText?.trim() || null,
@@ -110,4 +117,15 @@ export async function extractIdDocumentData(input: {
   const data = await response.json().catch(() => null) as { fields?: Record<string, string>; text?: string; error?: string } | null
   if (!response.ok) throw new Error(data?.error || 'Ausweisdaten konnten nicht automatisch gelesen werden.')
   return { fields: data?.fields ?? {}, text: data?.text ?? '' }
+}
+
+
+export async function loadEventAssistanceRequests(ereignisId: string): Promise<IncidentAssistanceRequest[]> {
+  const result = await supabase
+    .from('incident_assistance_requests')
+    .select('*')
+    .eq('ereignis_id', ereignisId)
+    .order('requested_at', { ascending: false })
+  if (result.error) throw new Error('Unterstützungsanfragen des Ereignisses konnten nicht geladen werden.')
+  return result.data ?? []
 }
