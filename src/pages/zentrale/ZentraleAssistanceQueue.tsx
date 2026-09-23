@@ -15,6 +15,11 @@ import {
   uploadEinsatzdokument,
 } from '../../lib/einsatzDokumente'
 import { addPersonen, extractPdfPlainText, personenAusText } from '../../lib/zmrPersonen'
+import {
+  registerEreignisDokument,
+  rollbackUploadedEreignisDokument,
+  uploadEreignisDokument,
+} from '../../lib/ereignisDokumente'
 import type {
   IncidentAssistanceRequest,
   IncidentReport,
@@ -86,14 +91,44 @@ export default function ZentraleAssistanceQueue({
   async function uploadResult(file?: File) {
     const row = rows.find(item => item.id === activeId)
     if (!file || !row || !profile?.id) return
-    if (!row.incident_id) {
-      setError('Für ereignisweite Ergebnisdokumente wird ein gemeinsamer Ereignis-Dokumentbereich benötigt. Die Anfrage kann bis dahin ohne Upload erledigt werden.')
+    const sharedEventResult = row.requester_organisation !== 'Stadtpolizei' && Boolean(row.ereignis_id)
+    if (!sharedEventResult && !row.incident_id) {
+      setError('Für diese Anfrage fehlt ein gültiger Einsatz- oder Ereignisbezug.')
       return
     }
-    const incidentId = row.incident_id
     setBusy(true)
     setError('')
     try {
+      if (sharedEventResult && row.ereignis_id) {
+        const eventId = row.ereignis_id
+        const uploaded = await uploadEreignisDokument(eventId, file)
+        let eventDoc
+        try {
+          eventDoc = await registerEreignisDokument({
+            ereignisId: eventId,
+            art: row.request_type === 'zmr' ? 'zmr' : row.request_type === 'sonstiges' ? 'sonstiges' : 'abfrage',
+            title: row.request_type === 'zmr' ? 'ZMR-Auszug' : row.request_type === 'sonstiges' ? 'Ergebnis / Unterlage' : 'Abfrage / Register',
+            fileKey: uploaded.key,
+            fileName: uploaded.name,
+            targetOrganisation: row.requester_organisation,
+            uploadedBy: profile.id,
+          })
+        } catch (err) {
+          await rollbackUploadedEreignisDokument(eventId, uploaded.key)
+          throw err
+        }
+
+        await completeAssistanceRequest({
+          id: row.id,
+          userId: profile.id,
+          resultEventDocumentId: eventDoc.id,
+        })
+        setRows(current => current.filter(item => item.id !== row.id))
+        setActiveId(null)
+        return
+      }
+
+      const incidentId = row.incident_id!
       const uploaded = await uploadEinsatzdokument(incidentId, file)
       let doc
       try {
@@ -185,7 +220,7 @@ export default function ZentraleAssistanceQueue({
           {sourceFileKey ? <button type="button" onClick={() => void openEinsatzdokument(sourceFileKey).catch(() => setError('Ausweisdokument konnte nicht geöffnet werden.'))} className="mb-2 text-xs font-semibold text-blue-800 underline">Ausweisdokument öffnen</button> : null}
           <p className="text-xs text-gray-600">Abfrage außerhalb des Portals durchführen. Falls ein Ergebnisdokument vorliegt, hier hochladen; die Anfrage wird dadurch automatisch abgeschlossen.</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {row.incident_id ? <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">
+            {(row.incident_id || row.ereignis_id) ? <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">
               <Upload className="h-3.5 w-3.5" /> Ergebnis hochladen
               <input ref={inputRef} type="file" accept="image/*,.pdf" className="sr-only" disabled={busy} onChange={event => void uploadResult(event.target.files?.[0])} />
             </label> : null}
