@@ -177,20 +177,32 @@ function IncidentRow({
       {(item.caller_name || item.caller_phone) ? <div><p className="text-xs font-bold uppercase tracking-wider text-gray-400">Meldungsleger</p><p className="text-sm text-gray-700 mt-1">{item.caller_name || 'Name nicht erfasst'}{item.caller_phone ? ` · ${item.caller_phone}` : ''}</p></div> : null}
       <p className="text-xs text-gray-500">{DISPOSITION_LABEL[item.disposition]}</p>
       <NearbyBaustellenHint point={point} baustellen={baustellen} />
-      <div><PrintIncidentButton item={item} /></div>
-
       <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
-        <PatrolAssistancePanel incidentId={item.id} vehicleId={ownVehicleId ?? primaryVehicleId ?? null} />
+        <PatrolAssistancePanel incidentId={item.id} vehicleId={ownVehicleId ?? primaryVehicleId ?? null} incidentLocation={item.location} />
       </div>
 
       <details className="rounded-xl border border-gray-200 px-3 py-2">
-        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Weitere Einsatzinformationen</summary>
-        <div className="mt-3 space-y-3">
-          <EinsatzChecklisten incidentId={item.id} canOperate />
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Dokumente zum Einsatz</summary>
+        <div className="mt-3">
           <IncidentDocs incidentId={item.id} from="streife" />
+        </div>
+      </details>
+
+      <details className="rounded-xl border border-gray-200 px-3 py-2">
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Personen- und Arbeitslisten</summary>
+        <div className="mt-3">
           <IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} />
         </div>
       </details>
+
+      <details className="rounded-xl border border-gray-200 px-3 py-2">
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Sonder-/Ereignisabläufe</summary>
+        <div className="mt-3">
+          <EinsatzChecklisten incidentId={item.id} canOperate />
+        </div>
+      </details>
+
+      <div><PrintIncidentButton item={item} /></div>
     </div> : null}
   </article>
 }
