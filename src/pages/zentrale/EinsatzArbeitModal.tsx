@@ -240,7 +240,10 @@ export default function EinsatzArbeitModal({
       </div>
     </div> : null}
 
-    {!loading && tab === 'parteien' ? <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={canOperateZentrale} /> : null}
+    {!loading && tab === 'parteien' ? <div className="space-y-2">
+      <p className="text-xs text-gray-500">Von den Kräften vor Ort erfasste Parteien. Die Zentrale nutzt diese Information unterstützend und führt hier keine operative Personenerfassung.</p>
+      <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={false} />
+    </div> : null}
     {!loading && tab === 'dateien' ? <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} /> : null}
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
