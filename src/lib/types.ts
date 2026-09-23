@@ -1979,6 +1979,9 @@ export type Database = {
     Functions: {
       create_support_request: { Args: { p_subject: string; p_kind: string; p_topic: string; p_body: string }; Returns: string }
       set_incident_event_dimension: { Args: { p_incident_id: string; p_dimension: EreignisDimension }; Returns: string | null }
+      link_incident_to_event: { Args: { p_incident_id: string; p_event_id: string }; Returns: string }
+      unlink_incident_from_event: { Args: { p_incident_id: string }; Returns: string }
+      set_event_status: { Args: { p_event_id: string; p_status: 'aktiv' | 'abgeschlossen' }; Returns: Ereignis }
       move_einsatz_material: { Args: { p_material_id: string; p_target_tab_id: string }; Returns: undefined }
       save_portal_profile_v2: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null }; Returns: undefined }
       save_portal_profile_v3: { Args: { p_user_id: string; p_patch: Record<string, unknown>; p_einsatz_roles: string[] | null; p_schulungen_roles: string[] | null; p_fuhrpark_roles: string[] | null }; Returns: undefined }
