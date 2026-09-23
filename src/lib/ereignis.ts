@@ -53,6 +53,76 @@ export async function loadEreignisDimensionen(incidentIds: string[]): Promise<Re
   )
 }
 
+export interface ActiveEreignisSummary {
+  id: string
+  titel: string
+  dimension: EreignisDimension
+  started_at: string
+  incident_count: number
+}
+
+export async function loadActiveEreignisse(): Promise<ActiveEreignisSummary[]> {
+  const events = await supabase
+    .from('ereignisse')
+    .select('id,titel,dimension,started_at')
+    .eq('status', 'aktiv')
+    .order('started_at', { ascending: false })
+
+  if (events.error) throw events.error
+  if (!events.data?.length) return []
+
+  const ids = events.data.map(row => row.id)
+  const links = await supabase
+    .from('ereignis_einsaetze')
+    .select('ereignis_id,incident_id')
+    .in('ereignis_id', ids)
+
+  if (links.error) throw links.error
+
+  const counts = new Map<string, number>()
+  for (const row of links.data ?? []) counts.set(row.ereignis_id, (counts.get(row.ereignis_id) ?? 0) + 1)
+
+  return events.data.map(row => ({
+    ...row,
+    incident_count: counts.get(row.id) ?? 0,
+  }))
+}
+
+export async function linkIncidentToEreignis(input: {
+  incidentId: string
+  ereignisId: string
+  userId: string
+}): Promise<Ereignis> {
+  const result = await supabase
+    .from('ereignis_einsaetze')
+    .insert({
+      ereignis_id: input.ereignisId,
+      incident_id: input.incidentId,
+      linked_by: input.userId,
+    })
+
+  if (result.error) throw result.error
+
+  const eventResult = await supabase
+    .from('ereignisse')
+    .select('*')
+    .eq('id', input.ereignisId)
+    .single()
+
+  if (eventResult.error) throw eventResult.error
+  return eventResult.data
+}
+
+export async function loadEreignisIncidentIds(ereignisId: string): Promise<string[]> {
+  const result = await supabase
+    .from('ereignis_einsaetze')
+    .select('incident_id')
+    .eq('ereignis_id', ereignisId)
+
+  if (result.error) throw result.error
+  return (result.data ?? []).map(row => row.incident_id)
+}
+
 export async function loadEreignisEntscheidungen(ereignisId: string): Promise<EreignisEntscheidung[]> {
   const result = await supabase
     .from('ereignis_entscheidungen')
