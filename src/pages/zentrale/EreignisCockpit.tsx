@@ -125,13 +125,6 @@ export default function EreignisCockpit({
     nextTitle = 'Nächste Verständigung'
     nextText = nextKontakt
     nextSection = 'verstaendigung'
-  } else if (snapshot.zmrDocs === 0) {
-    nextTitle = 'Datenunterstützung vorbereiten'
-    nextText = 'Falls für die Lage erforderlich: ZMR-Abfrage durchführen und den Auszug bereitstellen.'
-  } else if (snapshot.bewohner > 0 && snapshot.evakuierung === 0) {
-    nextTitle = 'Arbeitsliste bereitstellen'
-    nextText = 'Die ZMR-Bewohnerdaten sind vorhanden. Bei Bedarf kann daraus eine neutrale Arbeitsliste für die Kräfte vor Ort bereitgestellt werden.'
-    nextSection = 'unterstuetzung'
   }
 
   return <div className="space-y-3">
@@ -151,8 +144,8 @@ export default function EreignisCockpit({
             </div>
             {nextKontaktDaten.length === 0 ? <p className="mt-2 text-xs text-amber-700">Für diesen Verständigungsschritt sind noch keine passenden Kontaktdaten gepflegt.</p> : null}
           </> : <div className="mt-3 flex flex-wrap gap-2">
-            {snapshot.zmrDocs === 0 ? <button type="button" onClick={onOpenFiles} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">ZMR / Abfrage bereitstellen</button> : null}
-            <button type="button" onClick={() => onGoTo('unterstuetzung')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Datenunterstützung öffnen</button>
+            <button type="button" onClick={() => onGoTo('unterstuetzung')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Vorhandene Daten ansehen</button>
+            <button type="button" onClick={onOpenFiles} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700">Dokumente</button>
           </div>}
         </div>
       </div>
@@ -189,7 +182,7 @@ export default function EreignisCockpit({
       <Users className="h-4 w-4 text-gray-500" />
       <span className="text-xs text-gray-700">Vor-Ort-Status: <strong>{snapshot.evakuierungImHaus}</strong> im Haus · <strong>{snapshot.evakuierungDraussen}</strong> draußen · <strong>{snapshot.evakuierungUnbekannt}</strong> unbekannt</span>
       <FileText className="ml-auto h-4 w-4 text-gray-400" />
-      {snapshot.zmrDocs === 0 ? <button type="button" onClick={onOpenFiles} className="text-xs font-bold text-blue-800">ZMR / Abfrage bereitstellen</button> : <button type="button" onClick={() => onGoTo('unterstuetzung')} className="text-xs font-bold text-blue-800">Daten ansehen</button>}
+      <button type="button" onClick={() => onGoTo('unterstuetzung')} className="text-xs font-bold text-blue-800">Daten ansehen</button>
     </div>
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
