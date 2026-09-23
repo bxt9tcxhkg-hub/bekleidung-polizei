@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { ASSISTANCE_LABEL, createAssistanceRequest } from '../../lib/incidentAssistance'
-import type { IncidentAssistanceOrganisation, IncidentAssistanceRequestType } from '../../lib/types'
+import { createAssistanceRequest } from '../../lib/incidentAssistance'
+import type { IncidentAssistanceOrganisation } from '../../lib/types'
 
-const ORGS: Exclude<IncidentAssistanceOrganisation, 'Stadtpolizei'>[] = ['Feuerwehr', 'Krisenstab']
-const TYPES: IncidentAssistanceRequestType[] = ['personenabfrage', 'zmr', 'fahrzeugabfrage', 'sonstiges']
+const ORGS: IncidentAssistanceOrganisation[] = ['Stadtpolizei', 'Feuerwehr', 'Krisenstab']
 
 export default function CentralSupportIntake({
   incidentId,
@@ -18,8 +17,7 @@ export default function CentralSupportIntake({
   onCreated?: () => void
 }) {
   const { profile } = useAuth()
-  const [organisation, setOrganisation] = useState<Exclude<IncidentAssistanceOrganisation, 'Stadtpolizei'>>('Feuerwehr')
-  const [requestType, setRequestType] = useState<IncidentAssistanceRequestType>('zmr')
+  const [organisation, setOrganisation] = useState<IncidentAssistanceOrganisation>('Stadtpolizei')
   const [requestText, setRequestText] = useState('')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -35,13 +33,14 @@ export default function CentralSupportIntake({
       await createAssistanceRequest({
         incidentId,
         ereignisId: ereignisId ?? null,
-        requestType,
+        // Technischer Altwert; fachlich wird keine Anfrageart ausgewählt.
+        requestType: 'sonstiges',
         requestedBy: profile.id,
         requesterOrganisation: organisation,
         requestText,
       })
       setRequestText('')
-      setNotice('Abfrage im Einsatz vorgemerkt.')
+      setNotice('Unterstützungsbedarf beim Einsatz vorgemerkt.')
       setOpen(false)
       onCreated?.()
     } catch (err) {
@@ -59,33 +58,27 @@ export default function CentralSupportIntake({
         <p className="text-xs text-gray-500">Telefonisch oder per Funk erhaltenen Bedarf direkt diesem Einsatz zuordnen.</p>
       </div>
       <button type="button" onClick={() => setOpen(current => !current)} className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800">
-        {open ? 'Schließen' : '+ Bedarf vormerken'}
+        {open ? 'Schließen' : '+ Unterstützung vormerken'}
       </button>
     </div>
 
     {open ? <div className="mt-3 space-y-2">
-      <div className="flex flex-wrap gap-2">
+      <div>
+        <p className="mb-1 text-[11px] font-semibold text-gray-500">Anfragende Stelle</p>
+        <div className="flex flex-wrap gap-2">
         {ORGS.map(org => <button
           key={org}
           type="button"
           onClick={() => setOrganisation(org)}
           className={'rounded-lg border px-2.5 py-1.5 text-xs font-semibold ' + (organisation === org ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700')}
         >{org}</button>)}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {TYPES.map(type => <button
-          key={type}
-          type="button"
-          onClick={() => setRequestType(type)}
-          className={'rounded-lg border px-2.5 py-1.5 text-xs font-semibold ' + (requestType === type ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700')}
-        >{ASSISTANCE_LABEL[type]}</button>)}
+        </div>
       </div>
 
       <input
         value={requestText}
         onChange={event => setRequestText(event.target.value)}
-        placeholder="Nur falls nötig: kurzer Zusatz"
+        placeholder="Was wird benötigt? Nur das Nötigste."
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
 

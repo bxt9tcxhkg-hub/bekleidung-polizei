@@ -6,8 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
 import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, IncidentSupport, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
-import { personDisplayName } from '../../lib/register'
-import { loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
+import { SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
@@ -42,6 +41,10 @@ export interface AussendienstContext {
   criticalItems: { id: string; title: string; description: string | null }[]
   criticalSourcesError: boolean
   openIncidents: SimpleIncident[]
+  ownIncidents: SimpleIncident[]
+  supportedIncidents: SimpleIncident[]
+  availableIncidents: SimpleIncident[]
+  completedIncidents: SimpleIncident[]
   openOrders: ZentraleEntry[]
   kontrollauftraege: ZentraleEntry[]
   incidents: SimpleIncident[]
@@ -81,11 +84,6 @@ export default function AussendienstShell() {
   const [checks, setChecks] = useState<VehicleCheck[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [avBv, setAvBv] = useState<Schutzfall[]>([])
-  // Ob ein Schutzfall für die Streife "wichtig" ist, entscheidet sich (wie
-  // überall sonst, siehe ZentraleAvBv.tsx) allein daran, ob ein verknüpfter
-  // Kontrollauftrag existiert - sonst würde eine EV ohne angeforderte
-  // Kontrolle hier trotzdem wie eine dringende Warnung erscheinen.
-  const [kontrolliert, setKontrolliert] = useState<Set<string>>(new Set())
   const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
   // Wie in ZentraleShell.tsx: bei Ladefehler darf "Keine aktuell dringenden
   // Warnungen" nicht fälschlich Entwarnung geben.
@@ -113,7 +111,7 @@ export default function AussendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = operationalToday()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, baustelleResult, kontrolliertIds] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, baustelleResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
@@ -125,7 +123,6 @@ export default function AussendienstShell() {
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       // Für "Baustelle in der Nähe" auf der Einsatzliste - erledigte Baustellen wie in der Zentrale ausgeblendet.
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
-      loadSchutzfaelleMitKontrollauftrag(),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
@@ -138,7 +135,6 @@ export default function AussendienstShell() {
     setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
-    setKontrolliert(kontrolliertIds)
     setCriticalSourcesError(Boolean(avBvResult.error))
     setLoading(false)
   }, [])
@@ -217,12 +213,7 @@ export default function AussendienstShell() {
   const criticalEntries = useMemo(() => entries.filter(item => item.status !== 'erledigt' && item.priority === 'kritisch'), [entries])
   const criticalItems = useMemo(() => [
     ...criticalEntries.map(item => ({ id: item.id, title: item.title, description: item.description })),
-    // BV/AV hat die gesetzliche 72h-Erstkontrollpflicht und erscheint daher
-    // immer; eine EV nur, wenn für sie tatsächlich ein Kontrollauftrag
-    // angefordert wurde (siehe ZentraleAvBv.tsx) - sonst würde diese Warnung
-    // der dort bewusst getroffenen Entscheidung widersprechen.
-    ...avBv.filter(item => item.massnahme === 'bv_av' || kontrolliert.has(item.id)).map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · Gefährder: ${item.gefaehrder ? personDisplayName(item.gefaehrder) : '—'}`, description: item.ausnahmen ? `Ausnahmen: ${item.ausnahmen}` : `PAD ${item.pad_aktenzahl} · Schutzbereiche prüfen` })),
-  ], [avBv, criticalEntries, kontrolliert])
+  ], [criticalEntries])
   const openIncidents = useMemo(() => {
     const relevant = ownAssignment?.function === 'jd'
       ? incidents.filter(item => item.disposition === 'jd' || item.disposition === 'offen')
@@ -231,8 +222,31 @@ export default function AussendienstShell() {
         : incidents
     return relevant.filter(item => item.status === 'offen')
   }, [incidents, ownAssignment?.function])
+  const ownIncidents = useMemo(() => openIncidents.filter(item => {
+    const primaryVehicleId = item.taken_over_vehicle_id || item.assigned_vehicle_id
+    return Boolean((ownVehicle?.id && primaryVehicleId === ownVehicle.id) || item.taken_over_by === profile?.id)
+  }), [openIncidents, ownVehicle, profile?.id])
+  const supportedIncidentIds = useMemo(() => new Set(incidentSupports
+    .filter(item => item.ended_at === null && item.vehicle_id === ownVehicle?.id)
+    .map(item => item.incident_id)), [incidentSupports, ownVehicle])
+  const supportedIncidents = useMemo(() => openIncidents.filter(item =>
+    supportedIncidentIds.has(item.id) && !ownIncidents.some(own => own.id === item.id),
+  ), [openIncidents, ownIncidents, supportedIncidentIds])
+  const availableIncidents = useMemo(() => openIncidents.filter(item =>
+    !item.assigned_vehicle_id && !item.taken_over_vehicle_id && !item.taken_over_by && !supportedIncidentIds.has(item.id),
+  ), [openIncidents, supportedIncidentIds])
+  const completedIncidents = useMemo(() => incidents.filter(item => {
+    const primaryVehicleId = item.taken_over_vehicle_id || item.assigned_vehicle_id
+    return item.status === 'erledigt' && Boolean((ownVehicle?.id && primaryVehicleId === ownVehicle.id) || item.completed_by === profile?.id)
+  }), [incidents, ownVehicle, profile?.id])
   const ownFunctionOrders = useCallback((item: ZentraleEntry) => item.category === 'kontrollauftrag' && (!ownAssignment || item.target_function == null || item.target_function === 'beide' || item.target_function === ownAssignment.function), [ownAssignment])
-  const openOrders = useMemo(() => entries.filter(item => ownFunctionOrders(item) && item.status !== 'erledigt'), [entries, ownFunctionOrders])
+  const openOrders = useMemo(() => {
+    const priority = { kritisch: 0, hoch: 1, normal: 2 } as const
+    return entries
+      .filter(item => ownFunctionOrders(item) && item.status !== 'erledigt')
+      .sort((a, b) => priority[a.priority] - priority[b.priority]
+        || (a.valid_until ? new Date(a.valid_until).getTime() : Number.MAX_SAFE_INTEGER) - (b.valid_until ? new Date(b.valid_until).getTime() : Number.MAX_SAFE_INTEGER))
+  }, [entries, ownFunctionOrders])
   const kontrollauftraege = useMemo(() => entries.filter(ownFunctionOrders), [entries, ownFunctionOrders])
 
   async function saveVehicleCheck(status: VehicleCheckStatus, note: string) {
@@ -337,7 +351,7 @@ export default function AussendienstShell() {
 
   const ctx: AussendienstContext = {
     loading, ownAssignment, ownFunction, ownVehicle, availableVehicles, setDutyVehicle, ownCheck, patrolMates,
-    criticalItems, criticalSourcesError, openIncidents, openOrders, kontrollauftraege,
+    criticalItems, criticalSourcesError, openIncidents, ownIncidents, supportedIncidents, availableIncidents, completedIncidents, openOrders, kontrollauftraege,
     incidents, entries, avBv, baustellen, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,

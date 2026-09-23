@@ -1,4 +1,4 @@
-import { BookOpen, Car, ClipboardList, LayoutGrid, Radio, Shield, ShieldAlert, UserRoundCheck } from 'lucide-react'
+import { BookOpen, Car, ClipboardList, LayoutGrid, Mail, Radio, Shield, UserRoundCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
@@ -13,7 +13,7 @@ export default function AussendienstLayout() {
       { to: '/aussendienst', label: 'Außendienst / Streife', icon: Shield },
       { to: '/aussendienst/einsaetze', label: 'Einsätze', icon: Radio },
       { to: '/aussendienst/kontrollauftraege', label: 'Kontrollaufträge', icon: ClipboardList },
-      { to: '/aussendienst/hinweise', label: 'Operative Hinweise', icon: ShieldAlert },
+      { to: '/aussendienst/rsa-rsb', label: 'RSa/RSb', icon: Mail },
       { to: '/aussendienst/schutzmassnahmen', label: 'Schutzmaßnahmen', icon: UserRoundCheck },
       { to: '/aussendienst/fahrzeug', label: 'Fahrzeug', icon: Car },
       // Eigener Bestand, getrennt von den Unterlagen der Zentrale (gleiche

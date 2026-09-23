@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Archive, CheckCircle2, Clock3, Mail, Plus, Trash2, X } from 'lucide-react'
+import { Archive, CheckCircle2, Clock3, Mail, Plus, Search, Trash2, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import type { MailDelivery, MailDeliveryKind, MailDeliveryStatus } from '../lib/types'
@@ -25,8 +25,8 @@ const STATUS_COLOR: Record<MailDeliveryStatus, string> = {
 }
 // Passende Schnellaktionen je Fall-Art: Postzustellung vs. Vernehmung.
 const QUICK_ACTIONS_BY_KIND: Record<MailDeliveryKind, MailDeliveryStatus[]> = {
-  rsa: ['zugestellt', 'schriftlich_in_kenntnis', 'nicht_angetroffen', 'spaeter_erneut'],
-  rsb: ['zugestellt', 'schriftlich_in_kenntnis', 'nicht_angetroffen', 'spaeter_erneut'],
+  rsa: ['zugestellt', 'schriftlich_in_kenntnis'],
+  rsb: ['zugestellt', 'schriftlich_in_kenntnis'],
   vernehmung: ['durchgefuehrt', 'nicht_angetroffen', 'spaeter_erneut'],
 }
 const inputClass = 'mt-1 w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
@@ -58,6 +58,7 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
   const [form, setForm] = useState({ personId: null as string | null, kind: 'rsb' as MailDeliveryKind, behoerdenAktenzahl: '', eigeneGeschaeftszahl: '', note: '' })
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -73,7 +74,17 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
   }, [canManage])
   useEffect(() => { void load() }, [load])
 
-  const visible = useMemo(() => onlyOpen ? items.filter(item => item.status === 'offen' || item.status === 'spaeter_erneut') : items, [items, onlyOpen])
+  const visible = useMemo(() => {
+    const base = onlyOpen ? items.filter(item => item.status === 'offen' || item.status === 'spaeter_erneut') : items
+    const needle = search.trim().toLocaleLowerCase('de-AT')
+    if (!needle) return base
+    return base.filter(item => [
+      personDisplayName(item.person),
+      item.behoerden_aktenzahl,
+      item.eigene_geschaeftszahl,
+      item.akteneigentuemer?.name,
+    ].filter(Boolean).join(' ').toLocaleLowerCase('de-AT').includes(needle))
+  }, [items, onlyOpen, search])
   const groups = useMemo(() => {
     const byPerson = new Map<string, MailDelivery[]>()
     for (const item of visible) {
@@ -90,6 +101,9 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
   function openForm() { setForm({ personId: null, kind: 'rsb', behoerdenAktenzahl: '', eigeneGeschaeftszahl: '', note: '' }); setShowForm(true); setError('') }
   async function save() {
     if (!profile?.id || !form.personId) { setError('Bitte die Person auswählen.'); return }
+    if (form.kind !== 'vernehmung' && (!form.behoerdenAktenzahl.trim() || !form.eigeneGeschaeftszahl.trim())) {
+      setError('Für RSa/RSb sind Behördenaktenzahl und eigene Geschäftszahl erforderlich.'); return
+    }
     setSaving(true)
     // Akteneigentümer wird serverseitig automatisch auf den Ersteller gesetzt (kein manueller Schritt).
     const { error: insertError } = await supabase.from('mail_deliveries').insert({
@@ -102,6 +116,9 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
     setShowForm(false); await load()
   }
   async function quickAction(item: MailDelivery, status: MailDeliveryStatus) {
+    if (status === 'schriftlich_in_kenntnis' && (!item.behoerden_aktenzahl || !item.eigene_geschaeftszahl)) {
+      setError('Schriftliche Kenntnisnahme ist nur mit Behördenaktenzahl und eigener Geschäftszahl möglich.'); return
+    }
     setBusyId(item.id); setError('')
     const { error: rpcError } = await supabase.rpc('record_mail_delivery_action', { p_id: item.id, p_status: status })
     setBusyId(null)
@@ -131,6 +148,10 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
 
   return <div className="space-y-4">
     <div className="flex items-center justify-between gap-3"><p className="text-sm text-gray-500">Nach Person gruppiert · unabhängig vom heutigen Dienst nutzbar.</p><div className="flex gap-2">{canManage ? <button type="button" onClick={() => setShowClosed(true)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 px-3 py-2 rounded-lg"><Archive className="w-3.5 h-3.5" /> Erledigte</button> : null}<button type="button" onClick={openForm} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Eintrag</button></div></div>
+    <label className="relative block">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+      <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Person, Aktenzahl oder GZ suchen" className="w-full rounded-xl border border-gray-300 py-3 pl-10 pr-3 text-base sm:text-sm" />
+    </label>
     {error && !showForm ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
     {groups.length === 0 ? <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><Mail className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{onlyOpen ? 'Keine offenen Fälle.' : 'Noch keine Einträge erfasst.'}</p></div> : <div className="space-y-3">
       {groups.map(group => <section key={group.personId} className="rounded-2xl border border-gray-200 bg-white overflow-hidden"><div className="px-4 sm:px-5 py-3 border-b bg-gray-50"><h3 className="font-bold text-gray-900">{group.personName}</h3></div><div className="divide-y divide-gray-100">
@@ -148,8 +169,8 @@ export default function MailDeliveries({ onlyOpen = false }: { onlyOpen?: boolea
       <PersonPicker persons={persons} value={form.personId} onChange={id => setForm(current => ({ ...current, personId: id }))} createdBy={profile?.id ?? null} onCreated={created => setPersons(current => [...current, created].sort((a, b) => personDisplayName(a).localeCompare(personDisplayName(b), 'de-AT')))} required />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <label className="block text-xs font-medium text-gray-600">Art<select className={inputClass} value={form.kind} onChange={event => setForm(current => ({ ...current, kind: event.target.value as MailDeliveryKind }))}><option value="rsb">RSb</option><option value="rsa">RSa</option><option value="vernehmung">Vernehmung</option></select></label>
-        <label className="block text-xs font-medium text-gray-600">Behördenaktenzahl<input className={inputClass} value={form.behoerdenAktenzahl} onChange={event => setForm(current => ({ ...current, behoerdenAktenzahl: event.target.value }))} /></label>
-        <label className="block text-xs font-medium text-gray-600">Eigene Geschäftszahl<input className={inputClass} value={form.eigeneGeschaeftszahl} onChange={event => setForm(current => ({ ...current, eigeneGeschaeftszahl: event.target.value }))} /></label>
+        <label className="block text-xs font-medium text-gray-600">Behördenaktenzahl{form.kind !== 'vernehmung' ? ' *' : ''}<input className={inputClass} value={form.behoerdenAktenzahl} onChange={event => setForm(current => ({ ...current, behoerdenAktenzahl: event.target.value }))} /></label>
+        <label className="block text-xs font-medium text-gray-600">Eigene Geschäftszahl{form.kind !== 'vernehmung' ? ' *' : ''}<input className={inputClass} value={form.eigeneGeschaeftszahl} onChange={event => setForm(current => ({ ...current, eigeneGeschaeftszahl: event.target.value }))} /></label>
       </div>
       <p className="text-xs text-gray-500 -mt-2">Du wirst automatisch als Akteneigentümer:in eingetragen.</p>
       <label className="block text-xs font-medium text-gray-600">Bemerkung<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>

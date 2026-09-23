@@ -9,7 +9,7 @@ export const ASSISTANCE_LABEL: Record<IncidentAssistanceRequestType, string> = {
   personenabfrage: 'Personenabfrage',
   zmr: 'ZMR-Abfrage',
   fahrzeugabfrage: 'Fahrzeugabfrage',
-  sonstiges: 'Sonstige Anfrage',
+  sonstiges: 'Unterstützung',
 }
 
 export async function loadIncidentAssistanceRequests(incidentId: string): Promise<IncidentAssistanceRequest[]> {

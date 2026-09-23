@@ -11,10 +11,11 @@ export default function AussendienstUebersicht() {
 
   const functionLabel = ctx.ownFunction?.label ?? ctx.ownAssignment.function.toUpperCase()
   const openOrders = ctx.openOrders
+  const currentIncidents = [...ctx.ownIncidents, ...ctx.supportedIncidents]
   const incidentList = (
     <EntryOrIncidentList
       kind="incidents"
-      incidents={ctx.openIncidents}
+      incidents={currentIncidents}
       baustellen={ctx.baustellen}
       ownVehicleId={ctx.ownVehicle?.id ?? null}
       incidentSupports={ctx.incidentSupports}
@@ -36,6 +37,7 @@ export default function AussendienstUebersicht() {
           <p className="text-sm text-gray-600 mt-1">
             {ctx.ownVehicle ? <>{ctx.ownVehicle.call_sign || ctx.ownVehicle.name}{ctx.ownVehicle.license_plate ? ` · ${ctx.ownVehicle.license_plate}` : ''}</> : 'Kein Fahrzeug zugewiesen'}
           </p>
+          <p className="mt-1 text-xs text-gray-500">Streifenpartner: {ctx.patrolMates.map(item => item.profiles?.name).filter(Boolean).join(', ') || 'keine weitere Person zugeordnet'}</p>
         </div>
         <button type="button" onClick={() => setChangingVehicle(value => !value)} className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-50">
           <Car className="w-4 h-4" /> Fahrzeug ändern
@@ -57,7 +59,11 @@ export default function AussendienstUebersicht() {
       </div> : null}
     </section>
 
-    {ctx.openIncidents.length > 0 ? <section>
+    {ctx.criticalItems.length > 0 ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 sm:p-5">
+      <div className="flex items-start gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-700" /><div><p className="text-xs font-bold uppercase tracking-wider text-red-700">Dringend beachten</p><div className="mt-2 space-y-2">{ctx.criticalItems.map(item => <div key={item.id}><p className="text-sm font-bold text-red-950">{item.title}</p>{item.description ? <p className="text-xs text-red-800">{item.description}</p> : null}</div>)}</div></div></div>
+    </section> : null}
+
+    {currentIncidents.length > 0 ? <section>
       <div className="flex items-center justify-between gap-3 mb-2">
         <div><p className="text-xs font-bold uppercase tracking-wider text-red-700">Jetzt</p><h2 className="text-lg font-bold text-gray-900">Aktuelle Einsätze</h2></div>
         <Link to="/aussendienst/einsaetze" className="text-xs font-semibold text-blue-700 hover:underline">Alle ansehen</Link>
@@ -111,16 +117,16 @@ export default function AussendienstUebersicht() {
       </div>)}</div>}
     </section>
 
-    {ctx.openIncidents.length === 0 ? <section className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
+    {currentIncidents.length === 0 ? <section className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
       <CheckCircle2 className="w-7 h-7 text-gray-300 mx-auto mb-2" />
-      <p className="font-medium text-gray-700">Keine offenen Einsätze</p>
-      <p className="text-sm text-gray-500 mt-1">Neue disponierte Einsätze erscheinen automatisch hier.</p>
+      <p className="font-medium text-gray-700">Keine eigenen laufenden Einsätze</p>
+      <p className="text-sm text-gray-500 mt-1">Noch nicht zugewiesene Einsätze stehen unter „Einsätze“ als verfügbarer Pool.</p>
     </section> : null}
 
     <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
       <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Schnellzugriff</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Link to="/rsa-rsb" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Mail className="w-4 h-4 text-blue-700" /> RSa/RSb</Link>
+        <Link to="/aussendienst/rsa-rsb" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Mail className="w-4 h-4 text-blue-700" /> RSa/RSb</Link>
         <Link to="/stammdaten/personen" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Search className="w-4 h-4 text-blue-700" /> Personen</Link>
         <Link to="/aussendienst/kontrollbehelfe" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><ListChecks className="w-4 h-4 text-blue-700" /> Behelfe</Link>
         <Link to="/aussendienst/fahrzeug" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Car className="w-4 h-4 text-blue-700" /> Fahrzeug</Link>
