@@ -90,14 +90,15 @@ export default function ZentraleAssistanceQueue({
       setError('Für ereignisweite Ergebnisdokumente wird ein gemeinsamer Ereignis-Dokumentbereich benötigt. Die Anfrage kann bis dahin ohne Upload erledigt werden.')
       return
     }
+    const incidentId = row.incident_id
     setBusy(true)
     setError('')
     try {
-      const uploaded = await uploadEinsatzdokument(row.incident_id, file)
+      const uploaded = await uploadEinsatzdokument(incidentId, file)
       let doc
       try {
         doc = await registerEinsatzdokument({
-          incidentId: row.incident_id,
+          incidentId,
           art: row.request_type === 'zmr' ? 'zmr' : 'abfrage',
           title: row.request_type === 'zmr' ? 'ZMR-Auszug' : 'Abfrage / Register',
           fileKey: uploaded.key,
@@ -106,13 +107,13 @@ export default function ZentraleAssistanceQueue({
           uploadedBy: profile.id,
         })
       } catch (err) {
-        await rollbackUploadedEinsatzdokument(row.incident_id, uploaded.key)
+        await rollbackUploadedEinsatzdokument(incidentId, uploaded.key)
         throw err
       }
       if (row.request_type === 'zmr' && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
         const text = await extractPdfPlainText(file)
         const gefunden = personenAusText(text)
-        if (gefunden.length > 0) await addPersonen(row.incident_id, 'haus', gefunden, profile.id)
+        if (gefunden.length > 0) await addPersonen(incidentId, 'haus', gefunden, profile.id)
       }
 
       await completeAssistanceRequest({
@@ -157,7 +158,7 @@ export default function ZentraleAssistanceQueue({
     </div>
 
     <div className="mt-3 space-y-2">{rows.map(row => {
-      const incident = byIncident.get(row.incident_id)
+      const incident = row.incident_id ? byIncident.get(row.incident_id) : undefined
       const active = activeId === row.id
       return <article key={row.id} className={'rounded-xl border bg-white p-3 ' + (active ? 'border-blue-400' : 'border-gray-200')}>
         <div className="flex flex-wrap items-start justify-between gap-2">
