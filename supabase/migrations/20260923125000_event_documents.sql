@@ -17,6 +17,8 @@ create index if not exists ereignis_dokumente_ereignis_created_idx
   on public.ereignis_dokumente(ereignis_id, created_at);
 create index if not exists ereignis_dokumente_target_idx
   on public.ereignis_dokumente(target_organisation, created_at desc);
+create index if not exists ereignis_dokumente_uploaded_by_idx
+  on public.ereignis_dokumente(uploaded_by);
 
 alter table public.ereignis_dokumente enable row level security;
 
