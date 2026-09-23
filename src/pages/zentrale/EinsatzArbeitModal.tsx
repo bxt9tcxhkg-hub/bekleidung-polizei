@@ -214,7 +214,7 @@ export default function EinsatzArbeitModal({
         <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Daten- und Dokumentenunterstützung</h3>
-            <p className="text-xs text-gray-500 mt-1">Die Zentrale stellt Daten und Unterlagen bereit. Evakuierungs- und Unterkunftsentscheidungen kommen von den Kräften vor Ort bzw. der Einsatzleitung.</p>
+            <p className="text-xs text-gray-500 mt-1">Die Zentrale stellt Daten und Unterlagen bereit. Einsatzverlauf, Feststellungen und Rückmeldungen werden bei der Stadtpolizei im PAD dokumentiert.</p>
           </div>
           <button type="button" onClick={() => setTab('dateien')} className="text-xs font-semibold text-blue-800 border border-blue-200 rounded-lg px-2.5 py-1.5 bg-blue-50">
             ZMR / Abfrage hochladen
