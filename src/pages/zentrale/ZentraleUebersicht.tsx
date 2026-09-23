@@ -13,6 +13,7 @@ import { IncidentCards, SofortWichtig } from './zentraleShared'
 import { formatTime } from '../../lib/zentraleShared'
 import EinsatzArbeitModal from './EinsatzArbeitModal'
 import ZentraleAssistanceQueue from './ZentraleAssistanceQueue'
+import CentralDutyOverview from './CentralDutyOverview'
 
 const INCIDENT_COLORS = ['#2563eb', '#ea580c', '#7c3aed', '#0f766e', '#be185d', '#4d7c0f', '#0891b2', '#92400e']
 
@@ -120,6 +121,7 @@ export default function ZentraleUebersicht() {
   }, [ctx.openIncidents, listIncidents])
 
   return <div className="space-y-6">
+    <CentralDutyOverview openIncidents={ctx.openIncidents} />
     <SofortWichtig items={[
       ...ctx.criticalEntries.filter(item => item.category !== 'brief').map(item => ({
         id: item.id, title: item.title, description: item.description,
