@@ -14,6 +14,7 @@ import {
   rollbackUploadedEinsatzdokument,
   uploadEinsatzdokument,
 } from '../../lib/einsatzDokumente'
+import { addPersonen, extractPdfPlainText, personenAusText } from '../../lib/zmrPersonen'
 import type {
   IncidentAssistanceRequest,
   IncidentReport,
@@ -104,6 +105,12 @@ export default function ZentraleAssistanceQueue({
         await rollbackUploadedEinsatzdokument(row.incident_id, uploaded.key)
         throw err
       }
+      if (row.request_type === 'zmr' && (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))) {
+        const text = await extractPdfPlainText(file)
+        const gefunden = personenAusText(text)
+        if (gefunden.length > 0) await addPersonen(row.incident_id, 'haus', gefunden, profile.id)
+      }
+
       await completeAssistanceRequest({
         id: row.id,
         userId: profile.id,
