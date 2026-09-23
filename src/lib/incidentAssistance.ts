@@ -65,14 +65,30 @@ export async function createAssistanceRequest(input: {
 }
 
 export async function startAssistanceRequest(id: string, userId: string): Promise<IncidentAssistanceRequest> {
+  const current = await supabase
+    .from('incident_assistance_requests')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (current.error) throw new Error('Abfrage konnte nicht geladen werden.')
+  if (current.data.status === 'in_bearbeitung') {
+    if (current.data.handled_by === userId) return current.data
+    throw new Error('Diese Aufgabe wird bereits von einer anderen Person bearbeitet.')
+  }
+  if (current.data.status !== 'offen') throw new Error('Diese Aufgabe ist nicht mehr offen.')
+
   const now = new Date().toISOString()
   const result = await supabase
     .from('incident_assistance_requests')
     .update({ status: 'in_bearbeitung', handled_by: userId, handled_at: now, updated_at: now })
     .eq('id', id)
+    .eq('status', 'offen')
     .select('*')
-    .single()
-  if (result.error) throw new Error('Anfrage konnte nicht übernommen werden.')
+    .maybeSingle()
+
+  if (result.error) throw new Error('Abfrage konnte nicht übernommen werden.')
+  if (!result.data) throw new Error('Die Aufgabe wurde zwischenzeitlich von einer anderen Person übernommen.')
   return result.data
 }
 
@@ -96,9 +112,12 @@ export async function completeAssistanceRequest(input: {
       updated_at: now,
     })
     .eq('id', input.id)
+    .eq('handled_by', input.userId)
+    .in('status', ['offen', 'in_bearbeitung'])
     .select('*')
-    .single()
-  if (result.error) throw new Error('Anfrage konnte nicht abgeschlossen werden.')
+    .maybeSingle()
+  if (result.error) throw new Error('Abfrage konnte nicht abgeschlossen werden.')
+  if (!result.data) throw new Error('Die Aufgabe wurde zwischenzeitlich geändert oder von einer anderen Person übernommen.')
   return result.data
 }
 
