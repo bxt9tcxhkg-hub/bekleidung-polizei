@@ -1812,8 +1812,9 @@ export type Database = {
         { foreignKeyName: 'einsatz_dokumente_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_dokumente_uploaded_by_fkey'; columns: ['uploaded_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
-      incident_assistance_requests: { Row: IncidentAssistanceRequestRow; Insert: Pick<IncidentAssistanceRequestRow, 'incident_id' | 'request_type' | 'requested_by'> & Partial<Omit<IncidentAssistanceRequestRow, 'id' | 'incident_id' | 'request_type' | 'requested_by' | 'requested_at' | 'updated_at'>>; Update: Partial<Omit<IncidentAssistanceRequestRow, 'id' | 'incident_id' | 'requested_by' | 'requested_at'>>; Relationships: [
+      incident_assistance_requests: { Row: IncidentAssistanceRequestRow; Insert: Pick<IncidentAssistanceRequestRow, 'request_type' | 'requested_by'> & Partial<Omit<IncidentAssistanceRequestRow, 'id' | 'request_type' | 'requested_by' | 'requested_at' | 'updated_at'>>; Update: Partial<Omit<IncidentAssistanceRequestRow, 'id' | 'requested_by' | 'requested_at'>>; Relationships: [
         { foreignKeyName: 'incident_assistance_requests_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_assistance_requests_source_document_id_fkey'; columns: ['source_document_id']; isOneToOne: false; referencedRelation: 'einsatz_dokumente'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_assistance_requests_result_document_id_fkey'; columns: ['result_document_id']; isOneToOne: false; referencedRelation: 'einsatz_dokumente'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_assistance_requests_requested_by_fkey'; columns: ['requested_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
