@@ -17,6 +17,7 @@ import {
 } from '../../lib/ereignis'
 import { EREIGNISSTUFEN, STUFE_META, formatStamp, telefonketteFuer } from '../../lib/einsatzSchema'
 import { formatTime } from '../../lib/zentraleShared'
+import { centralNextAction, eventNeedsClosureHint } from '../../lib/centralWorkflow'
 import { loadEreignisKontakte, telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
 import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport, IncidentStatus } from '../../lib/types'
 import type { ActiveEreignisSummary } from '../../lib/ereignis'
@@ -239,45 +240,18 @@ export default function EinsatzArbeitModal({
     })
   }
 
-  function nextAction() {
-    if (item.status !== 'offen') return {
-      done: true,
-      title: 'Einsatz abgeschlossen',
-      text: 'Für diesen Einsatz besteht keine offene Zentralen-Aufgabe.',
-      action: null as null | (() => void),
-      actionLabel: '',
-    }
-    if (item.disposition === 'offen' && !item.assigned_vehicle_id && !item.taken_over_at) return {
-      done: false,
-      title: 'Bearbeitung festlegen',
-      text: 'Der Einsatz ist noch keiner Bearbeitung zugewiesen.',
-      action: () => { close(); openEditIncident(item) },
-      actionLabel: 'Disposition öffnen',
-    }
-    if (openAssistanceCount > 0) return {
-      done: false,
-      title: 'Offene Abfrage bearbeiten',
-      text: `${openAssistanceCount} ${openAssistanceCount === 1 ? 'Aufgabe wartet' : 'Aufgaben warten'} in diesem Einsatz.`,
-      action: null,
-      actionLabel: '',
-    }
-    if (ereignis && nextKontakt) return {
-      done: false,
-      title: 'Nächste Verständigung',
-      text: nextKontakt,
-      action: () => setTab('ereignis'),
-      actionLabel: 'Verständigungen öffnen',
-    }
-    return {
-      done: true,
-      title: 'Keine offene Zentralen-Aufgabe',
-      text: 'Auf neue Anforderungen von Streife, Feuerwehr oder Krisenstab reagieren.',
-      action: null,
-      actionLabel: '',
-    }
-  }
+  const action = centralNextAction({
+    incident: item,
+    openAssistanceCount,
+    nextNotification: ereignis ? nextKontakt : null,
+  })
 
-  const action = nextAction()
+  const actionHandler = action.kind === 'dispatch'
+    ? () => { close(); openEditIncident(item) }
+    : action.kind === 'notification'
+      ? () => setTab('ereignis')
+      : null
+
 
   return <Modal wide title={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} close={close}>
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
@@ -310,14 +284,14 @@ export default function EinsatzArbeitModal({
 
       <CentralIncidentContext incidentId={item.id} />
 
-      <section className={'rounded-xl border px-3 py-2.5 ' + (action.done ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50')}>
+      <section className={'rounded-xl border px-3 py-2.5 ' + (action.kind === 'done' || action.kind === 'wait' ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50')}>
         <div className="flex items-start gap-2">
-          {action.done ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-green-700" /> : <CircleAlert className="mt-0.5 h-4 w-4 flex-none text-blue-800" />}
+          {action.kind === 'done' || action.kind === 'wait' ? <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-green-700" /> : <CircleAlert className="mt-0.5 h-4 w-4 flex-none text-blue-800" />}
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-bold uppercase tracking-wide text-gray-600">Nächster Schritt</p>
             <p className="mt-0.5 text-sm font-bold text-gray-950">{action.title}</p>
             <p className="mt-0.5 text-xs text-gray-700">{action.text}</p>
-            {action.action ? <button type="button" onClick={action.action} className="mt-2 text-xs font-bold text-blue-800">{action.actionLabel}</button> : null}
+            {actionHandler ? <button type="button" onClick={actionHandler} className="mt-2 text-xs font-bold text-blue-800">{action.kind === 'dispatch' ? 'Disposition öffnen' : 'Verständigungen öffnen'}</button> : null}
           </div>
         </div>
       </section>
@@ -366,7 +340,7 @@ export default function EinsatzArbeitModal({
           </div>
         </div>
 
-        {ereignis && ereignis.status === 'aktiv' && relatedOpenCount === 0 ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">Alle zugeordneten Einsätze sind erledigt. Ereignis prüfen und bei Bedarf abschließen.</div> : null}
+        {ereignis && eventNeedsClosureHint({ eventStatus: ereignis.status, openIncidentCount: relatedOpenCount }) ? <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-900">Alle zugeordneten Einsätze sind erledigt. Ereignis prüfen und bei Bedarf abschließen.</div> : null}
 
         {canOperateZentrale ? <div className="mt-2 flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
           const row = STUFE_META[key]
