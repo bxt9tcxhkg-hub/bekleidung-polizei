@@ -1,7 +1,6 @@
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
 import EreignisEntscheidungen from '../zentrale/EreignisEntscheidungen'
 import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
-import EventAssistanceRequestPanel from './EventAssistanceRequestPanel'
 import EventDocumentsPanel from './EventDocumentsPanel'
 import type { IncidentAssistanceOrganisation } from '../../lib/types'
 
@@ -31,15 +30,9 @@ export default function OrganisationEventDocumentation({
     <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2">
       <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Ereignisdokumentation</p>
       <p className="mt-1 text-xs text-gray-600">
-        Organisationsspezifischer Protokollbereich im Portal. Dieser Bereich ist nicht Teil der Stadtpolizei-Oberfläche.
+        Organisationsspezifischer Arbeitsbereich. Abfragen werden telefonisch oder über Funk bei der Stadtpolizei-Zentrale angefordert; bereitgestellte Ergebnisse erscheinen hier.
       </p>
     </div>
-
-    {assistanceOrganisation ? <EventAssistanceRequestPanel
-      ereignisId={ereignisId}
-      incidentId={incidentId}
-      organisation={assistanceOrganisation}
-    /> : null}
 
     {assistanceOrganisation ? <EventDocumentsPanel
       ereignisId={ereignisId}
