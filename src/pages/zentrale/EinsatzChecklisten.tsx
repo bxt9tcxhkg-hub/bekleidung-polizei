@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { loadChecklistPunkte, setChecklistPunktErledigt, setChecklistPunktWer } from '../../lib/einsatzChecklisten'
 import { ERSTMELDUNG_CHECKLISTE, NOTUNTERKUNFT_CHECKLISTE, type ChecklistPunktDef } from '../../lib/einsatzSchema'
 import type { EinsatzChecklisteName, EinsatzChecklistPunkt } from '../../lib/types'
+import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
 
 // Verständigungen werden ausschließlich im eigenen serverseitigen
 // Verständigungsbereich geführt (Versucht/Erreicht). Sie dürfen nicht ein
@@ -134,8 +135,23 @@ function MassnahmenAbschnitt({
   </div>
 }
 
-export default function EinsatzChecklisten({ incidentId, canOperate, onChanged }: { incidentId: string; canOperate: boolean; onChanged?: () => void }) {
+export default function EinsatzChecklisten({
+  incidentId,
+  canOperate,
+  organisation,
+  onChanged,
+}: {
+  incidentId: string
+  canOperate: boolean
+  organisation: WorkspaceOrganisation
+  onChanged?: () => void
+}) {
   const [notunterkunftOffen, setNotunterkunftOffen] = useState(false)
+  const policy = workspacePolicy(organisation)
+
+  // Fail closed: die Stadtpolizei darf diese generischen Protokollbausteine
+  // nicht als zweites Einsatzprotokoll neben dem PAD verwenden.
+  if (!policy.operationalChecklists) return null
 
   return <div className="space-y-4">
     <MassnahmenAbschnitt
