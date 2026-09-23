@@ -1049,9 +1049,10 @@ export interface EinsatzPartei {
 
 export type EinsatzChecklisteName = 'erstmeldung' | 'notunterkunft'
 
-/** Ein Punkt der digitalen "Checkliste Notfall/Katastrophe" bzw. "Checkliste
- * Notunterkunft" (Stadt Dornbirn) - geteilter Server-Zustand statt
- * localStorage, damit Zentrale UND Streife denselben Bearbeitungsstand sehen. */
+/** Generischer serverseitiger Protokollpunkt der Ereignis-/Notunterkunfts-
+ * dokumentation. Die Stadtpolizei verwendet diese Protokollfunktion nicht als
+ * Einsatzdokumentation (PAD bleibt führend); der Typ bleibt für spätere
+ * organisationsspezifische Arbeitsräume wie Feuerwehr/Krisenstab erhalten. */
 export interface EinsatzChecklistPunkt {
   id: string
   incident_id: string
@@ -1067,9 +1068,10 @@ export interface EinsatzChecklistPunkt {
 export type NamenslisteArt = 'haus' | 'kontrolle' | 'evakuierung' | 'befragung' | 'unterbringung'
 export type NamenslistePersonStatus = 'offen' | 'erledigt' | 'im_haus' | 'draussen' | 'unbekannt'
 
-/** Personenliste eines Einsatzes (ZMR-Auszug-Erkennung, Kontrollen, Evakuierung,
- * Befragung, Notunterkunft-Namensliste) - geteilter Server-Zustand statt
- * localStorage, damit Zentrale UND Streife dieselbe Liste sehen/bearbeiten. */
+/** Generisches Personenlistenmodell eines Ereignisses. In der Polizei-Sicht
+ * wird aktuell nur die Bewohner-/ZMR-Datenbasis lesend genutzt; operative
+ * Status- und Unterkunftsfelder bleiben für spätere organisationsspezifische
+ * Protokolloberflächen (z. B. Feuerwehr/Krisenstab) erhalten. */
 export interface NamenslistePerson {
   id: string
   incident_id: string
