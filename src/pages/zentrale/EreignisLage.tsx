@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { updateEreignisLage } from '../../lib/ereignis'
 import type { Ereignis, IncidentReport } from '../../lib/types'
+import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
 
 function Info({ label, value }: { label: string; value: string }) {
   return <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
@@ -79,7 +80,7 @@ function NumberField({
 }
 
 export default function EreignisLage({
-  ereignis, incident, canOperate, userId, onSaved, onProcessChanged,
+  ereignis, incident, canOperate, userId, onSaved, onProcessChanged, organisation = 'stadtpolizei',
 }: {
   ereignis: Ereignis
   incident: IncidentReport
@@ -87,8 +88,12 @@ export default function EreignisLage({
   userId: string | null
   onSaved: (ereignis: Ereignis) => void
   onProcessChanged?: () => void
+  organisation?: WorkspaceOrganisation
 }) {
   const [error, setError] = useState('')
+  const policy = workspacePolicy(organisation)
+
+  if (!policy.operationalProtocol) return null
 
   async function save(changes: Parameters<typeof updateEreignisLage>[1]) {
     if (!userId) return
@@ -110,7 +115,7 @@ export default function EreignisLage({
   return <div className="space-y-4">
     <div>
       <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Lageinformation</h3>
-      <p className="mt-1 text-xs text-gray-500">Die Zentrale dokumentiert vorhandene Meldungen und Rückmeldungen. Sie trifft hier keine Entscheidungen für die Kräfte vor Ort.</p>
+      <p className="mt-1 text-xs text-gray-500">Organisationsspezifische Ereignisdokumentation. Für die Stadtpolizei bleibt das PAD führend; diese Oberfläche wird dort nicht angezeigt.</p>
     </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
