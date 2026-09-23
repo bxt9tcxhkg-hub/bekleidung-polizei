@@ -131,7 +131,7 @@ export default function PatrolAssistancePanel({
   return <div className="space-y-3">
     <div>
       <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Unterstützung Zentrale</p>
-      <p className="mt-1 text-xs text-gray-500">Abfrage anfordern; die Zentrale führt sie durch und meldet das Ergebnis über Funk, Telefon oder Portal zurück.</p>
+      <p className="mt-1 text-xs text-gray-500">Abfrage anfordern. Funk bzw. Telefon bleiben der normale Kommunikationsweg; Ergebnisdateien erscheinen automatisch beim Einsatz.</p>
     </div>
 
     {openRows.length > 0 ? <div className="space-y-1.5">{openRows.map(row => <div key={row.id} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
@@ -175,10 +175,10 @@ export default function PatrolAssistancePanel({
     </button>
 
     {completedRows.length > 0 ? <details className="rounded-lg border border-gray-200 px-3 py-2">
-      <summary className="cursor-pointer text-xs font-semibold text-gray-700">Erledigte Rückmeldungen ({completedRows.length})</summary>
+      <summary className="cursor-pointer text-xs font-semibold text-gray-700">Abgeschlossene Anfragen ({completedRows.length})</summary>
       <div className="mt-2 space-y-2">{completedRows.slice(0, 5).map(row => <div key={row.id} className="text-xs text-gray-600">
-        <strong>{ASSISTANCE_LABEL[row.request_type]}</strong>{row.response_channel ? ' · ' + (row.response_channel === 'funk' ? 'Funk' : row.response_channel === 'telefon' ? 'Telefon' : 'Portal') : ''}
-        {row.result_text ? <p className="mt-0.5 whitespace-pre-wrap">{row.result_text}</p> : null}
+        <strong>{ASSISTANCE_LABEL[row.request_type]}</strong>
+        <span className="text-gray-500">{row.result_document_id ? ' · Ergebnisdatei beim Einsatz vorhanden' : ' · erledigt'}</span>
       </div>)}</div>
     </details> : null}
 
