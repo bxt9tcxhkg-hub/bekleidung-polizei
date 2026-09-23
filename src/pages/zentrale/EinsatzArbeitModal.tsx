@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Modal } from '../../components/ZentraleEntryEditor'
 import {
+  loadActiveEreignisse,
+  linkIncidentToEreignis,
   loadIncidentEreignis,
   loadVerstaendigungen,
   setIncidentEreignisDimension,
@@ -12,6 +14,7 @@ import { EREIGNISSTUFEN, STUFE_META, formatStamp, telefonketteFuer } from '../..
 import { formatTime } from '../../lib/zentraleShared'
 import { loadEreignisKontakte, telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
 import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport } from '../../lib/types'
+import type { ActiveEreignisSummary } from '../../lib/ereignis'
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EreignisCockpit from './EreignisCockpit'
@@ -38,6 +41,8 @@ export default function EinsatzArbeitModal({
   const [error, setError] = useState('')
   const [cockpitRefresh, setCockpitRefresh] = useState(0)
   const [kontakte, setKontakte] = useState<Record<string, EreignisKontaktTreffer[]>>({})
+  const [activeEvents, setActiveEvents] = useState<ActiveEreignisSummary[]>([])
+  const [linkEventOpen, setLinkEventOpen] = useState(false)
 
   const stufe: EreignisDimension = ereignis?.dimension ?? 'klein'
   const meta = STUFE_META[stufe]
@@ -69,6 +74,14 @@ export default function EinsatzArbeitModal({
   }, [hatEreignisArbeitsraum, tab])
 
   useEffect(() => {
+    let cancelled = false
+    void loadActiveEreignisse()
+      .then(rows => { if (!cancelled) setActiveEvents(rows) })
+      .catch(() => { if (!cancelled) setActiveEvents([]) })
+    return () => { cancelled = true }
+  }, [item.id, ereignis?.id])
+
+  useEffect(() => {
     if (!hatEreignisArbeitsraum) { setKontakte({}); return }
     let cancelled = false
     void loadEreignisKontakte(telefonketteFuer(stufe))
@@ -76,6 +89,27 @@ export default function EinsatzArbeitModal({
       .catch(() => { if (!cancelled) setKontakte({}) })
     return () => { cancelled = true }
   }, [hatEreignisArbeitsraum, stufe])
+
+  async function linkToExistingEvent(eventId: string) {
+    if (!canOperateZentrale || !createdBy || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await linkIncidentToEreignis({
+        incidentId: item.id,
+        ereignisId: eventId,
+        userId: createdBy,
+      })
+      setEreignis(saved)
+      setVerstaendigungen(await loadVerstaendigungen(saved.id))
+      setLinkEventOpen(false)
+      setCockpitRefresh(value => value + 1)
+    } catch {
+      setError('Einsatz konnte dem Ereignis nicht zugeordnet werden.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function setStufe(next: EreignisDimension) {
     if (!canOperateZentrale || busy || next === stufe) return
@@ -178,8 +212,14 @@ export default function EinsatzArbeitModal({
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Ereignisdimension</p>
             <p className="mt-1 text-xs text-gray-500">{meta.wann}</p>
+            {ereignis ? <p className="mt-1 text-xs font-semibold text-gray-700">Gemeinsames Ereignis: {ereignis.titel}</p> : null}
           </div>
-          {stufe !== 'klein' ? <button type="button" onClick={() => setTab('ereignis')} className="text-xs font-semibold text-blue-800">Ereignis öffnen</button> : null}
+          <div className="flex flex-wrap gap-2">
+            {!ereignis && canOperateZentrale && activeEvents.length > 0 ? <button type="button" onClick={() => setLinkEventOpen(current => !current)} className="text-xs font-semibold text-blue-800">
+              {linkEventOpen ? 'Zuordnung schließen' : 'Zu bestehendem Ereignis'}
+            </button> : null}
+            {stufe !== 'klein' ? <button type="button" onClick={() => setTab('ereignis')} className="text-xs font-semibold text-blue-800">Ereignis öffnen</button> : null}
+          </div>
         </div>
         {canOperateZentrale ? <div className="mt-2 flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
           const row = STUFE_META[key]
@@ -192,6 +232,23 @@ export default function EinsatzArbeitModal({
             style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}
           >{row.label}</button>
         })}</div> : <span className="mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>}
+
+        {linkEventOpen && !ereignis ? <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
+          <p className="text-xs font-semibold text-gray-700">Aktive Ereignisse</p>
+          {activeEvents.map(row => <button
+            key={row.id}
+            type="button"
+            disabled={busy}
+            onClick={() => void linkToExistingEvent(row.id)}
+            className="flex w-full items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left disabled:opacity-50"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold text-gray-900">{row.titel}</span>
+              <span className="block text-xs text-gray-500">{STUFE_META[row.dimension].label} · {row.incident_count} {row.incident_count === 1 ? 'Einsatz' : 'Einsätze'}</span>
+            </span>
+            <span className="text-xs font-semibold text-blue-800">Zuordnen</span>
+          </button>)}
+        </div> : null}
       </div>
 
       <div className="flex flex-wrap gap-2">
