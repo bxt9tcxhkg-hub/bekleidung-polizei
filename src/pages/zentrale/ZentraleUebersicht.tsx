@@ -4,7 +4,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import LeafletMap from '../../components/LeafletMap'
 import WichtigeTelefonnummernCard from '../../components/WichtigeTelefonnummernCard'
 import { firstControlDeadline, hasInitialControl, loadSchutzfaelleMitKontrollauftrag, MASSNAHME_LABEL, SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
-import { loadEreignisDimensionen } from '../../lib/ereignis'
+import { loadEreignisContexts, loadEreignisDimensionen, type IncidentEreignisContext } from '../../lib/ereignis'
 import { supabase } from '../../lib/supabase'
 import { ZUSTAND_LABEL, formatZeitraum, strassenName } from '../../lib/strassenzustand'
 import type { EreignisDimension, IncidentReport } from '../../lib/types'
@@ -28,6 +28,7 @@ export default function ZentraleUebersicht() {
   const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null)
   const [workIncident, setWorkIncident] = useState<IncidentReport | null>(null)
   const [eventDimensionByIncidentId, setEventDimensionByIncidentId] = useState<Record<string, EreignisDimension>>({})
+  const [eventContextByIncidentId, setEventContextByIncidentId] = useState<Record<string, IncidentEreignisContext>>({})
   const previousOpenCountRef = useRef(0)
   const [now] = useState(() => new Date().getTime())
   useEffect(() => {
@@ -61,9 +62,20 @@ export default function ZentraleUebersicht() {
   const incidentIds = useMemo(() => listIncidents.map(item => item.id), [listIncidents])
   useEffect(() => {
     let cancelled = false
-    void loadEreignisDimensionen(incidentIds)
-      .then(rows => { if (!cancelled) setEventDimensionByIncidentId(rows) })
-      .catch(() => { if (!cancelled) setEventDimensionByIncidentId({}) })
+    void Promise.all([
+      loadEreignisDimensionen(incidentIds),
+      loadEreignisContexts(incidentIds),
+    ])
+      .then(([dimensions, contexts]) => {
+        if (cancelled) return
+        setEventDimensionByIncidentId(dimensions)
+        setEventContextByIncidentId(contexts)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setEventDimensionByIncidentId({})
+        setEventContextByIncidentId({})
+      })
     return () => { cancelled = true }
   }, [incidentIds, workIncident])
   function openWork(item: IncidentReport) {
@@ -74,21 +86,24 @@ export default function ZentraleUebersicht() {
   function toggleIncident(item: IncidentReport) {
     setSelectedIncidentId(current => current === item.id ? null : item.id)
   }
+  const selectedEventId = selectedIncidentId ? eventContextByIncidentId[selectedIncidentId]?.id ?? null : null
   const incidentMarkers = useMemo(() => ctx.openIncidents
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => {
       const visual = incidentVisuals[item.id]
       const selected = selectedIncidentId === item.id
+      const related = Boolean(selectedEventId && eventContextByIncidentId[item.id]?.id === selectedEventId && !selected)
       return {
         lat: item.location_lat as number,
         lng: item.location_lng as number,
         color: visual.color,
         label: visual.label,
         selected,
+        related,
         popup: selected ? `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 80)}` : undefined,
         onClick: () => toggleIncident(item),
       }
-    }), [ctx.openIncidents, selectedIncidentId, incidentVisuals])
+    }), [ctx.openIncidents, selectedIncidentId, selectedEventId, incidentVisuals, eventContextByIncidentId])
   const focusedIncident = useMemo(() => ctx.openIncidents.find(item =>
     item.id === selectedIncidentId && item.location_lat !== null && item.location_lng !== null
   ) ?? null, [ctx.openIncidents, selectedIncidentId])
@@ -137,6 +152,7 @@ export default function ZentraleUebersicht() {
             setIncidentHandling={ctx.setIncidentHandling}
             visualByIncidentId={incidentVisuals}
             eventDimensionByIncidentId={eventDimensionByIncidentId}
+            eventContextByIncidentId={eventContextByIncidentId}
             accordion={ctx.openIncidents.length >= 2}
             expandedIncidentId={selectedIncidentId}
             onToggleIncident={toggleIncident}
@@ -165,6 +181,8 @@ export default function ZentraleUebersicht() {
       openEditIncident={ctx.openEditIncident}
       completeIncident={ctx.completeIncident}
       createdBy={ctx.createdBy}
+      allIncidents={listIncidents}
+      onOpenRelatedIncident={openWork}
     /> : null}
   </div>
 }
