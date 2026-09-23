@@ -154,7 +154,26 @@ export async function loadPersonenliste(incidentId: string, art: NamenslisteArt)
 }
 
 export async function addPersonen(incidentId: string, art: NamenslisteArt, personen: readonly ErkannteZmrPerson[], createdBy: string): Promise<NamenslistePerson[]> {
-  const rows = personen.map(person => ({ incident_id: incidentId, listenart: art, name: person.name, geboren: person.geboren ?? null, wohnung: person.wohnung ?? null, created_by: createdBy }))
+  if (personen.length === 0) return []
+  const vorhanden = await loadPersonenliste(incidentId, art)
+  const keys = new Set(vorhanden.map(person => [
+    person.name.trim().toLocaleLowerCase('de-AT'),
+    person.geboren ?? '',
+    person.wohnung ?? '',
+  ].join('|')))
+  const neu = personen.filter(person => {
+    const key = [
+      person.name.trim().toLocaleLowerCase('de-AT'),
+      person.geboren ?? '',
+      person.wohnung ?? '',
+    ].join('|')
+    if (keys.has(key)) return false
+    keys.add(key)
+    return true
+  })
+  if (neu.length === 0) return []
+
+  const rows = neu.map(person => ({ incident_id: incidentId, listenart: art, name: person.name, geboren: person.geboren ?? null, wohnung: person.wohnung ?? null, created_by: createdBy }))
   const result = await supabase.from('einsatz_namensliste').insert(rows).select('*')
   if (result.error) throw new Error('Die Personen konnten nicht übernommen werden.')
   return (result.data ?? []) as unknown as NamenslistePerson[]
