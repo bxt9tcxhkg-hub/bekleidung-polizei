@@ -981,6 +981,31 @@ export interface EinsatzDokumentRow {
   created_at: string
 }
 
+export type IncidentAssistanceRequestType = 'personenabfrage' | 'zmr' | 'fahrzeugabfrage' | 'sonstiges'
+export type IncidentAssistanceRequestStatus = 'offen' | 'in_bearbeitung' | 'erledigt' | 'storniert'
+export type IncidentAssistanceResponseChannel = 'funk' | 'telefon' | 'portal'
+
+export interface IncidentAssistanceRequest {
+  id: string
+  incident_id: string
+  request_type: IncidentAssistanceRequestType
+  status: IncidentAssistanceRequestStatus
+  request_text: string | null
+  subject_data: Record<string, unknown>
+  source_document_id: string | null
+  result_text: string | null
+  result_document_id: string | null
+  response_channel: IncidentAssistanceResponseChannel | null
+  requested_by: string
+  requested_vehicle_id: string | null
+  requested_at: string
+  handled_by: string | null
+  handled_at: string | null
+  completed_by: string | null
+  completed_at: string | null
+  updated_at: string
+}
+
 export interface IncidentSupport {
   id: string
   incident_id: string
@@ -1506,6 +1531,7 @@ type EreignisVerlaufRow = Omit<EreignisVerlauf, never>
 type EreignisVerstaendigungRow = Omit<EreignisVerstaendigung, never>
 type EreignisEntscheidungRow = Omit<EreignisEntscheidung, never>
 type EinsatzDokumentDbRow = Omit<EinsatzDokumentRow, never>
+type IncidentAssistanceRequestRow = Omit<IncidentAssistanceRequest, never>
 type IncidentSupportRow = Omit<IncidentSupport, 'vehicle'>
 type IncidentReasonConfigRow = Omit<IncidentReasonConfig, never>
 type EinsatzParteiRow = Omit<EinsatzPartei, 'person'>
@@ -1779,6 +1805,15 @@ export type Database = {
       einsatz_dokumente: { Row: EinsatzDokumentDbRow; Insert: Pick<EinsatzDokumentDbRow, 'incident_id' | 'art' | 'title' | 'file_key' | 'file_name' | 'source' | 'uploaded_by'> & Partial<Pick<EinsatzDokumentDbRow, 'id' | 'created_at'>>; Update: Partial<never>; Relationships: [
         { foreignKeyName: 'einsatz_dokumente_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
         { foreignKeyName: 'einsatz_dokumente_uploaded_by_fkey'; columns: ['uploaded_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      incident_assistance_requests: { Row: IncidentAssistanceRequestRow; Insert: Pick<IncidentAssistanceRequestRow, 'incident_id' | 'request_type' | 'requested_by'> & Partial<Omit<IncidentAssistanceRequestRow, 'id' | 'incident_id' | 'request_type' | 'requested_by' | 'requested_at' | 'updated_at'>>; Update: Partial<Omit<IncidentAssistanceRequestRow, 'id' | 'incident_id' | 'requested_by' | 'requested_at'>>; Relationships: [
+        { foreignKeyName: 'incident_assistance_requests_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_source_document_id_fkey'; columns: ['source_document_id']; isOneToOne: false; referencedRelation: 'einsatz_dokumente'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_result_document_id_fkey'; columns: ['result_document_id']; isOneToOne: false; referencedRelation: 'einsatz_dokumente'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_requested_by_fkey'; columns: ['requested_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_requested_vehicle_id_fkey'; columns: ['requested_vehicle_id']; isOneToOne: false; referencedRelation: 'fleet_vehicles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_handled_by_fkey'; columns: ['handled_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+        { foreignKeyName: 'incident_assistance_requests_completed_by_fkey'; columns: ['completed_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       einsatz_checklist_punkte: { Row: EinsatzChecklistPunktRow; Insert: Pick<EinsatzChecklistPunktRow, 'incident_id' | 'checkliste' | 'punkt_key'> & Partial<Omit<EinsatzChecklistPunktRow, 'id' | 'incident_id' | 'checkliste' | 'punkt_key'>>; Update: Partial<Omit<EinsatzChecklistPunktRow, 'id' | 'incident_id' | 'checkliste' | 'punkt_key'>>; Relationships: [
         { foreignKeyName: 'einsatz_checklist_punkte_incident_id_fkey'; columns: ['incident_id']; isOneToOne: false; referencedRelation: 'incident_reports'; referencedColumns: ['id'] },
