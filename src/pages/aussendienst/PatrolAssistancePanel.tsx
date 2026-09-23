@@ -8,9 +8,12 @@ import {
   loadIncidentAssistanceRequests,
 } from '../../lib/incidentAssistance'
 import {
+  loadDokumente,
+  openEinsatzdokument,
   registerEinsatzdokument,
   rollbackUploadedEinsatzdokument,
   uploadEinsatzdokument,
+  type EinsatzDokument,
 } from '../../lib/einsatzDokumente'
 import type { IncidentAssistanceRequest, IncidentAssistanceRequestType } from '../../lib/types'
 
@@ -19,12 +22,15 @@ const TYPES: IncidentAssistanceRequestType[] = ['personenabfrage', 'zmr', 'fahrz
 export default function PatrolAssistancePanel({
   incidentId,
   vehicleId,
+  incidentLocation,
 }: {
   incidentId: string
   vehicleId?: string | null
+  incidentLocation?: string | null
 }) {
   const { profile } = useAuth()
   const [rows, setRows] = useState<IncidentAssistanceRequest[]>([])
+  const [documents, setDocuments] = useState<EinsatzDokument[]>([])
   const [type, setType] = useState<IncidentAssistanceRequestType>('personenabfrage')
   const [requestText, setRequestText] = useState('')
   const [subjectData, setSubjectData] = useState<Record<string, string>>({})
@@ -37,7 +43,14 @@ export default function PatrolAssistancePanel({
   const inputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
-    try { setRows(await loadIncidentAssistanceRequests(incidentId)) } catch { /* card remains usable */ }
+    try {
+      const [requests, docs] = await Promise.all([
+        loadIncidentAssistanceRequests(incidentId),
+        loadDokumente(incidentId),
+      ])
+      setRows(requests)
+      setDocuments(docs)
+    } catch { /* card remains usable */ }
   }, [incidentId])
   useEffect(() => {
     void load()
@@ -48,7 +61,7 @@ export default function PatrolAssistancePanel({
   function resetForm(nextType = type) {
     setType(nextType)
     setRequestText('')
-    setSubjectData({})
+    setSubjectData(nextType === 'zmr' && incidentLocation ? { adresse: incidentLocation } : {})
     setDocumentId(null)
     setDocumentName('')
     if (inputRef.current) inputRef.current.value = ''
@@ -168,6 +181,27 @@ export default function PatrolAssistancePanel({
       <p className="mt-2 text-[11px] text-gray-500">Automatisch erkannte Ausweisdaten sind eine Eingabehilfe und müssen vor dem Absenden kurz geprüft werden.</p>
     </div> : null}
 
+    {type === 'zmr' ? <div className="rounded-xl border border-gray-200 p-3">
+      <label className="text-xs font-semibold text-gray-600">Adresse / Objekt
+        <input value={subjectData.adresse ?? ''} onChange={event => setSubjectData(current => ({ ...current, adresse: event.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm font-normal text-gray-900" />
+      </label>
+      <p className="mt-2 text-[11px] text-gray-500">Die Einsatzörtlichkeit wird übernommen und kann bei Bedarf angepasst werden.</p>
+    </div> : null}
+
+    {type === 'fahrzeugabfrage' ? <div className="rounded-xl border border-gray-200 p-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <label className="text-xs font-semibold text-gray-600">Kennzeichen
+          <input value={subjectData.kennzeichen ?? ''} onChange={event => setSubjectData(current => ({ ...current, kennzeichen: event.target.value.toUpperCase() }))} className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm font-normal text-gray-900" />
+        </label>
+        <label className="text-xs font-semibold text-gray-600">Marke / Typ
+          <input value={subjectData.marke_typ ?? ''} onChange={event => setSubjectData(current => ({ ...current, marke_typ: event.target.value }))} className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm font-normal text-gray-900" />
+        </label>
+        <label className="text-xs font-semibold text-gray-600 sm:col-span-2">FIN / Fahrgestellnummer (optional)
+          <input value={subjectData.fin ?? ''} onChange={event => setSubjectData(current => ({ ...current, fin: event.target.value.toUpperCase() }))} className="mt-1 w-full rounded-lg border border-gray-300 px-2.5 py-2 text-sm font-normal text-gray-900" />
+        </label>
+      </div>
+    </div> : null}
+
     <textarea value={requestText} onChange={event => setRequestText(event.target.value)} rows={2} placeholder={type === 'personenabfrage' ? 'Zusatz zur Abfrage (optional)' : 'Was soll die Zentrale abfragen / klären?'} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
 
     <button type="button" disabled={busy} onClick={() => void submit()} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
@@ -176,10 +210,14 @@ export default function PatrolAssistancePanel({
 
     {completedRows.length > 0 ? <details className="rounded-lg border border-gray-200 px-3 py-2">
       <summary className="cursor-pointer text-xs font-semibold text-gray-700">Abgeschlossene Anfragen ({completedRows.length})</summary>
-      <div className="mt-2 space-y-2">{completedRows.slice(0, 5).map(row => <div key={row.id} className="text-xs text-gray-600">
-        <strong>{ASSISTANCE_LABEL[row.request_type]}</strong>
-        <span className="text-gray-500">{row.result_document_id ? ' · Ergebnisdatei beim Einsatz vorhanden' : ' · erledigt'}</span>
-      </div>)}</div>
+      <div className="mt-2 space-y-2">{completedRows.slice(0, 5).map(row => {
+        const resultDoc = row.result_document_id ? documents.find(doc => doc.id === row.result_document_id) : null
+        return <div key={row.id} className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
+          <strong>{ASSISTANCE_LABEL[row.request_type]}</strong>
+          <span className="text-gray-500">{resultDoc ? ' · Ergebnis vorhanden' : ' · erledigt'}</span>
+          {resultDoc ? <button type="button" onClick={() => void openEinsatzdokument(resultDoc.fileKey).catch(() => setError('Ergebnisdokument konnte nicht geöffnet werden.'))} className="font-semibold text-blue-800 underline">Ergebnis öffnen</button> : null}
+        </div>
+      })}</div>
     </details> : null}
 
     {notice ? <p className="text-xs text-green-700">{notice}</p> : null}
