@@ -2,7 +2,6 @@ import { supabase } from './supabase'
 import type {
   IncidentAssistanceRequest,
   IncidentAssistanceRequestType,
-  IncidentAssistanceResponseChannel,
 } from './types'
 
 export const ASSISTANCE_LABEL: Record<IncidentAssistanceRequestType, string> = {
@@ -73,18 +72,14 @@ export async function startAssistanceRequest(id: string, userId: string): Promis
 export async function completeAssistanceRequest(input: {
   id: string
   userId: string
-  resultText?: string | null
   resultDocumentId?: string | null
-  responseChannel: IncidentAssistanceResponseChannel
 }): Promise<IncidentAssistanceRequest> {
   const now = new Date().toISOString()
   const result = await supabase
     .from('incident_assistance_requests')
     .update({
       status: 'erledigt',
-      result_text: input.resultText?.trim() || null,
       result_document_id: input.resultDocumentId ?? null,
-      response_channel: input.responseChannel,
       completed_by: input.userId,
       completed_at: now,
       handled_by: input.userId,
