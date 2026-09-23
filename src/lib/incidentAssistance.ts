@@ -97,3 +97,22 @@ export async function completeAssistanceRequest(input: {
   if (result.error) throw new Error('Anfrage konnte nicht abgeschlossen werden.')
   return result.data
 }
+
+
+export async function extractIdDocumentData(input: {
+  incidentId: string
+  documentId: string
+}): Promise<{ fields: Record<string, string>; text: string }> {
+  const { data: sessionData } = await supabase.auth.getSession()
+  const response = await fetch('/incident-id-extract', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${sessionData.session?.access_token ?? ''}`,
+      'X-Incident-Id': input.incidentId,
+      'X-Document-Id': input.documentId,
+    },
+  })
+  const data = await response.json().catch(() => null) as { fields?: Record<string, string>; text?: string; error?: string } | null
+  if (!response.ok) throw new Error(data?.error || 'Ausweisdaten konnten nicht automatisch gelesen werden.')
+  return { fields: data?.fields ?? {}, text: data?.text ?? '' }
+}
