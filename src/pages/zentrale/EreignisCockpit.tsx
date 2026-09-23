@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, CircleAlert, FileText, Users } from 'lucide-react'
+import { CheckCircle2, CircleAlert } from 'lucide-react'
 import { loadDokumente } from '../../lib/einsatzDokumente'
 import { telefonketteFuer } from '../../lib/einsatzSchema'
 import { verstaendigungKey } from '../../lib/ereignis'
@@ -7,28 +7,18 @@ import { loadPersonenliste } from '../../lib/zmrPersonen'
 import { telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
 import type { Ereignis, EreignisVerstaendigung } from '../../lib/types'
 
-type Section = 'lage' | 'verstaendigung' | 'unterstuetzung'
+type Section = 'verstaendigung' | 'unterstuetzung'
 
 type Snapshot = {
   dokumente: number
   zmrDocs: number
   bewohner: number
-  evakuierung: number
-  evakuierungImHaus: number
-  evakuierungDraussen: number
-  evakuierungUnbekannt: number
-  unterbringung: number
 }
 
 const EMPTY: Snapshot = {
   dokumente: 0,
   zmrDocs: 0,
   bewohner: 0,
-  evakuierung: 0,
-  evakuierungImHaus: 0,
-  evakuierungDraussen: 0,
-  evakuierungUnbekannt: 0,
-  unterbringung: 0,
 }
 
 function StatusCard({
@@ -75,21 +65,14 @@ export default function EreignisCockpit({
     setLoading(true)
     setError('')
     try {
-      const [docs, bewohner, evakuierung, unterbringung] = await Promise.all([
+      const [docs, bewohner] = await Promise.all([
         loadDokumente(incidentId),
         loadPersonenliste(incidentId, 'haus'),
-        loadPersonenliste(incidentId, 'evakuierung'),
-        loadPersonenliste(incidentId, 'unterbringung'),
       ])
       setSnapshot({
         dokumente: docs.length,
         zmrDocs: docs.filter(doc => doc.art === 'zmr' || doc.art === 'abfrage').length,
         bewohner: bewohner.length,
-        evakuierung: evakuierung.length,
-        evakuierungImHaus: evakuierung.filter(row => row.status === 'im_haus').length,
-        evakuierungDraussen: evakuierung.filter(row => row.status === 'draussen').length,
-        evakuierungUnbekannt: evakuierung.filter(row => row.status !== 'im_haus' && row.status !== 'draussen').length,
-        unterbringung: unterbringung.length,
       })
     } catch {
       setError('Prozessstand konnte nicht vollständig geladen werden.')
@@ -170,19 +153,10 @@ export default function EreignisCockpit({
         detail="Von der Zentrale bereitgestellte Datenbasis"
         onClick={() => onGoTo('unterstuetzung')}
       />
-      <StatusCard
-        title="Arbeitslisten / Rückmeldung"
-        main={snapshot.evakuierung + ' Evakuierung · ' + snapshot.unterbringung + ' Unterkunft'}
-        detail="Listen durch Zentrale bereitgestellt, Status durch Kräfte vor Ort geführt"
-        onClick={() => onGoTo('unterstuetzung')}
-      />
     </div>
 
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2">
-      <Users className="h-4 w-4 text-gray-500" />
-      <span className="text-xs text-gray-700">Vor-Ort-Status: <strong>{snapshot.evakuierungImHaus}</strong> im Haus · <strong>{snapshot.evakuierungDraussen}</strong> draußen · <strong>{snapshot.evakuierungUnbekannt}</strong> unbekannt</span>
-      <FileText className="ml-auto h-4 w-4 text-gray-400" />
-      <button type="button" onClick={() => onGoTo('unterstuetzung')} className="text-xs font-bold text-blue-800">Daten ansehen</button>
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
+      <p className="text-xs text-gray-600">Lage- und Rückmeldedetails werden im PAD dokumentiert. Dieses Portal zeigt der Zentrale nur Verständigungen sowie bereitgestellte Daten und Dokumente.</p>
     </div>
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
