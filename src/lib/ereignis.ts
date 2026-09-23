@@ -53,6 +53,50 @@ export async function loadEreignisDimensionen(incidentIds: string[]): Promise<Re
   )
 }
 
+export interface IncidentEreignisContext {
+  id: string
+  titel: string
+  dimension: EreignisDimension
+  incident_count: number
+}
+
+export async function loadEreignisContexts(incidentIds: string[]): Promise<Record<string, IncidentEreignisContext>> {
+  if (incidentIds.length === 0) return {}
+
+  const links = await supabase
+    .from('ereignis_einsaetze')
+    .select('incident_id,ereignis_id')
+    .in('incident_id', incidentIds)
+
+  if (links.error) throw links.error
+  if (!links.data?.length) return {}
+
+  const eventIds = [...new Set(links.data.map(row => row.ereignis_id))]
+  const [events, allLinks] = await Promise.all([
+    supabase.from('ereignisse').select('id,titel,dimension').in('id', eventIds),
+    supabase.from('ereignis_einsaetze').select('ereignis_id,incident_id').in('ereignis_id', eventIds),
+  ])
+
+  if (events.error) throw events.error
+  if (allLinks.error) throw allLinks.error
+
+  const counts = new Map<string, number>()
+  for (const row of allLinks.data ?? []) counts.set(row.ereignis_id, (counts.get(row.ereignis_id) ?? 0) + 1)
+  const byEvent = new Map((events.data ?? []).map(row => [row.id, {
+    id: row.id,
+    titel: row.titel,
+    dimension: row.dimension,
+    incident_count: counts.get(row.id) ?? 0,
+  }]))
+
+  return Object.fromEntries(
+    links.data.flatMap(row => {
+      const event = byEvent.get(row.ereignis_id)
+      return event ? [[row.incident_id, event]] : []
+    }),
+  )
+}
+
 export interface ActiveEreignisSummary {
   id: string
   titel: string
