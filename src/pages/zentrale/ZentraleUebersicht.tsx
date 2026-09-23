@@ -70,6 +70,10 @@ export default function ZentraleUebersicht() {
     setSelectedIncidentId(item.id)
     setWorkIncident(item)
   }
+
+  function toggleIncident(item: IncidentReport) {
+    setSelectedIncidentId(current => current === item.id ? null : item.id)
+  }
   const incidentMarkers = useMemo(() => ctx.openIncidents
     .filter(item => item.location_lat !== null && item.location_lng !== null)
     .map(item => {
@@ -82,7 +86,7 @@ export default function ZentraleUebersicht() {
         label: visual.label,
         selected,
         popup: selected ? `${formatTime(item.reported_at)} – ${item.location || item.summary.slice(0, 80)}` : undefined,
-        onClick: () => openWork(item),
+        onClick: () => toggleIncident(item),
       }
     }), [ctx.openIncidents, selectedIncidentId, incidentVisuals])
   const focusedIncident = useMemo(() => ctx.openIncidents.find(item =>
@@ -133,6 +137,9 @@ export default function ZentraleUebersicht() {
             setIncidentHandling={ctx.setIncidentHandling}
             visualByIncidentId={incidentVisuals}
             eventDimensionByIncidentId={eventDimensionByIncidentId}
+            accordion={ctx.openIncidents.length >= 2}
+            expandedIncidentId={selectedIncidentId}
+            onToggleIncident={toggleIncident}
             selectedIncidentId={selectedIncidentId}
             onOpenIncident={openWork}
           />
@@ -148,7 +155,7 @@ export default function ZentraleUebersicht() {
           focus={focusedIncident ? { lat: focusedIncident.location_lat as number, lng: focusedIncident.location_lng as number, zoom: 16 } : null}
           fitLines={false}
         />
-        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Ausgewählter Einsatz zentriert.' : 'Nur offene Einsatzorte auf der Karte. Klick auf Pin oder Karte öffnet das Arbeitsfenster.'}</p>
+        <p className="mt-2 text-xs text-gray-500">{focusedIncident ? 'Aufgeklappter Einsatz zentriert. Zuklappen zeigt wieder alle offenen Einsatzorte.' : 'Alle offenen Einsatzorte. Pin oder Einsatzkarte auswählen, um einen Einsatz aufzuklappen.'}</p>
       </section>
     </div>
     {workIncident ? <EinsatzArbeitModal
