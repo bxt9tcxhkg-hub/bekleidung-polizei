@@ -9,7 +9,8 @@ type IncidentVisual = { color: string; label: string }
 
 export function IncidentCards({
   visibleIncidents, canOperateZentrale, openEditIncident, completeIncident, deleteIncident,
-  patrolVehicles = [], setIncidentHandling, visualByIncidentId = {}, eventDimensionByIncidentId = {}, selectedIncidentId = null, onOpenIncident,
+  patrolVehicles = [], setIncidentHandling, accordion = false, expandedIncidentId = null, onToggleIncident,
+  visualByIncidentId = {}, eventDimensionByIncidentId = {}, selectedIncidentId = null, onOpenIncident,
 }: {
   visibleIncidents: IncidentReport[]
   lageByIncidentId: Record<string, ZentraleEntry>
