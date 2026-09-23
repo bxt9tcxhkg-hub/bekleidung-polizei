@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { DOK_ART_LABEL, DOK_ARTEN, deleteEinsatzdokument, loadDokumente, openEinsatzdokument, registerEinsatzdokument, rollbackUploadedEinsatzdokument, uploadEinsatzdokument, type DokArt, type EinsatzDokument } from '../../lib/einsatzDokumente'
+import { DOK_ART_LABEL, deleteEinsatzdokument, loadDokumente, openEinsatzdokument, registerEinsatzdokument, rollbackUploadedEinsatzdokument, uploadEinsatzdokument, type DokArt, type EinsatzDokument } from '../../lib/einsatzDokumente'
 import { addPersonen, extractPdfPlainText, personenAusText } from '../../lib/zmrPersonen'
 
 // Reine Datei-Ablage (Ausweis/ZMR-Auszug/Abfrage/Sonstiges) - bewusst
