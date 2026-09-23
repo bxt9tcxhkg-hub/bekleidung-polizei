@@ -13,9 +13,11 @@ export default function CentralDutyOverview({ openIncidents }: { openIncidents: 
 
   useEffect(() => {
     let cancelled = false
-    setIncomplete(false)
-    void Promise.all([loadOpenAssistanceRequests(), loadActiveEreignisse()])
-      .then(async ([requests, events]) => {
+
+    async function load() {
+      setIncomplete(false)
+      try {
+        const [requests, events] = await Promise.all([loadOpenAssistanceRequests(), loadActiveEreignisse()])
         if (cancelled) return
         setOpenAssistance(requests.length)
         setActiveEvents(events.length)
@@ -32,9 +34,14 @@ export default function CentralDutyOverview({ openIncidents }: { openIncidents: 
             .replace(/^_|_$/g, ''))).length
         }))
         if (!cancelled) setPendingNotifications(notifications.reduce((sum, value) => sum + value, 0))
-      })
-      .catch(() => { if (!cancelled) setIncomplete(true) })
-    return () => { cancelled = true }
+      } catch {
+        if (!cancelled) setIncomplete(true)
+      }
+    }
+
+    void load()
+    const timer = window.setInterval(() => { void load() }, 15_000)
+    return () => { cancelled = true; window.clearInterval(timer) }
   }, [openIncidents.length])
 
   const hasWork = openIncidents.length > 0 || openAssistance > 0 || pendingNotifications > 0
