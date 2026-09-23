@@ -4,6 +4,7 @@ import { Modal } from '../../components/ZentraleEntryEditor'
 import {
   loadActiveEreignisse,
   linkIncidentToEreignis,
+  loadEreignisIncidentIds,
   loadIncidentEreignis,
   loadVerstaendigungen,
   setIncidentEreignisDimension,
@@ -24,7 +25,7 @@ import IncidentAssistanceWorkPanel from './IncidentAssistanceWorkPanel'
 type Tab = 'uebersicht' | 'ereignis' | 'dateien'
 
 export default function EinsatzArbeitModal({
-  item, canOperateZentrale, close, openEditIncident, completeIncident, createdBy,
+  item, canOperateZentrale, close, openEditIncident, completeIncident, createdBy, allIncidents = [], onOpenRelatedIncident,
 }: {
   item: IncidentReport
   canOperateZentrale: boolean
@@ -32,6 +33,8 @@ export default function EinsatzArbeitModal({
   openEditIncident: (item: IncidentReport) => void
   completeIncident: (item: IncidentReport) => Promise<void>
   createdBy: string | null
+  allIncidents?: IncidentReport[]
+  onOpenRelatedIncident?: (item: IncidentReport) => void
 }) {
   const [tab, setTab] = useState<Tab>('uebersicht')
   const [ereignis, setEreignis] = useState<Ereignis | null>(null)
@@ -43,6 +46,7 @@ export default function EinsatzArbeitModal({
   const [kontakte, setKontakte] = useState<Record<string, EreignisKontaktTreffer[]>>({})
   const [activeEvents, setActiveEvents] = useState<ActiveEreignisSummary[]>([])
   const [linkEventOpen, setLinkEventOpen] = useState(false)
+  const [relatedIncidentIds, setRelatedIncidentIds] = useState<string[]>([])
 
   const stufe: EreignisDimension = ereignis?.dimension ?? 'klein'
   const meta = STUFE_META[stufe]
@@ -58,10 +62,17 @@ export default function EinsatzArbeitModal({
         if (cancelled) return
         setEreignis(next)
         if (next) {
-          const rows = await loadVerstaendigungen(next.id)
-          if (!cancelled) setVerstaendigungen(rows)
+          const [rows, incidentIds] = await Promise.all([
+            loadVerstaendigungen(next.id),
+            loadEreignisIncidentIds(next.id),
+          ])
+          if (!cancelled) {
+            setVerstaendigungen(rows)
+            setRelatedIncidentIds(incidentIds)
+          }
         } else {
           setVerstaendigungen([])
+          setRelatedIncidentIds([])
         }
       })
       .catch(() => { if (!cancelled) setError('Ereignisdaten konnten nicht geladen werden.') })
@@ -101,7 +112,12 @@ export default function EinsatzArbeitModal({
         userId: createdBy,
       })
       setEreignis(saved)
-      setVerstaendigungen(await loadVerstaendigungen(saved.id))
+      const [rows, incidentIds] = await Promise.all([
+        loadVerstaendigungen(saved.id),
+        loadEreignisIncidentIds(saved.id),
+      ])
+      setVerstaendigungen(rows)
+      setRelatedIncidentIds(incidentIds)
       setLinkEventOpen(false)
       setCockpitRefresh(value => value + 1)
     } catch {
@@ -118,8 +134,17 @@ export default function EinsatzArbeitModal({
     try {
       const saved = await setIncidentEreignisDimension(item.id, next)
       setEreignis(saved)
-      if (saved) setVerstaendigungen(await loadVerstaendigungen(saved.id))
-      else setVerstaendigungen([])
+      if (saved) {
+        const [rows, incidentIds] = await Promise.all([
+          loadVerstaendigungen(saved.id),
+          loadEreignisIncidentIds(saved.id),
+        ])
+        setVerstaendigungen(rows)
+        setRelatedIncidentIds(incidentIds)
+      } else {
+        setVerstaendigungen([])
+        setRelatedIncidentIds([])
+      }
       setCockpitRefresh(value => value + 1)
     } catch {
       setError('Ereignisdimension konnte nicht gespeichert werden.')
@@ -213,6 +238,7 @@ export default function EinsatzArbeitModal({
             <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Ereignisdimension</p>
             <p className="mt-1 text-xs text-gray-500">{meta.wann}</p>
             {ereignis ? <p className="mt-1 text-xs font-semibold text-gray-700">Gemeinsames Ereignis: {ereignis.titel}</p> : null}
+            {ereignis ? <p className="mt-0.5 text-xs text-gray-500">{relatedIncidentIds.length} {relatedIncidentIds.length === 1 ? 'zugeordneter Einsatz' : 'zugeordnete Einsätze'}</p> : null}
           </div>
           <div className="flex flex-wrap gap-2">
             {!ereignis && canOperateZentrale && activeEvents.length > 0 ? <button type="button" onClick={() => setLinkEventOpen(current => !current)} className="text-xs font-semibold text-blue-800">
@@ -250,6 +276,24 @@ export default function EinsatzArbeitModal({
           </button>)}
         </div> : null}
       </div>
+
+      {ereignis && relatedIncidentIds.length > 1 ? <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-indigo-800">Weitere Einsätze dieses Ereignisses</p>
+        <div className="mt-2 space-y-1.5">
+          {allIncidents.filter(row => row.id !== item.id && relatedIncidentIds.includes(row.id)).map(row => <button
+            key={row.id}
+            type="button"
+            onClick={() => onOpenRelatedIncident?.(row)}
+            className="flex w-full items-center justify-between gap-3 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-left"
+          >
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold text-gray-900">{formatTime(row.reported_at)} · {row.location || 'Ohne Ortsangabe'}</span>
+              <span className="block truncate text-xs text-gray-500">{row.summary}</span>
+            </span>
+            <span className="text-xs font-semibold text-indigo-800">Öffnen</span>
+          </button>)}
+        </div>
+      </div> : null}
 
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={() => setTab('dateien')} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">Dateien / ZMR</button>
