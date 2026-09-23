@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Ereignis, EreignisDimension, EreignisEntscheidung, EreignisVerstaendigung } from './types'
+import type { Ereignis, EreignisDimension, EreignisEntscheidung, EreignisVerstaendigung, IncidentStatus } from './types'
 
 export async function loadIncidentEreignis(incidentId: string): Promise<Ereignis | null> {
   const link = await supabase
@@ -137,24 +137,56 @@ export async function linkIncidentToEreignis(input: {
   ereignisId: string
   userId: string
 }): Promise<Ereignis> {
-  const result = await supabase
-    .from('ereignis_einsaetze')
-    .insert({
-      ereignis_id: input.ereignisId,
-      incident_id: input.incidentId,
-      linked_by: input.userId,
-    })
-
+  const result = await supabase.rpc('link_incident_to_event', {
+    p_incident_id: input.incidentId,
+    p_event_id: input.ereignisId,
+  })
   if (result.error) throw result.error
 
   const eventResult = await supabase
     .from('ereignisse')
     .select('*')
-    .eq('id', input.ereignisId)
+    .eq('id', result.data)
     .single()
 
   if (eventResult.error) throw eventResult.error
   return eventResult.data
+}
+
+export async function unlinkIncidentFromEreignis(incidentId: string): Promise<string> {
+  const result = await supabase.rpc('unlink_incident_from_event', {
+    p_incident_id: incidentId,
+  })
+  if (result.error) throw result.error
+  return result.data
+}
+
+export async function setEreignisStatus(ereignisId: string, status: Ereignis['status']): Promise<Ereignis> {
+  const result = await supabase.rpc('set_event_status', {
+    p_event_id: ereignisId,
+    p_status: status,
+  })
+  if (result.error) throw result.error
+  return result.data
+}
+
+export async function loadEreignisIncidentStatus(ereignisId: string): Promise<Record<string, IncidentStatus>> {
+  const links = await supabase
+    .from('ereignis_einsaetze')
+    .select('incident_id')
+    .eq('ereignis_id', ereignisId)
+
+  if (links.error) throw links.error
+  const ids = (links.data ?? []).map(row => row.incident_id)
+  if (ids.length === 0) return {}
+
+  const incidents = await supabase
+    .from('incident_reports')
+    .select('id,status')
+    .in('id', ids)
+
+  if (incidents.error) throw incidents.error
+  return Object.fromEntries((incidents.data ?? []).map(row => [row.id, row.status as IncidentStatus]))
 }
 
 export async function loadEreignisIncidentIds(ereignisId: string): Promise<string[]> {
