@@ -4,13 +4,14 @@ import { Empty } from '../../components/ZentraleEntryEditor'
 import { formatTime } from '../../lib/zentraleShared'
 import { STUFE_META } from '../../lib/einsatzSchema'
 import type { EreignisDimension, IncidentReport, ZentraleEntry } from '../../lib/types'
+import type { IncidentEreignisContext } from '../../lib/ereignis'
 
 type IncidentVisual = { color: string; label: string }
 
 export function IncidentCards({
   visibleIncidents, canOperateZentrale, openEditIncident, completeIncident, deleteIncident,
   patrolVehicles = [], setIncidentHandling, accordion = false, expandedIncidentId = null, onToggleIncident,
-  visualByIncidentId = {}, eventDimensionByIncidentId = {}, selectedIncidentId = null, onOpenIncident,
+  visualByIncidentId = {}, eventDimensionByIncidentId = {}, eventContextByIncidentId = {}, selectedIncidentId = null, onOpenIncident,
 }: {
   visibleIncidents: IncidentReport[]
   lageByIncidentId: Record<string, ZentraleEntry>
@@ -26,6 +27,7 @@ export function IncidentCards({
   onToggleIncident?: (item: IncidentReport) => void
   visualByIncidentId?: Record<string, IncidentVisual>
   eventDimensionByIncidentId?: Record<string, EreignisDimension>
+  eventContextByIncidentId?: Record<string, IncidentEreignisContext>
   selectedIncidentId?: string | null
   onOpenIncident?: (item: IncidentReport) => void
 }) {
@@ -35,7 +37,8 @@ export function IncidentCards({
     ? <Empty text="Keine Einsätze." />
     : visibleIncidents.map(item => {
       const visual = visualByIncidentId[item.id]
-      const stufe = eventDimensionByIncidentId[item.id] ?? 'klein'
+      const eventContext = eventContextByIncidentId[item.id]
+      const stufe = eventDimensionByIncidentId[item.id] ?? eventContext?.dimension ?? 'klein'
       const meta = STUFE_META[stufe]
       const done = item.status === 'erledigt'
       const selected = selectedIncidentId === item.id
@@ -71,6 +74,7 @@ export function IncidentCards({
               {!done ? <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">Bearbeitung: {handlingLabel}</span> : null}
             </div>
             <p className={`${accordion && !isExpanded ? 'mt-1 text-sm' : 'mt-2'} font-semibold text-gray-900`}>{item.location || 'Ohne Ortsangabe'}</p>
+            {eventContext ? <p className="mt-1 text-xs font-semibold text-indigo-700">Ereignis: {eventContext.titel} · {eventContext.incident_count} {eventContext.incident_count === 1 ? 'Einsatz' : 'Einsätze'}</p> : null}
             {(!accordion || isExpanded) ? <p className="mt-1 line-clamp-3 text-sm text-gray-700">{item.summary}</p> : null}
             {accordion && !isExpanded ? <p className="mt-0.5 truncate text-xs text-gray-500">{item.summary}</p> : null}
           </button>
