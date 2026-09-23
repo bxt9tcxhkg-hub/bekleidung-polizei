@@ -1,6 +1,9 @@
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
 import EreignisEntscheidungen from '../zentrale/EreignisEntscheidungen'
 import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
+import EventAssistanceRequestPanel from './EventAssistanceRequestPanel'
+import EventDocumentsPanel from './EventDocumentsPanel'
+import type { IncidentAssistanceOrganisation } from '../../lib/types'
 
 export default function OrganisationEventDocumentation({
   organisation,
@@ -18,6 +21,8 @@ export default function OrganisationEventDocumentation({
   onChanged?: () => void
 }) {
   const policy = workspacePolicy(organisation)
+  const assistanceOrganisation: Exclude<IncidentAssistanceOrganisation, 'Stadtpolizei'> | null =
+    organisation === 'feuerwehr' ? 'Feuerwehr' : organisation === 'krisenstab' ? 'Krisenstab' : null
 
   // Polizei: PAD ist führend. Diese Oberfläche bleibt vollständig unsichtbar.
   if (policy.documentationSystem !== 'portal' || !policy.operationalProtocol) return null
@@ -29,6 +34,17 @@ export default function OrganisationEventDocumentation({
         Organisationsspezifischer Protokollbereich im Portal. Dieser Bereich ist nicht Teil der Stadtpolizei-Oberfläche.
       </p>
     </div>
+
+    {assistanceOrganisation ? <EventAssistanceRequestPanel
+      ereignisId={ereignisId}
+      incidentId={incidentId}
+      organisation={assistanceOrganisation}
+    /> : null}
+
+    {assistanceOrganisation ? <EventDocumentsPanel
+      ereignisId={ereignisId}
+      organisation={assistanceOrganisation}
+    /> : null}
 
     {policy.decisionProtocol ? <section className="rounded-xl border border-gray-200 bg-white p-3">
       <EreignisEntscheidungen
