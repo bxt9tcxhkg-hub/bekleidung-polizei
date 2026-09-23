@@ -5,6 +5,7 @@ import {
   createAssistanceRequest,
   loadEventAssistanceRequests,
 } from '../../lib/incidentAssistance'
+import { loadEreignisDokumente, openEreignisDokument, type EreignisDokument } from '../../lib/ereignisDokumente'
 import type {
   IncidentAssistanceOrganisation,
   IncidentAssistanceRequest,
@@ -29,6 +30,7 @@ export default function EventAssistanceRequestPanel({
 }) {
   const { profile } = useAuth()
   const [rows, setRows] = useState<IncidentAssistanceRequest[]>([])
+  const [documents, setDocuments] = useState<EreignisDokument[]>([])
   const [requestType, setRequestType] = useState<IncidentAssistanceRequestType>('zmr')
   const [requestText, setRequestText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -36,7 +38,12 @@ export default function EventAssistanceRequestPanel({
 
   async function load() {
     try {
-      setRows(await loadEventAssistanceRequests(ereignisId))
+      const [requests, docs] = await Promise.all([
+        loadEventAssistanceRequests(ereignisId),
+        loadEreignisDokumente(ereignisId),
+      ])
+      setRows(requests)
+      setDocuments(docs)
       setError('')
     } catch {
       setError('Unterstützungsanfragen konnten nicht geladen werden.')
@@ -107,10 +114,18 @@ export default function EventAssistanceRequestPanel({
     {eigene.length > 0 ? <div className="border-t border-blue-100 pt-2">
       <p className="text-xs font-semibold text-gray-700">Anfragen dieses Ereignisses</p>
       <div className="mt-1 space-y-1">
-        {eigene.slice(0, 8).map(row => <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 text-xs">
-          <span className="font-medium text-gray-800">{ASSISTANCE_LABEL[row.request_type]}</span>
-          <span className="text-gray-500">{row.status === 'offen' ? 'offen' : row.status === 'in_bearbeitung' ? 'in Bearbeitung' : row.status === 'erledigt' ? 'erledigt' : 'storniert'}</span>
-        </div>)}
+        {eigene.slice(0, 8).map(row => {
+          const resultDoc = row.result_event_document_id
+            ? documents.find(doc => doc.id === row.result_event_document_id)
+            : null
+          return <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white px-2 py-1.5 text-xs">
+            <span className="font-medium text-gray-800">{ASSISTANCE_LABEL[row.request_type]}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500">{row.status === 'offen' ? 'offen' : row.status === 'in_bearbeitung' ? 'in Bearbeitung' : row.status === 'erledigt' ? 'erledigt' : 'storniert'}</span>
+              {resultDoc ? <button type="button" onClick={() => void openEreignisDokument(resultDoc.fileKey).catch(() => setError('Ergebnisdokument konnte nicht geöffnet werden.'))} className="font-semibold text-blue-800 underline">Ergebnis öffnen</button> : null}
+            </div>
+          </div>
+        })}
       </div>
     </div> : null}
 
