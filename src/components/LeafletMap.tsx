@@ -34,6 +34,7 @@ export interface MapMarker {
   color?: string
   label?: string
   selected?: boolean
+  related?: boolean
   onClick?: () => void
 }
 
@@ -184,7 +185,11 @@ export default function LeafletMap(props: {
         pinEl.style.transform = 'rotate(-45deg)'
         pinEl.style.background = marker.color ?? '#2563eb'
         pinEl.style.border = marker.selected ? '4px solid #ffffff' : '3px solid #ffffff'
-        pinEl.style.boxShadow = marker.selected ? '0 0 0 3px #111827, 0 4px 10px rgb(0 0 0 / 35%)' : '0 2px 7px rgb(0 0 0 / 30%)'
+        pinEl.style.boxShadow = marker.selected
+          ? '0 0 0 3px #111827, 0 4px 10px rgb(0 0 0 / 35%)'
+          : marker.related
+            ? '0 0 0 3px #a5b4fc, 0 3px 9px rgb(0 0 0 / 30%)'
+            : '0 2px 7px rgb(0 0 0 / 30%)'
         pinEl.style.display = 'flex'
         pinEl.style.alignItems = 'center'
         pinEl.style.justifyContent = 'center'
