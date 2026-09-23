@@ -984,10 +984,12 @@ export interface EinsatzDokumentRow {
 export type IncidentAssistanceRequestType = 'personenabfrage' | 'zmr' | 'fahrzeugabfrage' | 'sonstiges'
 export type IncidentAssistanceRequestStatus = 'offen' | 'in_bearbeitung' | 'erledigt' | 'storniert'
 export type IncidentAssistanceResponseChannel = 'funk' | 'telefon' | 'portal'
+export type IncidentAssistanceOrganisation = 'Stadtpolizei' | 'Feuerwehr' | 'Krisenstab'
 
 export interface IncidentAssistanceRequest {
   id: string
-  incident_id: string
+  incident_id: string | null
+  ereignis_id: string | null
   request_type: IncidentAssistanceRequestType
   status: IncidentAssistanceRequestStatus
   request_text: string | null
@@ -996,6 +998,8 @@ export interface IncidentAssistanceRequest {
   result_text: string | null
   result_document_id: string | null
   response_channel: IncidentAssistanceResponseChannel | null
+  requester_organisation: IncidentAssistanceOrganisation
+  target_organisation: 'Stadtpolizei'
   requested_by: string
   requested_vehicle_id: string | null
   requested_at: string
