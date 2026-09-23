@@ -16,7 +16,6 @@ import {
 } from '../../lib/einsatzDokumente'
 import type {
   IncidentAssistanceRequest,
-  IncidentAssistanceResponseChannel,
   IncidentReport,
 } from '../../lib/types'
 import { formatTime } from '../../lib/zentraleShared'
@@ -42,9 +41,6 @@ export default function ZentraleAssistanceQueue({
   const { profile } = useAuth()
   const [rows, setRows] = useState<IncidentAssistanceRequest[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [resultText, setResultText] = useState('')
-  const [resultDocumentId, setResultDocumentId] = useState<string | null>(null)
-  const [resultDocumentName, setResultDocumentName] = useState('')
   const [sourceFileKey, setSourceFileKey] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -74,9 +70,6 @@ export default function ZentraleAssistanceQueue({
       const saved = await startAssistanceRequest(row.id, profile.id)
       setRows(current => current.map(item => item.id === saved.id ? saved : item))
       setActiveId(saved.id)
-      setResultText(saved.result_text ?? '')
-      setResultDocumentId(saved.result_document_id)
-      setResultDocumentName('')
       setSourceFileKey(null)
       if (saved.source_document_id) {
         const docs = await loadDokumente(saved.incident_id)
@@ -111,39 +104,31 @@ export default function ZentraleAssistanceQueue({
         await rollbackUploadedEinsatzdokument(row.incident_id, uploaded.key)
         throw err
       }
-      setResultDocumentId(doc.id)
-      setResultDocumentName(doc.fileName)
+      await completeAssistanceRequest({
+        id: row.id,
+        userId: profile.id,
+        resultDocumentId: doc.id,
+      })
+      setRows(current => current.filter(item => item.id !== row.id))
+      setActiveId(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ergebnisdatei konnte nicht hochgeladen werden.')
+      setError(err instanceof Error ? err.message : 'Ergebnisdatei konnte nicht bereitgestellt werden.')
     } finally {
       setBusy(false)
     }
   }
 
-  async function complete(channel: IncidentAssistanceResponseChannel) {
+  async function completeWithoutUpload() {
     const row = rows.find(item => item.id === activeId)
     if (!row || !profile?.id || busy) return
-    if (channel === 'portal' && !resultText.trim() && !resultDocumentId) {
-      setError('Für Portal bitte Ergebnistext oder Datei hinterlegen.')
-      return
-    }
     setBusy(true)
     setError('')
     try {
-      await completeAssistanceRequest({
-        id: row.id,
-        userId: profile.id,
-        resultText,
-        resultDocumentId,
-        responseChannel: channel,
-      })
+      await completeAssistanceRequest({ id: row.id, userId: profile.id })
       setRows(current => current.filter(item => item.id !== row.id))
       setActiveId(null)
-      setResultText('')
-      setResultDocumentId(null)
-      setResultDocumentName('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rückmeldung konnte nicht abgeschlossen werden.')
+      setError(err instanceof Error ? err.message : 'Anfrage konnte nicht abgeschlossen werden.')
     } finally {
       setBusy(false)
     }
@@ -181,20 +166,17 @@ export default function ZentraleAssistanceQueue({
 
         {active ? <div className="mt-3 border-t border-gray-100 pt-3">
           {sourceFileKey ? <button type="button" onClick={() => void openEinsatzdokument(sourceFileKey).catch(() => setError('Ausweisdokument konnte nicht geöffnet werden.'))} className="mb-2 text-xs font-semibold text-blue-800 underline">Ausweisdokument öffnen</button> : null}
-          <textarea rows={3} value={resultText} onChange={event => setResultText(event.target.value)} placeholder="Ergebnis / relevante Information für die Streife" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+          <p className="text-xs text-gray-600">Abfrage außerhalb des Portals durchführen. Falls ein Ergebnisdokument vorliegt, hier hochladen; die Anfrage wird dadurch automatisch abgeschlossen.</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-800">
-              <Upload className="h-3.5 w-3.5" /> Ergebnisdatei
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white">
+              <Upload className="h-3.5 w-3.5" /> Ergebnis hochladen
               <input ref={inputRef} type="file" accept="image/*,.pdf" className="sr-only" disabled={busy} onChange={event => void uploadResult(event.target.files?.[0])} />
             </label>
-            {resultDocumentName ? <span className="text-xs text-gray-500">{resultDocumentName}</span> : null}
+            <button type="button" disabled={busy} onClick={() => void completeWithoutUpload()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-800 disabled:opacity-50">
+              Erledigt
+            </button>
           </div>
-          <p className="mt-3 text-[11px] font-bold uppercase tracking-wide text-gray-500">Wie wurde das Ergebnis übermittelt?</p>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            <button type="button" disabled={busy} onClick={() => void complete('funk')} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-800 disabled:opacity-50">Funk</button>
-            <button type="button" disabled={busy} onClick={() => void complete('telefon')} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-800 disabled:opacity-50">Telefon</button>
-            <button type="button" disabled={busy} onClick={() => void complete('portal')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Portal</button>
-          </div>
+          <p className="mt-2 text-[11px] text-gray-500">Funk oder Telefon werden nicht zusätzlich im Portal dokumentiert.</p>
         </div> : null}
       </article>
     })}</div>
