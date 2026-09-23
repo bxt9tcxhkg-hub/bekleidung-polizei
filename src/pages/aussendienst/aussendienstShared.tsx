@@ -188,7 +188,7 @@ function IncidentRow({
       </details>
 
       <details className="rounded-xl border border-gray-200 px-3 py-2">
-        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Personen- und Arbeitslisten</summary>
+        <summary className="text-xs font-bold text-gray-800 cursor-pointer">Bewohnerdaten / ZMR</summary>
         <div className="mt-3">
           <IncidentNamensliste incidentId={item.id} incidentTitel={`${formatTime(item.reported_at)} · ${item.location || 'Ohne Ortsangabe'}`} />
         </div>
