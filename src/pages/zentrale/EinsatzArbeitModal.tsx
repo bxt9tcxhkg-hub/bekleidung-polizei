@@ -15,6 +15,7 @@ import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentRepor
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EreignisCockpit from './EreignisCockpit'
+import CentralSupportIntake from './CentralSupportIntake'
 
 type Tab = 'uebersicht' | 'ereignis' | 'dateien'
 
@@ -211,7 +212,13 @@ export default function EinsatzArbeitModal({
       </div>
 
       <div id="ereignis-unterstuetzung" className="scroll-mt-4 border-t border-gray-200 pt-4">
-        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
+        <CentralSupportIntake
+          incidentId={item.id}
+          ereignisId={ereignis.id}
+          canOperate={canOperateZentrale}
+          onCreated={() => setCockpitRefresh(value => value + 1)}
+        />
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Daten- und Dokumentenunterstützung</h3>
             <p className="text-xs text-gray-500 mt-1">Die Zentrale stellt Daten und Unterlagen bereit. Einsatzverlauf, Feststellungen und Rückmeldungen werden bei der Stadtpolizei im PAD dokumentiert.</p>
