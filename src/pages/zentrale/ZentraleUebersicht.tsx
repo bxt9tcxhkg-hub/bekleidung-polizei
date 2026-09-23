@@ -12,6 +12,7 @@ import type { ZentraleContext } from './ZentraleShell'
 import { IncidentCards, SofortWichtig } from './zentraleShared'
 import { formatTime } from '../../lib/zentraleShared'
 import EinsatzArbeitModal from './EinsatzArbeitModal'
+import ZentraleAssistanceQueue from './ZentraleAssistanceQueue'
 
 const INCIDENT_COLORS = ['#2563eb', '#ea580c', '#7c3aed', '#0f766e', '#be185d', '#4d7c0f', '#0891b2', '#92400e']
 
@@ -111,6 +112,7 @@ export default function ZentraleUebersicht() {
       ...schutzWarnings.map(item => ({ id: item.id, title: `${MASSNAHME_LABEL[item.massnahme]} · PAD ${item.pad_aktenzahl}`, description: kontrolliert.has(item.id) && !hasInitialControl(item) && firstControlDeadline(item).getTime() < now ? 'Erstkontrolle innerhalb der ersten drei Tage noch nicht erfasst.' : `Endet am ${new Date(item.ende).toLocaleString('de-AT')}.`, onOpen: () => navigate('/zentrale/av-bv-ev') })),
       ...ctx.criticalStrassensperren.map(item => ({ id: `${item.strasse_id ?? item.strasse_freitext}-${item.created_at}`, title: `Straßenzustand: ${strassenName(item)} · ${item.zustand === 'sonstige' ? (item.zustand_freitext ?? ZUSTAND_LABEL.sonstige) : ZUSTAND_LABEL[item.zustand]}`, description: formatZeitraum(item), onOpen: () => navigate('/zentrale/strassenzustand') })),
     ]} incomplete={ctx.criticalSourcesError || schutzError} />
+    <ZentraleAssistanceQueue incidents={listIncidents} onOpenIncident={openWork} />
     <WichtigeTelefonnummernCard />
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <section className="flex flex-col min-h-0">
