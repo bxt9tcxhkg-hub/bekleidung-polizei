@@ -53,11 +53,10 @@ export default function CentralSupportIntake({
 
   if (!canOperate) return null
 
-  return <div className="rounded-xl border border-gray-200 bg-white p-3">
+  return <div>
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Abfrage / Bereitstellung</p>
-        <p className="mt-1 text-xs text-gray-500">Telefonisch oder per Funk erhaltenen Bedarf kurz im Einsatz vormerken und anschließend abarbeiten.</p>
+        <p className="text-xs text-gray-500">Telefonisch oder per Funk erhaltenen Bedarf direkt diesem Einsatz zuordnen.</p>
       </div>
       <button type="button" onClick={() => setOpen(current => !current)} className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800">
         {open ? 'Schließen' : '+ Bedarf vormerken'}
