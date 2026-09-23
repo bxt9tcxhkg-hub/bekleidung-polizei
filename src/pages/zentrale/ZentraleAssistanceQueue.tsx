@@ -8,6 +8,8 @@ import {
   startAssistanceRequest,
 } from '../../lib/incidentAssistance'
 import {
+  loadDokumente,
+  openEinsatzdokument,
   registerEinsatzdokument,
   rollbackUploadedEinsatzdokument,
   uploadEinsatzdokument,
@@ -43,6 +45,7 @@ export default function ZentraleAssistanceQueue({
   const [resultText, setResultText] = useState('')
   const [resultDocumentId, setResultDocumentId] = useState<string | null>(null)
   const [resultDocumentName, setResultDocumentName] = useState('')
+  const [sourceFileKey, setSourceFileKey] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -57,7 +60,11 @@ export default function ZentraleAssistanceQueue({
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    const timer = window.setInterval(() => { void load() }, 8_000)
+    return () => window.clearInterval(timer)
+  }, [load])
 
   async function take(row: IncidentAssistanceRequest) {
     if (!profile?.id || busy) return
@@ -70,6 +77,11 @@ export default function ZentraleAssistanceQueue({
       setResultText(saved.result_text ?? '')
       setResultDocumentId(saved.result_document_id)
       setResultDocumentName('')
+      setSourceFileKey(null)
+      if (saved.source_document_id) {
+        const docs = await loadDokumente(saved.incident_id)
+        setSourceFileKey(docs.find(doc => doc.id === saved.source_document_id)?.fileKey ?? null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Anfrage konnte nicht übernommen werden.')
     } finally {
@@ -168,6 +180,7 @@ export default function ZentraleAssistanceQueue({
         </div>
 
         {active ? <div className="mt-3 border-t border-gray-100 pt-3">
+          {sourceFileKey ? <button type="button" onClick={() => void openEinsatzdokument(sourceFileKey).catch(() => setError('Ausweisdokument konnte nicht geöffnet werden.'))} className="mb-2 text-xs font-semibold text-blue-800 underline">Ausweisdokument öffnen</button> : null}
           <textarea rows={3} value={resultText} onChange={event => setResultText(event.target.value)} placeholder="Ergebnis / relevante Information für die Streife" className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-800">
