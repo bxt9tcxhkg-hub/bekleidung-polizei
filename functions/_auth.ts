@@ -147,6 +147,40 @@ export async function canReadFleetDocument(request: Request, env: AuthEnv, key: 
   }
 }
 
+export async function canReadEinsatzDocument(request: Request, env: AuthEnv, key: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/einsatz_dokumente?select=id&file_key=eq.${encodeURIComponent(key)}&limit=1`,
+      { headers },
+    )
+    if (!response.ok) return false
+    const rows = await response.json() as { id: string }[]
+    return rows.length > 0
+  } catch {
+    return false
+  }
+}
+
+export async function canReadEreignisDocument(request: Request, env: AuthEnv, key: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/ereignis_dokumente?select=id&file_key=eq.${encodeURIComponent(key)}&limit=1`,
+      { headers },
+    )
+    if (!response.ok) return false
+    const rows = await response.json() as { id: string }[]
+    return rows.length > 0
+  } catch {
+    return false
+  }
+}
+
 /** Anlegen/Löschen von Fahrzeugdokumenten: Fuhrpark-Verwaltung oder Fahrzeugverantwortliche/r. */
 export async function canManageFleetVehicle(request: Request, env: AuthEnv, vehicleId: string): Promise<boolean> {
   if (!env.SUPABASE_URL) return false
@@ -203,10 +237,11 @@ export async function canReadFile(request: Request, env: AuthEnv, key: string): 
   if (key.startsWith('einsatz-unterlagen/') || key.startsWith('schulungs-unterlagen/')) {
     return canReadEinsatzMaterial(request, env, key)
   }
-  // Einsatz-Unterlagen (ZMR-Auszug etc.) haben keine eigene DB-Tabelle; Berechtigung folgt
-  // der beim Upload/Löschen: angemeldetes aktives Profil reicht (isAuthenticated bereits geprüft).
   if (key.startsWith('einsatz-dokumente/')) {
-    return true
+    return canReadEinsatzDocument(request, env, key)
+  }
+  if (key.startsWith('ereignis-dokumente/')) {
+    return canReadEreignisDocument(request, env, key)
   }
   if (key.startsWith('fuhrpark-dokumente/')) {
     return canReadFleetDocument(request, env, key)
