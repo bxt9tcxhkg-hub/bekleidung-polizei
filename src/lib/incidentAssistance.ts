@@ -80,6 +80,7 @@ export async function completeAssistanceRequest(input: {
   id: string
   userId: string
   resultDocumentId?: string | null
+  resultEventDocumentId?: string | null
 }): Promise<IncidentAssistanceRequest> {
   const now = new Date().toISOString()
   const result = await supabase
@@ -87,6 +88,7 @@ export async function completeAssistanceRequest(input: {
     .update({
       status: 'erledigt',
       result_document_id: input.resultDocumentId ?? null,
+      result_event_document_id: input.resultEventDocumentId ?? null,
       completed_by: input.userId,
       completed_at: now,
       handled_by: input.userId,
