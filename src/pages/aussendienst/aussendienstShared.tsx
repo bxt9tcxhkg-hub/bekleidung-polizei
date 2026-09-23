@@ -21,6 +21,7 @@ import type { IncidentContextItem, IncidentDisposition, IncidentSupport, Kontrol
 import IncidentDocs from '../zentrale/IncidentDocs'
 import IncidentNamensliste from '../zentrale/IncidentNamensliste'
 import EinsatzChecklisten from '../zentrale/EinsatzChecklisten'
+import PatrolAssistancePanel from './PatrolAssistancePanel'
 
 export function Empty({ text }: { text: string }) { return <div className="rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CheckCircle2 className="w-8 h-8 text-gray-300 mx-auto mb-2" /><p className="text-sm text-gray-500">{text}</p></div> }
 
@@ -177,6 +178,10 @@ function IncidentRow({
       <p className="text-xs text-gray-500">{DISPOSITION_LABEL[item.disposition]}</p>
       <NearbyBaustellenHint point={point} baustellen={baustellen} />
       <div><PrintIncidentButton item={item} /></div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+        <PatrolAssistancePanel incidentId={item.id} vehicleId={ownVehicleId ?? primaryVehicleId ?? null} />
+      </div>
 
       <details className="rounded-xl border border-gray-200 px-3 py-2">
         <summary className="text-xs font-bold text-gray-800 cursor-pointer">Weitere Einsatzinformationen</summary>
