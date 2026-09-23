@@ -5,3 +5,6 @@ pages_build_output_dir = "dist"
 [[r2_buckets]]
 binding = "BEKLEIDUNG"
 bucket_name = "bekleidung"
+
+[ai]
+binding = "AI"
