@@ -39,7 +39,11 @@ export default function PatrolAssistancePanel({
   const load = useCallback(async () => {
     try { setRows(await loadIncidentAssistanceRequests(incidentId)) } catch { /* card remains usable */ }
   }, [incidentId])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    const timer = window.setInterval(() => { void load() }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [load])
 
   function resetForm(nextType = type) {
     setType(nextType)
