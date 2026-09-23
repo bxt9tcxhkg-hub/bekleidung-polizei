@@ -11,25 +11,21 @@ import {
 import { EREIGNISSTUFEN, STUFE_META, formatStamp, telefonketteFuer } from '../../lib/einsatzSchema'
 import { formatTime } from '../../lib/zentraleShared'
 import { loadEreignisKontakte, telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
-import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport, OperationalPerson } from '../../lib/types'
+import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport } from '../../lib/types'
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
-import EinsatzParteien from './EinsatzParteien'
-import EreignisLage from './EreignisLage'
 import EreignisCockpit from './EreignisCockpit'
 
-type Tab = 'uebersicht' | 'ereignis' | 'parteien' | 'dateien'
+type Tab = 'uebersicht' | 'ereignis' | 'dateien'
 
 export default function EinsatzArbeitModal({
-  item, canOperateZentrale, close, openEditIncident, completeIncident, persons, onPersonCreated, createdBy,
+  item, canOperateZentrale, close, openEditIncident, completeIncident, createdBy,
 }: {
   item: IncidentReport
   canOperateZentrale: boolean
   close: () => void
   openEditIncident: (item: IncidentReport) => void
   completeIncident: (item: IncidentReport) => Promise<void>
-  persons: OperationalPerson[]
-  onPersonCreated: (person: OperationalPerson) => void
   createdBy: string | null
 }) {
   const [tab, setTab] = useState<Tab>('uebersicht')
@@ -126,7 +122,7 @@ export default function EinsatzArbeitModal({
 
   const tabClass = (id: Tab) => 'px-2 py-2 text-sm font-semibold border-b-2 ' + (tab === id ? 'border-blue-800 text-blue-900' : 'border-transparent text-gray-500 hover:text-gray-800')
 
-  function goToEreignisSection(section: 'lage' | 'verstaendigung' | 'unterstuetzung') {
+  function goToEreignisSection(section: 'verstaendigung' | 'unterstuetzung') {
     window.requestAnimationFrame(() => {
       document.getElementById('ereignis-' + section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -136,10 +132,9 @@ export default function EinsatzArbeitModal({
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
     <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
 
-    <div className={'grid ' + (hatEreignisArbeitsraum ? 'grid-cols-4' : 'grid-cols-3') + ' border-b border-gray-200'}>
+    <div className={'grid ' + (hatEreignisArbeitsraum ? 'grid-cols-3' : 'grid-cols-2') + ' border-b border-gray-200'}>
       <button type="button" className={tabClass('uebersicht')} onClick={() => setTab('uebersicht')}>Übersicht</button>
       {hatEreignisArbeitsraum ? <button type="button" className={tabClass('ereignis')} onClick={() => setTab('ereignis')}>Ereignis</button> : null}
-      <button type="button" className={tabClass('parteien')} onClick={() => setTab('parteien')}>Parteien</button>
       <button type="button" className={tabClass('dateien')} onClick={() => setTab('dateien')}>Dateien</button>
     </div>
 
@@ -181,17 +176,6 @@ export default function EinsatzArbeitModal({
         onGoTo={goToEreignisSection}
         onOpenFiles={() => setTab('dateien')}
       />
-
-      <div id="ereignis-lage" className="scroll-mt-4 border-t border-gray-200 pt-4">
-        <EreignisLage
-          ereignis={ereignis}
-          incident={item}
-          canOperate={canOperateZentrale}
-          userId={createdBy}
-          onSaved={setEreignis}
-          onProcessChanged={() => setCockpitRefresh(value => value + 1)}
-        />
-      </div>
 
       <div id="ereignis-verstaendigung" className="scroll-mt-4 border-t border-gray-200 pt-4">
         <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Verständigung</p>
@@ -240,10 +224,6 @@ export default function EinsatzArbeitModal({
       </div>
     </div> : null}
 
-    {!loading && tab === 'parteien' ? <div className="space-y-2">
-      <p className="text-xs text-gray-500">Von den Kräften vor Ort erfasste Parteien. Die Zentrale nutzt diese Information unterstützend und führt hier keine operative Personenerfassung.</p>
-      <EinsatzParteien incidentId={item.id} incidentLocation={{ location: item.location, lat: item.location_lat, lng: item.location_lng }} persons={persons} onPersonCreated={onPersonCreated} createdBy={createdBy} canOperate={false} />
-    </div> : null}
     {!loading && tab === 'dateien' ? <IncidentDocs incidentId={item.id} from="zentrale" canUpload={canOperateZentrale} onChanged={() => setCockpitRefresh(value => value + 1)} /> : null}
 
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
