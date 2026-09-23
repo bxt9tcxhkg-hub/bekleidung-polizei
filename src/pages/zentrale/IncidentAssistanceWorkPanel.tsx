@@ -38,11 +38,13 @@ export default function IncidentAssistanceWorkPanel({
   refreshToken = 0,
   canOperate,
   onChanged,
+  onOpenCountChange,
 }: {
   incidentId: string
   refreshToken?: number
   canOperate: boolean
   onChanged?: () => void
+  onOpenCountChange?: (count: number) => void
 }) {
   const { profile } = useAuth()
   const [rows, setRows] = useState<IncidentAssistanceRequest[]>([])
@@ -55,12 +57,14 @@ export default function IncidentAssistanceWorkPanel({
   const load = useCallback(async () => {
     try {
       const all = await loadIncidentAssistanceRequests(incidentId)
-      setRows(all.filter(row => row.status === 'offen' || row.status === 'in_bearbeitung'))
+      const openRows = all.filter(row => row.status === 'offen' || row.status === 'in_bearbeitung')
+      setRows(openRows)
+      onOpenCountChange?.(openRows.length)
       setError('')
     } catch {
       setError('Offene Abfragen konnten nicht geladen werden.')
     }
-  }, [incidentId])
+  }, [incidentId, onOpenCountChange])
 
   useEffect(() => { void load() }, [load, refreshToken])
 
@@ -167,12 +171,9 @@ export default function IncidentAssistanceWorkPanel({
     }
   }
 
-  return <section className="rounded-xl border border-gray-200 bg-white p-3">
+  return <section className="space-y-2">
     <div className="flex items-center justify-between gap-2">
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Offene Abfragen dieses Einsatzes</p>
-        <p className="mt-1 text-xs text-gray-500">{rows.length === 0 ? 'Keine offene Abfrage.' : rows.length + (rows.length === 1 ? ' offene Aufgabe' : ' offene Aufgaben')}</p>
-      </div>
+      <p className="text-xs font-semibold text-gray-700">{rows.length === 0 ? 'Keine offene Abfrage.' : rows.length + (rows.length === 1 ? ' offene Aufgabe' : ' offene Aufgaben')}</p>
     </div>
 
     {rows.length > 0 ? <div className="mt-3 space-y-2">
