@@ -16,6 +16,7 @@ import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EreignisCockpit from './EreignisCockpit'
 import CentralSupportIntake from './CentralSupportIntake'
+import IncidentAssistanceWorkPanel from './IncidentAssistanceWorkPanel'
 
 type Tab = 'uebersicht' | 'ereignis' | 'dateien'
 
@@ -142,26 +143,60 @@ export default function EinsatzArbeitModal({
     {loading ? <p className="text-sm text-gray-500 py-3">Ereignisdaten werden geladen…</p> : null}
 
     {!loading && tab === 'uebersicht' ? <div className="space-y-4">
-      <div>
-        <p className="text-xs font-semibold text-gray-600 mb-1.5">Ereignisdimension</p>
-        {canOperateZentrale ? <div className="flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Status</p>
+          <p className="mt-1 text-sm font-bold text-gray-900">{item.status === 'offen' ? 'Offen' : item.status === 'weitergegeben' ? 'Bundespolizei' : 'Erledigt'}</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Disposition</p>
+          <p className="mt-1 text-sm font-bold text-gray-900">{item.disposition === 'zentrale' ? 'Zentrale' : item.disposition === 'jd' ? 'JD' : item.disposition === 'vd' ? 'VD' : item.disposition === 'bp' ? 'Bundespolizei' : 'Offen'}</p>
+          {item.assigned_vehicle?.call_sign || item.assigned_vehicle?.name ? <p className="mt-0.5 text-xs text-gray-500">{item.assigned_vehicle.call_sign || item.assigned_vehicle.name}</p> : null}
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Ort</p>
+          <p className="mt-1 text-sm font-bold text-gray-900">{item.location || 'Ohne Ortsangabe'}</p>
+        </div>
+      </div>
+
+      <CentralSupportIntake
+        incidentId={item.id}
+        ereignisId={ereignis?.id ?? null}
+        canOperate={canOperateZentrale}
+        onCreated={() => setCockpitRefresh(value => value + 1)}
+      />
+
+      <IncidentAssistanceWorkPanel
+        incidentId={item.id}
+        refreshToken={cockpitRefresh}
+        canOperate={canOperateZentrale}
+        onChanged={() => setCockpitRefresh(value => value + 1)}
+      />
+
+      <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Ereignisdimension</p>
+            <p className="mt-1 text-xs text-gray-500">{meta.wann}</p>
+          </div>
+          {stufe !== 'klein' ? <button type="button" onClick={() => setTab('ereignis')} className="text-xs font-semibold text-blue-800">Ereignis öffnen</button> : null}
+        </div>
+        {canOperateZentrale ? <div className="mt-2 flex flex-wrap gap-1.5">{EREIGNISSTUFEN.map(key => {
           const row = STUFE_META[key]
           return <button
             key={key}
             type="button"
             disabled={busy}
             onClick={() => void setStufe(key)}
-            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border disabled:opacity-60"
+            className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-60"
             style={{ background: stufe === key ? row.bg : 'white', color: row.color, borderColor: row.color }}
           >{row.label}</button>
-        })}</div> : <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>}
-        <p className="text-xs text-gray-600 mt-2"><span className="font-semibold">{meta.label}:</span> {meta.wann}</p>
-        {stufe === 'klein' ? <p className="text-xs text-gray-500 mt-1">Tagesgeschäft: kein zusätzlicher Ereignis-Arbeitsraum.</p> : null}
+        })}</div> : <span className="mt-2 inline-block rounded-full px-2 py-0.5 text-xs font-bold" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>}
       </div>
-      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-        <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Bearbeitung</p>
-        <p className="mt-1 text-sm text-gray-800">Status: {item.status === 'offen' ? 'Offen' : item.status === 'weitergegeben' ? 'An Bundespolizei weitergegeben' : 'Erledigt'}</p>
-        <p className="text-sm text-gray-800">Zuweisung: {item.disposition === 'zentrale' ? 'Zentrale' : item.disposition === 'jd' ? 'JD' : item.disposition === 'vd' ? 'VD' : item.disposition === 'bp' ? 'Bundespolizei' : 'Nicht zugewiesen'}</p>
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setTab('dateien')} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">Dateien / ZMR</button>
+        {hatEreignisArbeitsraum ? <button type="button" onClick={() => setTab('ereignis')} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700">Verständigungen</button> : null}
       </div>
     </div> : null}
 
@@ -212,13 +247,7 @@ export default function EinsatzArbeitModal({
       </div>
 
       <div id="ereignis-unterstuetzung" className="scroll-mt-4 border-t border-gray-200 pt-4">
-        <CentralSupportIntake
-          incidentId={item.id}
-          ereignisId={ereignis.id}
-          canOperate={canOperateZentrale}
-          onCreated={() => setCockpitRefresh(value => value + 1)}
-        />
-        <div className="mt-4 flex flex-wrap items-start justify-between gap-2 mb-3">
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Daten- und Dokumentenunterstützung</h3>
             <p className="text-xs text-gray-500 mt-1">Die Zentrale stellt Daten und Unterlagen bereit. Einsatzverlauf, Feststellungen und Rückmeldungen werden bei der Stadtpolizei im PAD dokumentiert.</p>
