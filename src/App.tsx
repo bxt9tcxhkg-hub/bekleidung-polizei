@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import GenehmigerLayout from './components/GenehmigerLayout'
 import EinsatzLayout from './components/EinsatzLayout'
 import ZentraleLayout from './components/ZentraleLayout'
 import StammdatenLayout from './components/StammdatenLayout'
@@ -298,11 +299,6 @@ export default function App() {
             <Route path="warenkorb" element={<Shop />} />
             <Route path="meine-bestellungen" element={<MyOrders />} />
 
-            {/* Genehmiger */}
-            <Route path="genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
-            <Route path="schuherstattungen" element={<ProtectedRoute genehmigerOnly><ShoeRefunds /></ProtectedRoute>} />
-            <Route path="budgets" element={<ProtectedRoute genehmigerOnly><Budgets /></ProtectedRoute>} />
-
             {/* Sachbearbeiter */}
             <Route path="bestellungen" element={<ProtectedRoute sachbearbeiterOnly><Orders /></ProtectedRoute>} />
             <Route path="produkte" element={<ProtectedRoute sachbearbeiterOnly><Products /></ProtectedRoute>} />
@@ -310,6 +306,20 @@ export default function App() {
             <Route path="lager" element={<ProtectedRoute sachbearbeiterOnly><Lager /></ProtectedRoute>} />
             <Route path="analyse" element={<ProtectedRoute staffOnly><Analyse /></ProtectedRoute>} />
             <Route path="grundausstattung" element={<ProtectedRoute sachbearbeiterOnly><Grundausstattung /></ProtectedRoute>} />
+          </Route>
+          <Route
+            element={
+              <ProtectedRoute>
+                <GenehmigerLayout />
+              </ProtectedRoute>
+            }
+          >
+            {/* Portalweite Genehmiger-Werkzeuge, unabhängig vom Bekleidung-Layout
+                (siehe GenehmigerLayout.tsx) - "Freigaben" bündelt offene Fälle aus
+                allen Bereichen, nicht nur Bekleidung. */}
+            <Route path="/genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
+            <Route path="/schuherstattungen" element={<ProtectedRoute genehmigerOnly><ShoeRefunds /></ProtectedRoute>} />
+            <Route path="/budgets" element={<ProtectedRoute genehmigerOnly><Budgets /></ProtectedRoute>} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
