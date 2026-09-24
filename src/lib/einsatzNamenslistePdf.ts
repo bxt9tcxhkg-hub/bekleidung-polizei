@@ -32,7 +32,7 @@ function statusText(person: NamenslistePerson): string {
 }
 
 function statusAnkreuzfelder(art: Listenart): string {
-  if (art === 'evakuierung') return '<span class="chk">☐ im Haus</span><span class="chk">☐ draußen</span>'
+  if (art === 'evakuierung') return '<span class="chk">☐ im Haus</span><span class="chk">☐ draußen</span><span class="chk">☐ unbekannt</span>'
   if (art === 'kontrolle') return '<span class="chk">☐ kontrolliert</span>'
   if (art === 'befragung') return '<span class="chk">☐ befragt</span>'
   return ''
