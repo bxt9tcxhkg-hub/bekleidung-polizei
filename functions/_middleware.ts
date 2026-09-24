@@ -25,6 +25,20 @@ function preventStaleHtml(response: Response) {
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const response = await context.next()
+
+  // Cloudflare Pages liefert bei Projekten ohne eigene 404-Seite unbekannte
+  // Pfade bereits hier als index.html mit Status 200. Für Modul- und andere
+  // Dateiabrufe muss daraus wieder ein echter 404 werden.
+  if (!isDocumentNavigation(context.request) && response.headers.get('Content-Type')?.includes('text/html')) {
+    return new Response('Nicht gefunden', {
+      status: 404,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    })
+  }
+
   if (response.status !== 404) return preventStaleHtml(response)
 
   // Nur echte Seitennavigationen erhalten den SPA-Einstieg. Fehlende JS-,
