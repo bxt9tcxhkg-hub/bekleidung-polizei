@@ -1,4 +1,4 @@
--- Funktionskontakte trennen die dauerhaft benötigte Funktion (z. B.
+-- Funktionskontakte trennen eine dauerhaft benötigte Funktion (z. B.
 -- Bürgermeister oder Rechtsabteilung) von der jeweils aktuellen Person.
 -- Dadurch bleiben Checklisten und Verständigungsregeln stabil, während der
 -- Admin die konkrete Person und Rufnummer an einer Stelle austauschen kann.
