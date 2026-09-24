@@ -106,7 +106,7 @@ export function IncidentCards({
           {dispatchingId === item.id ? <div className="flex flex-wrap items-center gap-2 pt-3">
             <select
               autoFocus
-              defaultValue=""
+              defaultValue={item.assigned_vehicle_id ?? ''}
               className="min-w-[220px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
               onChange={event => {
                 const vehicleId = event.target.value
@@ -119,8 +119,8 @@ export function IncidentCards({
             </select>
             <button type="button" onClick={() => setDispatchingId(null)} className="text-xs font-semibold text-gray-600">Abbrechen</button>
           </div> : <div className="flex flex-wrap gap-2 pt-3">
-            {item.disposition !== 'zentrale' ? <button type="button" onClick={() => void setIncidentHandling(item, 'zentrale')} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">Zentrale übernimmt</button> : null}
-            <button type="button" onClick={() => setDispatchingId(item.id)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-800">Streife zuweisen</button>
+            {item.disposition !== 'zentrale' ? <button type="button" onClick={() => void setIncidentHandling(item, 'zentrale')} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-800">An Zentrale zurückgeben</button> : null}
+            <button type="button" onClick={() => setDispatchingId(item.id)} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-800">{item.assigned_vehicle_id ? 'Streife ändern' : 'Streife zuweisen'}</button>
             <button type="button" onClick={() => void setIncidentHandling(item, 'bp')} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-800">An BP abtreten</button>
           </div>}
         </div> : null}
