@@ -214,8 +214,10 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
     }
   }, [listenart, personen])
 
-  function drucken() {
-    generateNamenslistePdf({ incidentTitel, listenart, personen, erstelltVon: officerPrintName(profile) })
+  const hatStatusSpalte = listenart === 'evakuierung' || listenart === 'kontrolle' || listenart === 'befragung'
+
+  function drucken(leer: boolean) {
+    generateNamenslistePdf({ incidentTitel, listenart, personen, erstelltVon: officerPrintName(profile), leer })
   }
 
   return <div className="space-y-3">
@@ -235,7 +237,8 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
     </div>
 
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={drucken} disabled={personen.length === 0} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-800 border border-blue-200 px-2 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"><Printer className="w-3.5 h-3.5" /> PDF</button>
+      <button type="button" onClick={() => drucken(false)} disabled={personen.length === 0} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-800 border border-blue-200 px-2 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"><Printer className="w-3.5 h-3.5" /> {hatStatusSpalte ? 'PDF (Stand)' : 'PDF'}</button>
+      {hatStatusSpalte ? <button type="button" onClick={() => drucken(true)} disabled={personen.length === 0} className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 border border-gray-300 px-2 py-1.5 rounded-md disabled:opacity-40 disabled:cursor-not-allowed"><Printer className="w-3.5 h-3.5" /> PDF (leer zum Erfassen)</button> : null}
       {erlaubteSekundaerlisten.length > 0 ? <select
         className="text-xs border border-gray-300 rounded-md px-2 py-1.5 bg-white"
         value={SECONDARY_LISTS.includes(listenart) ? listenart : ''}

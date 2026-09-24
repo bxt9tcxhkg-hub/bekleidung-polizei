@@ -15,6 +15,11 @@ export interface NamenslistePdfInput {
   personen: readonly NamenslistePerson[]
   erstelltVon: string
   now?: Date
+  /** true = Statusspalte bewusst leer mit Ankreuzfeldern statt dem digital
+   * erfassten Stand - für die Erfassung vor Ort auf Papier, wenn (noch) kein
+   * digitaler Zugriff besteht. Der Papierstand wird danach händisch ins
+   * Portal nachgetragen, nicht automatisch zurückgespielt. */
+  leer?: boolean
 }
 
 function statusText(person: NamenslistePerson): string {
@@ -24,14 +29,22 @@ function statusText(person: NamenslistePerson): string {
   return person.status === 'erledigt' ? 'erledigt' : 'offen'
 }
 
+function statusAnkreuzfelder(art: Listenart): string {
+  if (art === 'evakuierung') return '<span class="chk">☐ im Haus</span><span class="chk">☐ draußen</span>'
+  if (art === 'kontrolle') return '<span class="chk">☐ kontrolliert</span>'
+  if (art === 'befragung') return '<span class="chk">☐ befragt</span>'
+  return ''
+}
+
 export function generateNamenslistePdf(input: NamenslistePdfInput): void {
   const now = input.now ?? new Date()
   const datumText = now.toLocaleDateString('de-AT')
   const istUnterbringung = input.listenart === 'unterbringung'
+  const leer = input.leer ?? false
 
   const head = istUnterbringung
     ? '<tr><th>Nr</th><th>Name</th><th>Alter</th><th>m/w/d</th><th>Sprache</th><th>Familie</th><th>Telefonnummer</th><th>Ort Unterkunft</th><th>Anmerkungen</th></tr>'
-    : '<tr><th>Nr</th><th>Top-Nr</th><th>Name</th><th>geboren</th><th>Status</th></tr>'
+    : `<tr><th>Nr</th><th>Top-Nr</th><th>Name</th><th>geboren</th><th>${leer ? 'Status (bitte ankreuzen)' : 'Status'}</th></tr>`
 
   const rows = input.personen.map((person, index) => istUnterbringung
     ? `<tr>
@@ -50,7 +63,7 @@ export function generateNamenslistePdf(input: NamenslistePdfInput): void {
         <td class="c">${escHtml(person.wohnung ?? '')}</td>
         <td>${escHtml(person.name)}</td>
         <td class="c">${escHtml(person.geboren ?? '')}</td>
-        <td class="c">${escHtml(statusText(person))}</td>
+        <td class="c">${leer ? statusAnkreuzfelder(input.listenart) : escHtml(statusText(person))}</td>
       </tr>`,
   ).join('')
 
@@ -66,12 +79,13 @@ export function generateNamenslistePdf(input: NamenslistePdfInput): void {
   table.grid th, table.grid td { border: 1px solid #000; padding: 1.5mm 2mm; vertical-align: top; }
   table.grid th { background: #f1f4f9; font-weight: bold; text-align: left; font-size: 8.5pt; }
   .c { text-align: center; }
+  .chk { display: inline-block; margin-right: 4mm; white-space: nowrap; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   ${letterheadBlock(input.erstelltVon)}
   ${referenceLineBlock(now)}
-  <div class="kt">Namensliste – ${escHtml(LISTENART_LABEL[input.listenart])}</div>
-  <div class="meta">Einsatz: ${escHtml(input.incidentTitel)} · Datum: ${datumText} · Protokollant: ${escHtml(input.erstelltVon)} · ${input.personen.length} Person(en)</div>
+  <div class="kt">Namensliste – ${escHtml(LISTENART_LABEL[input.listenart])}${leer ? ' (Erfassung vor Ort)' : ''}</div>
+  <div class="meta">Einsatz: ${escHtml(input.incidentTitel)} · Datum: ${datumText} · Protokollant: ${escHtml(input.erstelltVon)} · ${input.personen.length} Person(en)${leer ? ' · Status bitte handschriftlich ankreuzen und anschließend im Portal nachtragen' : ''}</div>
   <table class="grid"><thead>${head}</thead><tbody>${rows}</tbody></table>
 </body></html>`
   openPrintHtml(html)
