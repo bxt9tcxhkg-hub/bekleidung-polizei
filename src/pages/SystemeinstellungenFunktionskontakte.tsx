@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ContactRound, Save } from 'lucide-react'
+import { ArrowLeft, ContactRound, Plus, Save, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
@@ -22,6 +22,7 @@ export default function SystemeinstellungenFunktionskontakte() {
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [neueFunktion, setNeueFunktion] = useState({ bezeichnung: '', gruppe: 'einsatzorganisation' as PortalFunktionskontakt['gruppe'] })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,6 +71,40 @@ export default function SystemeinstellungenFunktionskontakte() {
     await load()
   }
 
+  async function hinzufuegen() {
+    const bezeichnung = neueFunktion.bezeichnung.trim()
+    if (!bezeichnung) { setError('Bitte eine Bezeichnung eingeben.'); return }
+    setSaving('neu'); setError(''); setNotice('')
+    const result = await funktionskontaktSupabase.from('portal_funktionskontakte').insert({
+      schluessel: `funktion_${crypto.randomUUID()}`,
+      bezeichnung,
+      gruppe: neueFunktion.gruppe,
+      sortierung: Math.max(0, ...funktionen.map(row => row.sortierung)) + 10,
+      kontakt_id: null,
+      telefon_art: null,
+      vertretung_id: null,
+      aktiv: true,
+      updated_by: profile?.id ?? null,
+    } as never).select('schluessel').single()
+    setSaving(null)
+    if (result.error || !result.data) { setError(result.error?.code === '23505' ? 'Diese Funktion besteht bereits.' : 'Funktionskontakt konnte nicht angelegt werden.'); return }
+    logAudit('Funktionskontakt angelegt', bezeichnung)
+    setNeueFunktion({ bezeichnung: '', gruppe: 'einsatzorganisation' })
+    setNotice(`${bezeichnung} wurde angelegt. Ordnen Sie jetzt eine Person zu und nehmen Sie die Funktion bei Bedarf in das Verständigungsschema auf.`)
+    await load()
+  }
+
+  async function entfernen(row: PortalFunktionskontakt) {
+    if (!window.confirm(`Funktion „${row.bezeichnung}“ löschen? Das ist nur möglich, wenn sie in keinem Verständigungsschema verwendet wird.`)) return
+    setSaving(row.schluessel); setError(''); setNotice('')
+    const result = await funktionskontaktSupabase.from('portal_funktionskontakte').delete().eq('schluessel', row.schluessel).select('schluessel').single()
+    setSaving(null)
+    if (result.error || !result.data) { setError('Funktionskontakt konnte nicht gelöscht werden. Entfernen Sie zuerst seine Einträge im Verständigungsschema.'); return }
+    logAudit('Funktionskontakt gelöscht', row.bezeichnung)
+    setNotice(`${row.bezeichnung} wurde gelöscht.`)
+    await load()
+  }
+
   return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
     <Link to="/portal/systemeinstellungen" className="inline-flex items-center gap-1 text-sm text-blue-700 hover:underline"><ArrowLeft className="h-4 w-4" /> Zu Systemeinstellungen</Link>
     <div className="mt-5 flex flex-wrap items-start justify-between gap-3">
@@ -78,6 +113,15 @@ export default function SystemeinstellungenFunktionskontakte() {
     </div>
     {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
     {notice ? <p role="status" className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p> : null}
+    <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+      <h2 className="font-semibold text-gray-900">Funktion hinzufügen</h2>
+      <p className="mt-1 text-xs text-gray-600">Die Funktion wird erst bei einer Ereignisstufe angezeigt, wenn sie im Verständigungsschema dieser Stufe ausgewählt wurde.</p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="min-w-52 flex-1 text-sm font-medium text-gray-700">Bezeichnung<input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" value={neueFunktion.bezeichnung} onChange={event => setNeueFunktion(current => ({ ...current, bezeichnung: event.target.value }))} /></label>
+        <label className="text-sm font-medium text-gray-700">Gruppe<select className="mt-1 block rounded-lg border border-gray-300 bg-white px-3 py-2" value={neueFunktion.gruppe} onChange={event => setNeueFunktion(current => ({ ...current, gruppe: event.target.value as PortalFunktionskontakt['gruppe'] }))}>{GRUPPEN.map(gruppe => <option key={gruppe.id} value={gruppe.id}>{gruppe.label}</option>)}</select></label>
+        <button type="button" disabled={saving !== null} onClick={() => void hinzufuegen()} className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"><Plus className="h-4 w-4" /> Hinzufügen</button>
+      </div>
+    </section>
     {loading ? <p className="mt-6 text-sm text-gray-500">Funktionskontakte werden geladen…</p> : <div className="mt-7 space-y-7">
       {GRUPPEN.map(gruppe => <section key={gruppe.id}>
         <h2 className="text-lg font-bold text-gray-900">{gruppe.label}</h2>
@@ -94,7 +138,7 @@ export default function SystemeinstellungenFunktionskontakte() {
               {!person ? <p className="mt-3 text-xs font-medium text-amber-700">Noch keine Person zugeordnet. Legen Sie die Person zuerst unter Kontakte an.</p> : !hatNummer ? <p className="mt-3 text-xs font-medium text-amber-700">Der Kontakt ist zugeordnet, hat aber noch keine Rufnummer.</p> : null}
               <div className="mt-4 flex items-center justify-between gap-3">
                 <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={row.aktiv} onChange={event => update(row.schluessel, { aktiv: event.target.checked })} /> Aktiv</label>
-                <button type="button" disabled={saving !== null} onClick={() => void speichern(row)} className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"><Save className="h-4 w-4" /> {saving === row.schluessel ? 'Speichern…' : 'Speichern'}</button>
+                <div className="flex items-center gap-2"><button type="button" disabled={saving !== null} onClick={() => void entfernen(row)} aria-label={`${row.bezeichnung} löschen`} className="rounded-lg p-2 text-red-700 disabled:opacity-50"><Trash2 className="h-4 w-4" /></button><button type="button" disabled={saving !== null} onClick={() => void speichern(row)} className="inline-flex items-center gap-2 rounded-lg bg-blue-800 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"><Save className="h-4 w-4" /> {saving === row.schluessel ? 'Speichern…' : 'Speichern'}</button></div>
               </div>
             </article>
           })}
