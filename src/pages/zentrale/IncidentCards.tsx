@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react'
 import { Empty } from '../../components/ZentraleEntryEditor'
 import { formatTime } from '../../lib/zentraleShared'
 import { STUFE_META } from '../../lib/einsatzSchema'
+import { telHref } from '../../lib/telefonnummern'
 import type { EreignisDimension, IncidentReport, ZentraleEntry } from '../../lib/types'
 import type { IncidentEreignisContext } from '../../lib/ereignis'
 
@@ -84,6 +85,14 @@ export function IncidentCards({
             <button type="button" onClick={() => openEditIncident(item)} className="p-2 text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Einsatzmeldung bearbeiten"><Pencil className="w-4 h-4" /></button>
             <button type="button" onClick={() => void deleteIncident(item)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" aria-label="Einsatzmeldung löschen"><Trash2 className="w-4 h-4" /></button>
           </div> : null}
+        </div>
+
+        <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-gray-100 px-3 text-sm sm:px-4 ${isExpanded ? 'py-2' : 'py-1.5'}`}>
+          <span className="font-semibold text-gray-600">Meldungsleger:</span>
+          <span className="text-gray-900">{item.caller_name?.trim() || 'Nicht erfasst'}</span>
+          {item.caller_phone?.trim() ? <a href={telHref(item.caller_phone)} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900" aria-label={`Meldungsleger unter ${item.caller_phone} anrufen`}>
+            {item.caller_phone}
+          </a> : null}
         </div>
 
         {accordion && isExpanded ? <div className="border-t border-gray-100 px-3 py-3 sm:px-4">

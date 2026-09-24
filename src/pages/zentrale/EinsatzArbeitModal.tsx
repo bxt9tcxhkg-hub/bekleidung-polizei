@@ -255,7 +255,7 @@ export default function EinsatzArbeitModal({
 
   return <Modal wide title={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} close={close}>
     <p className="text-sm text-gray-800 line-clamp-3">{item.summary}</p>
-    <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
+    <p className="text-xs text-gray-500">Meldungsleger: {item.caller_name || '–'} · Tel: {item.caller_phone?.trim() ? <a href={telHref(item.caller_phone)} className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900" aria-label={`Meldungsleger unter ${item.caller_phone} anrufen`}>{item.caller_phone}</a> : '–'}</p>
 
     <div className={'grid ' + (hatEreignisArbeitsraum ? 'grid-cols-3' : 'grid-cols-2') + ' border-b border-gray-200'}>
       <button type="button" className={tabClass('uebersicht')} onClick={() => setTab('uebersicht')}>Übersicht</button>
