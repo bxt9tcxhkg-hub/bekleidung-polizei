@@ -23,6 +23,7 @@ end;
 $$;
 revoke all on function public.aktualisiere_aktive_ereignis_funktionskontakte() from public, anon, authenticated;
 
+drop trigger if exists portal_funktionskontakte_aktive_ereignisse on public.portal_funktionskontakte;
 create trigger portal_funktionskontakte_aktive_ereignisse
 after update of kontakt_id, telefon_art, vertretung_id, aktiv on public.portal_funktionskontakte
 for each row execute function public.aktualisiere_aktive_ereignis_funktionskontakte();
@@ -39,6 +40,7 @@ end;
 $$;
 revoke all on function public.pruefe_funktionskontakt_loeschung() from public, anon, authenticated;
 
+drop trigger if exists portal_funktionskontakte_loeschung_pruefen on public.portal_funktionskontakte;
 create trigger portal_funktionskontakte_loeschung_pruefen
 before delete on public.portal_funktionskontakte
 for each row execute function public.pruefe_funktionskontakt_loeschung();
