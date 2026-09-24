@@ -15,10 +15,12 @@ export interface NamenslistePdfInput {
   personen: readonly NamenslistePerson[]
   erstelltVon: string
   now?: Date
-  /** true = Statusspalte bewusst leer mit Ankreuzfeldern statt dem digital
-   * erfassten Stand - für die Erfassung vor Ort auf Papier, wenn (noch) kein
-   * digitaler Zugriff besteht. Der Papierstand wird danach händisch ins
-   * Portal nachgetragen, nicht automatisch zurückgespielt. */
+  /** true = Status-/Detailspalten bewusst leer (Ankreuzfelder bzw. leere
+   * Zellen) statt dem digital erfassten Stand - für die Erfassung vor Ort
+   * auf Papier, wenn (noch) kein digitaler Zugriff besteht. Nr und Name
+   * bleiben ausgefüllt, da diese Personen bereits in der Liste stehen. Der
+   * Papierstand wird danach händisch ins Portal nachgetragen, nicht
+   * automatisch zurückgespielt. */
   leer?: boolean
 }
 
@@ -50,13 +52,13 @@ export function generateNamenslistePdf(input: NamenslistePdfInput): void {
     ? `<tr>
         <td>${index + 1}</td>
         <td>${escHtml(person.name)}</td>
-        <td class="c">${person.alter ?? ''}</td>
-        <td class="c">${person.geschlecht ?? ''}</td>
-        <td>${escHtml(person.sprache ?? '')}</td>
-        <td>${escHtml(person.familie ?? '')}</td>
-        <td>${escHtml(person.telefon ?? '')}</td>
-        <td>${escHtml(person.ort_unterkunft ?? '')}</td>
-        <td>${escHtml(person.anmerkungen ?? '')}</td>
+        <td class="c">${leer ? '' : person.alter ?? ''}</td>
+        <td class="c">${leer ? '' : person.geschlecht ?? ''}</td>
+        <td>${leer ? '' : escHtml(person.sprache ?? '')}</td>
+        <td>${leer ? '' : escHtml(person.familie ?? '')}</td>
+        <td>${leer ? '' : escHtml(person.telefon ?? '')}</td>
+        <td>${leer ? '' : escHtml(person.ort_unterkunft ?? '')}</td>
+        <td>${leer ? '' : escHtml(person.anmerkungen ?? '')}</td>
       </tr>`
     : `<tr>
         <td>${index + 1}</td>
@@ -85,7 +87,7 @@ export function generateNamenslistePdf(input: NamenslistePdfInput): void {
   ${letterheadBlock(input.erstelltVon)}
   ${referenceLineBlock(now)}
   <div class="kt">Namensliste – ${escHtml(LISTENART_LABEL[input.listenart])}${leer ? ' (Erfassung vor Ort)' : ''}</div>
-  <div class="meta">Einsatz: ${escHtml(input.incidentTitel)} · Datum: ${datumText} · Protokollant: ${escHtml(input.erstelltVon)} · ${input.personen.length} Person(en)${leer ? ' · Status bitte handschriftlich ankreuzen und anschließend im Portal nachtragen' : ''}</div>
+  <div class="meta">Einsatz: ${escHtml(input.incidentTitel)} · Datum: ${datumText} · Protokollant: ${escHtml(input.erstelltVon)} · ${input.personen.length} Person(en)${leer ? (istUnterbringung ? ' · Angaben bitte handschriftlich ausfüllen und anschließend im Portal nachtragen' : ' · Status bitte handschriftlich ankreuzen und anschließend im Portal nachtragen') : ''}</div>
   <table class="grid"><thead>${head}</thead><tbody>${rows}</tbody></table>
 </body></html>`
   openPrintHtml(html)
