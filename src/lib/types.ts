@@ -723,8 +723,10 @@ export interface PortalFunktionskontakt {
   gruppe: FunktionskontaktGruppe
   sortierung: number
   kontakt_id: string | null
+  profil_id: string | null
   telefon_art: KontaktTelefonArt | null
   vertretung_id: string | null
+  vertretung_profil_id: string | null
   aktiv: boolean
   updated_by: string | null
   updated_at: string
@@ -741,7 +743,7 @@ export interface Verstaendigungsregel {
   telefon_art: KontaktTelefonArt | null
   vertretung_id: string | null
 }
-export type EreignisVerstaendigungsschritt = Omit<Verstaendigungsregel, 'id' | 'dimension' | 'funktionskontakt_key'> & { ereignis_id: string }
+export type EreignisVerstaendigungsschritt = Omit<Verstaendigungsregel, 'id' | 'dimension' | 'funktionskontakt_key'> & { ereignis_id: string; profil_id: string | null; vertretung_profil_id: string | null }
 
 export type AlarmierungBereich = 'polizei' | 'staedtisch' | 'beide'
 

@@ -6,7 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
 import { integrationSupabase, type IntegrationOutlookContact } from '../../lib/integrations'
-import { profilTelefonClient, type ProfilTelefonnummern } from '../../lib/profilTelefon'
+import { profilTelefonClient, profilNummerFuerArt, type ProfilTelefonnummern } from '../../lib/profilTelefon'
 import type { ZentraleKontakt } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
@@ -91,7 +91,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
     })
   }, [rows, filterInstitution, search])
   const kontakteById = useMemo(() => new Map(items.map(item => [item.id, item])), [items])
-  const sichtbareFunktionen = useMemo(() => funktionskontakte.filter(row => canManage || (row.aktiv && row.kontakt_id)), [funktionskontakte, canManage])
+  const sichtbareFunktionen = useMemo(() => funktionskontakte.filter(row => canManage || (row.aktiv && (row.kontakt_id || row.profil_id))), [funktionskontakte, canManage])
 
   if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
@@ -136,9 +136,11 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 sm:px-5"><div><h2 className="font-semibold text-gray-900">Funktionskontakte</h2><p className="text-xs text-gray-500">Stadtführung, Einsatzorganisation und Fachabteilungen</p></div>{canManage ? <Link to="/portal/systemeinstellungen/funktionskontakte" className="text-sm font-medium text-blue-800 hover:underline">Zuordnungen bearbeiten</Link> : null}</div>
       <div className="divide-y divide-gray-100">{sichtbareFunktionen.map(row => {
         const person = row.kontakt_id ? kontakteById.get(row.kontakt_id) : null
-        const nummer = person && row.telefon_art ? nummerFuerArt(person, row.telefon_art) : null
+        const profil = row.profil_id ? benutzer.find(item => item.id === row.profil_id) : null
+        const telefon = row.profil_id ? benutzerTelefone.find(item => item.user_id === row.profil_id) : null
+        const nummer = profil ? profilNummerFuerArt(telefon, row.telefon_art === 'diensthandy' || row.telefon_art === 'privathandy' ? row.telefon_art : null) : person && row.telefon_art ? nummerFuerArt(person, row.telefon_art) : null
         return <div key={row.schluessel} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm sm:px-5">
-          <div><p className="font-medium text-gray-900">{row.bezeichnung}</p>{person ? <p className="text-gray-600">{person.name}{nummer ? ` · ${nummer}` : ''}</p> : <p className="text-amber-700">Noch kein Kontakt zugeordnet</p>}</div>
+          <div><p className="font-medium text-gray-900">{row.bezeichnung}</p>{person || profil ? <p className="text-gray-600">{person?.name ?? profil?.name}{nummer ? ` · ${nummer}` : ''}</p> : <p className="text-amber-700">Noch kein Kontakt zugeordnet</p>}</div>
           {!row.aktiv ? <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">Inaktiv</span> : null}
         </div>
       })}</div>

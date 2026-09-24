@@ -5,15 +5,19 @@ import { supabase } from '../lib/supabase'
 import { ladeFunktionskontakte, ladeVerstaendigungsregeln, nummerFuerArt } from '../lib/verstaendigungsregeln'
 import { STUFE_META } from '../lib/einsatzSchema'
 import { logAudit } from '../lib/audit'
+import { profilTelefonClient, profilNummerFuerArt, type ProfilTelefonnummern } from '../lib/profilTelefon'
 import type { PortalFunktionskontakt, Verstaendigungsregel, ZentraleKontakt } from '../lib/types'
 
 const DIMENSIONEN = ['mittel', 'gross', 'katastrophe'] as const
 const leeresFormular = (dimension: Verstaendigungsregel['dimension']) => ({ dimension, funktionskontakt_key: '', sortierung: 10, pflicht: true })
+type Mitarbeiter = { id: string; name: string }
 
 export default function SystemeinstellungenVerstaendigungen() {
   const [regeln, setRegeln] = useState<Verstaendigungsregel[]>([])
   const [funktionen, setFunktionen] = useState<PortalFunktionskontakt[]>([])
   const [kontakte, setKontakte] = useState<ZentraleKontakt[]>([])
+  const [mitarbeiter, setMitarbeiter] = useState<Mitarbeiter[]>([])
+  const [telefone, setTelefone] = useState<ProfilTelefonnummern[]>([])
   const [dimension, setDimension] = useState<Verstaendigungsregel['dimension']>('mittel')
   const [editing, setEditing] = useState<Verstaendigungsregel | null>(null)
   const [form, setForm] = useState<ReturnType<typeof leeresFormular> | null>(null)
@@ -25,15 +29,19 @@ export default function SystemeinstellungenVerstaendigungen() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [regelRows, funktionsRows, kontakteResult] = await Promise.all([
+      const [regelRows, funktionsRows, kontakteResult, mitarbeiterResult, telefonResult] = await Promise.all([
         ladeVerstaendigungsregeln(),
         ladeFunktionskontakte(),
         supabase.from('zentrale_kontakte').select('*').order('name'),
+        supabase.from('profiles').select('id,name').eq('active', true),
+        profilTelefonClient.from('profile_phone_numbers').select('*'),
       ])
-      if (kontakteResult.error) throw kontakteResult.error
+      if (kontakteResult.error || mitarbeiterResult.error || telefonResult.error) throw kontakteResult.error ?? mitarbeiterResult.error ?? telefonResult.error
       setRegeln(regelRows)
       setFunktionen(funktionsRows)
       setKontakte((kontakteResult.data ?? []) as ZentraleKontakt[])
+      setMitarbeiter((mitarbeiterResult.data ?? []) as Mitarbeiter[])
+      setTelefone(telefonResult.data ?? [])
       setError('')
     } catch { setError('Das Verständigungsschema konnte nicht geladen werden.') }
     finally { setLoading(false) }
@@ -42,6 +50,8 @@ export default function SystemeinstellungenVerstaendigungen() {
 
   const funktionByKey = useMemo(() => new Map(funktionen.map(row => [row.schluessel, row])), [funktionen])
   const kontaktById = useMemo(() => new Map(kontakte.map(row => [row.id, row])), [kontakte])
+  const mitarbeiterById = useMemo(() => new Map(mitarbeiter.map(row => [row.id, row])), [mitarbeiter])
+  const telefonById = useMemo(() => new Map(telefone.map(row => [row.user_id, row])), [telefone])
 
   async function speichern() {
     if (!form || saving) return
@@ -90,10 +100,11 @@ export default function SystemeinstellungenVerstaendigungen() {
       {loading ? <p className="mt-4 text-sm">Lädt…</p> : <div className="mt-4 space-y-2">{regeln.filter(row => row.dimension === dimension).map(row => {
         const funktion = row.funktionskontakt_key ? funktionByKey.get(row.funktionskontakt_key) : null
         const person = funktion?.kontakt_id ? kontaktById.get(funktion.kontakt_id) : null
-        const nummer = person && funktion ? (funktion.telefon_art ? nummerFuerArt(person, funktion.telefon_art) : null) : null
+        const profil = funktion?.profil_id ? mitarbeiterById.get(funktion.profil_id) : null
+        const nummer = profil && funktion ? profilNummerFuerArt(telefonById.get(profil.id), funktion.telefon_art === 'diensthandy' || funktion.telefon_art === 'privathandy' ? funktion.telefon_art : null) : person && funktion?.telefon_art ? nummerFuerArt(person, funktion.telefon_art) : null
         return <div key={row.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
           <span className="w-8 text-gray-500">{row.sortierung}</span>
-          <div className="min-w-0 flex-1"><strong>{row.bezeichnung}</strong>{!row.pflicht ? ' · optional' : ''}<p className={person ? 'text-gray-600' : 'text-amber-700'}>{person ? `${person.name}${nummer ? ` · ${nummer}` : ''}` : 'Noch kein konkreter Kontakt zugeordnet'}</p></div>
+          <div className="min-w-0 flex-1"><strong>{row.bezeichnung}</strong>{!row.pflicht ? ' · optional' : ''}<p className={person || profil ? 'text-gray-600' : 'text-amber-700'}>{person || profil ? `${person?.name ?? profil?.name}${nummer ? ` · ${nummer}` : ''}` : 'Noch kein konkreter Kontakt zugeordnet'}</p></div>
           <button type="button" className="text-blue-800" onClick={() => { setEditing(row); setForm({ dimension: row.dimension, funktionskontakt_key: row.funktionskontakt_key ?? '', sortierung: row.sortierung, pflicht: row.pflicht }); setError('') }}>Bearbeiten</button>
           <button type="button" aria-label={`${row.bezeichnung} entfernen`} className="text-red-700" onClick={() => void entfernen(row)}><Trash2 className="h-4 w-4" /></button>
         </div>

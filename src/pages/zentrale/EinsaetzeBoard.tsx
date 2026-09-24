@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
 import { nummerFuerArt } from '../../lib/verstaendigungsregeln'
 import { telHref } from '../../lib/ereignisKontakte'
+import { profilTelefonClient, profilTelefonnummern, profilNummerFuerArt, type ProfilTelefonnummern } from '../../lib/profilTelefon'
 import { formatTime } from '../../lib/zentraleShared'
 import { EREIGNISSTUFEN, STUFE_META, type Ereignisstufe } from '../../lib/einsatzSchema'
 import { loadEreignisContexts, setIncidentEreignisDimension } from '../../lib/ereignis'
@@ -24,6 +25,8 @@ export default function EinsaetzeBoard({
   const [view, setView] = useState<'uebersicht' | 'detail'>('uebersicht')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [kontakte, setKontakte] = useState<ZentraleKontakt[]>([])
+  const [mitarbeiter, setMitarbeiter] = useState<{ id: string; name: string }[]>([])
+  const [telefone, setTelefone] = useState<ProfilTelefonnummern[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [levels, setLevels] = useState<Record<string, Ereignisstufe>>({})
   const [eventIds, setEventIds] = useState<Record<string, string>>({})
@@ -31,8 +34,14 @@ export default function EinsaetzeBoard({
   const [decisionsByEvent, setDecisionsByEvent] = useState<Record<string, EreignisEntscheidungsschritt[]>>({})
 
   useEffect(() => {
-    void supabase.from('zentrale_kontakte').select('*').order('name').then(result => {
-      setKontakte((result.data ?? []) as ZentraleKontakt[])
+    void Promise.all([
+      supabase.from('zentrale_kontakte').select('*').order('name'),
+      supabase.from('profiles').select('id,name'),
+      profilTelefonClient.from('profile_phone_numbers').select('*'),
+    ]).then(([kontakteResult, profilResult, telefonResult]) => {
+      setKontakte((kontakteResult.data ?? []) as ZentraleKontakt[])
+      setMitarbeiter(profilResult.data ?? [])
+      setTelefone(telefonResult.data ?? [])
     })
   }, [])
 
@@ -160,10 +169,13 @@ export default function EinsaetzeBoard({
                 {stufe !== 'klein' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   <p className="font-bold">Verständigung telefonisch</p>
                   <ul className="mt-1 list-disc pl-5">{(stepsByEvent[eventIds[item.id]] ?? []).map(step => {
-                    const match = kontakte.find(row => row.id === step.kontakt_id)
-                    const nummer = match ? nummerFuerArt(match, step.telefon_art) : null
-                    const verfuegbareNummern = match ? (step.telefon_art ? (nummer ? [{ art: 'Bevorzugt', nummer }] : []) : kontaktTelefonnummern(match)) : []
-                    return <li key={step.schluessel}>{step.bezeichnung}{match ? ` – ${match.name}` : ' – Kontakt fehlt'}{match && !verfuegbareNummern.length ? ' · Rufnummer fehlt' : null}{verfuegbareNummern.map(({ art, nummer: value }) => <span key={art}> · <a href={telHref(value)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{art}: {value}</a></span>)}</li>
+                     const match = kontakte.find(row => row.id === step.kontakt_id)
+                     const profil = mitarbeiter.find(row => row.id === step.profil_id)
+                     const profilTelefon = telefone.find(row => row.user_id === step.profil_id)
+                     const nummer = match ? nummerFuerArt(match, step.telefon_art) : null
+                     const profilNummer = step.telefon_art === 'diensthandy' || step.telefon_art === 'privathandy' ? profilNummerFuerArt(profilTelefon, step.telefon_art) : null
+                     const verfuegbareNummern = profil ? (step.telefon_art ? (profilNummer ? [{ art: 'Bevorzugt', nummer: profilNummer }] : []) : profilTelefonnummern(profilTelefon)) : match ? (step.telefon_art ? (nummer ? [{ art: 'Bevorzugt', nummer }] : []) : kontaktTelefonnummern(match)) : []
+                     return <li key={step.schluessel}>{step.bezeichnung}{match || profil ? ` – ${match?.name ?? profil?.name}` : ' – Kontakt fehlt'}{(match || profil) && !verfuegbareNummern.length ? ' · Rufnummer fehlt' : null}{verfuegbareNummern.map(({ art, nummer: value }) => <span key={art}> · <a href={telHref(value)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{art}: {value}</a></span>)}</li>
                   })}</ul>
                   {stufe === 'gross' || stufe === 'katastrophe' ? <><p className="font-bold mt-2">Entscheidung</p><ul className="list-disc pl-5">{(decisionsByEvent[eventIds[item.id]] ?? []).map(row => <li key={row.schluessel}>{row.bezeichnung}</li>)}</ul></> : null}
                   <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Kontakte bearbeiten</Link>

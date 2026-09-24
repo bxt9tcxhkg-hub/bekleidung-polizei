@@ -28,3 +28,14 @@ type ProfilTelefonDatabase = {
 }
 
 export const profilTelefonClient = supabase as unknown as SupabaseClient<ProfilTelefonDatabase>
+
+export function profilTelefonnummern(telefon: ProfilTelefonnummern | null | undefined) {
+  return [
+    telefon?.diensthandy?.trim() ? { art: 'Diensthandy', nummer: telefon.diensthandy.trim() } : null,
+    telefon?.privathandy?.trim() ? { art: 'Privathandy', nummer: telefon.privathandy.trim() } : null,
+  ].filter((row): row is { art: string; nummer: string } => row !== null)
+}
+
+export function profilNummerFuerArt(telefon: ProfilTelefonnummern | null | undefined, art: 'diensthandy' | 'privathandy' | null) {
+  return art ? telefon?.[art]?.trim() || null : null
+}
