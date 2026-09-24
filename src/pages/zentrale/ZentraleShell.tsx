@@ -372,7 +372,16 @@ export default function ZentraleShell() {
   }
 
   async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
-  async function deleteIncident(item: IncidentReport) { if (!window.confirm('Diese Einsatzmeldung endgültig löschen?')) return; const result = await supabase.from('incident_reports').delete().eq('id', item.id); if (result.error) { setError('Die Einsatzmeldung konnte nicht gelöscht werden.'); return } logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80)); await load() }
+  async function deleteIncident(item: IncidentReport) {
+    if (!window.confirm('Diese Einsatzmeldung endgültig löschen? Ein Ereignis ohne weitere Einsätze und seine Verständigungen werden ebenfalls gelöscht.')) return
+    const result = await supabase.from('incident_reports').delete().eq('id', item.id).select('id').maybeSingle()
+    if (result.error || !result.data) {
+      setError('Die Einsatzmeldung konnte nicht gelöscht werden. Bitte Berechtigung prüfen.')
+      return
+    }
+    logAudit('Einsatzmeldung endgültig gelöscht', item.location ?? item.summary.slice(0, 80))
+    await load()
+  }
 
   const ctx: ZentraleContext = {
     canManage, canOperateZentrale, loading, entries, lageEntries, lageByIncidentId, incidentsById,
