@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap, Footprints } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap, Footprints, Clock3, ArrowRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import type {
   EinsatzTrainingAssignment,
@@ -59,6 +60,12 @@ export default function Approvals() {
   const [schulungAssignments, setSchulungAssignments] = useState<SchulungAssignmentWithOfficer[]>([])
   const [shoeRefunds, setShoeRefunds] = useState<ShoeRefund[]>([])
   const [shoeRefundCap, setShoeRefundCap] = useState<number | null>(null)
+  // Überstundenmeldungen laufen über eine eigene Seite (Ueberstunden.tsx, mit
+  // eigener Genehmigerketten-/Selbst-Genehmigen-Logik) statt über diese - hier
+  // nur ein Zähler + Link, damit "alles, was auf eine Entscheidung wartet"
+  // nicht stillschweigend eine ganze Antragsart auslässt. null = (noch) nicht
+  // geladen bzw. fehlgeschlagen, dann keine (ggf. falsche) Zahl zeigen.
+  const [ueberstundenCount, setUeberstundenCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' } | null>(null)
@@ -81,7 +88,7 @@ export default function Approvals() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tRegRes, tAssignRes, sModRes, sSessRes, sRegRes, sAssignRes, refundRes, capRes] = await Promise.all([
+    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tRegRes, tAssignRes, sModRes, sSessRes, sRegRes, sAssignRes, refundRes, capRes, ueberstundenRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, products(name,category,price,size_mode), quarters(name), profiles(name,dienstnummer,username)')
@@ -128,6 +135,7 @@ export default function Approvals() {
         .eq('status', 'pending')
         .order('created_at', { ascending: true }),
       getCurrentShoeRefundCapResult(),
+      supabase.from('ueberstunden_meldungen').select('id', { count: 'exact', head: true }).eq('status', 'eingereicht'),
     ])
     // Ein fehlgeschlagener Query darf nicht als "keine offenen Fälle" durchgehen -
     // das würde dem Genehmiger echte, noch unentschiedene Fälle verstecken. Bei
@@ -181,6 +189,8 @@ export default function Approvals() {
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
     if (refundRes.error) failed.push('Schuherstattungen')
     else setShoeRefunds((refundRes.data ?? []) as ShoeRefund[])
+    if (ueberstundenRes.error) { failed.push('Überstundenmeldungen'); setUeberstundenCount(null) }
+    else setUeberstundenCount(ueberstundenRes.count ?? 0)
     // getCurrentShoeRefundCapResult() (anders als getCurrentShoeRefundCap()) meldet einen
     // fehlgeschlagenen Lookup statt ihn als DEFAULT_SHOE_CAP zu verschleiern - sonst würde
     // die Tabelle einen falschen Höchstbetrag als echt ausgeben, während die Genehmigung
@@ -493,6 +503,23 @@ export default function Approvals() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <>
+          {/* ── Überstundenmeldungen ── läuft über eine eigene Seite (Genehmigerketten-
+              Logik, Rückfrage-Dialog) statt hier eingebettet zu sein - nur Link + Zähler,
+              damit diese Antragsart auf der Übersicht nicht schlicht fehlt. */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Clock3 className="w-4 h-4" /> Überstundenmeldungen</h2>
+            <Link to="/ueberstunden" className="flex items-center gap-4 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all px-5 py-4">
+              <div className="flex-1">
+                <p className="font-medium text-gray-900">{ueberstundenCount === null ? 'Anzahl nicht bekannt' : ueberstundenCount === 0 ? 'Keine offenen Überstundenmeldungen' : `${ueberstundenCount} zur Entscheidung eingereicht`}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Entscheidung (genehmigen/ablehnen/Rückfrage) erfolgt auf der Seite Überstundenmeldungen</p>
+              </div>
+              {ueberstundenCount != null && ueberstundenCount > 0 && (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">{ueberstundenCount} offen</span>
+              )}
+              <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            </Link>
+          </div>
+
           {/* ── Budgetüberschreitungen ── */}
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><ShoppingBag className="w-4 h-4" /> Budgetüberschreitungen</h2>

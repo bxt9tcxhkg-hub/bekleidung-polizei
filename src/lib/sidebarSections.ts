@@ -1,4 +1,4 @@
-import { CheckSquare, Footprints, Wallet } from 'lucide-react'
+import { CheckSquare, Clock3, Footprints, Wallet } from 'lucide-react'
 
 // Bausteine für die Seitenmenüs aller Bereiche (Vorlage: Bekleidung) - siehe
 // components/PortalSidebar.tsx für die eigentliche Render-Komponente. Als
@@ -33,6 +33,12 @@ export const GENEHMIGER_ITEMS: NavItem[] = [
   { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
   { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
   { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
+  // Eigene Seite (Ueberstunden.tsx), nicht Teil von Approvals.tsx - dort steht
+  // sowohl die eigene Meldung als auch (nur für Genehmiger sichtbar) der
+  // Abschnitt "Zu entscheiden". Ohne diesen Eintrag war der Entscheidungsteil
+  // nur über den identisch benannten "Mein Bereich"-Link erreichbar, obwohl
+  // "Genehmigungen" (Freigaben) genau das für alle anderen Antragsarten bündelt.
+  { to: '/ueberstunden', label: 'Überstundenmeldungen', icon: Clock3 },
 ]
 
 /** Baut den Genehmiger-Abschnitt (nur sichtbar, wenn isGenehmiger) - optional mit bereichseigenen Zusatzpunkten. */
