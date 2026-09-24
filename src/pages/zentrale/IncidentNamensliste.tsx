@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { generateNamenslistePdf } from '../../lib/einsatzNamenslistePdf'
+import { loadIncidentEreignis } from '../../lib/ereignis'
 import { officerPrintName } from '../../lib/printDocs'
 import {
   LISTENART_LABEL,
@@ -70,7 +71,25 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   const [error, setError] = useState('')
   const [hinweis, setHinweis] = useState('')
   const [manuellOffen, setManuellOffen] = useState(false)
-  const erlaubteSekundaerlisten = useMemo<Listenart[]>(() => ereignisstufe && ereignisstufe !== 'klein' ? [] : SECONDARY_LISTS, [ereignisstufe])
+  const [geladeneEreignisstufe, setGeladeneEreignisstufe] = useState<EreignisDimension | null | undefined>(ereignisstufe)
+  const erlaubteSekundaerlisten = useMemo<Listenart[]>(
+    () => geladeneEreignisstufe === null || geladeneEreignisstufe === 'klein' ? SECONDARY_LISTS : [],
+    [geladeneEreignisstufe],
+  )
+
+  useEffect(() => {
+    if (ereignisstufe !== undefined) {
+      setGeladeneEreignisstufe(ereignisstufe)
+      return
+    }
+
+    let cancelled = false
+    setGeladeneEreignisstufe(undefined)
+    void loadIncidentEreignis(incidentId)
+      .then(ereignis => { if (!cancelled) setGeladeneEreignisstufe(ereignis?.dimension ?? null) })
+      .catch(() => { if (!cancelled) setGeladeneEreignisstufe(undefined) })
+    return () => { cancelled = true }
+  }, [ereignisstufe, incidentId])
 
   const loadCounts = useCallback(async () => {
     const arten: Listenart[] = ['haus', 'kontrolle', 'evakuierung', 'befragung', 'unterbringung']
@@ -101,7 +120,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   }
 
   async function onAddManual() {
-    if (!neuerName.trim() || !profile?.id) return
+    if (!canOperate || !neuerName.trim() || !profile?.id) return
     setBusy(true)
     setError('')
     try {
@@ -145,7 +164,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   const ausgewaehltePersonen = personen.filter(person => ausgewaehlteIds.includes(person.id))
 
   async function listeBereitstellen(ziel: 'evakuierung' | 'kontrolle' | 'befragung') {
-    if (!profile?.id || listenart !== 'haus' || personen.length === 0) return
+    if (!canOperate || !profile?.id || listenart !== 'haus' || personen.length === 0) return
     setBusy(true)
     setError('')
     setHinweis('')
@@ -166,7 +185,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
   }
 
   async function kopieren(ziel: 'evakuierung' | 'unterbringung') {
-    if (!profile?.id || ausgewaehltePersonen.length === 0) return
+    if (!canOperate || !profile?.id || ausgewaehltePersonen.length === 0) return
     setBusy(true)
     setError('')
     setHinweis('')
@@ -228,7 +247,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
       {erlaubteSekundaerlisten.includes(listenart) ? <button type="button" onClick={() => setListenart('haus')} className="text-xs font-medium text-gray-600">Zurück zu Bewohner</button> : null}
     </div>
 
-    {isZentrale && listenart === 'haus' && personen.length > 0 ? <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+    {isZentrale && canOperate && listenart === 'haus' && personen.length > 0 ? <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
       <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Arbeitsliste bereitstellen</p>
       <p className="mt-1 text-xs text-gray-500">Es werden alle ZMR-Bewohner als neutrale Arbeitsgrundlage übernommen. Die Zentrale entscheidet dabei nicht, wer tatsächlich betroffen oder vor Ort ist.</p>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -252,7 +271,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
 
     <p className="text-xs text-gray-500">{isZentrale && listenart !== 'haus' ? 'Rückmeldung / Bearbeitungsstand der Kräfte vor Ort · ' : ''}{LISTENART_SPALTEN[listenart]} · nach Top-Nr sortiert</p>
 
-    {!isZentrale && ausgewaehltePersonen.length > 0 && listenart !== 'unterbringung' ? <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-2">
+    {!isZentrale && canOperate && ausgewaehltePersonen.length > 0 && listenart !== 'unterbringung' ? <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-2">
       <span className="text-xs font-semibold text-blue-950">{ausgewaehltePersonen.length} ausgewählt</span>
       {listenart !== 'evakuierung' ? <button type="button" disabled={busy} onClick={() => void kopieren('evakuierung')} className="text-xs font-semibold text-blue-800 border border-blue-300 bg-white rounded-md px-2 py-1.5 disabled:opacity-50">→ Evakuierung</button> : null}
       <button type="button" disabled={busy} onClick={() => void kopieren('unterbringung')} className="text-xs font-semibold text-blue-800 border border-blue-300 bg-white rounded-md px-2 py-1.5 disabled:opacity-50">→ Notunterkunft</button>
@@ -288,7 +307,7 @@ export default function IncidentNamensliste({ incidentId, incidentTitel, canOper
           <InlineField value={person.anmerkungen ?? ''} placeholder="Anmerkungen" onCommit={value => void onFieldChange(person, { anmerkungen: value || null })} className="text-xs border border-gray-300 rounded-md px-1.5 py-1 bg-white col-span-2" />
           {canOperate ? <button type="button" onClick={() => void onRemovePerson(person)} className="text-xs text-red-700 hover:underline text-left">Entfernen</button> : null}
         </div> : <div className="flex flex-wrap items-center gap-2">
-          {!isZentrale ? <input type="checkbox" checked={!!ausgewaehlt[person.id]} onChange={() => setAusgewaehlt(current => ({ ...current, [person.id]: !current[person.id] }))} /> : null}
+          {!isZentrale ? <input type="checkbox" disabled={!canOperate} checked={!!ausgewaehlt[person.id]} onChange={() => setAusgewaehlt(current => ({ ...current, [person.id]: !current[person.id] }))} /> : null}
           <span className="font-medium text-gray-900">{person.name}</span>
           {person.wohnung ? <span className="text-gray-500">Top {person.wohnung}</span> : null}
           {person.geboren ? <span className="text-gray-500">* {person.geboren}</span> : null}

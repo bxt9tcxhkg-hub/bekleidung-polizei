@@ -232,19 +232,19 @@ export async function copyPersonenInListe(
       status: (ziel === 'evakuierung' ? 'unbekannt' : 'offen') as NamenslistePerson['status'],
       created_by: createdBy,
     }))
-    const result = await supabase.from('einsatz_namensliste').insert(rows)
-    if (result.error) throw new Error('Die ausgewählten Personen konnten nicht übernommen werden.')
+    const result = await supabase.from('einsatz_namensliste').insert(rows).select('id')
+    if (result.error || result.data?.length !== rows.length) throw new Error('Die ausgewählten Personen konnten nicht übernommen werden.')
   }
 
   return { hinzugefuegt: neu.length, uebersprungen: personen.length - neu.length }
 }
 
 export async function updatePerson(id: string, changes: Partial<Pick<NamenslistePerson, 'name' | 'geboren' | 'wohnung' | 'alter' | 'geschlecht' | 'sprache' | 'familie' | 'telefon' | 'ort_unterkunft' | 'anmerkungen' | 'status'>>): Promise<void> {
-  const result = await supabase.from('einsatz_namensliste').update(changes).eq('id', id)
-  if (result.error) throw new Error('Die Person konnte nicht gespeichert werden.')
+  const result = await supabase.from('einsatz_namensliste').update(changes).eq('id', id).select('id').maybeSingle()
+  if (result.error || !result.data) throw new Error('Die Person konnte nicht gespeichert werden.')
 }
 
 export async function removePerson(id: string): Promise<void> {
-  const result = await supabase.from('einsatz_namensliste').delete().eq('id', id)
-  if (result.error) throw new Error('Die Person konnte nicht entfernt werden.')
+  const result = await supabase.from('einsatz_namensliste').delete().eq('id', id).select('id').maybeSingle()
+  if (result.error || !result.data) throw new Error('Die Person konnte nicht entfernt werden.')
 }
