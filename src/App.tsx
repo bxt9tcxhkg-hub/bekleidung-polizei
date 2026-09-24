@@ -40,6 +40,10 @@ const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const Schulungen = lazy(() => import('./pages/Schulungen'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
 const Systemeinstellungen = lazy(() => import('./pages/Systemeinstellungen'))
+const SystemeinstellungenFunktionskontakte = lazy(() => import('./pages/SystemeinstellungenFunktionskontakte'))
+const SystemeinstellungenVerstaendigungen = lazy(() => import('./pages/SystemeinstellungenVerstaendigungen'))
+const SystemeinstellungenEinsatzgruende = lazy(() => import('./pages/SystemeinstellungenEinsatzgruende'))
+const SystemeinstellungenAblaufvorlagen = lazy(() => import('./pages/SystemeinstellungenAblaufvorlagen'))
 const Ueberstunden = lazy(() => import('./pages/Ueberstunden'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
@@ -112,6 +116,12 @@ export default function App() {
             }
           />
           <Route path="/portal/systemeinstellungen" element={<ProtectedRoute adminOnly><PortalChrome wide><Systemeinstellungen /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/funktionskontakte" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenFunktionskontakte /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/verstaendigungen" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenVerstaendigungen /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/einsatzgruende" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenEinsatzgruende /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/ablaufvorlagen" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenAblaufvorlagen /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/kontakte" element={<ProtectedRoute adminOnly><PortalChrome wide><StammdatenKontakte context={{ areaLabel: 'Systemeinstellungen', backTo: '/portal/systemeinstellungen', backLabel: 'Zu Systemeinstellungen', allowManage: true }} /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/telefonnummern" element={<ProtectedRoute adminOnly><PortalChrome wide><StammdatenTelefonnummern context={{ areaLabel: 'Systemeinstellungen', backTo: '/portal/systemeinstellungen', backLabel: 'Zu Systemeinstellungen', allowManage: true }} /></PortalChrome></ProtectedRoute>} />
           <Route
             path="/einsatz"
             element={

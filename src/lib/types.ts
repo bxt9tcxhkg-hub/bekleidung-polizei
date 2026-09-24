@@ -716,6 +716,19 @@ export interface WichtigeTelefonnummer {
 }
 
 export type KontaktTelefonArt = 'buero' | 'diensthandy' | 'privathandy' | 'weitere'
+export type FunktionskontaktGruppe = 'stadtfuehrung' | 'einsatzorganisation' | 'fachabteilung'
+export interface PortalFunktionskontakt {
+  schluessel: string
+  bezeichnung: string
+  gruppe: FunktionskontaktGruppe
+  sortierung: number
+  kontakt_id: string | null
+  telefon_art: KontaktTelefonArt | null
+  vertretung_id: string | null
+  aktiv: boolean
+  updated_by: string | null
+  updated_at: string
+}
 export interface Verstaendigungsregel {
   id: string
   dimension: 'mittel' | 'gross' | 'katastrophe'
@@ -723,11 +736,12 @@ export interface Verstaendigungsregel {
   bezeichnung: string
   sortierung: number
   pflicht: boolean
+  funktionskontakt_key: string | null
   kontakt_id: string | null
   telefon_art: KontaktTelefonArt | null
   vertretung_id: string | null
 }
-export type EreignisVerstaendigungsschritt = Omit<Verstaendigungsregel, 'id' | 'dimension'> & { ereignis_id: string }
+export type EreignisVerstaendigungsschritt = Omit<Verstaendigungsregel, 'id' | 'dimension' | 'funktionskontakt_key'> & { ereignis_id: string }
 
 export type AlarmierungBereich = 'polizei' | 'staedtisch' | 'beide'
 

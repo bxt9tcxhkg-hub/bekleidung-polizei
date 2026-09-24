@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
@@ -13,6 +13,9 @@ import { ObjectPicker } from '../../components/RegisterPickers'
 import { objectLabel, useObjects } from '../../lib/register'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type { ContextualReference } from '../../lib/contextualReference'
+import { ladeFunktionskontakte, nummerFuerArt } from '../../lib/verstaendigungsregeln'
+import type { PortalFunktionskontakt } from '../../lib/types'
+import { kontaktInstitutionSupabase, ladeKontaktInstitutionen, type KontaktInstitution } from '../../lib/kontaktInstitutionen'
 
 const emptyForm = { name: '', institution: '', funktion: '', telefon: '', telefon_buero: '', telefon_diensthandy: '', telefon_privathandy: '', email: '', erreichbarkeit: '', objectId: null as string | null, note: '', restricted: false }
 
@@ -28,12 +31,14 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   // wird das Register von Zentrale UND Datenpflege gemeinsam.
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
-  const canManage = !context && (isStrictAdmin || isDatenpflegeSachbearbeiter)
+  const canManage = (!context || context.allowManage) && (isStrictAdmin || isDatenpflegeSachbearbeiter)
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleKontakt[]>([])
   const [benutzer, setBenutzer] = useState<BenutzerProfil[]>([])
   const [benutzerTelefone, setBenutzerTelefone] = useState<ProfilTelefonnummern[]>([])
   const [outlookKontakte, setOutlookKontakte] = useState<IntegrationOutlookContact[]>([])
+  const [funktionskontakte, setFunktionskontakte] = useState<PortalFunktionskontakt[]>([])
+  const [verwalteteInstitutionen, setVerwalteteInstitutionen] = useState<KontaktInstitution[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -42,21 +47,28 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   const [editing, setEditing] = useState<ZentraleKontakt | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [filterInstitution, setFilterInstitution] = useState('')
+  const [search, setSearch] = useState('')
+  const [showInstitutionForm, setShowInstitutionForm] = useState(false)
+  const [newInstitution, setNewInstitution] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [kontakteResult, benutzerResult, telefonResult, outlookResult] = await Promise.all([
+    const [kontakteResult, benutzerResult, telefonResult, outlookResult, funktionsResult, institutionenResult] = await Promise.all([
       supabase.from('zentrale_kontakte').select('*, object:operational_objects(id,address,label)').order('name'),
       supabase.from('profiles').select('id,name,dienstnummer,dienstgrad,organisation').eq('active', true).order('name'),
       profilTelefonClient.from('profile_phone_numbers').select('*'),
       integrationSupabase.from('integration_outlook_contacts').select('*').order('name'),
+      ladeFunktionskontakte().then(data => ({ data, error: null })).catch(error => ({ data: [] as PortalFunktionskontakt[], error })),
+      ladeKontaktInstitutionen().then(data => ({ data, error: null })).catch(error => ({ data: [] as KontaktInstitution[], error })),
     ])
-    if (kontakteResult.error || outlookResult.error || telefonResult.error) setError('Die Kontakte konnten nicht vollständig geladen werden.')
+    if (kontakteResult.error || outlookResult.error || telefonResult.error || funktionsResult.error || institutionenResult.error) setError('Die Kontakte konnten nicht vollständig geladen werden.')
     else setError('')
     setItems((kontakteResult.data ?? []) as unknown as ZentraleKontakt[])
     setBenutzer(benutzerResult.error ? [] : (benutzerResult.data ?? []) as unknown as BenutzerProfil[])
     setBenutzerTelefone((telefonResult.data ?? []) as unknown as ProfilTelefonnummern[])
     setOutlookKontakte(outlookResult.data ?? [])
+    setFunktionskontakte(funktionsResult.data)
+    setVerwalteteInstitutionen(institutionenResult.data)
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -66,8 +78,20 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
     ...benutzer.map((person): KontaktRow => ({ key: `benutzer:${person.id}`, kind: 'benutzer', name: person.name, institution: person.organisation, funktion: [person.dienstgrad, person.dienstnummer ? `DN ${person.dienstnummer}` : null].filter(Boolean).join(' · ') || null, telefon: null, benutzerTelefon: benutzerTelefone.find(row => row.user_id === person.id) })),
     ...outlookKontakte.map((item): KontaktRow => ({ key: `outlook:${item.id}`, kind: 'outlook', name: item.name, institution: item.institution, funktion: item.funktion, telefon: item.telefon, email: item.email })),
   ].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')), [items, benutzer, benutzerTelefone, outlookKontakte])
-  const institutions = useMemo(() => [...new Set(rows.map(row => row.institution).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'de-AT')), [rows])
-  const visibleRows = useMemo(() => filterInstitution ? rows.filter(row => row.institution === filterInstitution) : rows, [rows, filterInstitution])
+  const institutions = useMemo(() => [...new Set([
+    ...verwalteteInstitutionen.map(row => row.name),
+    ...rows.map(row => row.institution).filter((value): value is string => Boolean(value)),
+  ])].sort((a, b) => a.localeCompare(b, 'de-AT')), [rows, verwalteteInstitutionen])
+  const visibleRows = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('de-AT')
+    return rows.filter(row => {
+      if (filterInstitution && row.institution !== filterInstitution) return false
+      if (!query) return true
+      return [row.name, row.funktion, row.institution].some(value => value?.toLocaleLowerCase('de-AT').includes(query))
+    })
+  }, [rows, filterInstitution, search])
+  const kontakteById = useMemo(() => new Map(items.map(item => [item.id, item])), [items])
+  const sichtbareFunktionen = useMemo(() => funktionskontakte.filter(row => canManage || (row.aktiv && row.kontakt_id)), [funktionskontakte, canManage])
 
   if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
@@ -90,21 +114,48 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
     logAudit('Kontakt endgültig gelöscht', editing.name); setShowForm(false); setNotice('Kontakt wurde endgültig gelöscht.'); await load()
   }
 
+  async function addInstitution() {
+    const name = newInstitution.trim()
+    if (!name) { setError('Bitte eine Institution eingeben.'); return }
+    setSaving(true); setError('')
+    const result = await kontaktInstitutionSupabase.from('zentrale_kontakt_institutionen').insert({ name, created_by: profile?.id ?? null }).select('name').single()
+    setSaving(false)
+    if (result.error || !result.data) {
+      setError(result.error?.code === '23505' ? 'Diese Institution ist bereits vorhanden.' : 'Institution konnte nicht angelegt werden.')
+      return
+    }
+    logAudit('Kontaktinstitution angelegt', name)
+    setNewInstitution(''); setShowInstitutionForm(false); setNotice(`Institution „${name}“ wurde angelegt.`); await load()
+  }
+
   return <div>
     <Link to={context?.backTo ?? '/stammdaten'} className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> {context?.backLabel ?? 'Zu Stammdaten'}</Link>
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{context ? `${context.areaLabel} · Nachschlagewerk` : 'Stammdaten & Nachschlagewerke'}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Kontakte</h1><p className="text-sm text-gray-500 mt-1">Dienstlich notwendige Kontakte und Rufbereitschaften, ergänzt um aktive Benutzer und künftig synchronisierte Outlook-Kontakte. Outlook-Kontakte können hier nicht bearbeitet werden.</p></div>
     {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur Nachschlageansicht. Änderungen erfolgen ausschließlich im Bereich Stammdaten.</div> : null}
+    {sichtbareFunktionen.length > 0 ? <section className="mb-5 rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 sm:px-5"><div><h2 className="font-semibold text-gray-900">Funktionskontakte</h2><p className="text-xs text-gray-500">Stadtführung, Einsatzorganisation und Fachabteilungen</p></div>{canManage ? <Link to="/portal/systemeinstellungen/funktionskontakte" className="text-sm font-medium text-blue-800 hover:underline">Zuordnungen bearbeiten</Link> : null}</div>
+      <div className="divide-y divide-gray-100">{sichtbareFunktionen.map(row => {
+        const person = row.kontakt_id ? kontakteById.get(row.kontakt_id) : null
+        const nummer = person && row.telefon_art ? nummerFuerArt(person, row.telefon_art) : null
+        return <div key={row.schluessel} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm sm:px-5">
+          <div><p className="font-medium text-gray-900">{row.bezeichnung}</p>{person ? <p className="text-gray-600">{person.name}{nummer ? ` · ${nummer}` : ''}</p> : <p className="text-amber-700">Noch kein Kontakt zugeordnet</p>}</div>
+          {!row.aktiv ? <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-600">Inaktiv</span> : null}
+        </div>
+      })}</div>
+    </section> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (
       <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-4 border-b bg-gray-50 flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="font-bold text-gray-900">Kontakte</h2><p className="text-sm text-gray-500">{visibleRows.length} von {rows.length} Kontakten{benutzer.length > 0 ? ` (davon ${benutzer.length} Benutzer)` : ''}.</p></div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <label className="relative min-w-0 flex-1 sm:w-64 sm:flex-none"><span className="sr-only">Person suchen</span><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" /><input type="search" className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm" value={search} onChange={event => setSearch(event.target.value)} placeholder="Person suchen…" /></label>
             {institutions.length > 0 ? <select className="text-sm border border-gray-300 rounded-lg px-2 py-2 bg-white" value={filterInstitution} onChange={event => setFilterInstitution(event.target.value)}>
               <option value="">Alle Institutionen</option>
               {institutions.map(name => <option key={name} value={name}>{name}</option>)}
             </select> : null}
+            {canManage ? <button type="button" onClick={() => { setNewInstitution(''); setError(''); setShowInstitutionForm(true) }} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700"><Building2 className="h-4 w-4" /> Institution</button> : null}
             {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Kontakt</button> : null}
           </div>
         </div>
@@ -143,7 +194,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
     {showForm ? <Modal title={editing ? 'Kontakt bearbeiten' : 'Kontakt anlegen'} close={() => setShowForm(false)}>
       <Field label="Name *" value={form.name} onChange={value => setForm(current => ({ ...current, name: value }))} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Institution" value={form.institution} onChange={value => setForm(current => ({ ...current, institution: value }))} />
+        <label className="block text-xs font-medium text-gray-600">Institution<select className={inputClass} value={form.institution} onChange={event => setForm(current => ({ ...current, institution: event.target.value }))}><option value="">Keine Institution</option>{form.institution && !verwalteteInstitutionen.some(row => row.name === form.institution) ? <option value={form.institution}>{form.institution}</option> : null}{verwalteteInstitutionen.map(row => <option key={row.name} value={row.name}>{row.name}</option>)}</select></label>
         <Field label="Funktion" value={form.funktion} onChange={value => setForm(current => ({ ...current, funktion: value }))} />
         <Field label="E-Mail" value={form.email} onChange={value => setForm(current => ({ ...current, email: value }))} />
       </div>
@@ -164,6 +215,11 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
         <button type="button" onClick={() => setShowForm(false)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button>
         <button type="button" disabled={saving} onClick={() => void save()} className="bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button>
       </div>
+    </Modal> : null}
+    {showInstitutionForm ? <Modal title="Institution hinzufügen" close={() => setShowInstitutionForm(false)}>
+      <Field label="Name der Institution *" value={newInstitution} onChange={setNewInstitution} />
+      {error ? <ErrorMessage text={error} /> : null}
+      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setShowInstitutionForm(false)} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm">Abbrechen</button><button type="button" disabled={saving} onClick={() => void addInstitution()} className="rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{saving ? 'Speichern…' : 'Hinzufügen'}</button></div>
     </Modal> : null}
   </div>
 }

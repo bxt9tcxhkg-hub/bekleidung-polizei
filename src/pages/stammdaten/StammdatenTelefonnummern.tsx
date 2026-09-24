@@ -19,7 +19,7 @@ export default function StammdatenTelefonnummernPage({ context }: { context?: Co
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
-  const canManage = !context && (isStrictAdmin || isGenehmiger || isDatenpflegeSachbearbeiter)
+  const canManage = (!context || context.allowManage) && (isStrictAdmin || isGenehmiger || isDatenpflegeSachbearbeiter)
   const { nummern, loading, error: loadError, reload } = useWichtigeTelefonnummern()
   const [kontakte, setKontakte] = useState<ZentraleKontakt[]>([])
   useEffect(() => { void supabase.from('zentrale_kontakte').select('*').order('name').then(({ data }) => setKontakte((data ?? []) as ZentraleKontakt[])) }, [])
