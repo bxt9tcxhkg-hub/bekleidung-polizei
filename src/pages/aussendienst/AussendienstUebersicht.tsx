@@ -11,13 +11,14 @@ export default function AussendienstUebersicht() {
 
   const functionLabel = ctx.ownFunction?.label ?? ctx.ownAssignment.function.toUpperCase()
   const openOrders = ctx.openOrders
-  const currentIncidents = [...ctx.ownIncidents, ...ctx.supportedIncidents]
+  const currentIncidents = [...ctx.ownIncidents, ...ctx.supportedIncidents, ...ctx.availableIncidents, ...ctx.otherIncidents]
   const incidentList = (
     <EntryOrIncidentList
       kind="incidents"
       incidents={currentIncidents}
       baustellen={ctx.baustellen}
       ownVehicleId={ctx.ownVehicle?.id ?? null}
+      ownFunction={ctx.ownAssignment.function}
       incidentSupports={ctx.incidentSupports}
       takeOverIncident={ctx.takeOverIncident}
       releaseIncidentTakeover={ctx.releaseIncidentTakeover}
@@ -127,8 +128,7 @@ export default function AussendienstUebersicht() {
 
     {currentIncidents.length === 0 ? <section className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-8 text-center">
       <CheckCircle2 className="w-7 h-7 text-gray-300 mx-auto mb-2" />
-      <p className="font-medium text-gray-700">Keine eigenen laufenden Einsätze</p>
-      <p className="text-sm text-gray-500 mt-1">Noch nicht zugewiesene Einsätze stehen unter „Einsätze“ als verfügbarer Pool.</p>
+      <p className="font-medium text-gray-700">Keine laufenden Einsätze</p>
     </section> : null}
 
     <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">

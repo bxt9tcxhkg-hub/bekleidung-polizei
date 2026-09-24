@@ -324,9 +324,9 @@ export default function ZentraleShell() {
     setSaving(true)
     try {
       const result = editingIncident
-        ? await withTimeout(supabase.from('incident_reports').update(payload).eq('id', editingIncident.id))
-        : await withTimeout(supabase.from('incident_reports').insert({ ...payload, created_by: profile.id }))
-      if (result.error) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
+        ? await withTimeout(supabase.from('incident_reports').update(payload).eq('id', editingIncident.id).select('id').single())
+        : await withTimeout(supabase.from('incident_reports').insert({ ...payload, created_by: profile.id }).select('id').single())
+      if (result.error || !result.data) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
       logAudit(editingIncident ? 'Einsatzmeldung bearbeitet' : 'Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`)
       setEditingIncident(null); setShowIncidentForm(false); navigate('/zentrale/einsaetze'); setNotice(editingIncident ? 'Meldung wurde aktualisiert.' : 'Meldung wurde gespeichert.'); await load()
     } catch (err) {
@@ -359,8 +359,8 @@ export default function ZentraleShell() {
       status,
       assigned_vehicle_id: assignedVehicleId,
       ...(mode === 'offen' ? { taken_over_by: null, taken_over_at: null, taken_over_vehicle_id: null } : {}),
-    }).eq('id', item.id)
-    if (result.error) { setError('Die Bearbeitung konnte nicht geändert werden.'); return }
+    }).eq('id', item.id).select('id').single()
+    if (result.error || !result.data) { setError('Die Bearbeitung konnte nicht geändert werden.'); return }
 
     const label = mode === 'zentrale' ? 'Zentrale'
       : mode === 'bp' ? 'Bundespolizei'

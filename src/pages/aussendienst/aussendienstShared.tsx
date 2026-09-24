@@ -79,12 +79,13 @@ function PrintIncidentButton({ item }: { item: IncidentListItem }) {
 }
 
 function IncidentRow({
-  item, baustellen, ownVehicleId, supports, takeOverIncident, releaseIncidentTakeover,
+  item, baustellen, ownVehicleId, ownFunction, supports, takeOverIncident, releaseIncidentTakeover,
   supportIncident, stopSupportingIncident, completeIncident, reopenIncident, contextSummary,
 }: {
   item: IncidentListItem
   baustellen: readonly ZentraleBaustelle[]
   ownVehicleId?: string | null
+  ownFunction?: string | null
   supports: readonly IncidentSupport[]
   takeOverIncident?: (id: string) => Promise<void>
   releaseIncidentTakeover?: (id: string) => Promise<void>
@@ -106,7 +107,7 @@ function IncidentRow({
   const ownIsPrimary = Boolean(ownVehicleId && primaryVehicleId === ownVehicleId)
   const activeSupports = supports.filter(row => row.incident_id === item.id && row.ended_at === null)
   const ownSupport = activeSupports.find(row => row.vehicle_id === ownVehicleId)
-  const canTakeOver = item.status !== 'erledigt' && (!primaryVehicleId || ownIsPrimary)
+  const canTakeOver = item.status !== 'erledigt' && (ownIsPrimary || (!primaryVehicleId && (item.disposition === 'offen' || item.disposition === ownFunction)))
   const canComplete = item.status !== 'erledigt' && (ownIsPrimary || takenOverByMe)
   const canReopen = item.status === 'erledigt' && (ownIsPrimary || item.completed_by === profile?.id)
 
@@ -152,7 +153,7 @@ function IncidentRow({
         <NavigationButton point={point} address={item.location} />
         {item.status !== 'erledigt' && !item.taken_over_at && canTakeOver && takeOverIncident ? <button type="button" disabled={busy} onClick={() => void run(() => takeOverIncident(item.id))} className="inline-flex items-center gap-1.5 bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Übernehmen</button> : null}
         {item.status !== 'erledigt' && item.taken_over_at && (ownIsPrimary || takenOverByMe) && releaseIncidentTakeover ? <button type="button" disabled={busy} onClick={() => void run(() => releaseIncidentTakeover(item.id))} className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-60">Übernahme zurücknehmen</button> : null}
-        {item.status !== 'erledigt' && !ownIsPrimary && ownVehicleId && !ownSupport && supportIncident ? <button type="button" disabled={busy} onClick={() => void run(() => supportIncident(item.id))} className="inline-flex items-center gap-1.5 border border-purple-300 text-purple-800 bg-purple-50 text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Unterstützen</button> : null}
+        {item.status !== 'erledigt' && primaryVehicleId && !ownIsPrimary && ownVehicleId && !ownSupport && supportIncident ? <button type="button" disabled={busy} onClick={() => void run(() => supportIncident(item.id))} className="inline-flex items-center gap-1.5 border border-purple-300 text-purple-800 bg-purple-50 text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Unterstützen</button> : null}
         {item.status !== 'erledigt' && ownSupport && stopSupportingIncident ? <button type="button" disabled={busy} onClick={() => void run(() => stopSupportingIncident(item.id))} className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg disabled:opacity-60">Unterstützung beenden</button> : null}
         {canComplete && completeIncident ? <button type="button" disabled={busy} onClick={() => void run(() => completeIncident(item.id))} className="inline-flex items-center gap-1.5 bg-green-700 hover:bg-green-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Erledigen</button> : null}
         {canReopen && reopenIncident ? <button type="button" disabled={busy} onClick={() => void run(() => reopenIncident(item.id))} className="inline-flex items-center gap-1.5 border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-60">Wieder öffnen</button> : null}
@@ -199,10 +200,10 @@ function IncidentRow({
   </article>
 }
 
-export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt, ownVehicleId, incidentSupports, takeOverIncident, releaseIncidentTakeover, supportIncident, stopSupportingIncident, completeIncident, reopenIncident, incidentContextSummary, emptyText }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void>; ownVehicleId?: string | null; incidentSupports?: IncidentSupport[]; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void>; supportIncident?: (id: string) => Promise<void>; stopSupportingIncident?: (id: string) => Promise<void>; completeIncident?: (id: string) => Promise<void>; reopenIncident?: (id: string) => Promise<void>; incidentContextSummary?: Record<string, { safety: number; attention: number }>; emptyText?: string }) {
+export function EntryOrIncidentList({ kind, entries, incidents, baustellen, canManage, onEdit, onToggleErledigt, ownVehicleId, ownFunction, incidentSupports, takeOverIncident, releaseIncidentTakeover, supportIncident, stopSupportingIncident, completeIncident, reopenIncident, incidentContextSummary, emptyText }: { kind: 'entries' | 'incidents'; entries?: ZentraleEntry[]; incidents?: IncidentListItem[]; baustellen?: ZentraleBaustelle[]; canManage?: boolean; onEdit?: (item: ZentraleEntry) => void; onToggleErledigt?: (item: ZentraleEntry) => Promise<void>; ownVehicleId?: string | null; ownFunction?: string | null; incidentSupports?: IncidentSupport[]; takeOverIncident?: (id: string) => Promise<void>; releaseIncidentTakeover?: (id: string) => Promise<void>; supportIncident?: (id: string) => Promise<void>; stopSupportingIncident?: (id: string) => Promise<void>; completeIncident?: (id: string) => Promise<void>; reopenIncident?: (id: string) => Promise<void>; incidentContextSummary?: Record<string, { safety: number; attention: number }>; emptyText?: string }) {
   if (kind === 'incidents') {
     if (!incidents || incidents.length === 0) return <Empty text={emptyText ?? 'Heute wurden noch keine Meldungen erfasst.'} />
-    return <div className="space-y-2">{incidents.map(item => <IncidentRow key={item.id} item={item} baustellen={baustellen ?? []} ownVehicleId={ownVehicleId} supports={incidentSupports ?? []} takeOverIncident={takeOverIncident} releaseIncidentTakeover={releaseIncidentTakeover} supportIncident={supportIncident} stopSupportingIncident={stopSupportingIncident} completeIncident={completeIncident} reopenIncident={reopenIncident} contextSummary={incidentContextSummary?.[item.id]} />)}</div>
+    return <div className="space-y-2">{incidents.map(item => <IncidentRow key={item.id} item={item} baustellen={baustellen ?? []} ownVehicleId={ownVehicleId} ownFunction={ownFunction} supports={incidentSupports ?? []} takeOverIncident={takeOverIncident} releaseIncidentTakeover={releaseIncidentTakeover} supportIncident={supportIncident} stopSupportingIncident={stopSupportingIncident} completeIncident={completeIncident} reopenIncident={reopenIncident} contextSummary={incidentContextSummary?.[item.id]} />)}</div>
   }
   const list = entries ?? []
   if (list.length === 0) return <Empty text="Keine Einträge vorhanden." />

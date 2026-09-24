@@ -8,6 +8,7 @@ export default function AussendienstEinsaetze() {
     kind: 'incidents' as const,
     baustellen: ctx.baustellen,
     ownVehicleId: ctx.ownVehicle?.id ?? null,
+    ownFunction: ctx.ownAssignment?.function ?? null,
     incidentSupports: ctx.incidentSupports,
     takeOverIncident: ctx.takeOverIncident,
     releaseIncidentTakeover: ctx.releaseIncidentTakeover,
@@ -31,6 +32,10 @@ export default function AussendienstEinsaetze() {
       <div className="mb-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Verfügbarer Pool</p><h2 className="text-lg font-bold text-gray-900">Noch nicht disponiert</h2><p className="mt-1 text-xs text-gray-500">Nur offene Einsätze ohne zugewiesene Streife.</p></div>
       <EntryOrIncidentList {...common} incidents={ctx.availableIncidents} emptyText="Keine verfügbaren Einsätze." />
     </section>
+    {ctx.otherIncidents.length > 0 ? <section>
+      <div className="mb-2"><p className="text-xs font-bold uppercase tracking-wider text-gray-500">Weitere Einsätze</p><h2 className="text-lg font-bold text-gray-900">Andere Zuständigkeit</h2><p className="mt-1 text-xs text-gray-500">Offene Einsätze anderer Streifen oder der Zentrale.</p></div>
+      <EntryOrIncidentList {...common} incidents={ctx.otherIncidents} />
+    </section> : null}
     {ctx.completedIncidents.length > 0 ? <details className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
       <summary className="cursor-pointer text-sm font-bold text-gray-700">Heute abgeschlossen ({ctx.completedIncidents.length})</summary>
       <div className="mt-3"><EntryOrIncidentList {...common} incidents={ctx.completedIncidents} /></div>

@@ -10,6 +10,7 @@ import { SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
+import { classifyPatrolIncidents } from '../../lib/patrolIncidentVisibility'
 import { EMPTY_AUFTRAG, EMPTY_BAUSTELLE_REPORT, type AuftragFormState, type BaustelleReportState } from '../../lib/aussendienstShared'
 import { AuftragModal, BaustelleReportModal } from './aussendienstShared'
 
@@ -44,6 +45,7 @@ export interface AussendienstContext {
   ownIncidents: SimpleIncident[]
   supportedIncidents: SimpleIncident[]
   availableIncidents: SimpleIncident[]
+  otherIncidents: SimpleIncident[]
   completedIncidents: SimpleIncident[]
   openOrders: ZentraleEntry[]
   kontrollauftraege: ZentraleEntry[]
@@ -111,39 +113,49 @@ export default function AussendienstShell() {
   const [baustelleSaving, setBaustelleSaving] = useState(false)
   const [baustelleError, setBaustelleError] = useState('')
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     const today = operationalToday()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, baustelleResult, bescheidResult] = await Promise.all([
+    const incidentSelect = 'id,reported_at,reason_code,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)'
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, openIncidentResult, recentIncidentResult, supportResult, avBvResult, baustelleResult, bescheidResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select('id,reported_at,reason_code,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
-      supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').gte('started_at', startOfOperationalDayIso()).order('started_at'),
+      supabase.from('incident_reports').select(incidentSelect).eq('status', 'offen').order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select(incidentSelect).neq('status', 'offen').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').is('ended_at', null).order('started_at'),
       // Schutzmaßnahmen werden separat geladen; Fahndungen sind für den aktuellen Ausbaustand bewusst aus dem Außendienst-Kontext herausgenommen.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       // Für "Baustelle in der Nähe" auf der Einsatzliste - erledigte Baustellen wie in der Zentrale ausgeblendet.
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
       supabase.from('innendienst_records').select('*, person:operational_persons(id,vorname,nachname,birth_date)').in('kind', ['bescheid_strassenmusik', 'bescheid_strassenkunst']).eq('issued_date', today).order('created_at'),
     ])
-    if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
+    if (openIncidentResult.error || recentIncidentResult.error) setError('Einsätze konnten nicht geladen werden. Bitte erneut laden oder die Zentrale informieren.')
+    else if (dutyResult.error || entryResult.error || supportResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
     setAssignments((dutyResult.data ?? []) as unknown as DutyAssignment[])
     setFunctions((functionResult.data ?? []) as DutyFunctionConfig[])
     setVehicles((vehicleResult.data ?? []) as FleetVehicle[])
     setChecks((checkResult.data ?? []) as VehicleCheck[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
-    setIncidents(incidentResult.data ?? [])
-    setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
+    if (!openIncidentResult.error && !recentIncidentResult.error) setIncidents([...(openIncidentResult.data ?? []), ...(recentIncidentResult.data ?? [])])
+    if (!supportResult.error) setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
     setHeutigeBescheide(bescheidResult.error ? [] : (bescheidResult.data ?? []) as unknown as InnendienstRecord[])
     setCriticalSourcesError(Boolean(avBvResult.error))
     setLoading(false)
   }, [])
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void load()
+    const refresh = () => { if (document.visibilityState === 'visible') void load(true) }
+    const timer = window.setInterval(refresh, 10_000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [load])
 
   useEffect(() => {
     let cancelled = false
@@ -228,27 +240,15 @@ export default function AussendienstShell() {
   const criticalItems = useMemo(() => [
     ...criticalEntries.map(item => ({ id: item.id, title: item.title, description: item.description })),
   ], [criticalEntries])
-  const openIncidents = useMemo(() => {
-    const relevant = ownAssignment?.function === 'jd'
-      ? incidents.filter(item => item.disposition === 'jd' || item.disposition === 'offen')
-      : ownAssignment?.function === 'vd'
-        ? incidents.filter(item => item.disposition === 'vd' || item.disposition === 'offen')
-        : incidents
-    return relevant.filter(item => item.status === 'offen')
-  }, [incidents, ownAssignment?.function])
-  const ownIncidents = useMemo(() => openIncidents.filter(item => {
-    const primaryVehicleId = item.taken_over_vehicle_id || item.assigned_vehicle_id
-    return Boolean((ownVehicle?.id && primaryVehicleId === ownVehicle.id) || item.taken_over_by === profile?.id)
-  }), [openIncidents, ownVehicle, profile?.id])
   const supportedIncidentIds = useMemo(() => new Set(incidentSupports
     .filter(item => item.ended_at === null && item.vehicle_id === ownVehicle?.id)
     .map(item => item.incident_id)), [incidentSupports, ownVehicle])
-  const supportedIncidents = useMemo(() => openIncidents.filter(item =>
-    supportedIncidentIds.has(item.id) && !ownIncidents.some(own => own.id === item.id),
-  ), [openIncidents, ownIncidents, supportedIncidentIds])
-  const availableIncidents = useMemo(() => openIncidents.filter(item =>
-    !item.assigned_vehicle_id && !item.taken_over_vehicle_id && !item.taken_over_by && !supportedIncidentIds.has(item.id),
-  ), [openIncidents, supportedIncidentIds])
+  const openIncidents = useMemo(() => incidents.filter(item => item.status === 'offen'), [incidents])
+  const incidentGroups = useMemo(() => classifyPatrolIncidents(openIncidents, ownVehicle?.id ?? null, profile?.id ?? null, ownAssignment?.function ?? null, supportedIncidentIds), [openIncidents, ownVehicle?.id, profile?.id, ownAssignment?.function, supportedIncidentIds])
+  const ownIncidents = incidentGroups.own
+  const supportedIncidents = incidentGroups.supported
+  const availableIncidents = incidentGroups.available
+  const otherIncidents = incidentGroups.other
   const completedIncidents = useMemo(() => incidents.filter(item => {
     const primaryVehicleId = item.taken_over_vehicle_id || item.assigned_vehicle_id
     return item.status === 'erledigt' && Boolean((ownVehicle?.id && primaryVehicleId === ownVehicle.id) || item.completed_by === profile?.id)
@@ -365,7 +365,7 @@ export default function AussendienstShell() {
 
   const ctx: AussendienstContext = {
     loading, ownAssignment, ownFunction, ownVehicle, availableVehicles, setDutyVehicle, ownCheck, patrolMates,
-    criticalItems, criticalSourcesError, openIncidents, ownIncidents, supportedIncidents, availableIncidents, completedIncidents, openOrders, kontrollauftraege,
+    criticalItems, criticalSourcesError, openIncidents, ownIncidents, supportedIncidents, availableIncidents, otherIncidents, completedIncidents, openOrders, kontrollauftraege,
     incidents, entries, avBv, baustellen, heutigeBescheide, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
