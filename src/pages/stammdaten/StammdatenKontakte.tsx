@@ -4,6 +4,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
+import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
 import { integrationSupabase, type IntegrationOutlookContact } from '../../lib/integrations'
 import type { ZentraleKontakt } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
@@ -12,7 +13,7 @@ import { objectLabel, useObjects } from '../../lib/register'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 import type { ContextualReference } from '../../lib/contextualReference'
 
-const emptyForm = { name: '', institution: '', funktion: '', telefon: '', email: '', erreichbarkeit: '', objectId: null as string | null, note: '', restricted: false }
+const emptyForm = { name: '', institution: '', funktion: '', telefon: '', telefon_buero: '', telefon_diensthandy: '', telefon_privathandy: '', email: '', erreichbarkeit: '', objectId: null as string | null, note: '', restricted: false }
 
 type BenutzerProfil = { id: string; name: string; dienstnummer: string | null; dienstgrad: string | null; organisation: string }
 /** Vereinheitlichte Anzeigezeile: echte Kontakte (Institutionen/Rufbereitschaften) und automatisch gespiegelte Benutzer. */
@@ -67,15 +68,15 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew() { setEditing(null); setForm(emptyForm); setShowForm(true); setError('') }
-  function openEdit(item: ZentraleKontakt) { setEditing(item); setForm({ name: item.name, institution: item.institution ?? '', funktion: item.funktion ?? '', telefon: item.telefon ?? '', email: item.email ?? '', erreichbarkeit: item.erreichbarkeit ?? '', objectId: item.object_id, note: item.note ?? '', restricted: item.restricted }); setShowForm(true); setError('') }
+  function openEdit(item: ZentraleKontakt) { setEditing(item); setForm({ name: item.name, institution: item.institution ?? '', funktion: item.funktion ?? '', telefon: item.telefon ?? '', telefon_buero: item.telefon_buero ?? '', telefon_diensthandy: item.telefon_diensthandy ?? '', telefon_privathandy: item.telefon_privathandy ?? '', email: item.email ?? '', erreichbarkeit: item.erreichbarkeit ?? '', objectId: item.object_id, note: item.note ?? '', restricted: item.restricted }); setShowForm(true); setError('') }
 
   async function save() {
     if (!form.name.trim()) { setError('Bitte einen Namen eingeben.'); return }
     setSaving(true)
-    const payload = { name: form.name.trim(), institution: form.institution.trim() || null, funktion: form.funktion.trim() || null, telefon: form.telefon.trim() || null, email: form.email.trim() || null, erreichbarkeit: form.erreichbarkeit.trim() || null, object_id: form.objectId, note: form.note.trim() || null, restricted: form.restricted }
-    const response = editing ? await supabase.from('zentrale_kontakte').update(payload).eq('id', editing.id) : await supabase.from('zentrale_kontakte').insert({ ...payload, created_by: profile?.id ?? null })
+    const payload = { name: form.name.trim(), institution: form.institution.trim() || null, funktion: form.funktion.trim() || null, telefon: form.telefon.trim() || null, telefon_buero: form.telefon_buero.trim() || null, telefon_diensthandy: form.telefon_diensthandy.trim() || null, telefon_privathandy: form.telefon_privathandy.trim() || null, email: form.email.trim() || null, erreichbarkeit: form.erreichbarkeit.trim() || null, object_id: form.objectId, note: form.note.trim() || null, restricted: form.restricted }
+    const response = editing ? await supabase.from('zentrale_kontakte').update(payload).eq('id', editing.id).select('id').single() : await supabase.from('zentrale_kontakte').insert({ ...payload, created_by: profile?.id ?? null }).select('id').single()
     setSaving(false)
-    if (response.error) { setError('Kontakt konnte nicht gespeichert werden.'); return }
+    if (response.error || !response.data) { setError('Kontakt konnte nicht gespeichert werden.'); return }
     logAudit(editing ? 'Kontakt bearbeitet' : 'Kontakt angelegt', form.name.trim()); setShowForm(false); setNotice('Kontakt wurde gespeichert.'); await load()
   }
   async function remove() {
@@ -120,7 +121,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
             </div>
             {(row.kontakt!.institution || row.kontakt!.funktion) ? <p className="text-sm text-gray-600 mt-1">{[row.kontakt!.institution, row.kontakt!.funktion].filter(Boolean).join(' · ')}</p> : null}
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-1.5">
-              {row.kontakt!.telefon ? <span>TEL: {row.kontakt!.telefon}</span> : null}
+              {kontaktTelefonnummern(row.kontakt!).map(({ art, nummer }) => <a key={art} href={`tel:${nummer.replace(/[^\d+]/g, '')}`} className="text-blue-700 hover:underline" aria-label={`${row.kontakt!.name}, ${art}: ${nummer}`}>{art}: {nummer}</a>)}
               {row.kontakt!.email ? <span>{row.kontakt!.email}</span> : null}
               {row.kontakt!.erreichbarkeit ? <span>Erreichbar: {row.kontakt!.erreichbarkeit}</span> : null}
               {row.kontakt!.object ? <span>Zuständig für: {objectLabel(row.kontakt!.object)}</span> : null}
@@ -136,9 +137,15 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Institution" value={form.institution} onChange={value => setForm(current => ({ ...current, institution: value }))} />
         <Field label="Funktion" value={form.funktion} onChange={value => setForm(current => ({ ...current, funktion: value }))} />
-        <Field label="Telefon" value={form.telefon} onChange={value => setForm(current => ({ ...current, telefon: value }))} />
         <Field label="E-Mail" value={form.email} onChange={value => setForm(current => ({ ...current, email: value }))} />
       </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Büro-Telefon" value={form.telefon_buero} onChange={value => setForm(current => ({ ...current, telefon_buero: value }))} />
+        <Field label="Diensthandy" value={form.telefon_diensthandy} onChange={value => setForm(current => ({ ...current, telefon_diensthandy: value }))} />
+        <Field label="Privathandy" value={form.telefon_privathandy} onChange={value => setForm(current => ({ ...current, telefon_privathandy: value }))} />
+        {editing?.telefon ? <Field label="Bisherige Nummer (Art unbekannt)" value={form.telefon} onChange={value => setForm(current => ({ ...current, telefon: value }))} /> : null}
+      </div>
+      {editing?.telefon ? <p className="text-xs text-gray-500">Die bisherige Nummer bleibt erhalten. Nach Zuordnung zu Büro, Diensthandy oder Privathandy kann sie hier entfernt werden.</p> : null}
       <Field label="Erreichbarkeit (z. B. Mo–Fr 8–16 Uhr)" value={form.erreichbarkeit} onChange={value => setForm(current => ({ ...current, erreichbarkeit: value }))} />
       <ObjectPicker objects={objects} value={form.objectId} onChange={id => setForm(current => ({ ...current, objectId: id }))} createdBy={profile?.id ?? null} onCreated={created => setObjects(current => [...current, created].sort((a, b) => a.address.localeCompare(b.address, 'de-AT')))} label="Zuständig für Objekt (optional)" />
       <label className="block text-xs font-medium text-gray-600">Notiz<textarea className={`${inputClass} min-h-20 resize-y`} value={form.note} onChange={event => setForm(current => ({ ...current, note: event.target.value }))} /></label>

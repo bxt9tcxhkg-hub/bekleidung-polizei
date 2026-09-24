@@ -1,12 +1,13 @@
 import { supabase } from './supabase'
 import type { WichtigeTelefonnummer, ZentraleKontakt } from './types'
+import { kontaktTelefonnummern, type KontaktTelefonnummer } from './kontaktTelefon'
 
 export type EreignisKontaktTreffer = {
   id: string
   label: string
   name: string
   funktion: string | null
-  telefon: string | null
+  telefonnummern: KontaktTelefonnummer[]
   erreichbarkeit: string | null
   source: 'kontakt' | 'telefonnummer'
 }
@@ -35,13 +36,13 @@ function matches(label: string, values: Array<string | null | undefined>): boole
 
 export async function loadEreignisKontakte(labels: readonly string[]): Promise<Record<string, EreignisKontaktTreffer[]>> {
   const [kontakteResult, nummernResult] = await Promise.all([
-    supabase.from('zentrale_kontakte').select('id,name,funktion,telefon,erreichbarkeit,institution,restricted').order('name'),
+    supabase.from('zentrale_kontakte').select('id,name,funktion,telefon,telefon_buero,telefon_diensthandy,telefon_privathandy,erreichbarkeit,institution,restricted').order('name'),
     supabase.from('wichtige_telefonnummern').select('*').order('sortierung').order('bezeichnung'),
   ])
 
   if (kontakteResult.error || nummernResult.error) throw new Error('Kontaktdaten konnten nicht geladen werden.')
 
-  const kontakte = (kontakteResult.data ?? []) as unknown as Array<Pick<ZentraleKontakt, 'id' | 'name' | 'funktion' | 'telefon' | 'erreichbarkeit' | 'institution'>>
+  const kontakte = (kontakteResult.data ?? []) as unknown as Array<Pick<ZentraleKontakt, 'id' | 'name' | 'funktion' | 'telefon' | 'telefon_buero' | 'telefon_diensthandy' | 'telefon_privathandy' | 'erreichbarkeit' | 'institution'>>
   const nummern = (nummernResult.data ?? []) as unknown as WichtigeTelefonnummer[]
 
   return Object.fromEntries(labels.map(label => {
@@ -52,7 +53,7 @@ export async function loadEreignisKontakte(labels: readonly string[]): Promise<R
         label,
         name: row.name,
         funktion: row.funktion,
-        telefon: row.telefon,
+        telefonnummern: kontaktTelefonnummern(row),
         erreichbarkeit: row.erreichbarkeit,
         source: 'kontakt',
       }))
@@ -64,16 +65,18 @@ export async function loadEreignisKontakte(labels: readonly string[]): Promise<R
         label,
         name: row.bezeichnung,
         funktion: null,
-        telefon: row.nummer,
+        telefonnummern: [{ art: 'Telefon', nummer: row.nummer }],
         erreichbarkeit: row.hinweis,
         source: 'telefonnummer',
       }))
 
     const seen = new Set<string>()
     const merged = [...fromContacts, ...fromNumbers].filter(row => {
-      const key = [NORMALIZE(row.name), NORMALIZE(row.telefon ?? '')].join('|')
-      if (seen.has(key)) return false
-      seen.add(key)
+      const keys = row.telefonnummern.length > 0
+        ? row.telefonnummern.map(({ nummer }) => [NORMALIZE(row.name), NORMALIZE(nummer)].join('|'))
+        : [[NORMALIZE(row.name), ''].join('|')]
+      if (keys.every(key => seen.has(key))) return false
+      keys.forEach(key => seen.add(key))
       return true
     })
     return [label, merged]

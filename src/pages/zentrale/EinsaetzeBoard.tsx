@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
+import { telHref } from '../../lib/ereignisKontakte'
 import { formatTime } from '../../lib/zentraleShared'
 import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, telefonketteFuer, type Ereignisstufe } from '../../lib/einsatzSchema'
 import { loadEreignisDimensionen, setIncidentEreignisDimension } from '../../lib/ereignis'
@@ -131,7 +133,7 @@ export default function EinsaetzeBoard({
                   <p className="font-bold">Verständigung telefonisch</p>
                   <ul className="mt-1 list-disc pl-5">{telefonketteFuer(stufe).map(name => {
                     const match = kontakte.find(row => (row.funktion || '').toLowerCase().includes(name.toLowerCase().slice(0, 8)) || (row.name || '').toLowerCase().includes(name.toLowerCase().slice(0, 8)))
-                    return <li key={name}>{name}{match ? ` – ${match.name}${match.telefon ? ` (${match.telefon})` : ''}` : ''}</li>
+                    return <li key={name}>{name}{match ? <> – {match.name}{kontaktTelefonnummern(match).map(({ art, nummer }) => <span key={art}> · <a href={telHref(nummer)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{art}: {nummer}</a></span>)}</> : null}</li>
                   })}</ul>
                   {stufe === 'gross' || stufe === 'katastrophe' ? <><p className="font-bold mt-2">Entscheidung</p><ul className="list-disc pl-5">{ENTSCHEIDUNGSPUNKTE.map(itemName => <li key={itemName}>{itemName}</li>)}</ul></> : null}
                   <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Kontakte bearbeiten</Link>

@@ -685,6 +685,9 @@ export interface ZentraleKontakt {
   institution: string | null
   funktion: string | null
   telefon: string | null
+  telefon_buero: string | null
+  telefon_diensthandy: string | null
+  telefon_privathandy: string | null
   email: string | null
   erreichbarkeit: string | null
   object_id: string | null

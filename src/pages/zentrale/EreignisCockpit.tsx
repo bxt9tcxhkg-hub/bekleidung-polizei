@@ -121,9 +121,9 @@ export default function EreignisCockpit({
 
           {!loading && nextKontakt ? <>
             <div className="mt-3 flex flex-wrap gap-2">
-              {nextKontaktDaten.filter(kontakt => kontakt.telefon).map(kontakt => <div key={`${kontakt.source}:${kontakt.id}`} className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-white px-2 py-1.5">
+              {nextKontaktDaten.filter(kontakt => kontakt.telefonnummern.length > 0).map(kontakt => <div key={`${kontakt.source}:${kontakt.id}`} className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-white px-2 py-1.5">
                 <span className="text-xs font-semibold text-gray-900">{kontakt.name}</span>
-                <a href={telHref(kontakt.telefon!)} aria-label={`${kontakt.name} anrufen: ${kontakt.telefon}`} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white hover:bg-blue-900">TEL {kontakt.telefon}</a>
+                {kontakt.telefonnummern.map(({ art, nummer }) => <a key={art} href={telHref(nummer)} aria-label={`${kontakt.name}, ${art} anrufen: ${nummer}`} className="rounded-lg bg-blue-800 px-3 py-2 text-xs font-bold text-white hover:bg-blue-900">{art}: {nummer}</a>)}
               </div>)}
               <button type="button" disabled={!canOperate} onClick={() => void onMarkVerstaendigung(nextKontakt, 'versucht')} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Versucht</button>
               <button type="button" disabled={!canOperate} onClick={() => void onMarkVerstaendigung(nextKontakt, 'erreicht')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Erreicht</button>
