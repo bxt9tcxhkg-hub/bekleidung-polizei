@@ -2,27 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { loadChecklistPunkte, setChecklistPunktErledigt, setChecklistPunktWer } from '../../lib/einsatzChecklisten'
-import { ERSTMELDUNG_CHECKLISTE, NOTUNTERKUNFT_CHECKLISTE, type ChecklistPunktDef } from '../../lib/einsatzSchema'
-import type { EinsatzChecklisteName, EinsatzChecklistPunkt } from '../../lib/types'
+import type { ChecklistPunktDef } from '../../lib/einsatzSchema'
+import { supabase } from '../../lib/supabase'
+import type { EinsatzChecklisteName, EinsatzChecklistPunkt, EinsatzAblaufSchritt } from '../../lib/types'
 import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
-
-// Verständigungen werden ausschließlich im eigenen serverseitigen
-// Verständigungsbereich geführt (Versucht/Erreicht). Sie dürfen nicht ein
-// zweites Mal als Checklistenaufgabe erscheinen.
-const NICHT_ALS_MASSNAHME = new Set([
-  'meldungszettel',
-  'oeffentliche_sicherheit',
-  'meldung_katschutz',
-  'meldung_bgm',
-  'meldung_sad',
-  'meldung_recht',
-  'meldung_oeffentlichkeitsarbeit',
-  'personen_verstaendigen',
-])
-
-const WEITERE_ERSTMELDUNG_CHECKLISTE = ERSTMELDUNG_CHECKLISTE.filter(
-  punkt => !NICHT_ALS_MASSNAHME.has(punkt.key),
-)
 
 function MassnahmenAbschnitt({
   incidentId,
@@ -54,6 +37,8 @@ function MassnahmenAbschnitt({
   const offen = useMemo(() => punkte.filter(punkt => !stand.get(punkt.key)?.erledigt), [punkte, stand])
   const erledigt = useMemo(() => punkte.filter(punkt => stand.get(punkt.key)?.erledigt), [punkte, stand])
   const visible = showAll ? offen : offen.slice(0, 4)
+
+  if (punkte.length === 0) return <p className="text-sm text-gray-500">Für diesen Vorgang sind keine Maßnahmen hinterlegt.</p>
 
   async function toggle(punktKey: string) {
     if (!profile?.id) return
@@ -147,17 +132,35 @@ export default function EinsatzChecklisten({
   onChanged?: () => void
 }) {
   const [notunterkunftOffen, setNotunterkunftOffen] = useState(false)
+  const [schritte, setSchritte] = useState<EinsatzAblaufSchritt[] | null>(null)
+  const [error, setError] = useState('')
   const policy = workspacePolicy(organisation)
+
+  useEffect(() => {
+    if (!policy.operationalChecklists) return
+    let cancelled = false
+    setSchritte(null); setError('')
+    void supabase.from('einsatz_ablauf_schritte').select('*').eq('incident_id', incidentId).order('sortierung').then(result => {
+      if (cancelled) return
+      if (result.error) setError('Ablaufpunkte konnten nicht geladen werden: ' + result.error.message)
+      else setSchritte(result.data ?? [])
+    })
+    return () => { cancelled = true }
+  }, [incidentId, policy.operationalChecklists])
 
   // Fail closed: die Stadtpolizei darf diese generischen Protokollbausteine
   // nicht als zweites Einsatzprotokoll neben dem PAD verwenden.
   if (!policy.operationalChecklists) return null
+  if (error) return <p role="alert" className="text-sm text-red-700">{error}</p>
+  if (!schritte) return <p className="text-sm text-gray-500">Ablaufpunkte werden geladen…</p>
+
+  const punkte = (typ: EinsatzChecklisteName): ChecklistPunktDef[] => schritte.filter(row => row.typ === typ).map(row => ({ key: row.schluessel, text: row.bezeichnung }))
 
   return <div className="space-y-4">
     <MassnahmenAbschnitt
       incidentId={incidentId}
       checkliste="erstmeldung"
-      punkte={WEITERE_ERSTMELDUNG_CHECKLISTE}
+      punkte={punkte('erstmeldung')}
       canOperate={canOperate}
       onChanged={onChanged}
     />
@@ -174,7 +177,7 @@ export default function EinsatzChecklisten({
         <MassnahmenAbschnitt
           incidentId={incidentId}
           checkliste="notunterkunft"
-          punkte={NOTUNTERKUNFT_CHECKLISTE}
+          punkte={punkte('notunterkunft')}
           canOperate={canOperate}
           onChanged={onChanged}
         />

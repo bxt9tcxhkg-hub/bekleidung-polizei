@@ -1654,9 +1654,38 @@ export type BudgetUsageRow = {
   used: number
 }
 
+export type AblaufvorlageTyp = 'erstmeldung' | 'notunterkunft' | 'entscheidung'
+
+export interface Ablaufvorlage {
+  id: string
+  typ: AblaufvorlageTyp
+  schluessel: string
+  bezeichnung: string
+  sortierung: number
+  aktiv: boolean
+}
+
+export interface EinsatzAblaufSchritt {
+  incident_id: string
+  typ: 'erstmeldung' | 'notunterkunft'
+  schluessel: string
+  bezeichnung: string
+  sortierung: number
+}
+
+export interface EreignisEntscheidungsschritt {
+  ereignis_id: string
+  schluessel: string
+  bezeichnung: string
+  sortierung: number
+}
+
 export type Database = {
   public: {
     Tables: {
+      ablaufvorlagen: { Row: Omit<Ablaufvorlage, never>; Insert: Omit<Ablaufvorlage, 'id'> & { id?: string }; Update: Partial<Ablaufvorlage>; Relationships: [] }
+      einsatz_ablauf_schritte: { Row: Omit<EinsatzAblaufSchritt, never>; Insert: Omit<EinsatzAblaufSchritt, never>; Update: Partial<EinsatzAblaufSchritt>; Relationships: [] }
+      ereignis_entscheidungsschritte: { Row: Omit<EreignisEntscheidungsschritt, never>; Insert: Omit<EreignisEntscheidungsschritt, never>; Update: Partial<EreignisEntscheidungsschritt>; Relationships: [] }
       profiles: { Row: ProfileRow; Insert: Omit<ProfileRow, 'created_at'>; Update: Partial<ProfileRow>; Relationships: [] }
       products: { Row: ProductRow; Insert: Omit<ProductRow, 'id' | 'created_at'>; Update: Partial<ProductRow>; Relationships: [] }
       inventory: { Row: InventoryRow; Insert: Omit<InventoryRow, 'id'>; Update: Partial<InventoryRow>; Relationships: [

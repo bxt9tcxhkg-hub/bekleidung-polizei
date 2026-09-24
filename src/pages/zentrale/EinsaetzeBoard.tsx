@@ -6,9 +6,9 @@ import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
 import { nummerFuerArt } from '../../lib/verstaendigungsregeln'
 import { telHref } from '../../lib/ereignisKontakte'
 import { formatTime } from '../../lib/zentraleShared'
-import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { EREIGNISSTUFEN, STUFE_META, type Ereignisstufe } from '../../lib/einsatzSchema'
 import { loadEreignisContexts, setIncidentEreignisDimension } from '../../lib/ereignis'
-import type { EreignisVerstaendigungsschritt, IncidentReport, ZentraleKontakt } from '../../lib/types'
+import type { EreignisVerstaendigungsschritt, EreignisEntscheidungsschritt, IncidentReport, ZentraleKontakt } from '../../lib/types'
 
 export default function EinsaetzeBoard({
   title, items, canOperate, onEdit, onComplete, onDelete, showComplete,
@@ -28,6 +28,7 @@ export default function EinsaetzeBoard({
   const [levels, setLevels] = useState<Record<string, Ereignisstufe>>({})
   const [eventIds, setEventIds] = useState<Record<string, string>>({})
   const [stepsByEvent, setStepsByEvent] = useState<Record<string, EreignisVerstaendigungsschritt[]>>({})
+  const [decisionsByEvent, setDecisionsByEvent] = useState<Record<string, EreignisEntscheidungsschritt[]>>({})
 
   useEffect(() => {
     void supabase.from('zentrale_kontakte').select('*').order('name').then(result => {
@@ -43,15 +44,23 @@ export default function EinsaetzeBoard({
         setLevels(Object.fromEntries(items.map(item => [item.id, contexts[item.id]?.dimension ?? 'klein'])))
         setEventIds(Object.fromEntries(Object.entries(contexts).map(([id, ctx]) => [id, ctx.id])))
         const ids = [...new Set(Object.values(contexts).map(ctx => ctx.id))]
-        if (!ids.length) { setStepsByEvent({}); return }
-        const result = await supabase.from('ereignis_verstaendigungsschritte').select('*').in('ereignis_id', ids).order('sortierung')
+        if (!ids.length) { setStepsByEvent({}); setDecisionsByEvent({}); return }
+        const [result, decisions] = await Promise.all([
+          supabase.from('ereignis_verstaendigungsschritte').select('*').in('ereignis_id', ids).order('sortierung'),
+          supabase.from('ereignis_entscheidungsschritte').select('*').in('ereignis_id', ids).order('sortierung'),
+        ])
         if (result.error) throw result.error
+        if (decisions.error) throw decisions.error
         if (!cancelled) setStepsByEvent((result.data ?? []).reduce<Record<string, EreignisVerstaendigungsschritt[]>>((byId, row) => {
           ;(byId[row.ereignis_id] ??= []).push(row)
           return byId
         }, {}))
+        if (!cancelled) setDecisionsByEvent((decisions.data ?? []).reduce<Record<string, EreignisEntscheidungsschritt[]>>((byId, row) => {
+          ;(byId[row.ereignis_id] ??= []).push(row)
+          return byId
+        }, {}))
       })
-      .catch(() => { if (!cancelled) { setLevels({}); setStepsByEvent({}) } })
+      .catch(() => { if (!cancelled) { setLevels({}); setStepsByEvent({}); setDecisionsByEvent({}) } })
     return () => { cancelled = true }
   }, [items])
 
@@ -75,6 +84,8 @@ export default function EinsaetzeBoard({
       setEventIds(current => ({ ...current, [item.id]: saved.id }))
       const result = await supabase.from('ereignis_verstaendigungsschritte').select('*').eq('ereignis_id', saved.id).order('sortierung')
       if (!result.error) setStepsByEvent(current => ({ ...current, [saved.id]: result.data ?? [] }))
+      const decisions = await supabase.from('ereignis_entscheidungsschritte').select('*').eq('ereignis_id', saved.id).order('sortierung')
+      if (!decisions.error) setDecisionsByEvent(current => ({ ...current, [saved.id]: decisions.data ?? [] }))
     }
   }
 
@@ -137,6 +148,7 @@ export default function EinsaetzeBoard({
                   <button type="button" onClick={() => void onDelete(item)} className="text-xs font-medium text-red-700 border border-red-200 px-2.5 py-1.5 rounded-lg">Löschen</button>
                 </div> : null}
               </div>
+              <p className="ml-7 mt-2 text-sm text-gray-700">Melder: {item.caller_name || 'Nicht erfasst'} · Telefon: {item.caller_phone ? <a href={telHref(item.caller_phone)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{item.caller_phone}</a> : 'Nicht erfasst'}</p>
               {open ? <div className="mt-3 ml-7 space-y-3">
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">{item.summary}</p>
                 <p className="text-xs text-gray-500">Melder: {item.caller_name || '–'} · Tel: {item.caller_phone || '–'}</p>
@@ -153,7 +165,7 @@ export default function EinsaetzeBoard({
                     const verfuegbareNummern = match ? (step.telefon_art ? (nummer ? [{ art: 'Bevorzugt', nummer }] : []) : kontaktTelefonnummern(match)) : []
                     return <li key={step.schluessel}>{step.bezeichnung}{match ? ` – ${match.name}` : ' – Kontakt fehlt'}{match && !verfuegbareNummern.length ? ' · Rufnummer fehlt' : null}{verfuegbareNummern.map(({ art, nummer: value }) => <span key={art}> · <a href={telHref(value)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{art}: {value}</a></span>)}</li>
                   })}</ul>
-                  {stufe === 'gross' || stufe === 'katastrophe' ? <><p className="font-bold mt-2">Entscheidung</p><ul className="list-disc pl-5">{ENTSCHEIDUNGSPUNKTE.map(itemName => <li key={itemName}>{itemName}</li>)}</ul></> : null}
+                  {stufe === 'gross' || stufe === 'katastrophe' ? <><p className="font-bold mt-2">Entscheidung</p><ul className="list-disc pl-5">{(decisionsByEvent[eventIds[item.id]] ?? []).map(row => <li key={row.schluessel}>{row.bezeichnung}</li>)}</ul></> : null}
                   <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Kontakte bearbeiten</Link>
                 </div> : null}
               </div> : null}

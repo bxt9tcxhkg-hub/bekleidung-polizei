@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { ladeVerstaendigungsregeln, nummerFuerArt, TELEFON_ARTEN } from '../lib/verstaendigungsregeln'
 import { STUFE_META } from '../lib/einsatzSchema'
 import EinsatzgrundEinstellungen from '../components/EinsatzgrundEinstellungen'
+import AblaufvorlagenEinstellungen from '../components/AblaufvorlagenEinstellungen'
 import { kontaktTelefonnummern } from '../lib/kontaktTelefon'
 import { logAudit } from '../lib/audit'
 import type { KontaktTelefonArt, Verstaendigungsregel, ZentraleKontakt } from '../lib/types'
@@ -104,6 +105,7 @@ export default function Systemeinstellungen() {
     </section>
 
     <EinsatzgrundEinstellungen />
+    <AblaufvorlagenEinstellungen />
     <div className="mt-6 grid gap-4 sm:grid-cols-2">{NAV.map(group => <section key={group.titel} className="rounded-xl border bg-white p-5"><h2 className="font-bold">{group.titel}</h2><div className="mt-3 flex flex-wrap gap-2">{group.links.map(([name, to]) => <Link key={to} to={to} className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-blue-800 hover:bg-blue-50">{name}</Link>)}</div></section>)}</div>
     <section className="mt-4 rounded-xl border bg-white p-5"><h2 className="font-bold">Outlook und Rainbow</h2><p className="mt-2 text-sm text-gray-600">Derzeit besteht keine Verbindung. Sobald die Stadt-IT die notwendigen Zugänge und die Rainbow-Ereignisanbindung freigegeben hat, werden hier echte Verbindungs-, Prüf- und Betriebsfunktionen ergänzt.</p></section>
   </div>

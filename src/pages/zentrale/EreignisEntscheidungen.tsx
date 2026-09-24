@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ENTSCHEIDUNGSPUNKTE } from '../../lib/einsatzSchema'
+import { supabase } from '../../lib/supabase'
 import { loadEreignisEntscheidungen, setEreignisEntscheidung } from '../../lib/ereignis'
-import type { EreignisEntscheidung } from '../../lib/types'
+import type { EreignisEntscheidung, EreignisEntscheidungsschritt } from '../../lib/types'
 import { workspacePolicy, type WorkspaceOrganisation } from '../../lib/organisationWorkspace'
-
-function keyFor(label: string): string {
-  return label
-    .toLocaleLowerCase('de-AT')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_|_$/g, '')
-}
 
 export default function EreignisEntscheidungen({
   ereignisId, canOperate, userId, organisation, onChanged,
@@ -23,13 +14,18 @@ export default function EreignisEntscheidungen({
   onChanged?: () => void
 }) {
   const [rows, setRows] = useState<EreignisEntscheidung[]>([])
+  const [schritte, setSchritte] = useState<EreignisEntscheidungsschritt[] | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState('')
   const policy = workspacePolicy(organisation)
 
   const load = useCallback(async () => {
     try {
-      setRows(await loadEreignisEntscheidungen(ereignisId))
+      const [current, result] = await Promise.all([loadEreignisEntscheidungen(ereignisId), supabase.from('ereignis_entscheidungsschritte').select('*').eq('ereignis_id', ereignisId).order('sortierung')])
+      if (result.error) throw result.error
+      setRows(current)
+      setSchritte(result.data ?? [])
+      setError('')
     } catch {
       setError('Entscheidungsstand konnte nicht geladen werden.')
     }
@@ -41,9 +37,9 @@ export default function EreignisEntscheidungen({
 
   const byKey = useMemo(() => new Map(rows.map(row => [row.punkt_key, row])), [rows])
 
-  async function save(label: string, status: EreignisEntscheidung['status']) {
+  async function save(schritt: EreignisEntscheidungsschritt, status: EreignisEntscheidung['status']) {
     if (!userId) return
-    const key = keyFor(label)
+    const key = schritt.schluessel
     setBusyKey(key)
     setError('')
     try {
@@ -51,7 +47,7 @@ export default function EreignisEntscheidungen({
       const saved = await setEreignisEntscheidung({
         ereignisId,
         key,
-        label,
+        label: schritt.bezeichnung,
         status,
         notiz: current?.notiz ?? null,
         userId,
@@ -72,12 +68,12 @@ export default function EreignisEntscheidungen({
       <h3 className="text-xs font-bold uppercase tracking-wide text-gray-800">Entscheidungen / Anweisungen</h3>
       <p className="mt-1 text-xs text-gray-500">Hier wird nur dokumentiert, was durch die zuständigen Stellen festgelegt wurde. Das Portal trifft diese Entscheidungen nicht selbst.</p>
     </div>
-    {ENTSCHEIDUNGSPUNKTE.map(label => {
-      const key = keyFor(label)
+    {schritte?.map(schritt => {
+      const key = schritt.schluessel
       const row = byKey.get(key)
       const status = row?.status ?? 'offen'
       return <div key={key} className="rounded-xl border border-gray-200 p-3">
-        <p className="text-sm font-semibold text-gray-900">{label}</p>
+        <p className="text-sm font-semibold text-gray-900">{schritt.bezeichnung}</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {([
             ['offen', 'Offen'],
@@ -87,12 +83,14 @@ export default function EreignisEntscheidungen({
             key={value}
             type="button"
             disabled={!canOperate || busyKey === key}
-            onClick={() => void save(label, value)}
+            onClick={() => void save(schritt, value)}
             className={'rounded-lg border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50 ' + (status === value ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-gray-300 bg-white text-gray-700')}
           >{text}</button>)}
         </div>
       </div>
     })}
+    {!schritte && !error ? <p className="text-xs text-gray-500">Entscheidungspunkte werden geladen…</p> : null}
+    {schritte?.length === 0 ? <p className="text-xs text-gray-500">Für dieses Ereignis sind keine Entscheidungspunkte hinterlegt.</p> : null}
     {error ? <p className="text-xs text-red-700">{error}</p> : null}
   </div>
 }
