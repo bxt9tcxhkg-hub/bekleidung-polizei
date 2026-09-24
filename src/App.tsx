@@ -39,6 +39,7 @@ const Einsatztraining = lazy(() => import('./pages/einsatz/Einsatztraining'))
 const EinsatzMaterials = lazy(() => import('./pages/EinsatzMaterials'))
 const Schulungen = lazy(() => import('./pages/Schulungen'))
 const PortalUsers = lazy(() => import('./pages/PortalUsers'))
+const Systemeinstellungen = lazy(() => import('./pages/Systemeinstellungen'))
 const Ueberstunden = lazy(() => import('./pages/Ueberstunden'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
@@ -110,6 +111,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/portal/systemeinstellungen" element={<ProtectedRoute adminOnly><PortalChrome wide><Systemeinstellungen /></PortalChrome></ProtectedRoute>} />
           <Route
             path="/einsatz"
             element={

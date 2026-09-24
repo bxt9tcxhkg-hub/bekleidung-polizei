@@ -4,6 +4,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
+import { integrationSupabase, type IntegrationOutlookContact } from '../../lib/integrations'
 import type { ZentraleKontakt } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
@@ -15,7 +16,7 @@ const emptyForm = { name: '', institution: '', funktion: '', telefon: '', email:
 
 type BenutzerProfil = { id: string; name: string; dienstnummer: string | null; dienstgrad: string | null; organisation: string }
 /** Vereinheitlichte Anzeigezeile: echte Kontakte (Institutionen/Rufbereitschaften) und automatisch gespiegelte Benutzer. */
-type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer'; name: string; institution: string | null; funktion: string | null; telefon: string | null; kontakt?: ZentraleKontakt }
+type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer' | 'outlook'; name: string; institution: string | null; funktion: string | null; telefon: string | null; email?: string | null; kontakt?: ZentraleKontakt }
 
 export default function StammdatenKontaktePage({ context }: { context?: ContextualReference }) {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
@@ -29,6 +30,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleKontakt[]>([])
   const [benutzer, setBenutzer] = useState<BenutzerProfil[]>([])
+  const [outlookKontakte, setOutlookKontakte] = useState<IntegrationOutlookContact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -40,14 +42,16 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [kontakteResult, benutzerResult] = await Promise.all([
+    const [kontakteResult, benutzerResult, outlookResult] = await Promise.all([
       supabase.from('zentrale_kontakte').select('*, object:operational_objects(id,address,label)').order('name'),
       supabase.from('profiles').select('id,name,dienstnummer,dienstgrad,organisation').eq('active', true).order('name'),
+      integrationSupabase.from('integration_outlook_contacts').select('*').order('name'),
     ])
-    if (kontakteResult.error) setError('Die Kontakte konnten nicht geladen werden.')
+    if (kontakteResult.error || outlookResult.error) setError('Die Kontakte konnten nicht vollständig geladen werden.')
     else setError('')
     setItems((kontakteResult.data ?? []) as unknown as ZentraleKontakt[])
     setBenutzer(benutzerResult.error ? [] : (benutzerResult.data ?? []) as unknown as BenutzerProfil[])
+    setOutlookKontakte(outlookResult.data ?? [])
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -55,7 +59,8 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   const rows = useMemo((): KontaktRow[] => [
     ...items.map((item): KontaktRow => ({ key: `kontakt:${item.id}`, kind: 'kontakt', name: item.name, institution: item.institution, funktion: item.funktion, telefon: item.telefon, kontakt: item })),
     ...benutzer.map((person): KontaktRow => ({ key: `benutzer:${person.id}`, kind: 'benutzer', name: person.name, institution: person.organisation, funktion: [person.dienstgrad, person.dienstnummer ? `DN ${person.dienstnummer}` : null].filter(Boolean).join(' · ') || null, telefon: null })),
-  ].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')), [items, benutzer])
+    ...outlookKontakte.map((item): KontaktRow => ({ key: `outlook:${item.id}`, kind: 'outlook', name: item.name, institution: item.institution, funktion: item.funktion, telefon: item.telefon, email: item.email })),
+  ].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')), [items, benutzer, outlookKontakte])
   const institutions = useMemo(() => [...new Set(rows.map(row => row.institution).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'de-AT')), [rows])
   const visibleRows = useMemo(() => filterInstitution ? rows.filter(row => row.institution === filterInstitution) : rows, [rows, filterInstitution])
 
@@ -82,7 +87,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
 
   return <div>
     <Link to={context?.backTo ?? '/stammdaten'} className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> {context?.backLabel ?? 'Zu Stammdaten'}</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{context ? `${context.areaLabel} · Nachschlagewerk` : 'Stammdaten & Nachschlagewerke'}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Kontakte</h1><p className="text-sm text-gray-500 mt-1">Dienstlich notwendige Kontakte und Rufbereitschaften, ergänzt um alle aktiven Benutzer (automatisch, nicht hier editierbar - Verwaltung im Portal).</p></div>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{context ? `${context.areaLabel} · Nachschlagewerk` : 'Stammdaten & Nachschlagewerke'}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Kontakte</h1><p className="text-sm text-gray-500 mt-1">Dienstlich notwendige Kontakte und Rufbereitschaften, ergänzt um aktive Benutzer und künftig synchronisierte Outlook-Kontakte. Outlook-Kontakte können hier nicht bearbeitet werden.</p></div>
     {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur Nachschlageansicht. Änderungen erfolgen ausschließlich im Bereich Stammdaten.</div> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
@@ -98,13 +103,14 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
             {canManage ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Kontakt</button> : null}
           </div>
         </div>
-        {visibleRows.length === 0 ? <Empty text="Keine Kontakte gefunden." /> : <div className="divide-y divide-gray-100">{visibleRows.map(row => row.kind === 'benutzer' ? <article key={row.key} className="p-4 sm:p-5 flex items-start justify-between gap-3">
+        {visibleRows.length === 0 ? <Empty text="Keine Kontakte gefunden." /> : <div className="divide-y divide-gray-100">{visibleRows.map(row => row.kind !== 'kontakt' ? <article key={row.key} className="p-4 sm:p-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-semibold text-gray-900">{row.name}</h3>
-              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Benutzer</span>
+              <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{row.kind === 'outlook' ? 'Outlook' : 'Benutzer'}</span>
             </div>
             {(row.institution || row.funktion) ? <p className="text-sm text-gray-600 mt-1">{[row.institution, row.funktion].filter(Boolean).join(' · ')}</p> : null}
+            {row.kind === 'outlook' ? <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-gray-600">{row.telefon ? <a href={`tel:${row.telefon.replace(/[^\d+]/g, '')}`} className="text-blue-700 hover:underline">TEL: {row.telefon}</a> : null}{row.email ? <span>{row.email}</span> : null}</div> : null}
           </div>
         </article> : <article key={row.key} className="p-4 sm:p-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
