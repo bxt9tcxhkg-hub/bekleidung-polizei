@@ -3,13 +3,11 @@
  * Dornbirn-Vorlage nach (Spruch, Auflagen, Kostenaufstellung, Begründung,
  * Rechtsmittelbelehrung). Auflagen/Begründung/Rechtsmittelbelehrung sind
  * feste Textbausteine je Bescheid-Art (identisch mit der offiziellen
- * Vorlage) - nur die tatsächlich variablen Angaben (Person, Standplätze,
- * Zeitfenster, Kosten) kommen aus dem jeweiligen innendienst_records-Eintrag.
- * Optional wird als letzte Seite die Planbeilage (Luftbild + Katasterplan
- * der Marktplatz-Standplätze a)/b)) angehängt - nur wenn planbeilage=true
- * gesetzt ist (explizite Auswahl im Formular, da nicht jeder Bescheid diese
- * Location betrifft; aktuell die einzige mit Planbeilage hinterlegte
- * Location, bei künftig weiteren Standorten muss das erweitert werden).
+ * Vorlage) - nur die tatsächlich variablen Angaben (Person, Zeitfenster,
+ * Kosten) kommen aus dem jeweiligen innendienst_records-Eintrag. Die
+ * Standplätze sind durch die jeweilige Planbeilage fest vorgegeben.
+ * Die zur Bescheidart gehörende Planbeilage wird immer als letzte Seite
+ * angehängt. Sie ist kein optionales Formularfeld.
  */
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
 import { fmtEUR } from './format'
@@ -24,16 +22,12 @@ export interface BescheidPdfInput {
   bearbeiterName: string
   personName: string
   personBirthDate: string | null
-  personAddress: string | null
-  standplaetze: string[]
   /** "HH:MM", nur bei Straßenkunst genutzt. */
   zeitVon: string | null
   zeitBis: string | null
   kostenPositionen: { name: string; betrag: number }[]
   /** Ausstellungsdatum (YYYY-MM-DD) - dient zugleich als Bewilligungsdatum bei Straßenkunst. */
   issuedDate: string
-  /** Planbeilage (Luftbild+Kataster Marktplatz-Standplätze a)/b)) als letzte Seite anhängen - nur wenn die Standplätze tatsächlich diese Location betreffen. */
-  planbeilage: boolean
   now?: Date
 }
 
@@ -48,27 +42,18 @@ function dateLong(now: Date): string {
   return `${String(now.getDate()).padStart(2, '0')}. ${DE_MONTHS[now.getMonth()]} ${now.getFullYear()}`
 }
 
-function standplaetzeList(items: readonly string[]): string {
-  const filled = items.map(item => item.trim()).filter(Boolean)
-  if (filled.length === 0) return '<p>–</p>'
-  const letter = (i: number) => String.fromCharCode(97 + i) // a, b, c, ...
-  return `<ol class="standplaetze">${filled.map((item, i) => `<li><span class="letter">${letter(i)})</span> ${escHtml(item)}</li>`).join('')}</ol>`
-}
-
 const TITEL: Record<BescheidKind, { untertitel: string; paragraf: string }> = {
   bescheid_strassenmusik: { untertitel: 'Zuweisung eines Platzes zur Ausübung von Straßenmusik gemäß § 85 StVO', paragraf: '85' },
   bescheid_strassenkunst: { untertitel: 'Benützung von Straßen zu verkehrsfremden Zwecken gemäß § 82 Abs. 1 StVO 1960 &middot; Bewilligung für die Ausübung von Schaustellungen und Darbietungen', paragraf: '82' },
 }
 
 function spruch(input: BescheidPdfInput): string {
-  const list = standplaetzeList(input.standplaetze)
+  const person = `<strong>${escHtml(input.personName)}</strong>, geboren am ${input.personBirthDate ? formatDateShort(input.personBirthDate) : '–'}`
   if (input.kind === 'bescheid_strassenmusik') {
-    return `<p>Dem/Der Antragsteller/Antragstellerin werden gemäß § 85 Abs. 3 StVO folgende Standplätze zur Ausübung von Straßenmusik zugewiesen:</p>
-      ${list}`
+    return `<p>Für ${person} werden gemäß § 85 Abs. 3 StVO die in der Planbeilage ausgewiesenen Standplätze zur Ausübung von Straßenmusik zugewiesen.</p>`
   }
   const zeit = input.zeitVon && input.zeitBis ? `in der Zeit von ${escHtml(input.zeitVon)} Uhr bis ${escHtml(input.zeitBis)} Uhr ` : ''
-  return `<p>Dem/Der <strong>${escHtml(input.personName)}</strong>, geb. ${input.personBirthDate ? formatDateShort(input.personBirthDate) : '–'}, whft. ${escHtml(input.personAddress ?? '–')}, wird gemäß § 82 StVO die Bewilligung zur Ausübung von Schaustellungen und Darbietungen in der Fußgängerzone in Dornbirn am ${formatDateShort(input.issuedDate)} ${zeit}an folgenden Standplätzen erteilt:</p>
-    ${list}
+  return `<p>${person} wird gemäß § 82 StVO die Bewilligung zur Ausübung von Schaustellungen und Darbietungen in der Fußgängerzone in Dornbirn am ${formatDateShort(input.issuedDate)} ${zeit}an den in der Planbeilage ausgewiesenen Standplätzen erteilt.</p>
     <p>Die Bewilligung gilt für jeden Standplatz und Tag maximal für die Dauer von 2 Stunden.</p>
     <p>Die Bewilligung wird für stille Straßenkunst in Form einer lautlosen darstellerischen Darbietung (z.&nbsp;B. &bdquo;lebende Statue&ldquo;) erteilt.</p>`
 }
@@ -98,6 +83,11 @@ function kostenSection(positionen: readonly { name: string; betrag: number }[]):
 export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
   const now = input.now ?? new Date()
   const titel = TITEL[input.kind]
+  // Zuordnung aus der bestehenden vierseitigen Bescheidvorlage:
+  // Seite 3 = Straßenmusik (Luftbild), Seite 4 = Straßenkunst (Kataster).
+  const planbeilage = input.kind === 'bescheid_strassenmusik'
+    ? { bild: PLANBEILAGE_LUFTBILD, alt: 'Planbeilage Straßenmusik', titel: 'Luftbild mit markierten Standplätzen a) und b)' }
+    : { bild: PLANBEILAGE_KATASTER, alt: 'Planbeilage Straßenkunst', titel: 'Katasterplan mit markierten Standplätzen a) und b)' }
   return `<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><title>Bescheid ${input.kind === 'bescheid_strassenmusik' ? 'Straßenmusik' : 'Straßenkunst'}</title><style>
   @page { size: A4; margin: 20mm 20mm 20mm 20mm; }
@@ -111,9 +101,6 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
   .sp { font-size: 12pt; font-weight: bold; margin: 6mm 0 2mm; }
   h2 { font-size: 11pt; font-weight: bold; margin: 6mm 0 2mm; }
   p { margin-bottom: 2mm; }
-  ol.standplaetze { list-style: none; margin: 2mm 0 3mm 4mm; }
-  ol.standplaetze li { margin-bottom: 1mm; }
-  ol.standplaetze .letter { font-weight: bold; margin-right: 4px; }
   ol.bedingungen { margin: 2mm 0 3mm 6mm; }
   ol.bedingungen li { margin-bottom: 2mm; }
   table.kosten { border-collapse: collapse; margin: 3mm 0 5mm; min-width: 100mm; }
@@ -171,13 +158,11 @@ export function buildBescheidPdfHtml(input: BescheidPdfInput): string {
     <span>DVR 0036030</span>
   </div>
 
-  ${input.planbeilage ? `<div class="planbeilage">
-    <h2>Planbeilage – Standplätze a) und b), Marktplatz</h2>
-    <img src="${PLANBEILAGE_LUFTBILD}" alt="Planbeilage Luftbild">
-    <p class="bildtitel">Luftbild mit markierten Standplätzen a) und b)</p>
-    <img src="${PLANBEILAGE_KATASTER}" alt="Planbeilage Katasterplan">
-    <p class="bildtitel">Katasterplan mit markierten Standplätzen a) und b)</p>
-  </div>` : ''}
+  <div class="planbeilage">
+    <h2>Planbeilage ${input.kind === 'bescheid_strassenmusik' ? 'Straßenmusik' : 'Straßenkunst'} – Standplätze a) und b), Marktplatz</h2>
+    <img src="${planbeilage.bild}" alt="${planbeilage.alt}">
+    <p class="bildtitel">${planbeilage.titel}</p>
+  </div>
 </body></html>`
 }
 

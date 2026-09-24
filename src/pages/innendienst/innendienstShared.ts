@@ -29,9 +29,7 @@ export function todayLocal() { const date = new Date(); return `${date.getFullYe
 // personId gilt nur für einen Bescheid (Person, für die er ausgestellt wird) -
 // ein Verstoß übernimmt seine Person automatisch vom zugehörigen Bescheid,
 // subject bleibt dort die Freitext-Beschreibung des Verstoßes.
-// standplaetze/zeitVon/zeitBis/gebuehrensatzId sind nur für den PDF-Export
-// eines Bescheids relevant (siehe lib/innendienstBescheidPdf.ts) - optional,
-// ein Bescheid ohne diese Angaben lässt sich trotzdem erfassen, das PDF zeigt
-// dann Platzhalter statt der Angaben.
-export const EMPTY_BESCHEID_FORM = { kind: 'bescheid_strassenmusik' as InnendienstRecordKind, personId: null as string | null, subject: '', reference: '', note: '', relatedBescheidId: '', standplaetze: [''] as string[], zeitVon: '', zeitBis: '', gebuehrensatzId: '', planbeilage: false }
+// Zeitfenster und Gebührensatz sind variable Bescheiddaten. Standplätze und
+// Planbeilage sind durch die Bescheidart vorgegeben und daher keine Eingaben.
+export const EMPTY_BESCHEID_FORM = { kind: 'bescheid_strassenmusik' as InnendienstRecordKind, personId: null as string | null, subject: '', reference: '', note: '', relatedBescheidId: '', zeitVon: '', zeitBis: '', gebuehrensatzId: '', planbeilage: true }
 export type BescheidFormState = typeof EMPTY_BESCHEID_FORM

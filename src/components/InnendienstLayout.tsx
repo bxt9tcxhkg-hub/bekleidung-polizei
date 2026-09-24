@@ -13,7 +13,7 @@ export default function InnendienstLayout() {
     meinBereichSection([
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/innendienst', label: 'Innendienst', icon: Building2 },
-      { to: '/innendienst/bescheide', label: 'Bescheide & Verstöße', icon: ClipboardList },
+      { to: '/innendienst/bescheide', label: 'Bescheide', icon: ClipboardList },
       { to: '/innendienst/uebergabe', label: 'Schichtübergabe', icon: FileClock },
       { to: '/innendienst/gebuehren', label: 'Gebührenordnung', icon: Receipt },
       // Eigener Bestand, getrennt von den Unterlagen der Zentrale (gleiche

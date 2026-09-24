@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { geocodeLocation, routeAlongRoad } from '../../lib/geocode'
-import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, IncidentSupport, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
+import type { DutyAssignment, DutyFunctionConfig, FleetVehicle, IncidentDisposition, IncidentSupport, InnendienstRecord, VehicleCheck, VehicleCheckStatus, ZentraleBaustelle, ZentraleEntry } from '../../lib/types'
 import { SCHUTZ_SELECT, type Schutzfall } from '../../lib/schutzmassnahmen'
 import { locationParts, operationalToday, startOfOperationalDayIso } from '../../lib/zentraleShared'
 import { parseKilometerLocation } from '../../lib/roadKilometer'
@@ -51,6 +51,7 @@ export interface AussendienstContext {
   entries: ZentraleEntry[]
   avBv: Schutzfall[]
   baustellen: ZentraleBaustelle[]
+  heutigeBescheide: InnendienstRecord[]
   isGenehmiger: boolean
   saving: boolean
   checkNote: string
@@ -70,6 +71,7 @@ export interface AussendienstContext {
   stopSupportingIncident: (id: string) => Promise<void>
   completeIncident: (id: string) => Promise<void>
   reopenIncident: (id: string) => Promise<void>
+  bescheidZurueckziehen: (id: string) => Promise<void>
   incidentContextSummary: Record<string, { safety: number; attention: number }>
 }
 
@@ -85,6 +87,7 @@ export default function AussendienstShell() {
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
   const [avBv, setAvBv] = useState<Schutzfall[]>([])
   const [baustellen, setBaustellen] = useState<ZentraleBaustelle[]>([])
+  const [heutigeBescheide, setHeutigeBescheide] = useState<InnendienstRecord[]>([])
   // Wie in ZentraleShell.tsx: bei Ladefehler darf "Keine aktuell dringenden
   // Warnungen" nicht fälschlich Entwarnung geben.
   const [criticalSourcesError, setCriticalSourcesError] = useState(false)
@@ -111,7 +114,7 @@ export default function AussendienstShell() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = operationalToday()
-    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, baustelleResult] = await Promise.all([
+    const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, incidentResult, supportResult, avBvResult, baustelleResult, bescheidResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
@@ -123,6 +126,7 @@ export default function AussendienstShell() {
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
       // Für "Baustelle in der Nähe" auf der Einsatzliste - erledigte Baustellen wie in der Zentrale ausgeblendet.
       supabase.from('zentrale_baustellen').select('*').neq('status', 'erledigt').order('created_at', { ascending: false }),
+      supabase.from('innendienst_records').select('*, person:operational_persons(id,vorname,nachname,birth_date)').in('kind', ['bescheid_strassenmusik', 'bescheid_strassenkunst']).eq('issued_date', today).order('created_at'),
     ])
     if (dutyResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
@@ -135,6 +139,7 @@ export default function AussendienstShell() {
     setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
+    setHeutigeBescheide(bescheidResult.error ? [] : (bescheidResult.data ?? []) as unknown as InnendienstRecord[])
     setCriticalSourcesError(Boolean(avBvResult.error))
     setLoading(false)
   }, [])
@@ -207,6 +212,15 @@ export default function AussendienstShell() {
   async function reopenIncident(id: string) {
     const result = await supabase.rpc('reopen_incident', { p_id: id })
     if (result.error) { setError('Der Einsatz konnte nicht wieder geöffnet werden.'); return }
+    await load()
+  }
+  async function bescheidZurueckziehen(id: string) {
+    if (!window.confirm('Verstoß gegen die Auflagen festgestellt und diesen Bescheid zurückziehen?')) return
+    setSaving(true)
+    const result = await supabase.rpc('verstoss_gegen_bescheid_feststellen', { p_bescheid_id: id })
+    setSaving(false)
+    if (result.error) { setError('Der Verstoß konnte nicht dokumentiert werden.'); return }
+    setNotice('Verstoß dokumentiert. Der Bescheid ist zurückgezogen.')
     await load()
   }
 
@@ -352,11 +366,11 @@ export default function AussendienstShell() {
   const ctx: AussendienstContext = {
     loading, ownAssignment, ownFunction, ownVehicle, availableVehicles, setDutyVehicle, ownCheck, patrolMates,
     criticalItems, criticalSourcesError, openIncidents, ownIncidents, supportedIncidents, availableIncidents, completedIncidents, openOrders, kontrollauftraege,
-    incidents, entries, avBv, baustellen, isGenehmiger,
+    incidents, entries, avBv, baustellen, heutigeBescheide, isGenehmiger,
     saving, checkNote, setCheckNote, showMangelForm, setShowMangelForm, saveVehicleCheck,
     openNewAuftrag, openEditAuftrag, toggleKontrollauftragErledigt, openBaustelleReport,
     patrolVehicles, takeOverIncident, releaseIncidentTakeover,
-    incidentSupports, supportIncident, stopSupportingIncident, completeIncident, reopenIncident, incidentContextSummary,
+    incidentSupports, supportIncident, stopSupportingIncident, completeIncident, reopenIncident, bescheidZurueckziehen, incidentContextSummary,
   }
 
   return <div>

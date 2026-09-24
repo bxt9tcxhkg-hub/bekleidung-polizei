@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, Car, CheckCircle2, Circle, ListChecks, Mail, Navigation, Search, ShieldCheck, Wrench } from 'lucide-react'
+import { AlertTriangle, Car, CheckCircle2, Circle, FileCheck2, ListChecks, Mail, Navigation, Search, ShieldCheck, Wrench } from 'lucide-react'
 import { Link, useOutletContext } from 'react-router-dom'
 import type { AussendienstContext } from './AussendienstShell'
 import { EntryOrIncidentList } from './aussendienstShared'
@@ -70,6 +70,14 @@ export default function AussendienstUebersicht() {
       </div>
       {incidentList}
     </section> : null}
+
+    <section className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+      <div className="p-4 sm:p-5 border-b border-gray-100"><h2 className="font-bold text-gray-900 flex items-center gap-2"><FileCheck2 className="w-4 h-4 text-blue-700" /> Heutige Bescheide</h2><p className="text-xs text-gray-500 mt-1">Kein Kontrollauftrag – nur zur Überprüfung vor Ort.</p></div>
+      {ctx.heutigeBescheide.length === 0 ? <p className="p-4 sm:p-5 text-sm text-gray-500">Heute wurde kein Bescheid für Straßenmusik oder Straßenkunst ausgestellt.</p> : <div className="divide-y divide-gray-100">{ctx.heutigeBescheide.map(item => {
+        const name = item.person ? `${item.person.vorname} ${item.person.nachname}`.trim() : item.subject
+        return <div key={item.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold text-gray-900">{name}</p><span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.status === 'entzogen' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>{item.status === 'entzogen' ? 'Zurückgezogen' : item.kind === 'bescheid_strassenmusik' ? 'Straßenmusik' : 'Straßenkunst'}</span></div><p className="text-sm text-gray-600 mt-1">Geb. {item.person?.birth_date ? new Date(item.person.birth_date).toLocaleDateString('de-AT') : 'nicht erfasst'}{item.reference ? ` · GZ ${item.reference}` : ''}</p></div>{item.status !== 'entzogen' ? <button type="button" disabled={ctx.saving} onClick={() => void ctx.bescheidZurueckziehen(item.id)} className="min-h-11 px-4 rounded-lg border border-red-300 text-red-700 text-sm font-semibold hover:bg-red-50 disabled:opacity-60">Verstoß · zurückziehen</button> : null}</div>
+      })}</div>}
+    </section>
 
     <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">

@@ -1316,7 +1316,7 @@ export interface InnendienstRecord {
   zeit_bis: string | null
   /** Nur bei Bescheiden: Kostenaufstellung im PDF wird live aus diesem Gebührensatz nachgeschlagen, kein gespeicherter Betrag. */
   gebuehrensatz_id: string | null
-  /** Nur bei Bescheiden: Planbeilage (Luftbild+Kataster Marktplatz-Standplätze a)/b)) an das PDF anhängen - explizite Auswahl, da nicht jeder Bescheid diese Location betrifft. */
+  /** Bei Bescheiden immer true: die zur Bescheidart gehörende Planbeilage wird verpflichtend mitgedruckt. */
   planbeilage: boolean
   created_by: string
   created_at: string
@@ -1325,6 +1325,16 @@ export interface InnendienstRecord {
   person?: Pick<OperationalPerson, 'id' | 'vorname' | 'nachname' | 'birth_date'> & { home_object?: Pick<OperationalObject, 'address' | 'strasse' | 'hausnummer' | 'plz' | 'ort'> | null } | null
   related_bescheid?: Pick<InnendienstRecord, 'id' | 'kind' | 'subject' | 'reference'> | null
   gebuehrensatz?: Pick<InnendienstGebuehrensatz, 'id' | 'name'> | null
+}
+
+export type InnendienstPersonEntscheidungStatus = 'erlaubt' | 'ruecksprache' | 'gesperrt'
+
+export interface InnendienstPersonEntscheidung {
+  person_id: string
+  status: InnendienstPersonEntscheidungStatus
+  entschieden_von: string
+  entschieden_am: string
+  updated_at: string
 }
 
 /**
@@ -1600,6 +1610,7 @@ type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
 type InnendienstShiftTaskRow = Omit<InnendienstShiftTask, never>
 type InnendienstRecordRow = Omit<InnendienstRecord, 'creator' | 'person' | 'related_bescheid' | 'gebuehrensatz'>
+type InnendienstPersonEntscheidungRow = Omit<InnendienstPersonEntscheidung, never>
 type StrassenzustandStammdatumRow = Omit<StrassenzustandStammdatum, never>
 type StrassenzustandStrasseRow = Omit<StrassenzustandStrasse, never>
 type StrassenzustandBerichtRow = Omit<StrassenzustandBericht, 'profiles'>
@@ -1932,6 +1943,10 @@ export type Database = {
         { foreignKeyName: 'innendienst_records_related_bescheid_id_fkey'; columns: ['related_bescheid_id']; isOneToOne: false; referencedRelation: 'innendienst_records'; referencedColumns: ['id'] },
         { foreignKeyName: 'innendienst_records_person_id_fkey'; columns: ['person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
       ] }
+      innendienst_person_entscheidungen: { Row: InnendienstPersonEntscheidungRow; Insert: Pick<InnendienstPersonEntscheidungRow, 'person_id' | 'status' | 'entschieden_von'> & Partial<Omit<InnendienstPersonEntscheidungRow, 'person_id' | 'status' | 'entschieden_von'>>; Update: Partial<Omit<InnendienstPersonEntscheidungRow, 'person_id'>>; Relationships: [
+        { foreignKeyName: 'innendienst_person_entscheidungen_person_id_fkey'; columns: ['person_id']; isOneToOne: true; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },
+        { foreignKeyName: 'innendienst_person_entscheidungen_entschieden_von_fkey'; columns: ['entschieden_von']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
       innendienst_gebuehrenpositionen: { Row: InnendienstGebuehrenpositionRow; Insert: Pick<InnendienstGebuehrenpositionRow, 'name' | 'betrag'> & Partial<Omit<InnendienstGebuehrenpositionRow, 'name' | 'betrag'>>; Update: Partial<Omit<InnendienstGebuehrenpositionRow, 'id' | 'created_at'>>; Relationships: [
         { foreignKeyName: 'innendienst_gebuehrenpositionen_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
@@ -1977,6 +1992,7 @@ export type Database = {
       budget_usage: { Row: BudgetUsageRow; Relationships: [] }
     }
     Functions: {
+      verstoss_gegen_bescheid_feststellen: { Args: { p_bescheid_id: string }; Returns: string }
       create_support_request: { Args: { p_subject: string; p_kind: string; p_topic: string; p_body: string }; Returns: string }
       set_incident_event_dimension: { Args: { p_incident_id: string; p_dimension: EreignisDimension }; Returns: string | null }
       link_incident_to_event: { Args: { p_incident_id: string; p_event_id: string }; Returns: string }
