@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { sizeLabel } from '../lib/sizes'
 import { POLICE_RANKS, type PoliceRank } from '../lib/types'
 import ChangePasswordForm from '../components/ChangePasswordForm'
+import { profilTelefonClient, type ProfilTelefonnummern } from '../lib/profilTelefon'
 
 type SizeOptGroup = { group: string; sizes: string[] }
 type SizeField = { key: string; label: string; options: (string | SizeOptGroup)[] }
@@ -62,6 +63,12 @@ export default function UserProfile() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [telefon, setTelefon] = useState({ diensthandy: '', privathandy: '' })
+  const [telefonExists, setTelefonExists] = useState(false)
+  const [telefonLoading, setTelefonLoading] = useState(true)
+  const [telefonSaving, setTelefonSaving] = useState(false)
+  const [telefonError, setTelefonError] = useState('')
+  const [telefonSaved, setTelefonSaved] = useState(false)
 
   useEffect(() => {
     if (profile) {
@@ -70,12 +77,51 @@ export default function UserProfile() {
     }
   }, [profile])
 
+  useEffect(() => {
+    if (!profile?.id) return
+    let active = true
+    setTelefonLoading(true)
+    setTelefonError('')
+    void (async () => {
+      const { data: rawData, error: loadError } = await profilTelefonClient.from('profile_phone_numbers').select('*').eq('user_id', profile.id).maybeSingle()
+      if (!active) return
+      const data = rawData as unknown as ProfilTelefonnummern | null
+      if (loadError) setTelefonError('Telefonnummern konnten nicht geladen werden.')
+      else {
+        setTelefon({ diensthandy: data?.diensthandy ?? '', privathandy: data?.privathandy ?? '' })
+        setTelefonExists(Boolean(data))
+      }
+      setTelefonLoading(false)
+    })()
+    return () => { active = false }
+  }, [profile?.id])
+
+  async function saveTelefon() {
+    if (!profile?.id || telefonLoading) return
+    setTelefonError('')
+    setTelefonSaved(false)
+    setTelefonSaving(true)
+    const values = { diensthandy: telefon.diensthandy.trim() || null, privathandy: telefon.privathandy.trim() || null }
+    const query = profilTelefonClient.from('profile_phone_numbers')
+    const { data, error: saveError } = telefonExists
+      ? await query.update(values as never).eq('user_id', profile.id).select('user_id').single()
+      : await query.insert({ user_id: profile.id, ...values } as never).select('user_id').single()
+    setTelefonSaving(false)
+    if (saveError || !data) {
+      setTelefonError('Telefonnummern konnten nicht gespeichert werden. Bitte Eingaben und Berechtigung prüfen.')
+      return
+    }
+    setTelefon({ diensthandy: values.diensthandy ?? '', privathandy: values.privathandy ?? '' })
+    setTelefonExists(true)
+    setTelefonSaved(true)
+  }
+
   async function save() {
     setError('')
     setSuccess(false)
     if (!form.name.trim()) { setError('Name ist ein Pflichtfeld.'); return }
     setSaving(true)
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .update({
         name: form.name.trim(),
@@ -85,7 +131,8 @@ export default function UserProfile() {
         size_preferences: sizePref,
       })
       .eq('id', profile!.id)
-    if (error) setError(error.message)
+      .select('id').single()
+    if (error || !data) setError(error?.message ?? 'Profil konnte nicht gespeichert werden.')
     else {
       setSuccess(true)
       await refreshProfile()
@@ -252,6 +299,22 @@ export default function UserProfile() {
               {saving ? 'Speichern...' : 'Speichern'}
             </button>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-6">
+          <h2 className="text-base font-semibold text-gray-900">Meine Telefonnummern</h2>
+          <p className="mt-1 text-xs text-gray-600">Diese Nummern erscheinen für berechtigte Kollegen im Kontaktregister. Du kannst sie jederzeit ändern oder entfernen.</p>
+          <div className="mt-4 space-y-4">
+            <label className="block text-xs font-medium text-gray-700">Diensthandy
+              <input type="tel" maxLength={50} autoComplete="tel" value={telefon.diensthandy} onChange={event => setTelefon(current => ({ ...current, diensthandy: event.target.value }))} disabled={telefonLoading} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50" />
+            </label>
+            <label className="block text-xs font-medium text-gray-700">Privathandy
+              <input type="tel" maxLength={50} autoComplete="off" value={telefon.privathandy} onChange={event => setTelefon(current => ({ ...current, privathandy: event.target.value }))} disabled={telefonLoading} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-50" />
+            </label>
+          </div>
+          {telefonError ? <p role="alert" className="mt-3 text-sm text-red-700">{telefonError}</p> : null}
+          {telefonSaved ? <p role="status" className="mt-3 text-sm text-green-700">Telefonnummern gespeichert.</p> : null}
+          <button type="button" onClick={() => void saveTelefon()} disabled={telefonLoading || telefonSaving} className="mt-4 rounded-lg bg-blue-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{telefonSaving ? 'Speichern…' : 'Telefonnummern speichern'}</button>
         </div>
 
         <ChangePasswordForm />

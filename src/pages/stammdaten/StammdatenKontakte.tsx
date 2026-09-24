@@ -6,6 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
 import { integrationSupabase, type IntegrationOutlookContact } from '../../lib/integrations'
+import { profilTelefonClient, type ProfilTelefonnummern } from '../../lib/profilTelefon'
 import type { ZentraleKontakt } from '../../lib/types'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 import { ObjectPicker } from '../../components/RegisterPickers'
@@ -17,7 +18,7 @@ const emptyForm = { name: '', institution: '', funktion: '', telefon: '', telefo
 
 type BenutzerProfil = { id: string; name: string; dienstnummer: string | null; dienstgrad: string | null; organisation: string }
 /** Vereinheitlichte Anzeigezeile: echte Kontakte (Institutionen/Rufbereitschaften) und automatisch gespiegelte Benutzer. */
-type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer' | 'outlook'; name: string; institution: string | null; funktion: string | null; telefon: string | null; email?: string | null; kontakt?: ZentraleKontakt }
+type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer' | 'outlook'; name: string; institution: string | null; funktion: string | null; telefon: string | null; email?: string | null; kontakt?: ZentraleKontakt; benutzerTelefon?: ProfilTelefonnummern }
 
 export default function StammdatenKontaktePage({ context }: { context?: ContextualReference }) {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
@@ -31,6 +32,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleKontakt[]>([])
   const [benutzer, setBenutzer] = useState<BenutzerProfil[]>([])
+  const [benutzerTelefone, setBenutzerTelefone] = useState<ProfilTelefonnummern[]>([])
   const [outlookKontakte, setOutlookKontakte] = useState<IntegrationOutlookContact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -43,15 +45,17 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [kontakteResult, benutzerResult, outlookResult] = await Promise.all([
+    const [kontakteResult, benutzerResult, telefonResult, outlookResult] = await Promise.all([
       supabase.from('zentrale_kontakte').select('*, object:operational_objects(id,address,label)').order('name'),
       supabase.from('profiles').select('id,name,dienstnummer,dienstgrad,organisation').eq('active', true).order('name'),
+      profilTelefonClient.from('profile_phone_numbers').select('*'),
       integrationSupabase.from('integration_outlook_contacts').select('*').order('name'),
     ])
-    if (kontakteResult.error || outlookResult.error) setError('Die Kontakte konnten nicht vollständig geladen werden.')
+    if (kontakteResult.error || outlookResult.error || telefonResult.error) setError('Die Kontakte konnten nicht vollständig geladen werden.')
     else setError('')
     setItems((kontakteResult.data ?? []) as unknown as ZentraleKontakt[])
     setBenutzer(benutzerResult.error ? [] : (benutzerResult.data ?? []) as unknown as BenutzerProfil[])
+    setBenutzerTelefone((telefonResult.data ?? []) as unknown as ProfilTelefonnummern[])
     setOutlookKontakte(outlookResult.data ?? [])
     setLoading(false)
   }, [])
@@ -59,9 +63,9 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
 
   const rows = useMemo((): KontaktRow[] => [
     ...items.map((item): KontaktRow => ({ key: `kontakt:${item.id}`, kind: 'kontakt', name: item.name, institution: item.institution, funktion: item.funktion, telefon: item.telefon, kontakt: item })),
-    ...benutzer.map((person): KontaktRow => ({ key: `benutzer:${person.id}`, kind: 'benutzer', name: person.name, institution: person.organisation, funktion: [person.dienstgrad, person.dienstnummer ? `DN ${person.dienstnummer}` : null].filter(Boolean).join(' · ') || null, telefon: null })),
+    ...benutzer.map((person): KontaktRow => ({ key: `benutzer:${person.id}`, kind: 'benutzer', name: person.name, institution: person.organisation, funktion: [person.dienstgrad, person.dienstnummer ? `DN ${person.dienstnummer}` : null].filter(Boolean).join(' · ') || null, telefon: null, benutzerTelefon: benutzerTelefone.find(row => row.user_id === person.id) })),
     ...outlookKontakte.map((item): KontaktRow => ({ key: `outlook:${item.id}`, kind: 'outlook', name: item.name, institution: item.institution, funktion: item.funktion, telefon: item.telefon, email: item.email })),
-  ].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')), [items, benutzer, outlookKontakte])
+  ].sort((a, b) => a.name.localeCompare(b.name, 'de-AT')), [items, benutzer, benutzerTelefone, outlookKontakte])
   const institutions = useMemo(() => [...new Set(rows.map(row => row.institution).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b, 'de-AT')), [rows])
   const visibleRows = useMemo(() => filterInstitution ? rows.filter(row => row.institution === filterInstitution) : rows, [rows, filterInstitution])
 
@@ -112,6 +116,10 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
             </div>
             {(row.institution || row.funktion) ? <p className="text-sm text-gray-600 mt-1">{[row.institution, row.funktion].filter(Boolean).join(' · ')}</p> : null}
             {row.kind === 'outlook' ? <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-gray-600">{row.telefon ? <a href={`tel:${row.telefon.replace(/[^\d+]/g, '')}`} className="text-blue-700 hover:underline">TEL: {row.telefon}</a> : null}{row.email ? <span>{row.email}</span> : null}</div> : null}
+            {row.kind === 'benutzer' && row.benutzerTelefon ? <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {row.benutzerTelefon.diensthandy ? <a href={`tel:${row.benutzerTelefon.diensthandy.replace(/[^\d+]/g, '')}`} className="text-blue-700 hover:underline" aria-label={`${row.name}, Diensthandy: ${row.benutzerTelefon.diensthandy}`}>Diensthandy: {row.benutzerTelefon.diensthandy}</a> : null}
+              {row.benutzerTelefon.privathandy ? <a href={`tel:${row.benutzerTelefon.privathandy.replace(/[^\d+]/g, '')}`} className="text-blue-700 hover:underline" aria-label={`${row.name}, Privathandy: ${row.benutzerTelefon.privathandy}`}>Privathandy: {row.benutzerTelefon.privathandy}</a> : null}
+            </div> : null}
           </div>
         </article> : <article key={row.key} className="p-4 sm:p-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
