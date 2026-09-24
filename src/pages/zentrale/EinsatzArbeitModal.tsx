@@ -400,15 +400,11 @@ export default function EinsatzArbeitModal({
           const row = standByKey.get(key)
           const kontaktTreffer = kontakte[label] ?? []
           return <div key={key} className="rounded-xl border border-gray-200 bg-white p-3">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{label}</p>
-                {kontaktTreffer.length > 0 ? <div className="mt-1 space-y-0.5">{kontaktTreffer.map(kontakt => <p key={kontakt.id} className="text-xs text-gray-600">{kontakt.name}{kontakt.funktion && kontakt.funktion !== label ? ' · ' + kontakt.funktion : ''}{kontakt.erreichbarkeit ? ' · ' + kontakt.erreichbarkeit : ''}</p>)}</div> : <p className="mt-1 text-xs text-amber-700">Keine gepflegten Kontaktdaten gefunden.</p>}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {kontaktTreffer.filter(kontakt => kontakt.telefon).map(kontakt => <a key={kontakt.id} href={telHref(kontakt.telefon!)} className="rounded-lg bg-blue-800 px-2.5 py-1.5 text-xs font-bold text-white">TEL {kontakt.telefon}</a>)}
-              </div>
-            </div>
+            <p className="text-sm font-semibold text-gray-900">{label}</p>
+            {kontaktTreffer.length > 0 ? <div className="mt-2 space-y-1.5">{kontaktTreffer.map(kontakt => <div key={`${kontakt.source}:${kontakt.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-gray-50 px-2.5 py-2">
+              <span className="min-w-0 text-xs text-gray-700"><span className="font-semibold text-gray-900">{kontakt.name}</span>{kontakt.funktion && kontakt.funktion !== label ? ' · ' + kontakt.funktion : ''}{kontakt.erreichbarkeit ? ' · ' + kontakt.erreichbarkeit : ''}</span>
+              {kontakt.telefon ? <a href={telHref(kontakt.telefon)} aria-label={`${kontakt.name} anrufen: ${kontakt.telefon}`} className="rounded-lg bg-blue-800 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-blue-900">TEL {kontakt.telefon}</a> : null}
+            </div>)}</div> : <p className="mt-1 text-xs text-amber-700">Keine gepflegten Kontaktdaten gefunden.</p>}
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'versucht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.versucht_at ? 'bg-amber-100 border-amber-400' : 'border-gray-300 bg-white')}>{row?.versucht_at ? 'Versucht ' + formatStamp(row.versucht_at) : 'Versucht'}</button>
               <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'erreicht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.erreicht_at ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white')}>{row?.erreicht_at ? 'Erreicht ' + formatStamp(row.erreicht_at) : 'Erreicht'}</button>
