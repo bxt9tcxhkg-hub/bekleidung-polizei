@@ -14,11 +14,21 @@ const DEFAULT_DUTY_LABEL: Record<string, string> = {
 }
 
 const DUTY_PROMPT_DISMISS_PREFIX = 'dornbirn-portal-duty-prompt-dismissed'
+const DUTY_SHIFT_PREFIX = 'dornbirn-portal-duty-shift'
 function dutyPromptDismissedToday(userId: string): boolean {
   try { return localStorage.getItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`) === operationalToday() } catch { return false }
 }
 function dismissDutyPromptToday(userId: string): void {
   try { localStorage.setItem(`${DUTY_PROMPT_DISMISS_PREFIX}:${userId}`, operationalToday()) } catch { /* ignore */ }
+}
+function savedDutyShift(userId: string): DutyShift | null {
+  try {
+    const value = localStorage.getItem(`${DUTY_SHIFT_PREFIX}:${userId}:${operationalToday()}`)
+    return value === 'tag' || value === 'nacht' ? value : null
+  } catch { return null }
+}
+function saveDutyShift(userId: string, shift: DutyShift): void {
+  try { localStorage.setItem(`${DUTY_SHIFT_PREFIX}:${userId}:${operationalToday()}`, shift) } catch { /* ignore */ }
 }
 
 export function TodayFunctionCard({ userId, canManage }: { userId: string; canManage: boolean }) {
@@ -27,7 +37,7 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
   const [allAssignments, setAllAssignments] = useState<DutyAssignment[]>([])
   const [functions, setFunctions] = useState<DutyFunctionConfig[]>([])
   const [vehicles, setVehicles] = useState<FleetVehicle[]>([])
-  const [shift, setShift] = useState<DutyShift>('tag')
+  const [shift, setShift] = useState<DutyShift>(() => savedDutyShift(userId) ?? 'tag')
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [vehicleId, setVehicleId] = useState('')
@@ -62,9 +72,12 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
   // Nachtdienst-Zuteilung gespeichert ist.
   useEffect(() => {
     if (!loaded || shiftInitialized) return
-    if (ownAssignments.length > 0 && !ownAssignments.some(item => item.shift === 'tag') && ownAssignments.some(item => item.shift === 'nacht')) setShift('nacht')
+    if (!savedDutyShift(userId) && ownAssignments.length > 0 && !ownAssignments.some(item => item.shift === 'tag') && ownAssignments.some(item => item.shift === 'nacht')) {
+      setShift('nacht')
+      saveDutyShift(userId, 'nacht')
+    }
     setShiftInitialized(true)
-  }, [loaded, ownAssignments, shiftInitialized])
+  }, [loaded, ownAssignments, shiftInitialized, userId])
   const selectedConfig = functions.find(item => item.code === selected?.function)
   useEffect(() => { setVehicleId(selected?.vehicle_id ?? '') }, [selected?.vehicle_id])
 
@@ -87,9 +100,10 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
       const { data: suggested } = await supabase.rpc('suggest_duty_vehicle', { p_function: code })
       chosenVehicleId = suggested ?? null
     }
-    const { error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: operationalToday(), shift, function: code, vehicle_id: config?.is_patrol ? chosenVehicleId : null }, { onConflict: 'user_id,duty_date,shift' })
+    const { data, error } = await supabase.from('duty_assignments').upsert({ user_id: userId, duty_date: operationalToday(), shift, function: code, vehicle_id: config?.is_patrol ? chosenVehicleId : null }, { onConflict: 'user_id,duty_date,shift' }).select('id').single()
     setSaving(false)
-    if (error) { setMessage('Die Funktion konnte nicht gespeichert werden.'); return }
+    if (error || !data) { setMessage('Die Funktion konnte nicht gespeichert werden.'); return }
+    saveDutyShift(userId, shift)
     setMessage(`${config?.label ?? DEFAULT_DUTY_LABEL[code] ?? code} wurde für heute eingetragen.`)
     setPickerOpen(false)
     await load()
@@ -128,7 +142,7 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
   }
 
   return <>
-    <section className="rounded-2xl border border-blue-200 bg-white p-4 sm:p-5 mb-6 shadow-sm"><div className="flex items-start gap-3"><div className="bg-blue-50 p-2.5 rounded-xl"><UserRoundCheck className="w-5 h-5 text-blue-700" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold text-gray-900">Heutige Funktion</h2><p className="text-sm text-gray-500 mt-0.5">{selected ? `${selectedConfig?.label ?? selected.function} · ${shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}` : 'Noch nicht ausgewählt – freiwillig für passende Informationen und Aufträge.'}</p></div><div className="flex flex-wrap items-center gap-2"><select className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs" value={shift} onChange={event => setShift(event.target.value as DutyShift)} aria-label="Schicht"><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select><button type="button" onClick={() => setPickerOpen(true)} className="text-sm font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full">{selected ? 'Wechseln' : 'Funktion wählen'}</button>{selected ? <button type="button" disabled={saving} onClick={() => void remove()} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienst beenden</button> : null}{canManage ? <button type="button" onClick={() => setManaging(value => !value)} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienste verwalten</button> : null}</div></div>{selectedConfig?.is_patrol ? <div className="mt-3"><p className="text-xs font-medium text-gray-500 mb-1">Fahrzeug</p><select className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={vehicleId} onChange={event => void setVehicle(event.target.value)} aria-label="Streifenfahrzeug"><option value="">Kein Fahrzeug zugewiesen</option>{vehicles.filter(vehicle => vehicle.operational_status === 'verfuegbar' || vehicle.id === vehicleId).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.call_sign || vehicle.name}{vehicle.license_plate ? ` · ${vehicle.license_plate}` : ''}{vehicle.operational_status !== 'verfuegbar' ? ' · derzeit nicht verfügbar' : ''}</option>)}</select><p className="text-[11px] text-gray-500 mt-1">Bei JD wird automatisch das erste verfügbare Standardfahrzeug vorgeschlagen. Die Auswahl kann für diesen Dienst jederzeit geändert werden.</p></div> : null}{managing ? <div className="mt-4 border-t border-gray-200 pt-4"><div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2"><input className="border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Neuer Dienst" value={newLabel} onChange={event => setNewLabel(event.target.value)} /><label className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2"><input type="checkbox" checked={newPatrol} onChange={event => setNewPatrol(event.target.checked)} /> Streife</label><button type="button" onClick={() => void addFunction()} className="bg-gray-900 text-white text-sm font-medium px-3 py-2 rounded-lg">Anlegen</button></div><div className="flex flex-wrap gap-2 mt-3">{functions.map(item => <span key={item.code} className="inline-flex items-center gap-2 bg-gray-100 text-sm px-3 py-1.5 rounded-full">{item.label}{item.is_patrol ? ' · Streife' : ''}{item.code === 'zentrale' ? <span className="text-xs text-gray-500">Grunddienst</span> : <button type="button" onClick={() => void deleteFunction(item)} className="text-red-600" aria-label={`${item.label} löschen`}>×</button>}</span>)}</div></div> : null}{message ? <p className={`text-sm mt-3 ${message.includes('konnte nicht') ? 'text-red-700' : 'text-green-700'}`}>{message}</p> : null}</div></div></section>
+    <section className="rounded-2xl border border-blue-200 bg-white p-4 sm:p-5 mb-6 shadow-sm"><div className="flex items-start gap-3"><div className="bg-blue-50 p-2.5 rounded-xl"><UserRoundCheck className="w-5 h-5 text-blue-700" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-bold text-gray-900">Heutige Funktion</h2><p className="text-sm text-gray-500 mt-0.5">{selected ? `${selectedConfig?.label ?? selected.function} · ${shift === 'tag' ? 'Tagdienst' : 'Nachtdienst'}` : 'Noch nicht ausgewählt – freiwillig für passende Informationen und Aufträge.'}</p></div><div className="flex flex-wrap items-center gap-2"><select className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs" value={shift} onChange={event => { const next = event.target.value as DutyShift; setShift(next); saveDutyShift(userId, next) }} aria-label="Schicht"><option value="tag">Tagdienst</option><option value="nacht">Nachtdienst</option></select><button type="button" onClick={() => setPickerOpen(true)} className="text-sm font-semibold text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full">{selected ? 'Wechseln' : 'Funktion wählen'}</button>{selected ? <button type="button" disabled={saving} onClick={() => void remove()} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienst beenden</button> : null}{canManage ? <button type="button" onClick={() => setManaging(value => !value)} className="text-xs font-semibold text-gray-600 border border-gray-300 px-2.5 py-1.5 rounded-lg">Dienste verwalten</button> : null}</div></div>{selectedConfig?.is_patrol ? <div className="mt-3"><p className="text-xs font-medium text-gray-500 mb-1">Fahrzeug</p><select className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm" value={vehicleId} onChange={event => void setVehicle(event.target.value)} aria-label="Streifenfahrzeug"><option value="">Kein Fahrzeug zugewiesen</option>{vehicles.filter(vehicle => vehicle.operational_status === 'verfuegbar' || vehicle.id === vehicleId).map(vehicle => <option key={vehicle.id} value={vehicle.id}>{vehicle.call_sign || vehicle.name}{vehicle.license_plate ? ` · ${vehicle.license_plate}` : ''}{vehicle.operational_status !== 'verfuegbar' ? ' · derzeit nicht verfügbar' : ''}</option>)}</select><p className="text-[11px] text-gray-500 mt-1">Bei JD wird automatisch das erste verfügbare Standardfahrzeug vorgeschlagen. Die Auswahl kann für diesen Dienst jederzeit geändert werden.</p></div> : null}{managing ? <div className="mt-4 border-t border-gray-200 pt-4"><div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2"><input className="border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Neuer Dienst" value={newLabel} onChange={event => setNewLabel(event.target.value)} /><label className="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2"><input type="checkbox" checked={newPatrol} onChange={event => setNewPatrol(event.target.checked)} /> Streife</label><button type="button" onClick={() => void addFunction()} className="bg-gray-900 text-white text-sm font-medium px-3 py-2 rounded-lg">Anlegen</button></div><div className="flex flex-wrap gap-2 mt-3">{functions.map(item => <span key={item.code} className="inline-flex items-center gap-2 bg-gray-100 text-sm px-3 py-1.5 rounded-full">{item.label}{item.is_patrol ? ' · Streife' : ''}{item.code === 'zentrale' ? <span className="text-xs text-gray-500">Grunddienst</span> : <button type="button" onClick={() => void deleteFunction(item)} className="text-red-600" aria-label={`${item.label} löschen`}>×</button>}</span>)}</div></div> : null}{message ? <p className={`text-sm mt-3 ${message.includes('konnte nicht') ? 'text-red-700' : 'text-green-700'}`}>{message}</p> : null}</div></div></section>
     {pickerOpen ? <DutyPickerModal functions={functions.filter(item => item.active)} occupancy={occupancy} saving={saving} onChoose={code => void choose(code)} onNotOperational={notOperational} onClose={() => setPickerOpen(false)} /> : null}
   </>
 }
