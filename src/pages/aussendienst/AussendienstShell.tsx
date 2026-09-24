@@ -30,6 +30,16 @@ type SimpleIncident = {
   taken_over_by_profile?: { id: string; name: string } | null
 }
 
+const INCIDENT_SELECT = 'id,reported_at,reason_code,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at'
+
+function attachAssignedVehicles(rows: SimpleIncident[], vehicles: FleetVehicle[]): SimpleIncident[] {
+  const byId = new Map(vehicles.map(vehicle => [vehicle.id, vehicle]))
+  return rows.map(item => ({
+    ...item,
+    assigned_vehicle: item.assigned_vehicle_id ? byId.get(item.assigned_vehicle_id) ?? null : null,
+  }))
+}
+
 export interface AussendienstContext {
   loading: boolean
   ownAssignment: DutyAssignment | undefined
@@ -116,15 +126,14 @@ export default function AussendienstShell() {
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     const today = operationalToday()
-    const incidentSelect = 'id,reported_at,reason_code,location,location_lat,location_lng,summary,disposition,status,note,caller_name,caller_phone,involved_person,involved_birth_date,assigned_vehicle_id,taken_over_by,taken_over_at,taken_over_vehicle_id,completed_by,completed_at,assigned_vehicle:fleet_vehicles(id,name,call_sign),taken_over_by_profile:profiles!incident_reports_taken_over_by_fkey(id,name)'
     const [dutyResult, functionResult, vehicleResult, checkResult, entryResult, openIncidentResult, recentIncidentResult, supportResult, avBvResult, baustelleResult, bescheidResult] = await Promise.all([
       supabase.from('duty_assignments').select('*, profiles(id,name,dienstnummer)').eq('duty_date', today),
       supabase.from('duty_functions').select('*'),
       supabase.from('fleet_vehicles').select('*').eq('active', true),
       supabase.from('vehicle_checks').select('*').eq('duty_date', today),
       supabase.from('zentrale_entries').select('*').order('priority').order('updated_at', { ascending: false }),
-      supabase.from('incident_reports').select(incidentSelect).eq('status', 'offen').order('reported_at', { ascending: false }),
-      supabase.from('incident_reports').select(incidentSelect).neq('status', 'offen').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select(INCIDENT_SELECT).eq('status', 'offen').order('reported_at', { ascending: false }),
+      supabase.from('incident_reports').select(INCIDENT_SELECT).neq('status', 'offen').gte('reported_at', startOfOperationalDayIso()).order('reported_at', { ascending: false }),
       supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').is('ended_at', null).order('started_at'),
       // Schutzmaßnahmen werden separat geladen; Fahndungen sind für den aktuellen Ausbaustand bewusst aus dem Außendienst-Kontext herausgenommen.
       supabase.from('schutzfaelle').select(SCHUTZ_SELECT).eq('status', 'aktiv').gt('ende', new Date().toISOString()).order('ende'),
@@ -140,7 +149,7 @@ export default function AussendienstShell() {
     setVehicles((vehicleResult.data ?? []) as FleetVehicle[])
     setChecks((checkResult.data ?? []) as VehicleCheck[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
-    if (!openIncidentResult.error && !recentIncidentResult.error) setIncidents([...(openIncidentResult.data ?? []), ...(recentIncidentResult.data ?? [])])
+    if (!openIncidentResult.error && !recentIncidentResult.error) setIncidents(attachAssignedVehicles([...(openIncidentResult.data ?? []), ...(recentIncidentResult.data ?? [])] as SimpleIncident[], (vehicleResult.data ?? []) as FleetVehicle[]))
     if (!supportResult.error) setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
     setAvBv(avBvResult.error ? [] : (avBvResult.data ?? []) as unknown as Schutzfall[])
     setBaustellen(baustelleResult.error ? [] : (baustelleResult.data ?? []) as ZentraleBaustelle[])
@@ -148,14 +157,30 @@ export default function AussendienstShell() {
     setCriticalSourcesError(Boolean(avBvResult.error))
     setLoading(false)
   }, [])
+  useEffect(() => { void load() }, [load])
+
+  const refreshIncidents = useCallback(async () => {
+    const [incidentResult, supportResult] = await Promise.all([
+      supabase.from('incident_reports').select(INCIDENT_SELECT).eq('status', 'offen').order('reported_at', { ascending: false }),
+      supabase.from('incident_supports').select('*, vehicle:fleet_vehicles(id,name,call_sign,license_plate)').is('ended_at', null).order('started_at'),
+    ])
+    if (incidentResult.error) {
+      setError('Einsätze konnten nicht aktualisiert werden. Bitte erneut laden oder die Zentrale informieren.')
+    } else {
+      const openRows = attachAssignedVehicles((incidentResult.data ?? []) as SimpleIncident[], vehicles)
+      setIncidents(current => [...openRows, ...current.filter(item => item.status !== 'offen')])
+      setError(current => current.startsWith('Einsätze konnten') ? '' : current)
+    }
+    if (!supportResult.error) setIncidentSupports((supportResult.data ?? []) as IncidentSupport[])
+  }, [vehicles])
+
   useEffect(() => {
-    void load()
-    const refresh = () => { if (document.visibilityState === 'visible') void load(true) }
+    const refresh = () => { if (document.visibilityState === 'visible') void refreshIncidents() }
     const timer = window.setInterval(refresh, 10_000)
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', refresh)
     return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
-  }, [load])
+  }, [refreshIncidents])
 
   useEffect(() => {
     let cancelled = false
