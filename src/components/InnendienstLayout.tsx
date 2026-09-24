@@ -21,7 +21,7 @@ export default function InnendienstLayout() {
       // UnterlagenRegister.tsx). RSa/RSb ist kein Innendienst-Unterpunkt,
       // sondern bereichsübergreifend und hat eine eigene Portal-Kachel.
       { to: '/innendienst/unterlagen', label: 'Unterlagen', icon: BookOpen },
-      { to: '/stammdaten/telefonnummern', label: 'Telefonnummern', icon: Phone },
+      { to: '/innendienst/telefonnummern', label: 'Telefonnummern', icon: Phone },
     ]),
     ...genehmigerSection(isGenehmiger),
   ]

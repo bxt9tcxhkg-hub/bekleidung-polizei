@@ -9,6 +9,7 @@ import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/
 import { ObjectPicker } from '../../components/RegisterPickers'
 import { objectLabel, useObjects } from '../../lib/register'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
+import type { ContextualReference } from '../../lib/contextualReference'
 
 const emptyForm = { name: '', institution: '', funktion: '', telefon: '', email: '', erreichbarkeit: '', objectId: null as string | null, note: '', restricted: false }
 
@@ -16,7 +17,7 @@ type BenutzerProfil = { id: string; name: string; dienstnummer: string | null; d
 /** Vereinheitlichte Anzeigezeile: echte Kontakte (Institutionen/Rufbereitschaften) und automatisch gespiegelte Benutzer. */
 type KontaktRow = { key: string; kind: 'kontakt' | 'benutzer'; name: string; institution: string | null; funktion: string | null; telefon: string | null; kontakt?: ZentraleKontakt }
 
-export default function StammdatenKontaktePage() {
+export default function StammdatenKontaktePage({ context }: { context?: ContextualReference }) {
   const { profile, hasAreaAccess, isStrictAdmin, areaRoles } = useAuth()
   const { bereiche: eigeneBereicheHeute } = useOwnOperativBereicheToday(profile?.id)
   // Pflege obliegt der Administration oder den Sachbearbeitern im Bereich
@@ -24,7 +25,7 @@ export default function StammdatenKontaktePage() {
   // wird das Register von Zentrale UND Datenpflege gemeinsam.
   const datenpflegeRoles = areaRoles?.find(row => row.area === 'datenpflege')?.roles ?? []
   const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
-  const canManage = isStrictAdmin || isDatenpflegeSachbearbeiter
+  const canManage = !context && (isStrictAdmin || isDatenpflegeSachbearbeiter)
   const { objects, setObjects } = useObjects()
   const [items, setItems] = useState<ZentraleKontakt[]>([])
   const [benutzer, setBenutzer] = useState<BenutzerProfil[]>([])
@@ -80,9 +81,9 @@ export default function StammdatenKontaktePage() {
   }
 
   return <div>
-    <Link to="/stammdaten" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zu Stammdaten</Link>
-    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Kontakte</h1><p className="text-sm text-gray-500 mt-1">Dienstlich notwendige Kontakte und Rufbereitschaften, ergänzt um alle aktiven Benutzer (automatisch, nicht hier editierbar - Verwaltung im Portal).</p></div>
-    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur lesender Zugriff. Änderungen an diesen Stammdaten führen ausschließlich Administration und Datenpflege-Sachbearbeiter durch.</div> : null}
+    <Link to={context?.backTo ?? '/stammdaten'} className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> {context?.backLabel ?? 'Zu Stammdaten'}</Link>
+    <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{context ? `${context.areaLabel} · Nachschlagewerk` : 'Stammdaten & Nachschlagewerke'}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Kontakte</h1><p className="text-sm text-gray-500 mt-1">Dienstlich notwendige Kontakte und Rufbereitschaften, ergänzt um alle aktiven Benutzer (automatisch, nicht hier editierbar - Verwaltung im Portal).</p></div>
+    {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur Nachschlageansicht. Änderungen erfolgen ausschließlich im Bereich Stammdaten.</div> : null}
     {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : (

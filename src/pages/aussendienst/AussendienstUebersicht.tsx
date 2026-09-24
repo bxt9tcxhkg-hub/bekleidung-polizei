@@ -135,7 +135,7 @@ export default function AussendienstUebersicht() {
       <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Schnellzugriff</p>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <Link to="/aussendienst/rsa-rsb" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Mail className="w-4 h-4 text-blue-700" /> RSa/RSb</Link>
-        <Link to="/stammdaten/personen" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Search className="w-4 h-4 text-blue-700" /> Personen</Link>
+        <Link to="/aussendienst/personen" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Search className="w-4 h-4 text-blue-700" /> Personen</Link>
         <Link to="/aussendienst/kontrollbehelfe" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><ListChecks className="w-4 h-4 text-blue-700" /> Behelfe</Link>
         <Link to="/aussendienst/fahrzeug" className="rounded-xl border border-gray-200 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"><Car className="w-4 h-4 text-blue-700" /> Fahrzeug</Link>
       </div>

@@ -14,11 +14,11 @@ export default function ZentraleLayout() {
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/zentrale', label: 'Zentrale', icon: Radio },
       { to: '/zentrale/av-bv-ev', label: 'BV/AV & EV', icon: ShieldAlert },
-      { to: '/stammdaten/kontakte', label: 'Kontakte', icon: UserRoundCheck },
+      { to: '/zentrale/kontakte', label: 'Kontakte', icon: UserRoundCheck },
       // Telefonnummern bewusst kein eigener Sidebar-Punkt hier - die Kachel
       // "Wichtige Telefonnummern" auf der Zentrale-Hauptseite deckt das
       // Nachschlagen bereits ab (ZentraleUebersicht.tsx); Pflege weiterhin
-      // über /stammdaten/telefonnummern.
+      // über die Stammdatenverwaltung.
       { to: '/zentrale/unterlagen', label: 'Unterlagen', icon: BookOpen },
       { to: '/zentrale/strassenzustand', label: 'Straßenzustand', icon: MapPin },
     ]),

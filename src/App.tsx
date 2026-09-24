@@ -142,9 +142,9 @@ export default function App() {
             <Route path="/zentrale/alarmierung" element={<ZentraleAlarmierung />} />
             <Route path="/zentrale/unterlagen" element={<ZentraleUnterlagen />} />
             <Route path="/zentrale/strassenzustand" element={<ZentraleStrassenzustand />} />
+            <Route path="/zentrale/kontakte" element={<StammdatenKontakte context={{ areaLabel: 'Zentrale', backTo: '/zentrale', backLabel: 'Zur Zentrale' }} />} />
           </Route>
           <Route path="/zentrale/schluessel" element={<Navigate to="/stammdaten/schluessel" replace />} />
-          <Route path="/zentrale/kontakte" element={<Navigate to="/stammdaten/kontakte" replace />} />
           <Route path="/zentrale/personen" element={<Navigate to="/stammdaten/personen" replace />} />
           <Route path="/zentrale/objekte" element={<Navigate to="/stammdaten/objekte" replace />} />
           <Route path="/zentrale/fahndungen" element={<Navigate to="/stammdaten/fahndungen" replace />} />
@@ -182,6 +182,7 @@ export default function App() {
               <Route path="/aussendienst/kontrollbehelfe" element={<AussendienstKontrollbehelfe />} />
               <Route path="/aussendienst/schutzmassnahmen" element={<AussendienstSchutzmassnahmen />} />
             </Route>
+            <Route path="/aussendienst/personen" element={<StammdatenPersonen context={{ areaLabel: 'Außendienst', backTo: '/aussendienst', backLabel: 'Zum Außendienst' }} />} />
           </Route>
           <Route
             element={
@@ -197,6 +198,7 @@ export default function App() {
               <Route path="/innendienst/gebuehren" element={<InnendienstGebuehrenPage />} />
               <Route path="/innendienst/unterlagen" element={<InnendienstUnterlagen />} />
             </Route>
+            <Route path="/innendienst/telefonnummern" element={<StammdatenTelefonnummern context={{ areaLabel: 'Innendienst', backTo: '/innendienst', backLabel: 'Zum Innendienst' }} />} />
           </Route>
           <Route
             element={
