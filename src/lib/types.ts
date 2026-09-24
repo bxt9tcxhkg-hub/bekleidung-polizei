@@ -708,10 +708,26 @@ export interface WichtigeTelefonnummer {
   nummer: string
   hinweis: string | null
   sortierung: number
+  kontakt_id: string | null
+  telefon_art: 'buero' | 'diensthandy' | 'privathandy' | 'weitere' | null
   created_by: string | null
   created_at: string
   updated_at: string
 }
+
+export type KontaktTelefonArt = 'buero' | 'diensthandy' | 'privathandy' | 'weitere'
+export interface Verstaendigungsregel {
+  id: string
+  dimension: 'mittel' | 'gross' | 'katastrophe'
+  schluessel: string
+  bezeichnung: string
+  sortierung: number
+  pflicht: boolean
+  kontakt_id: string | null
+  telefon_art: KontaktTelefonArt | null
+  vertretung_id: string | null
+}
+export type EreignisVerstaendigungsschritt = Omit<Verstaendigungsregel, 'id' | 'dimension'> & { ereignis_id: string }
 
 export type AlarmierungBereich = 'polizei' | 'staedtisch' | 'beide'
 
@@ -1818,6 +1834,8 @@ export type Database = {
         { foreignKeyName: 'ereignis_verstaendigungen_ereignis_id_fkey'; columns: ['ereignis_id']; isOneToOne: false; referencedRelation: 'ereignisse'; referencedColumns: ['id'] },
         { foreignKeyName: 'ereignis_verstaendigungen_updated_by_fkey'; columns: ['updated_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
+      verstaendigungsregeln: { Row: Omit<Verstaendigungsregel, never>; Insert: Omit<Verstaendigungsregel, 'id'> & { id?: string }; Update: Partial<Verstaendigungsregel>; Relationships: [] }
+      ereignis_verstaendigungsschritte: { Row: Omit<EreignisVerstaendigungsschritt, never>; Insert: EreignisVerstaendigungsschritt; Update: Partial<EreignisVerstaendigungsschritt>; Relationships: [] }
       incident_reports: { Row: IncidentReportRow; Insert: Pick<IncidentReportRow, 'summary' | 'disposition' | 'created_by'> & Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'updated_at' | 'summary' | 'disposition' | 'created_by'>>; Update: Partial<Omit<IncidentReportRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'incident_reports_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
         { foreignKeyName: 'incident_reports_caller_person_id_fkey'; columns: ['caller_person_id']; isOneToOne: false; referencedRelation: 'operational_persons'; referencedColumns: ['id'] },

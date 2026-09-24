@@ -231,7 +231,7 @@ export default function Portal() {
         <PortalSection title="Mein Bereich" description={isStrictAdmin ? 'Persönliche Meldungen, Anträge und Administration' : 'Persönliche Meldungen und Anträge'} tone="persoenlich">
           <NavTile to="/rsa-rsb" label="RSa/RSb & Vernehmungen" description="Schwer erreichbare Personen – für jeden Benutzer jederzeit erfassbar" icon={Mail} />
           <NavTile to="/ueberstunden" label="Überstundenmeldung" description="Überstunden erfassen und zur Prüfung abgeben" icon={Clock3} />
-          {isStrictAdmin ? <NavTile to="/portal/systemeinstellungen" label="Systemeinstellungen" description="Outlook und Rainbow für die Stadt-IT-Anbindung vorbereiten" icon={Settings2} /> : null}
+          {isStrictAdmin ? <NavTile to="/portal/systemeinstellungen" label="Systemeinstellungen" description="Verständigungen, Einsatzgründe und Fachverwaltung" icon={Settings2} /> : null}
         </PortalSection>
       </div>
     </PortalChrome>

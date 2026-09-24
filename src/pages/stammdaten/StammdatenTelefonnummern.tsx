@@ -1,17 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
 import { telHref, useWichtigeTelefonnummern } from '../../lib/telefonnummern'
+import { nummerFuerArt, TELEFON_ARTEN } from '../../lib/verstaendigungsregeln'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
-import type { TelefonnummerKategorie, WichtigeTelefonnummer } from '../../lib/types'
+import type { KontaktTelefonArt, TelefonnummerKategorie, WichtigeTelefonnummer, ZentraleKontakt } from '../../lib/types'
 import type { ContextualReference } from '../../lib/contextualReference'
 import { Empty, ErrorMessage, Field, Modal, inputClass } from '../../components/ZentraleEntryEditor'
 
 const KATEGORIE_LABEL: Record<TelefonnummerKategorie, string> = { intern: 'Intern', extern: 'Extern' }
-const emptyForm = { kategorie: 'intern' as TelefonnummerKategorie, bezeichnung: '', nummer: '', hinweis: '', sortierung: '0' }
+const emptyForm = { kategorie: 'intern' as TelefonnummerKategorie, bezeichnung: '', nummer: '', hinweis: '', sortierung: '0', kontakt_id: '', telefon_art: '' }
 
 export default function StammdatenTelefonnummernPage({ context }: { context?: ContextualReference }) {
   const { profile, hasAreaAccess, isStrictAdmin, isGenehmiger, areaRoles } = useAuth()
@@ -20,6 +21,9 @@ export default function StammdatenTelefonnummernPage({ context }: { context?: Co
   const isDatenpflegeSachbearbeiter = datenpflegeRoles.some(role => ['sachbearbeiter', 'admin'].includes(role))
   const canManage = !context && (isStrictAdmin || isGenehmiger || isDatenpflegeSachbearbeiter)
   const { nummern, loading, error: loadError, reload } = useWichtigeTelefonnummern()
+  const [kontakte, setKontakte] = useState<ZentraleKontakt[]>([])
+  useEffect(() => { void supabase.from('zentrale_kontakte').select('*').order('name').then(({ data }) => setKontakte((data ?? []) as ZentraleKontakt[])) }, [])
+  const kontakt = kontakte.find(row => row.id === form.kontakt_id)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
@@ -30,13 +34,15 @@ export default function StammdatenTelefonnummernPage({ context }: { context?: Co
   if (!hasAreaAccess('zentrale') && !hasAreaAccess('datenpflege') && eigeneBereicheHeute.size === 0) return <Navigate to="/" replace />
 
   function openNew(kategorie: TelefonnummerKategorie) { setEditing(null); setForm({ ...emptyForm, kategorie }); setShowForm(true); setError('') }
-  function openEdit(item: WichtigeTelefonnummer) { setEditing(item); setForm({ kategorie: item.kategorie, bezeichnung: item.bezeichnung, nummer: item.nummer, hinweis: item.hinweis ?? '', sortierung: String(item.sortierung) }); setShowForm(true); setError('') }
+  function openEdit(item: WichtigeTelefonnummer) { setEditing(item); setForm({ kategorie: item.kategorie, bezeichnung: item.bezeichnung, nummer: item.nummer, hinweis: item.hinweis ?? '', sortierung: String(item.sortierung), kontakt_id: item.kontakt_id ?? '', telefon_art: item.telefon_art ?? '' }); setShowForm(true); setError('') }
 
   async function save() {
     if (!form.bezeichnung.trim()) { setError('Bitte eine Bezeichnung eingeben.'); return }
-    if (!form.nummer.trim()) { setError('Bitte eine Nummer eingeben.'); return }
+    const kontaktNummer = kontakt && form.telefon_art ? nummerFuerArt(kontakt, form.telefon_art as KontaktTelefonArt) : null
+    if (form.kontakt_id && !kontaktNummer) { setError('Bitte eine vorhandene Rufnummer des Kontakts wählen.'); return }
+    if (!form.kontakt_id && !form.nummer.trim()) { setError('Bitte eine Nummer eingeben.'); return }
     setSaving(true)
-    const payload = { kategorie: form.kategorie, bezeichnung: form.bezeichnung.trim(), nummer: form.nummer.trim(), hinweis: form.hinweis.trim() || null, sortierung: Number(form.sortierung) || 0 }
+    const payload = { kategorie: form.kategorie, bezeichnung: form.bezeichnung.trim(), nummer: kontaktNummer ?? form.nummer.trim(), kontakt_id: form.kontakt_id || null, telefon_art: (form.telefon_art || null) as KontaktTelefonArt | null, hinweis: form.hinweis.trim() || null, sortierung: Number(form.sortierung) || 0 }
     const response = editing
       ? await supabase.from('wichtige_telefonnummern').update(payload).eq('id', editing.id).select('id')
       : await supabase.from('wichtige_telefonnummern').insert({ ...payload, created_by: profile?.id ?? null }).select('id')
@@ -66,14 +72,18 @@ export default function StammdatenTelefonnummernPage({ context }: { context?: Co
               <div><h2 className="font-bold text-gray-900">{KATEGORIE_LABEL[kategorie]}</h2><p className="text-sm text-gray-500">{items.length} Nummern.</p></div>
               {canManage ? <button type="button" onClick={() => openNew(kategorie)} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg"><Plus className="w-4 h-4" /> Nummer</button> : null}
             </div>
-            {items.length === 0 ? <Empty text="Keine Nummern hinterlegt." /> : <div className="divide-y divide-gray-100">{items.map(item => <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3">
+            {items.length === 0 ? <Empty text="Keine Nummern hinterlegt." /> : <div className="divide-y divide-gray-100">{items.map(item => {
+              const person = item.kontakt_id ? kontakte.find(k => k.id === item.kontakt_id) : null
+              const nummer = item.kontakt_id ? (person && item.telefon_art ? nummerFuerArt(person, item.telefon_art) : null) : item.nummer
+              return <article key={item.id} className="p-4 sm:p-5 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="font-semibold text-gray-900">{item.bezeichnung}</h3>
-                <a href={telHref(item.nummer)} className="mt-1 inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline"><Phone className="w-3.5 h-3.5" /> {item.nummer}</a>
+                {person ? <p className="text-xs text-gray-600">{person.name}</p> : null}
+                {nummer ? <a href={telHref(nummer)} className="mt-1 inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline"><Phone className="w-3.5 h-3.5" /> {nummer}</a> : <p className="mt-1 text-sm text-amber-700">Zugeordnete Rufnummer fehlt</p>}
                 {item.hinweis ? <p className="text-sm text-gray-500 mt-1">{item.hinweis}</p> : null}
               </div>
               {canManage ? <button type="button" onClick={() => openEdit(item)} className="p-2 text-gray-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg flex-shrink-0" aria-label="Nummer bearbeiten"><Pencil className="w-4 h-4" /></button> : null}
-            </article>)}</div>}
+            </article>})}</div>}
           </section>
         })}
       </div>
@@ -86,7 +96,8 @@ export default function StammdatenTelefonnummernPage({ context }: { context?: Co
         </select>
       </label>
       <Field label="Bezeichnung *" value={form.bezeichnung} onChange={value => setForm(current => ({ ...current, bezeichnung: value }))} />
-      <Field label="Nummer *" value={form.nummer} onChange={value => setForm(current => ({ ...current, nummer: value }))} />
+      <label className="block text-xs font-medium text-gray-600">Kontakt (optional)<select className={inputClass} value={form.kontakt_id} onChange={event => setForm(current => ({ ...current, kontakt_id: event.target.value, telefon_art: '' }))}><option value="">Freie Nummer</option>{kontakte.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}</select></label>
+      {kontakt ? <label className="block text-xs font-medium text-gray-600">Anzuzeigende Rufnummer<select className={inputClass} value={form.telefon_art} onChange={event => setForm(current => ({ ...current, telefon_art: event.target.value }))}><option value="">Bitte wählen</option>{TELEFON_ARTEN.filter(a => nummerFuerArt(kontakt, a.id)).map(a => <option key={a.id} value={a.id}>{a.label}: {nummerFuerArt(kontakt, a.id)}</option>)}</select></label> : <Field label="Nummer *" value={form.nummer} onChange={value => setForm(current => ({ ...current, nummer: value }))} />}
       <Field label="Hinweis (optional)" value={form.hinweis} onChange={value => setForm(current => ({ ...current, hinweis: value }))} />
       <Field label="Sortierung" type="number" value={form.sortierung} onChange={value => setForm(current => ({ ...current, sortierung: value }))} />
       {error ? <ErrorMessage text={error} /> : null}

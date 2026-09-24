@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, CircleAlert } from 'lucide-react'
 import { loadDokumente } from '../../lib/einsatzDokumente'
-import { telefonketteFuer } from '../../lib/einsatzSchema'
-import { verstaendigungKey } from '../../lib/ereignis'
 import { loadPersonenliste } from '../../lib/zmrPersonen'
 import { telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
-import type { Ereignis, EreignisVerstaendigung } from '../../lib/types'
+import type { EreignisVerstaendigung, EreignisVerstaendigungsschritt } from '../../lib/types'
 
 type Section = 'verstaendigung' | 'unterstuetzung'
 
@@ -38,8 +36,8 @@ function StatusCard({
 
 export default function EreignisCockpit({
   incidentId,
-  ereignis,
   verstaendigungen,
+  schritte,
   canOperate,
   refreshToken,
   onMarkVerstaendigung,
@@ -48,8 +46,8 @@ export default function EreignisCockpit({
   onOpenFiles,
 }: {
   incidentId: string
-  ereignis: Ereignis
   verstaendigungen: EreignisVerstaendigung[]
+  schritte: EreignisVerstaendigungsschritt[]
   canOperate: boolean
   refreshToken: number
   onMarkVerstaendigung: (label: string, field: 'versucht' | 'erreicht') => Promise<void>
@@ -83,21 +81,21 @@ export default function EreignisCockpit({
 
   useEffect(() => { void load() }, [load, refreshToken])
 
-  const kette = telefonketteFuer(ereignis.dimension)
+  const kette = schritte
   const byKey = useMemo(() => new Map(verstaendigungen.map(row => [row.empfaenger_key, row])), [verstaendigungen])
-  const bearbeitet = kette.filter(label => {
-    const row = byKey.get(verstaendigungKey(label))
+  const bearbeitet = kette.filter(schritt => {
+    const row = byKey.get(schritt.schluessel)
     return Boolean(row?.versucht_at || row?.erreicht_at)
   }).length
-  const erreicht = kette.filter(label => Boolean(byKey.get(verstaendigungKey(label))?.erreicht_at)).length
+  const erreicht = kette.filter(schritt => Boolean(byKey.get(schritt.schluessel)?.erreicht_at)).length
 
   // Für die Prozessführung genügt ein dokumentierter Versuch. Ein nicht
   // erreichter Kontakt bleibt im Detail sichtbar, blockiert aber nicht den
   // nächsten vorgesehenen Verständigungsschritt.
-  const nextKontakt = kette.find(label => {
-    const row = byKey.get(verstaendigungKey(label))
+  const nextKontakt = kette.find(schritt => {
+    const row = byKey.get(schritt.schluessel)
     return !row?.versucht_at && !row?.erreicht_at
-  }) ?? null
+  })?.bezeichnung ?? null
   const nextKontaktDaten = nextKontakt ? (kontakte[nextKontakt] ?? []) : []
 
   let nextTitle = 'Verständigungsauftrag abgearbeitet'
@@ -128,7 +126,7 @@ export default function EreignisCockpit({
               <button type="button" disabled={!canOperate} onClick={() => void onMarkVerstaendigung(nextKontakt, 'versucht')} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Versucht</button>
               <button type="button" disabled={!canOperate} onClick={() => void onMarkVerstaendigung(nextKontakt, 'erreicht')} className="rounded-lg bg-green-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Erreicht</button>
             </div>
-            {nextKontaktDaten.length === 0 ? <p className="mt-2 text-xs text-amber-700">Für diesen Verständigungsschritt sind noch keine passenden Kontaktdaten gepflegt.</p> : null}
+            {nextKontaktDaten.every(kontakt => kontakt.telefonnummern.length === 0) ? <p className="mt-2 text-xs text-amber-700">Für diesen Verständigungsschritt ist keine gültige Rufnummer zugeordnet.</p> : null}
           </> : <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => onGoTo('unterstuetzung')} className="rounded-lg border border-blue-300 bg-white px-3 py-2 text-xs font-bold text-blue-900">Vorhandene Daten ansehen</button>
             <button type="button" onClick={onOpenFiles} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700">Dokumente</button>

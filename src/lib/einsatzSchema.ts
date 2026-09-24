@@ -36,32 +36,6 @@ export const STUFE_META: Record<Ereignisstufe, { label: string; color: string; b
   },
 }
 
-// Zwei getrennte Ketten statt einer für alle Stufen (Stand: Alarmierungs-
-// und Meldeschema Stadt Dornbirn, Amt der Stadt Dornbirn, Abt. Feuerwehr und
-// Katastrophenschutz, April 2025, V1.5) - Mittelereignis braucht keine
-// Öffentlichkeitsarbeit, Großereignis/Katastrophe schon.
-export const TELEFONKETTE_MITTEL = [
-  'Bürgermeisterin',
-  'Notfallkoordinator',
-  'Stadtamtsdirektor',
-  'Leitung Gruppe 2',
-  'Kdo Stadtpolizei',
-]
-export const TELEFONKETTE_GROSS = [
-  'Bürgermeisterin',
-  'Notfallkoordinator',
-  'Stadtamtsdirektor',
-  'Leitung Gruppe 2',
-  'Öffentlichkeitsarbeit',
-  'Kdo Stadtpolizei',
-]
-
-export function telefonketteFuer(stufe: Ereignisstufe): string[] {
-  if (stufe === 'mittel') return TELEFONKETTE_MITTEL
-  if (stufe === 'gross' || stufe === 'katastrophe') return TELEFONKETTE_GROSS
-  return []
-}
-
 // Digitale Abbildung der offiziellen "Checkliste Notfall/Katastrophe" (Erst-
 // meldung, Stand 2018 V1) und "Checkliste Notunterkunft" (Stand Jänner 2019
 // V1.1), Amt der Stadt Dornbirn. punkt_key ist stabil (Primärschlüssel-

@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom'
 import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { kontaktTelefonnummern } from '../../lib/kontaktTelefon'
+import { nummerFuerArt } from '../../lib/verstaendigungsregeln'
 import { telHref } from '../../lib/ereignisKontakte'
 import { formatTime } from '../../lib/zentraleShared'
-import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, telefonketteFuer, type Ereignisstufe } from '../../lib/einsatzSchema'
-import { loadEreignisDimensionen, setIncidentEreignisDimension } from '../../lib/ereignis'
-import type { IncidentReport, ZentraleKontakt } from '../../lib/types'
+import { ENTSCHEIDUNGSPUNKTE, EREIGNISSTUFEN, STUFE_META, type Ereignisstufe } from '../../lib/einsatzSchema'
+import { loadEreignisContexts, setIncidentEreignisDimension } from '../../lib/ereignis'
+import type { EreignisVerstaendigungsschritt, IncidentReport, ZentraleKontakt } from '../../lib/types'
 
 export default function EinsaetzeBoard({
   title, items, canOperate, onEdit, onComplete, onDelete, showComplete,
@@ -25,6 +26,8 @@ export default function EinsaetzeBoard({
   const [kontakte, setKontakte] = useState<ZentraleKontakt[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [levels, setLevels] = useState<Record<string, Ereignisstufe>>({})
+  const [eventIds, setEventIds] = useState<Record<string, string>>({})
+  const [stepsByEvent, setStepsByEvent] = useState<Record<string, EreignisVerstaendigungsschritt[]>>({})
 
   useEffect(() => {
     void supabase.from('zentrale_kontakte').select('*').order('name').then(result => {
@@ -34,13 +37,21 @@ export default function EinsaetzeBoard({
 
   useEffect(() => {
     let cancelled = false
-    void loadEreignisDimensionen(items.map(item => item.id))
-      .then(result => {
-        if (!cancelled) setLevels(Object.fromEntries(items.map(item => [item.id, result[item.id] ?? 'klein'])))
+    void loadEreignisContexts(items.map(item => item.id))
+      .then(async contexts => {
+        if (cancelled) return
+        setLevels(Object.fromEntries(items.map(item => [item.id, contexts[item.id]?.dimension ?? 'klein'])))
+        setEventIds(Object.fromEntries(Object.entries(contexts).map(([id, ctx]) => [id, ctx.id])))
+        const ids = [...new Set(Object.values(contexts).map(ctx => ctx.id))]
+        if (!ids.length) { setStepsByEvent({}); return }
+        const result = await supabase.from('ereignis_verstaendigungsschritte').select('*').in('ereignis_id', ids).order('sortierung')
+        if (result.error) throw result.error
+        if (!cancelled) setStepsByEvent((result.data ?? []).reduce<Record<string, EreignisVerstaendigungsschritt[]>>((byId, row) => {
+          ;(byId[row.ereignis_id] ??= []).push(row)
+          return byId
+        }, {}))
       })
-      .catch(() => {
-        if (!cancelled) setLevels(Object.fromEntries(items.map(item => [item.id, 'klein'])))
-      })
+      .catch(() => { if (!cancelled) { setLevels({}); setStepsByEvent({}) } })
     return () => { cancelled = true }
   }, [items])
 
@@ -60,6 +71,11 @@ export default function EinsaetzeBoard({
     setExpanded(item.id)
     const saved = await setIncidentEreignisDimension(item.id, stufe)
     setLevels(current => ({ ...current, [item.id]: saved?.dimension ?? 'klein' }))
+    if (saved) {
+      setEventIds(current => ({ ...current, [item.id]: saved.id }))
+      const result = await supabase.from('ereignis_verstaendigungsschritte').select('*').eq('ereignis_id', saved.id).order('sortierung')
+      if (!result.error) setStepsByEvent(current => ({ ...current, [saved.id]: result.data ?? [] }))
+    }
   }
 
   function printSelected() {
@@ -131,9 +147,11 @@ export default function EinsaetzeBoard({
                 <p className="text-xs text-gray-600">{meta.hint} · {meta.dienstbetrieb}</p>
                 {stufe !== 'klein' ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                   <p className="font-bold">Verständigung telefonisch</p>
-                  <ul className="mt-1 list-disc pl-5">{telefonketteFuer(stufe).map(name => {
-                    const match = kontakte.find(row => (row.funktion || '').toLowerCase().includes(name.toLowerCase().slice(0, 8)) || (row.name || '').toLowerCase().includes(name.toLowerCase().slice(0, 8)))
-                    return <li key={name}>{name}{match ? <> – {match.name}{kontaktTelefonnummern(match).map(({ art, nummer }) => <span key={art}> · <a href={telHref(nummer)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{art}: {nummer}</a></span>)}</> : null}</li>
+                  <ul className="mt-1 list-disc pl-5">{(stepsByEvent[eventIds[item.id]] ?? []).map(step => {
+                    const match = kontakte.find(row => row.id === step.kontakt_id)
+                    const nummer = match ? nummerFuerArt(match, step.telefon_art) : null
+                    const verfuegbareNummern = match ? (step.telefon_art ? (nummer ? [{ art: 'Bevorzugt', nummer }] : []) : kontaktTelefonnummern(match)) : []
+                    return <li key={step.schluessel}>{step.bezeichnung}{match ? ` – ${match.name}` : ' – Kontakt fehlt'}{match && !verfuegbareNummern.length ? ' · Rufnummer fehlt' : null}{verfuegbareNummern.map(({ art, nummer: value }) => <span key={art}> · <a href={telHref(value)} className="text-blue-800 underline" onClick={event => event.stopPropagation()}>{art}: {value}</a></span>)}</li>
                   })}</ul>
                   {stufe === 'gross' || stufe === 'katastrophe' ? <><p className="font-bold mt-2">Entscheidung</p><ul className="list-disc pl-5">{ENTSCHEIDUNGSPUNKTE.map(itemName => <li key={itemName}>{itemName}</li>)}</ul></> : null}
                   <Link to="/stammdaten/kontakte" className="inline-block text-xs font-semibold text-blue-800 mt-2">Kontakte bearbeiten</Link>

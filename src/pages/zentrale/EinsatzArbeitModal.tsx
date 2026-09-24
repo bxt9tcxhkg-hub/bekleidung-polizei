@@ -13,14 +13,14 @@ import {
   setIncidentEreignisDimension,
   setVerstaendigungStatus,
   unlinkIncidentFromEreignis,
-  verstaendigungKey,
 } from '../../lib/ereignis'
-import { EREIGNISSTUFEN, STUFE_META, formatStamp, telefonketteFuer } from '../../lib/einsatzSchema'
+import { EREIGNISSTUFEN, STUFE_META, formatStamp } from '../../lib/einsatzSchema'
 import { formatTime } from '../../lib/zentraleShared'
 import { centralNextAction, eventNeedsClosureHint } from '../../lib/centralWorkflow'
 import { loadEreignisKontakte, telHref, type EreignisKontaktTreffer } from '../../lib/ereignisKontakte'
-import type { Ereignis, EreignisDimension, EreignisVerstaendigung, IncidentReport, IncidentStatus } from '../../lib/types'
+import type { Ereignis, EreignisDimension, EreignisVerstaendigung, EreignisVerstaendigungsschritt, IncidentReport, IncidentStatus } from '../../lib/types'
 import type { ActiveEreignisSummary } from '../../lib/ereignis'
+import { ladeEreignisschritte } from '../../lib/verstaendigungsregeln'
 import IncidentDocs from './IncidentDocs'
 import IncidentNamensliste from './IncidentNamensliste'
 import EreignisCockpit from './EreignisCockpit'
@@ -46,6 +46,7 @@ export default function EinsatzArbeitModal({
   const [tab, setTab] = useState<Tab>('uebersicht')
   const [ereignis, setEreignis] = useState<Ereignis | null>(null)
   const [verstaendigungen, setVerstaendigungen] = useState<EreignisVerstaendigung[]>([])
+  const [schritte, setSchritte] = useState<EreignisVerstaendigungsschritt[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -66,10 +67,10 @@ export default function EinsatzArbeitModal({
     () => new Map(verstaendigungen.map(row => [row.empfaenger_key, row])),
     [verstaendigungen],
   )
-  const nextKontakt = useMemo(() => telefonketteFuer(stufe).find(label => {
-    const row = standByKey.get(verstaendigungKey(label))
+  const nextKontakt = useMemo(() => schritte.find(schritt => {
+    const row = standByKey.get(schritt.schluessel)
     return !row?.versucht_at && !row?.erreicht_at
-  }) ?? null, [standByKey, stufe])
+  })?.bezeichnung ?? null, [standByKey, schritte])
 
   useEffect(() => {
     let cancelled = false
@@ -81,18 +82,21 @@ export default function EinsatzArbeitModal({
         if (cancelled) return
         setEreignis(next)
         if (next) {
-          const [rows, incidentIds, statuses] = await Promise.all([
+          const [rows, incidentIds, statuses, steps] = await Promise.all([
             loadVerstaendigungen(next.id),
             loadEreignisIncidentIds(next.id),
             loadEreignisIncidentStatus(next.id),
+            ladeEreignisschritte(next.id),
           ])
           if (!cancelled) {
             setVerstaendigungen(rows)
+            setSchritte(steps)
             setRelatedIncidentIds(incidentIds)
             setRelatedStatuses(statuses)
           }
         } else {
           setVerstaendigungen([])
+          setSchritte([])
           setRelatedIncidentIds([])
           setRelatedStatuses({})
         }
@@ -117,20 +121,22 @@ export default function EinsatzArbeitModal({
   useEffect(() => {
     if (!hatEreignisArbeitsraum) { setKontakte({}); return }
     let cancelled = false
-    void loadEreignisKontakte(telefonketteFuer(stufe))
+    void loadEreignisKontakte(schritte)
       .then(rows => { if (!cancelled) setKontakte(rows) })
       .catch(() => { if (!cancelled) setKontakte({}) })
     return () => { cancelled = true }
-  }, [hatEreignisArbeitsraum, stufe])
+  }, [hatEreignisArbeitsraum, schritte])
 
   async function refreshEvent(saved: Ereignis) {
-    const [rows, incidentIds, statuses] = await Promise.all([
+    const [rows, incidentIds, statuses, steps] = await Promise.all([
       loadVerstaendigungen(saved.id),
       loadEreignisIncidentIds(saved.id),
       loadEreignisIncidentStatus(saved.id),
+      ladeEreignisschritte(saved.id),
     ])
     setEreignis(saved)
     setVerstaendigungen(rows)
+    setSchritte(steps)
     setRelatedIncidentIds(incidentIds)
     setRelatedStatuses(statuses)
     setCockpitRefresh(value => value + 1)
@@ -211,7 +217,8 @@ export default function EinsatzArbeitModal({
 
   async function markKette(label: string, field: 'versucht' | 'erreicht') {
     if (!ereignis || !createdBy || busy) return
-    const key = verstaendigungKey(label)
+    const key = schritte.find(row => row.bezeichnung === label)?.schluessel
+    if (!key) return
     setBusy(true)
     setError('')
     try {
@@ -382,8 +389,8 @@ export default function EinsatzArbeitModal({
     {!loading && tab === 'ereignis' && ereignis ? <div className="space-y-5">
       <EreignisCockpit
         incidentId={item.id}
-        ereignis={ereignis}
         verstaendigungen={verstaendigungen}
+        schritte={schritte}
         canOperate={canOperateZentrale}
         refreshToken={cockpitRefresh}
         onMarkVerstaendigung={markKette}
@@ -395,16 +402,18 @@ export default function EinsatzArbeitModal({
       <div id="ereignis-verstaendigung" className="scroll-mt-4 border-t border-gray-200 pt-4">
         <p className="text-xs font-bold uppercase tracking-wide text-gray-700">Verständigung</p>
         <p className="text-xs text-gray-500 mt-1 mb-3">Gemeinsamer Arbeitsstand für Zentrale und Schichtwechsel. Keine Einsatzverlaufsdokumentation.</p>
-        <div className="space-y-2">{telefonketteFuer(stufe).map(label => {
-          const key = verstaendigungKey(label)
+        <div className="space-y-2">{schritte.map(schritt => {
+          const label = schritt.bezeichnung
+          const key = schritt.schluessel
           const row = standByKey.get(key)
           const kontaktTreffer = kontakte[label] ?? []
           return <div key={key} className="rounded-xl border border-gray-200 bg-white p-3">
-            <p className="text-sm font-semibold text-gray-900">{label}</p>
+            <p className="text-sm font-semibold text-gray-900">{label}{!schritt.pflicht ? ' · optional' : ''}</p>
             {kontaktTreffer.length > 0 ? <div className="mt-2 space-y-1.5">{kontaktTreffer.map(kontakt => <div key={`${kontakt.source}:${kontakt.id}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-gray-50 px-2.5 py-2">
               <span className="min-w-0 text-xs text-gray-700"><span className="font-semibold text-gray-900">{kontakt.name}</span>{kontakt.funktion && kontakt.funktion !== label ? ' · ' + kontakt.funktion : ''}{kontakt.erreichbarkeit ? ' · ' + kontakt.erreichbarkeit : ''}</span>
               {kontakt.telefonnummern.map(({ art, nummer }) => <a key={art} href={telHref(nummer)} aria-label={`${kontakt.name}, ${art} anrufen: ${nummer}`} className="rounded-lg bg-blue-800 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-blue-900">{art}: {nummer}</a>)}
-            </div>)}</div> : <p className="mt-1 text-xs text-amber-700">Keine gepflegten Kontaktdaten gefunden.</p>}
+              {kontakt.telefonnummern.length === 0 ? <span className="text-xs text-amber-700">Ausgewählte Rufnummer fehlt</span> : null}
+            </div>)}</div> : <p className="mt-1 text-xs text-amber-700">Kein Kontakt mit Rufnummer zugeordnet. Bitte Admin informieren.</p>}
             <div className="mt-2 flex flex-wrap gap-2">
               <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'versucht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.versucht_at ? 'bg-amber-100 border-amber-400' : 'border-gray-300 bg-white')}>{row?.versucht_at ? 'Versucht ' + formatStamp(row.versucht_at) : 'Versucht'}</button>
               <button type="button" disabled={!canOperateZentrale || busy} onClick={() => void markKette(label, 'erreicht')} className={'text-xs px-2.5 py-1.5 rounded-md border disabled:opacity-60 ' + (row?.erreicht_at ? 'bg-green-100 border-green-500' : 'border-gray-300 bg-white')}>{row?.erreicht_at ? 'Erreicht ' + formatStamp(row.erreicht_at) : 'Erreicht'}</button>
