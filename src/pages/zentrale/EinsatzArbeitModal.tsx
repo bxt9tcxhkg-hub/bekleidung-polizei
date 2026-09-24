@@ -431,7 +431,7 @@ export default function EinsatzArbeitModal({
           </div>
           <button type="button" onClick={() => setTab('dateien')} className="text-xs font-semibold text-blue-800 border border-blue-200 rounded-lg px-2.5 py-1.5 bg-blue-50">ZMR / Abfrage hochladen</button>
         </div>
-        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} mode="zentrale" onChanged={() => setCockpitRefresh(value => value + 1)} />
+        <IncidentNamensliste incidentId={item.id} incidentTitel={formatTime(item.reported_at) + ' · ' + (item.location || 'Ohne Ortsangabe')} canOperate={canOperateZentrale} mode="zentrale" ereignisstufe={stufe} onChanged={() => setCockpitRefresh(value => value + 1)} />
       </div>
     </div> : null}
 
