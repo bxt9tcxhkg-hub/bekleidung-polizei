@@ -101,7 +101,7 @@ export default function MeineDienste() {
               <p className="mt-1 text-xl font-bold tabular-nums text-gray-900">{formatStunden(uebersicht.tag)} / {formatStunden(uebersicht.nacht)}</p>
             </div>
           </div>
-          <p className="mt-3 text-xs text-gray-400">Automatisch aus den Uhrzeiten der Diensteinträge berechnet (Tag = 06-19 Uhr, Nacht = 19-06 Uhr; ein Sonntagsdienst zählt ganztägig zu Sonn-/Feiertagsstunden, unabhängig von der Uhrzeit). Das sind die geplanten Diensstunden laut Dienstplan, keine Überstunden - für gemeldete/genehmigte Überstunden siehe Überstundenmeldung.</p>
+          <p className="mt-3 text-xs text-gray-400">Automatisch aus den Uhrzeiten der Diensteinträge berechnet (Tag = 08-19 Uhr, Nacht = 19-08 Uhr; ein Sonntagsdienst zählt ganztägig zu Sonn-/Feiertagsstunden, unabhängig von der Uhrzeit). Das sind die geplanten Diensstunden laut Dienstplan, keine Überstunden - für gemeldete/genehmigte Überstunden siehe Überstundenmeldung.</p>
         </section>
 
         <section>

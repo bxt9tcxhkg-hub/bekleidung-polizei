@@ -16,7 +16,9 @@
  * (ganzer Kalendertag zählt, wie bei berechneAufschluesselung) sowie
  * Tag-/Nachtstunden (06-19 Uhr bzw. 19-06 Uhr, unabhängig vom Sonn-Status -
  * eine Sonntags-Tagesstunde zählt also sowohl zu Sonn-/Feiertag als auch zu
- * Tag). Echte Überstunden bleiben allein Sache des eigenständigen Melde-/
+ * Tag). Tag-/Nachtdienst dauern laut Kommandant regulär 08-19 bzw. 19-08
+ * Uhr - das sind die Grenzen für die Tag-/Nacht-Aufteilung. Echte
+ * Überstunden bleiben allein Sache des eigenständigen Melde-/
  * Genehmigungsworkflows in Ueberstunden.tsx.
  */
 import { isSonnOderFeiertag } from './austrianHolidays'
@@ -52,10 +54,14 @@ export function dienstZeitraumMitNachtdienstDefault(zeile: Pick<DienstplanDienst
   return dienstZeitraum({ datum: zeile.datum, von_zeit: NACHTDIENST_VON, bis_zeit: NACHTDIENST_BIS })
 }
 
+/** Tagdienst dauert laut Kommandant regulär 08-19 Uhr, Nachtdienst 19-08 Uhr - das sind die Grenzen für die Tag-/Nacht-Aufteilung. */
+const TAGDIENST_BEGINN_STUNDE = 8
+const TAGDIENST_ENDE_STUNDE = 19
+
 /**
  * Zerlegt [von, bis) tageweise (wie berechneAufschluesselung in
  * lib/ueberstunden.ts) und liefert je Abschnitt die Tagesstunden sowie den
- * Anteil davon, der auf 06:00-19:00 Uhr fällt (Rest = Nachtstunden) und ob
+ * Anteil davon, der auf 08:00-19:00 Uhr fällt (Rest = Nachtstunden) und ob
  * der Kalendertag ein Sonn-/Feiertag ist.
  */
 function tagesAbschnitte(von: Date, bis: Date): { tagStunden: number; nachtStunden: number; istSonnFeiertag: boolean; dauer: number }[] {
@@ -67,10 +73,10 @@ function tagesAbschnitte(von: Date, bis: Date): { tagStunden: number; nachtStund
     const abschnittsende = bis < naechsterTag ? bis : naechsterTag
     const dauer = (abschnittsende.getTime() - cursor.getTime()) / 3_600_000
 
-    const sechsUhr = new Date(tagesbeginn.getTime() + 6 * 3_600_000)
-    const neunzehnUhr = new Date(tagesbeginn.getTime() + 19 * 3_600_000)
-    const tagUeberlappStart = cursor > sechsUhr ? cursor : sechsUhr
-    const tagUeberlappEnde = abschnittsende < neunzehnUhr ? abschnittsende : neunzehnUhr
+    const tagBeginn = new Date(tagesbeginn.getTime() + TAGDIENST_BEGINN_STUNDE * 3_600_000)
+    const tagEnde = new Date(tagesbeginn.getTime() + TAGDIENST_ENDE_STUNDE * 3_600_000)
+    const tagUeberlappStart = cursor > tagBeginn ? cursor : tagBeginn
+    const tagUeberlappEnde = abschnittsende < tagEnde ? abschnittsende : tagEnde
     const tagStunden = Math.max(0, (tagUeberlappEnde.getTime() - tagUeberlappStart.getTime()) / 3_600_000)
 
     ergebnis.push({ tagStunden, nachtStunden: dauer - tagStunden, istSonnFeiertag: isSonnOderFeiertag(tagesbeginn), dauer })

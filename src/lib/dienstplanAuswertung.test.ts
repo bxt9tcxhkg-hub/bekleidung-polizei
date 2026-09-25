@@ -41,10 +41,10 @@ describe('persoenlicheStundenUebersicht', () => {
     expect(ergebnis).toEqual({ gesamt: 11, sonnFeiertag: 0, tag: 11, nacht: 0 })
   })
 
-  it('ein Dienst ohne Uhrzeit zählt als Nachtdienst 19:00-08:00 Uhr (13 Std., davon 2 Std. Tag nach 06:00)', () => {
+  it('ein Dienst ohne Uhrzeit zählt als Nachtdienst 19:00-08:00 Uhr (13 Std., komplett Nachtstunden)', () => {
     // Montag 2.2.2026, Nachtdienst ohne Uhrzeit in der Zelle.
     const ergebnis = persoenlicheStundenUebersicht([zeile({ datum: '2026-02-02', von_zeit: null, bis_zeit: null })])
-    expect(ergebnis).toEqual({ gesamt: 13, sonnFeiertag: 0, tag: 2, nacht: 11 })
+    expect(ergebnis).toEqual({ gesamt: 13, sonnFeiertag: 0, tag: 0, nacht: 13 })
   })
 
   it('ein Sonntagsdienst zählt komplett zu Sonn-/Feiertagsstunden, unabhängig von der Uhrzeit', () => {
@@ -59,6 +59,12 @@ describe('persoenlicheStundenUebersicht', () => {
       zeile({ datum: '2026-02-05', von_zeit: '22:00', bis_zeit: '06:00' }), // 8 Std Nacht (22-06)
     ])
     expect(ergebnis).toEqual({ gesamt: 19, sonnFeiertag: 0, tag: 11, nacht: 8 })
+  })
+
+  it('Tagdienst-Grenze ist 08-19 Uhr, nicht 06-19 Uhr - Stunden davor/danach zählen zu Nacht', () => {
+    // 06:00-19:00 Uhr: die ersten 2 Std. (06-08) zählen zur Nacht, erst ab 08:00 zu Tag.
+    const ergebnis = persoenlicheStundenUebersicht([zeile({ datum: '2026-02-02', von_zeit: '06:00', bis_zeit: '19:00' })])
+    expect(ergebnis).toEqual({ gesamt: 13, sonnFeiertag: 0, tag: 11, nacht: 2 })
   })
 
   it('leere Liste ergibt lauter Nullen', () => {
