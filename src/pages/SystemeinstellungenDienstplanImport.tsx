@@ -9,6 +9,7 @@ import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanMonatRow, type DienstplanSpalteRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, istSpalteAktiv, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanParseErgebnis, type DienstplanSpalte, type DienstplanSpaltenZuordnung, type DienstplanZelle, type SollstundenEintrag } from '../lib/dienstplanImport'
+import { istAdminProfil, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Schritt 1-3 des Dienstplan-Imports (siehe AGENTS.md-Analyse): Datei einlesen,
@@ -51,12 +52,13 @@ export default function SystemeinstellungenDienstplanImport() {
   const ladeGrunddatenFn = useCallback(async () => {
     setLadeGrunddaten(true)
     const [mitarbeiterResult, spaltenResult, monateResult] = await Promise.all([
-      supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
+      supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_spalten').select('spaltenname,beamter_id,immer_aktiv'),
       dienstplanSupabase.from('dienstplan_monate').select('id,monat,dateiname,status,hochgeladen_at,sollstunden').order('monat', { ascending: false }),
     ])
     if (mitarbeiterResult.error || spaltenResult.error || monateResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLadeGrunddaten(false); return }
-    setMitarbeiter(mitarbeiterResult.data ?? [])
+    const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
+    setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setMonate(monateResult.data ?? [])
     const gemerkt = new Map<string, DienstplanSpaltenZuordnung>()
     for (const row of (spaltenResult.data ?? []) as SpaltenZuordnungRow[]) gemerkt.set(row.spaltenname, { beamterId: row.beamter_id, immerAktiv: row.immer_aktiv })
