@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarDays, CheckCircle2, CheckSquare, Square, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, CheckCircle2, CheckSquare, Moon, Square, Sparkles, Sun, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { isAustrianHoliday } from '../lib/austrianHolidays'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
@@ -415,7 +416,7 @@ export default function DienstplanPlanung() {
 
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile) bzw. zu kurze Ruhezeit (Zelle).</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile) bzw. zu kurze Ruhezeit (Zelle). Amber: Wochenende/Feiertag. Sonne/Mond: Tag-/Nachtzeile.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -454,7 +455,7 @@ export default function DienstplanPlanung() {
             <thead>
               <tr>
                 <th rowSpan={2} className="sticky left-0 z-20 w-[6rem] min-w-[6rem] max-w-[6rem] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
-                <th rowSpan={2} className="sticky left-[6rem] z-20 w-[5rem] min-w-[5rem] max-w-[5rem] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold text-gray-600"></th>
+                <th rowSpan={2} className="sticky left-[6rem] z-20 w-[5.75rem] min-w-[5.75rem] max-w-[5.75rem] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold text-gray-600"></th>
                 {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
               </tr>
               <tr>
@@ -470,17 +471,25 @@ export default function DienstplanPlanung() {
             <tbody>
               {tage.map(datum => {
                 const [, , tagText] = datum.split('-')
-                const wochentag = new Date(Number(datum.slice(0, 4)), Number(datum.slice(5, 7)) - 1, Number(tagText)).getDay()
+                const datumObjekt = new Date(Number(datum.slice(0, 4)), Number(datum.slice(5, 7)) - 1, Number(tagText))
+                const wochentag = datumObjekt.getDay()
+                // Wochenenden und Feiertage sollen optisch hervorstechen (amber),
+                // Tag/Nacht bekommt zusätzlich zur Hintergrundfarbe je ein eigenes
+                // Icon (Sonne/Mond), damit beides auch unabhängig voneinander
+                // erkennbar bleibt.
+                const besondererTag = wochentag === 0 || wochentag === 6 || isAustrianHoliday(datumObjekt)
                 return (['tag', 'nacht'] as const).map(abschnitt => {
                   const fehlend = (fehlendeGrund.get(datum) ?? []).filter(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
-                  return <tr key={`${datum}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
+                  const zeilenHintergrund = besondererTag ? (abschnitt === 'tag' ? 'bg-amber-50' : 'bg-amber-100/70') : (abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50/50')
+                  return <tr key={`${datum}|${abschnitt}`} className={`${zeilenHintergrund} ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
                     {abschnitt === 'tag' ? (
-                      <td rowSpan={2} className="sticky left-0 z-10 w-[6rem] min-w-[6rem] max-w-[6rem] whitespace-nowrap border-r border-gray-200 bg-white px-3 py-1.5 align-top">
-                        <span className="font-medium text-gray-800">{WOCHENTAG_LABEL[wochentag]} {tagText}.</span>
+                      <td rowSpan={2} className={`sticky left-0 z-10 w-[6rem] min-w-[6rem] max-w-[6rem] whitespace-nowrap border-r border-gray-200 px-3 py-1.5 align-top ${besondererTag ? 'bg-amber-50' : 'bg-white'}`}>
+                        <span className={`font-medium ${besondererTag ? 'text-amber-800' : 'text-gray-800'}`}>{WOCHENTAG_LABEL[wochentag]} {tagText}.</span>
                       </td>
                     ) : null}
-                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-[6rem] z-10 w-[5rem] min-w-[5rem] max-w-[5rem] whitespace-nowrap border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50'}`}>
-                      <span className={`text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
+                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-[6rem] z-10 w-[5.75rem] min-w-[5.75rem] max-w-[5.75rem] whitespace-nowrap border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : besondererTag ? (abschnitt === 'tag' ? 'bg-amber-50' : 'bg-amber-100/70') : abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50'}`}>
+                      {abschnitt === 'tag' ? <Sun className="mr-0.5 inline h-3 w-3 text-amber-500" /> : <Moon className="mr-0.5 inline h-3 w-3 text-indigo-500" />}
+                      <span className={`text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-amber-700' : 'text-indigo-700'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
                       {fehlend.length > 0 ? <AlertTriangle className="ml-1 inline h-3 w-3 text-red-600" /> : null}
                     </td>
                     {mitarbeiter.map(person => {
