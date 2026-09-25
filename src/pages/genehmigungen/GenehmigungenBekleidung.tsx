@@ -191,14 +191,7 @@ export default function GenehmigungenBekleidung() {
 
   return (
     <div>
-      <GenehmigungenBereichHeader
-        title="Bekleidung"
-        description="Budgetüberschreitungen, Lagerbestellungen und Schuherstattungen entscheiden."
-        links={<>
-          <Link to="/budgets" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50"><Wallet className="w-3.5 h-3.5" /> Budgetverwaltung</Link>
-          <Link to="/schuherstattungen" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50"><Footprints className="w-3.5 h-3.5" /> Schuherstattungen (Verwaltung)</Link>
-        </>}
-      />
+      <GenehmigungenBereichHeader title="Bekleidung" description="Budgetüberschreitungen, Lagerbestellungen und Schuherstattungen entscheiden." />
 
       {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
       {error && <div ref={topErrorRef} className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
@@ -207,9 +200,20 @@ export default function GenehmigungenBekleidung() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="space-y-8">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><ShoppingBag className="w-4 h-4" /> Budgetüberschreitungen</h2>
-            {orders.length === 0 ? (
+          {/* Budgetüberschreitungen und Schuherstattungen haben je ein eigenes
+              Verwaltungswerkzeug (Jahresbudget/Höchstbetrag festlegen, Verlauf
+              einsehen) - der Link dazu gehört direkt in die Kopfzeile der
+              jeweiligen Entscheidungsliste, nicht isoliert oben auf die Seite,
+              weit weg von der Liste, die er betrifft. Nebeneinander wie bei
+              Ausbildung; Lagerbestellungen hat kein eigenes Verwaltungswerkzeug
+              und bekommt deshalb die volle Breite darunter. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-blue-700" /> Budgetüberschreitungen</h2>
+                <Link to="/budgets" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 flex-shrink-0"><Wallet className="w-3.5 h-3.5" /> Budgetverwaltung</Link>
+              </div>
+              {orders.length === 0 ? (
               <Empty icon={CheckCircle} title="Keine offenen Freigaben" subtitle="Alle Bestellungen liegen im Budget" />
             ) : (
               <div className="space-y-4">
@@ -270,10 +274,43 @@ export default function GenehmigungenBekleidung() {
                 })}
               </div>
             )}
+            </div>
+
+            <div className="lg:border-l lg:border-gray-200 lg:pl-8">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <Footprints className="w-4 h-4 text-blue-700" /> Schuherstattungen
+                  {shoeRefundCap != null && <span className="font-normal text-gray-400">· Höchstbetrag {fmtEUR(shoeRefundCap)}</span>}
+                </h2>
+                <Link to="/schuherstattungen" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50 flex-shrink-0"><Footprints className="w-3.5 h-3.5" /> Verwaltung</Link>
+              </div>
+              {shoeRefunds.length === 0 ? (
+                <Empty icon={Footprints} title="Keine offenen Schuherstattungen" />
+              ) : (
+                <Table
+                  head={['Datum', 'Betrag', 'Erstattungsfähig', 'Beantragt von', 'Notiz', '']}
+                  rows={shoeRefunds.map(r => {
+                    const capped = shoeRefundCap != null ? Math.min(Number(r.amount), shoeRefundCap) : null
+                    return [
+                      new Date(r.refund_date).toLocaleDateString('de-AT'),
+                      fmtEUR(Number(r.amount)),
+                      capped != null
+                        ? <span key="cap" className={capped < Number(r.amount) ? 'text-amber-700 font-medium' : ''}>{fmtEUR(capped)}{capped < Number(r.amount) ? ' (gedeckelt)' : ''}</span>
+                        : '–',
+                      r.profiles?.name ?? '–',
+                      r.note ?? '–',
+                      <Actions key="ac" disabled={processing === r.id}
+                        onApprove={() => void reviewShoeRefund(r, 'approved')}
+                        onReject={() => void reviewShoeRefund(r, 'rejected')} />,
+                    ]
+                  })}
+                />
+              )}
+            </div>
           </div>
 
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Lagerbestellungen</h2>
+          <div className="border-t border-gray-200 pt-8">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 mb-3"><Package className="w-4 h-4 text-blue-700" /> Lagerbestellungen</h2>
             {stockOrders.length === 0 ? (
               <Empty icon={Package} title="Keine offenen Lagerbestellungen" />
             ) : (
@@ -287,35 +324,6 @@ export default function GenehmigungenBekleidung() {
                   <span key="st" className={`text-xs font-medium px-2.5 py-1 rounded-full ${STOCK_ORDER_STATUS_COLORS[o.status]}`}>{STOCK_ORDER_STATUS_LABELS[o.status]}</span>,
                   <Actions key="ac" disabled={processing === o.id} onApprove={() => approveStockOrder(o.id)} onReject={() => openCancelReason(o.id, 'stock')} />,
                 ])}
-              />
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <Footprints className="w-4 h-4" /> Schuherstattungen
-              {shoeRefundCap != null && <span className="normal-case font-normal text-gray-400">· Maximalbetrag {fmtEUR(shoeRefundCap)}</span>}
-            </h2>
-            {shoeRefunds.length === 0 ? (
-              <Empty icon={Footprints} title="Keine offenen Schuherstattungen" />
-            ) : (
-              <Table
-                head={['Datum', 'Betrag', 'Erstattungsfähig', 'Beantragt von', 'Notiz', '']}
-                rows={shoeRefunds.map(r => {
-                  const capped = shoeRefundCap != null ? Math.min(Number(r.amount), shoeRefundCap) : null
-                  return [
-                    new Date(r.refund_date).toLocaleDateString('de-AT'),
-                    fmtEUR(Number(r.amount)),
-                    capped != null
-                      ? <span key="cap" className={capped < Number(r.amount) ? 'text-amber-700 font-medium' : ''}>{fmtEUR(capped)}{capped < Number(r.amount) ? ' (gedeckelt)' : ''}</span>
-                      : '–',
-                    r.profiles?.name ?? '–',
-                    r.note ?? '–',
-                    <Actions key="ac" disabled={processing === r.id}
-                      onApprove={() => void reviewShoeRefund(r, 'approved')}
-                      onReject={() => void reviewShoeRefund(r, 'rejected')} />,
-                  ]
-                })}
               />
             )}
           </div>
