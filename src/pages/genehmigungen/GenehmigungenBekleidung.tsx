@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle, Footprints, Package, ShoppingBag, User, Wal
 import { supabase } from '../../lib/supabase'
 import type { Order, ShoeRefund, StockOrder } from '../../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../../lib/types'
-import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCapResult } from '../../lib/budget'
+import { DEFAULT_BUDGET, effectiveUsed, getCurrentBudget, getUsedBudget, getCurrentShoeRefundCapResult, summarizeBudgetRows, withoutAdminProfiles } from '../../lib/budget'
 import { logAudit } from '../../lib/audit'
 import { fmtEUR } from '../../lib/format'
 import { Actions, Empty, GenehmigungenBereichHeader, Table } from '../../components/genehmigungenShared'
@@ -28,6 +28,10 @@ export default function GenehmigungenBekleidung() {
   const [budgets, setBudgets] = useState<Record<string, { total: number; used: number }>>({})
   const [shoeRefunds, setShoeRefunds] = useState<ShoeRefund[]>([])
   const [shoeRefundCap, setShoeRefundCap] = useState<number | null>(null)
+  // Kompakte Kennzahlen wie in Budgets.tsx ("Budgetauswertung"), aber ohne die
+  // volle Verwaltungsoberfläche (Bearbeiten je Nutzer, Massenänderung) - die
+  // bleibt auf der eigenen Seite. null = (noch) nicht geladen.
+  const [budgetSummary, setBudgetSummary] = useState<ReturnType<typeof summarizeBudgetRows> | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' } | null>(null)
@@ -36,7 +40,8 @@ export default function GenehmigungenBekleidung() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ordersRes, stockRes, refundRes, capRes] = await Promise.all([
+    const t = new Date().toISOString().split('T')[0]
+    const [ordersRes, stockRes, refundRes, capRes, profilesRes, userBudgetsRes, yearOrdersRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, products(name,category,price,size_mode), quarters(name), profiles(name,dienstnummer,username)')
@@ -53,6 +58,15 @@ export default function GenehmigungenBekleidung() {
         .eq('status', 'pending')
         .order('created_at', { ascending: true }),
       getCurrentShoeRefundCapResult(),
+      // Für die Budgetauswertung unten - dieselbe Berechnung wie in Budgets.tsx,
+      // aber nur die Kennzahlen, keine Bearbeitungsoberfläche.
+      supabase.from('profiles').select('*').eq('active', true).order('name'),
+      supabase.from('user_budgets').select('*').eq('year', CURRENT_YEAR).order('valid_from', { ascending: false }),
+      supabase.from('orders')
+        .select('user_id, unit_price, quantity')
+        .not('status', 'in', '(pending,cancelled)')
+        .gte('created_at', `${CURRENT_YEAR}-01-01`)
+        .lt('created_at', `${CURRENT_YEAR + 1}-01-01`),
     ])
     const failed: string[] = []
     const pending = ordersRes.error ? [] : (ordersRes.data ?? []) as PendingOrder[]
@@ -64,6 +78,21 @@ export default function GenehmigungenBekleidung() {
     else setShoeRefunds((refundRes.data ?? []) as ShoeRefund[])
     if (capRes.error) { failed.push('Erstattungs-Höchstbetrag'); setShoeRefundCap(null) }
     else setShoeRefundCap(capRes.cap)
+    if (profilesRes.error || userBudgetsRes.error || yearOrdersRes.error) {
+      failed.push('Budgetauswertung')
+      setBudgetSummary(null)
+    } else {
+      const profiles = withoutAdminProfiles(profilesRes.data ?? [])
+      const usedByUser: Record<string, number> = {}
+      for (const o of yearOrdersRes.data ?? []) usedByUser[o.user_id] = (usedByUser[o.user_id] ?? 0) + o.unit_price * o.quantity
+      const rows = profiles.map(p => {
+        const userBudgets = (userBudgetsRes.data ?? []).filter(b => b.user_id === p.id)
+        const current = userBudgets.find(b => b.valid_from <= t) ?? null
+        const orderUsed = usedByUser[p.id] ?? 0
+        return { used: effectiveUsed(orderUsed, Number(current?.used_adjustment ?? 0)), totalBudget: current?.total_budget ?? DEFAULT_BUDGET }
+      })
+      setBudgetSummary(summarizeBudgetRows(rows))
+    }
     setLoadError(failed.length > 0 ? `Nicht alles konnte geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
     const userIds = Array.from(new Set(pending.map(o => o.user_id)))
     const budgetEntries = await Promise.all(userIds.map(async uid => {
@@ -200,6 +229,38 @@ export default function GenehmigungenBekleidung() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="space-y-8">
+          {budgetSummary && (
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <p className="text-sm font-semibold text-gray-700 mb-4">Budgetauswertung {CURRENT_YEAR}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Gesamtbudget</p>
+                  <p className="text-xl font-bold text-gray-900">{fmtEUR(budgetSummary.totalBudget)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Verbraucht</p>
+                  <p className="text-xl font-bold text-gray-900">{fmtEUR(budgetSummary.totalUsed)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Budget überschritten</p>
+                  <p className={`text-xl font-bold ${budgetSummary.overBudgetCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{budgetSummary.overBudgetCount} Nutzer</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-0.5">Kein Verbrauch</p>
+                  <p className="text-xl font-bold text-gray-500">{budgetSummary.unusedCount} Nutzer</p>
+                </div>
+              </div>
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Ausschöpfung</span>
+                <span className={budgetSummary.utilizationPct >= 90 ? 'text-red-600 font-semibold' : budgetSummary.utilizationPct >= 70 ? 'text-amber-600 font-semibold' : 'text-green-600 font-semibold'}>{budgetSummary.utilizationPct.toFixed(1)} %</span>
+              </div>
+              <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full transition-all ${budgetSummary.utilizationPct >= 90 ? 'bg-red-500' : budgetSummary.utilizationPct >= 70 ? 'bg-amber-400' : 'bg-green-500'}`}
+                  style={{ width: `${budgetSummary.utilizationPct}%` }} />
+              </div>
+            </div>
+          )}
+
           {/* Budgetüberschreitungen und Schuherstattungen haben je ein eigenes
               Verwaltungswerkzeug (Jahresbudget/Höchstbetrag festlegen, Verlauf
               einsehen) - der Link dazu gehört direkt in die Kopfzeile der

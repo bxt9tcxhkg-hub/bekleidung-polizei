@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
+import { ArrowLeft, Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -126,6 +126,11 @@ export default function ShoeRefunds() {
 
   return (
     <div>
+      {canManage && (
+        <Link to="/genehmigungen/bekleidung" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4">
+          <ArrowLeft className="w-4 h-4" /> Zu Bekleidung
+        </Link>
+      )}
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div className="flex items-center justify-between mb-6">
         <div>
