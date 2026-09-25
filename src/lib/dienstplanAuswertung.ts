@@ -1,8 +1,10 @@
 /**
  * Persönliche Stunden-Übersicht aus den importierten Dienstplan-Rohdaten
  * (siehe dienstplanSupabase.ts/dienstplanImport.ts) - wertet nur Einträge mit
- * Kategorie "dienst" und erkennbarer Uhrzeit aus (krank/Urlaub/Sonderurlaub/
- * Karenz haben keine Dauer). Nutzt dieselbe Zeitfenster-Kategorisierung wie
+ * Kategorie "dienst" aus (krank/Urlaub/Sonderurlaub/Karenz haben keine
+ * Dauer). Fehlt bei einem Dienst die Uhrzeit, ist das laut Kommandant ein
+ * Nachtdienst und zählt mit dem Standardzeitraum 19:00-08:00 Uhr (siehe
+ * dienstZeitraumMitNachtdienstDefault). Nutzt dieselbe Zeitfenster-Kategorisierung wie
  * die Überstundenmeldung (lib/ueberstunden.ts::berechneAufschluesselung),
  * daher dieselben fünf Kategorien (Werktag/19-22/22-06/Sonn 100%/Sonn 200%) -
  * das ist eine reine "wann fiel die Stunde an"-Auswertung des GEPLANTEN
@@ -33,6 +35,16 @@ export function dienstZeitraum(zeile: Pick<DienstplanDienstZeile, 'datum' | 'von
   return { von, bis }
 }
 
+/** Nachtdienste stehen in der Vorlage ohne Uhrzeit in der Zelle - laut Kommandant dauern sie regulär von 19:00 bis 08:00 Uhr des Folgetags. */
+export const NACHTDIENST_VON = '19:00'
+export const NACHTDIENST_BIS = '08:00'
+
+/** dienstZeitraum() mit dem Nachtdienst-Standardzeitraum, wenn die Zeile keine Uhrzeit hat (nur sinnvoll für kategorie "dienst" - krank/Urlaub/Sonderurlaub/Karenz haben bewusst keine Dauer). */
+export function dienstZeitraumMitNachtdienstDefault(zeile: Pick<DienstplanDienstZeile, 'datum' | 'von_zeit' | 'bis_zeit'>): { von: Date; bis: Date } | null {
+  if (zeile.von_zeit && zeile.bis_zeit) return dienstZeitraum(zeile)
+  return dienstZeitraum({ datum: zeile.datum, von_zeit: NACHTDIENST_VON, bis_zeit: NACHTDIENST_BIS })
+}
+
 const LEER: Record<UeberstundenKategorieKey, number> = { std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }
 
 export interface PersoenlicheStundenUebersicht {
@@ -44,7 +56,7 @@ export function persoenlicheStundenUebersicht(dienste: readonly DienstplanDienst
   const stunden: Record<UeberstundenKategorieKey, number> = { ...LEER }
   for (const zeile of dienste) {
     if (zeile.kategorie !== 'dienst') continue
-    const zeitraum = dienstZeitraum(zeile)
+    const zeitraum = dienstZeitraumMitNachtdienstDefault(zeile)
     if (!zeitraum) continue
     const aufschluesselung = berechneAufschluesselung(zeitraum.von, zeitraum.bis)
     for (const kat of KATEGORIEN) stunden[kat.key] += aufschluesselung[kat.key]

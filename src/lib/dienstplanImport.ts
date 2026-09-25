@@ -46,25 +46,60 @@ const NICHT_PERSON_SPALTEN = new Set(['<', 'frei'])
 
 function pad2(n: number): string { return String(n).padStart(2, '0') }
 
-/** "VD 08-19" -> { code: "VD", vonZeit: "08:00", bisZeit: "19:00" }; ohne erkennbare Uhrzeit bleibt code der volle Text. */
+/** "VD 08-19" -> { code: "VD", vonZeit: "08:00", bisZeit: "19:00" }; ohne erkennbare Uhrzeit bleibt code der volle Text (ohne abschließenden Punkt/Komma, z. B. "ID." -> "ID"). */
 export function parseDienstCode(rohtext: string): { code: string; vonZeit: string | null; bisZeit: string | null } {
   const match = rohtext.match(/(\d{1,2})(?:[:.](\d{2}))?\s*-\s*(\d{1,2})(?:[:.](\d{2}))?/)
-  if (!match) return { code: rohtext.trim(), vonZeit: null, bisZeit: null }
+  if (!match) return { code: rohtext.trim().replace(/[.,]$/, ''), vonZeit: null, bisZeit: null }
   const [ganz, h1, m1, h2, m2] = match
   const vonStunde = Number(h1), bisStunde = Number(h2)
-  if (vonStunde > 23 || bisStunde > 23) return { code: rohtext.trim(), vonZeit: null, bisZeit: null }
+  if (vonStunde > 23 || bisStunde > 23) return { code: rohtext.trim().replace(/[.,]$/, ''), vonZeit: null, bisZeit: null }
   const code = (rohtext.slice(0, match.index).trim() + ' ' + rohtext.slice((match.index ?? 0) + ganz.length).trim()).trim().replace(/[.,]$/, '')
-  return { code: code || rohtext.trim(), vonZeit: `${pad2(vonStunde)}:${pad2(Number(m1 ?? 0))}`, bisZeit: `${pad2(bisStunde)}:${pad2(Number(m2 ?? 0))}` }
+  return { code: code || rohtext.trim().replace(/[.,]$/, ''), vonZeit: `${pad2(vonStunde)}:${pad2(Number(m1 ?? 0))}`, bisZeit: `${pad2(bisStunde)}:${pad2(Number(m2 ?? 0))}` }
 }
 
-/** Kategorisiert anhand des Rohtexts - Reihenfolge ist wichtig ("SoUrl" enthält nicht "Urlaub", aber Prüfung schadet nicht). */
+/**
+ * Kategorisiert anhand des Dienst-Kürzels (nach Abzug einer evtl. Uhrzeit,
+ * siehe parseDienstCode) - Reihenfolge ist wichtig ("SoUrl" enthält nicht
+ * "Urlaub", aber Prüfung schadet nicht). "U" (mit oder ohne Uhrzeit, z. B.
+ * "U 08-13" für einen Urlaubs-Halbtag) zählt laut Kommandant ebenfalls als
+ * Urlaub - anders als "Urlaub" ist das kein Teilstring-Treffer, sondern das
+ * gesamte Kürzel muss "U" sein (sonst würden andere Kürzel mit einem "u"
+ * darin fälschlich mitgezählt).
+ */
 export function kategorisiereRohtext(rohtext: string): DienstplanKategorie {
-  const text = rohtext.toLowerCase()
-  if (text.includes('sourl')) return 'sonderurlaub'
-  if (text.includes('krank')) return 'krank'
-  if (text.includes('karenz')) return 'karenz'
-  if (text.includes('urlaub')) return 'urlaub'
+  const { code } = parseDienstCode(rohtext)
+  const kuerzel = code.toLowerCase()
+  if (kuerzel.includes('sourl')) return 'sonderurlaub'
+  if (kuerzel.includes('krank')) return 'krank'
+  if (kuerzel.includes('karenz')) return 'karenz'
+  if (kuerzel.includes('urlaub') || kuerzel === 'u') return 'urlaub'
   return 'dienst'
+}
+
+/**
+ * Klartext-Bezeichnungen der Dienst-Kürzel (vom Kommandanten bestätigt).
+ * Unbekannte Kürzel zeigt kuerzelKlartext() einfach als das Kürzel selbst.
+ */
+export const DIENST_KUERZEL_LABEL: Record<string, string> = {
+  VD: 'Verkehrsdienst',
+  JD: 'Journaldienst',
+  ID: 'Innendienst',
+  Z: 'Zentrale',
+  TD: 'Tagdienst (Kanzleidienst)',
+  ET: 'Einsatztraining',
+  SVE: 'Schulverkehrserziehung',
+  RA: 'Radar',
+  BHF: 'Bahnhofsdienst',
+  KFZ: 'Kraftfahrzeugdienst (Fahrzeugpflege)',
+  MOT: 'Motorraddienst',
+  PV: 'Personalvertretung',
+  SCH: 'Schulung',
+  ZIV: 'Zivilstreife',
+}
+
+/** Übersetzt ein (auch kombiniertes, z. B. "Sch/VD") Dienst-Kürzel in Klartext - unbekannte Teile bleiben als Kürzel stehen. */
+export function kuerzelKlartext(code: string): string {
+  return code.split('/').map(teil => DIENST_KUERZEL_LABEL[teil.trim().toUpperCase()] ?? teil.trim()).filter(Boolean).join(' / ')
 }
 
 function zuDatumString(wert: DienstplanZelle): string | null {
