@@ -72,6 +72,18 @@ export type DienstplanPersonEinstellungenRow = {
   updated_at: string
 }
 
+export type DienstplanWunschTyp = 'frei' | 'tagdienst_bevorzugt' | 'nachtdienst_bevorzugt'
+
+export type DienstplanWunschRow = {
+  id: string
+  beamter_id: string
+  monat: string
+  datum: string
+  wunsch: DienstplanWunschTyp
+  notiz: string | null
+  erstellt_at: string
+}
+
 type DienstplanDatabase = {
   public: {
     Tables: {
@@ -105,6 +117,12 @@ type DienstplanDatabase = {
         Update: Partial<Omit<DienstplanPersonEinstellungenRow, 'beamter_id' | 'updated_at'>>
         Relationships: []
       }
+      dienstplan_wuensche: {
+        Row: DienstplanWunschRow
+        Insert: Omit<DienstplanWunschRow, 'id' | 'erstellt_at'>
+        Update: Partial<Omit<DienstplanWunschRow, 'id'>>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -125,6 +143,8 @@ type DienstplanDatabase = {
         Returns: undefined
       }
       dienstplan_dienst_loeschen: { Args: { p_monat_id: string; p_beamter_id: string; p_datum: string; p_zeile: 1 | 2 }; Returns: undefined }
+      dienstplan_wunsch_setzen: { Args: { p_monat: string; p_datum: string; p_wunsch: DienstplanWunschTyp; p_notiz?: string | null }; Returns: undefined }
+      dienstplan_wunsch_loeschen: { Args: { p_monat: string; p_datum: string }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
