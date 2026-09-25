@@ -110,8 +110,9 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
     gesamtGesamt += zeile.gesamt
     return `<tr>
       <td>${escHtml(zeile.beamterName)}${zeile.dienstnummer ? ` <span class="klein">(DNr. ${escHtml(zeile.dienstnummer)})</span>` : ''}</td>
-      <td>${escHtml(VERGUETUNG_LABEL[zeile.verguetung])}</td>
+      <td>${zeile.verguetung ? escHtml(VERGUETUNG_LABEL[zeile.verguetung]) : '–'}</td>
       ${KATEGORIEN.map(kat => `<td class="r">${zeile.stunden[kat.key] ? formatStunden(zeile.stunden[kat.key]) : '–'}</td>`).join('')}
+      <td class="r"></td>
       <td class="r b">${formatStunden(zeile.gesamt)}</td>
     </tr>`
   }).join('')
@@ -119,6 +120,7 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
     <td>Gesamt</td>
     <td></td>
     ${KATEGORIEN.map(kat => `<td class="r">${gesamtProKategorie[kat.key] ? formatStunden(gesamtProKategorie[kat.key]) : '–'}</td>`).join('')}
+    <td class="r"></td>
     <td class="r b">${formatStunden(gesamtGesamt)}</td>
   </tr>`
 
@@ -149,11 +151,12 @@ export function buildUeberstundenSammelPdfHtml(input: UeberstundenSammelPdfInput
       <th>Beamter/in</th>
       <th>Vergütung</th>
       ${KATEGORIEN.map(kat => `<th class="r">${escHtml(kat.code)}<br><span class="klein">${escHtml(kat.satz)}</span></th>`).join('')}
+      <th class="r">Mehrstunden<br><span class="klein">Teilzeit</span></th>
       <th class="r">Gesamt</th>
     </tr></thead>
-    <tbody>${rows || `<tr><td colspan="${KATEGORIEN.length + 3}">Keine genehmigten Meldungen in diesem Monat.</td></tr>`}${input.zeilen.length ? summeRow : ''}</tbody>
+    <tbody>${rows || `<tr><td colspan="${KATEGORIEN.length + 4}">Keine genehmigten Meldungen in diesem Monat.</td></tr>`}${input.zeilen.length ? summeRow : ''}</tbody>
   </table>
-  <div class="foot"><span>Überstundenmeldung · Sammelansicht</span><span>DVR 0036030</span></div>
+  <div class="foot"><span>Überstundenmeldung · Sammelansicht · Mehrstunden Teilzeit händisch ergänzen</span><span>DVR 0036030</span></div>
 </body></html>`
 }
 

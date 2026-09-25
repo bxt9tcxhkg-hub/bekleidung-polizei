@@ -49,7 +49,10 @@ const SystemeinstellungenFunktionskontakte = lazy(() => import('./pages/Systemei
 const SystemeinstellungenVerstaendigungen = lazy(() => import('./pages/SystemeinstellungenVerstaendigungen'))
 const SystemeinstellungenEinsatzgruende = lazy(() => import('./pages/SystemeinstellungenEinsatzgruende'))
 const SystemeinstellungenAblaufvorlagen = lazy(() => import('./pages/SystemeinstellungenAblaufvorlagen'))
+const SystemeinstellungenDienstplanImport = lazy(() => import('./pages/SystemeinstellungenDienstplanImport'))
 const Ueberstunden = lazy(() => import('./pages/Ueberstunden'))
+const DienststellenKalender = lazy(() => import('./pages/DienststellenKalender'))
+const MeineDienste = lazy(() => import('./pages/MeineDienste'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
@@ -125,6 +128,7 @@ export default function App() {
           <Route path="/portal/systemeinstellungen/verstaendigungen" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenVerstaendigungen /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/einsatzgruende" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenEinsatzgruende /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/ablaufvorlagen" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenAblaufvorlagen /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/dienstplan-import" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenDienstplanImport /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/kontakte" element={<ProtectedRoute adminOnly><PortalChrome wide><StammdatenKontakte context={{ areaLabel: 'Systemeinstellungen', backTo: '/portal/systemeinstellungen', backLabel: 'Zu Systemeinstellungen', allowManage: true }} /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/telefonnummern" element={<ProtectedRoute adminOnly><PortalChrome wide><StammdatenTelefonnummern context={{ areaLabel: 'Systemeinstellungen', backTo: '/portal/systemeinstellungen', backLabel: 'Zu Systemeinstellungen', allowManage: true }} /></PortalChrome></ProtectedRoute>} />
           <Route
@@ -259,6 +263,8 @@ export default function App() {
           <Route path="/planung/fuhrpark/:vehicleId" element={<Navigate to="/fuhrpark" replace />} />
           <Route path="/ueberstunden" element={<ProtectedRoute><Ueberstunden /></ProtectedRoute>} />
           <Route path="/planung/ueberstunden" element={<Navigate to="/ueberstunden" replace />} />
+          <Route path="/dienststellenkalender" element={<ProtectedRoute><PortalChrome wide><DienststellenKalender /></PortalChrome></ProtectedRoute>} />
+          <Route path="/meine-dienste" element={<ProtectedRoute><PortalChrome wide><MeineDienste /></PortalChrome></ProtectedRoute>} />
           <Route
             path="/profil"
             element={
