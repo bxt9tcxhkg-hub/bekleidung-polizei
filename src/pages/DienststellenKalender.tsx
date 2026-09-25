@@ -1,0 +1,123 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CalendarDays } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
+import { inputClass } from '../components/ZentraleEntryEditor'
+import { thisMonthLocal } from '../lib/ueberstunden'
+
+// Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
+// tageweise, wer Dienst hat - aus den importierten Dienstplan-Rohdaten
+// (siehe SystemeinstellungenDienstplanImport.tsx). Für jede/n aktive/n
+// Bediensteten sichtbar (siehe Migration
+// 20260925051510_dienstplan_dienststellenweit_lesen.sql), keine eigene
+// Bereichsberechtigung nötig - wer Dienst hat, ist Basisinformation für die
+// ganze Dienststelle. Rein lesend; Bearbeitung passiert ausschließlich über
+// den monatlichen Import.
+
+interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
+interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
+
+const KATEGORIE_BADGE: Partial<Record<DienstplanKategorieDb, string>> = {
+  krank: 'bg-red-100 text-red-700',
+  urlaub: 'bg-amber-100 text-amber-800',
+  sonderurlaub: 'bg-blue-100 text-blue-700',
+  karenz: 'bg-purple-100 text-purple-700',
+}
+const KATEGORIE_LABEL: Partial<Record<DienstplanKategorieDb, string>> = {
+  krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz',
+}
+
+const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
+
+function formatDatum(iso: string): string {
+  const [jahr, monat, tag] = iso.split('-').map(Number)
+  const datum = new Date(jahr, monat - 1, tag)
+  return `${WOCHENTAG_LABEL[datum.getDay()]} ${String(tag).padStart(2, '0')}.${String(monat).padStart(2, '0')}.${jahr}`
+}
+
+interface TagesEintrag { beamterId: string; name: string; dienstnummer: string | null; texte: string[]; vonZeit: string | null; bisZeit: string | null; kategorie: DienstplanKategorieDb }
+
+export default function DienststellenKalender() {
+  const [monat, setMonat] = useState(thisMonthLocal())
+  const [monatVeroeffentlicht, setMonatVeroeffentlicht] = useState<boolean | null>(null)
+  const [dienste, setDienste] = useState<DienstZeile[]>([])
+  const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    const monatResult = await dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle()
+    if (monatResult.error) { setError('Der Dienstplan konnte nicht geladen werden.'); setLoading(false); return }
+    const monatRow = monatResult.data
+    if (!monatRow || monatRow.status !== 'veroeffentlicht') {
+      setMonatVeroeffentlicht(false); setDienste([]); setMitarbeiter([]); setLoading(false); return
+    }
+    setMonatVeroeffentlicht(true)
+    const [dienstResult, mitarbeiterResult] = await Promise.all([
+      dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,datum,zeile,rohtext,von_zeit,bis_zeit,kategorie').eq('dienstplan_monat_id', monatRow.id).order('datum').order('zeile'),
+      supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name'),
+    ])
+    if (dienstResult.error || mitarbeiterResult.error) { setError('Der Dienstplan konnte nicht geladen werden.'); setLoading(false); return }
+    setDienste(dienstResult.data ?? [])
+    setMitarbeiter(mitarbeiterResult.data ?? [])
+    setLoading(false)
+  }, [monat])
+  useEffect(() => { void load() }, [load])
+
+  const mitarbeiterById = useMemo(() => new Map(mitarbeiter.map(person => [person.id, person])), [mitarbeiter])
+
+  // Zeile 1/2 desselben Bediensteten am selben Tag zu EINER Zeile zusammenfassen
+  // (die genaue fachliche Bedeutung des Zusammenspiels ist noch nicht
+  // abschließend geklärt, siehe lib/dienstplanImport.ts - für die Kalender-
+  // Ansicht reicht "was steht an diesem Tag bei dieser Person" als ein Eintrag).
+  const tage = useMemo(() => {
+    const proTag = new Map<string, Map<string, TagesEintrag>>()
+    for (const zeile of dienste) {
+      const person = mitarbeiterById.get(zeile.beamter_id)
+      if (!person) continue
+      let tagesMap = proTag.get(zeile.datum)
+      if (!tagesMap) { tagesMap = new Map(); proTag.set(zeile.datum, tagesMap) }
+      let eintrag = tagesMap.get(zeile.beamter_id)
+      if (!eintrag) {
+        eintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, texte: [], vonZeit: null, bisZeit: null, kategorie: zeile.kategorie }
+        tagesMap.set(zeile.beamter_id, eintrag)
+      }
+      eintrag.texte.push(zeile.rohtext)
+      if (!eintrag.vonZeit && zeile.von_zeit) { eintrag.vonZeit = zeile.von_zeit; eintrag.bisZeit = zeile.bis_zeit }
+      if (zeile.kategorie !== 'dienst') eintrag.kategorie = zeile.kategorie
+    }
+    return Array.from(proTag.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([datum, tagesMap]) => ({
+        datum,
+        eintraege: Array.from(tagesMap.values()).sort((a, b) => (a.vonZeit ?? '99:99').localeCompare(b.vonZeit ?? '99:99') || a.name.localeCompare(b.name, 'de-AT')),
+      }))
+  }, [dienste, mitarbeiterById])
+
+  return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienststellenkalender</h1><p className="mt-1 text-sm text-gray-500">Wer hat an welchem Tag welchen Dienst - aus dem importierten Dienstplan.</p></div>
+      <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
+    </div>
+
+    {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+
+    {loading ? <div className="mt-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-800" /></div>
+      : monatVeroeffentlicht === false ? <div className="mt-8 rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CalendarDays className="mx-auto mb-2 h-8 w-8 text-gray-300" /><p className="text-sm text-gray-500">Für diesen Monat wurde noch kein Dienstplan veröffentlicht.</p></div>
+      : <div className="mt-6 space-y-3">
+        {tage.map(tag => <div key={tag.datum} className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="mb-2 text-sm font-bold text-gray-900">{formatDatum(tag.datum)}</p>
+          <div className="space-y-1.5">
+            {tag.eintraege.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
+              {eintrag.vonZeit && eintrag.bisZeit ? <span className="flex-none font-mono text-xs text-gray-500">{eintrag.vonZeit}–{eintrag.bisZeit}</span> : null}
+              {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
+              <span className="text-gray-600">{eintrag.texte.join(' · ')}</span>
+            </div>)}
+          </div>
+        </div>)}
+        {tage.length === 0 ? <p className="text-sm text-gray-500">Für diesen Monat sind keine Diensteinträge vorhanden.</p> : null}
+      </div>}
+  </div>
+}
