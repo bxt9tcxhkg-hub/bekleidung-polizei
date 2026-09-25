@@ -62,19 +62,19 @@ export function startOfTodayIso() {
 /**
  * Nachtdienste laufen über Mitternacht hinaus - der "Diensttag" (duty_date
  * einer laufenden Schicht, "heutige" Einsätze) wechselt daher nicht exakt um
- * 00:00 Uhr, sondern erst gegen Dienstbeginn des Tagdienstes. Vor 6 Uhr
- * lokaler Zeit gilt weiterhin der Vortag als "heute" - sonst würde ein
- * Nachtdienst, der z. B. um 19:00 mit duty_date=gestern begonnen hat, kurz
- * nach Mitternacht seine eigene Diensteinteilung und die währenddessen
- * erfassten Einsätze nicht mehr finden (beides über duty_date bzw.
- * reported_at gegen den literalen Kalendertag abgeglichen).
+ * 00:00 Uhr, sondern erst gegen Dienstende des Nachtdienstes um 8 Uhr. Vor
+ * 8 Uhr lokaler Zeit gilt weiterhin der Vortag als "heute" - sonst würde ein
+ * Nachtdienst, der z. B. um 19:00 mit duty_date=gestern begonnen hat, schon
+ * vor seinem eigentlichen Dienstende (8 Uhr) seine eigene Diensteinteilung
+ * und die währenddessen erfassten Einsätze nicht mehr finden (beides über
+ * duty_date bzw. reported_at gegen den literalen Kalendertag abgeglichen).
  */
-export function operationalToday(cutoffHour = 6) {
+export function operationalToday(cutoffHour = 8) {
   const date = new Date()
   if (date.getHours() < cutoffHour) date.setDate(date.getDate() - 1)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
-export function startOfOperationalDayIso(cutoffHour = 6) {
+export function startOfOperationalDayIso(cutoffHour = 8) {
   const date = new Date()
   if (date.getHours() < cutoffHour) date.setDate(date.getDate() - 1)
   date.setHours(0, 0, 0, 0)
