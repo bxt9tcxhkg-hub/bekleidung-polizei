@@ -1,4 +1,3 @@
--- Fahndungen bleiben bis zur fachlichen Konkretisierung vollständig aus dem aktuellen Einsatzkontext herausgenommen.
 create or replace function public.incident_context(p_incident_id uuid)
 returns table(
   kind text,
@@ -37,8 +36,11 @@ begin
   )
   select
     'personenhinweis'::text,
-    case when n.category in ('aggressiv','waffenverbot','fluchtgefahr','suizidgefahr','infektionsschutz')
-      then 'sicherheit' else 'operativ' end,
+    case
+      when n.category in ('aggressiv','waffenverbot','suizidgefahr') then 'sicherheit'
+      when n.category in ('fluchtgefahr','infektionsschutz') then 'achtung'
+      else 'operativ'
+    end,
     ('Personenhinweis: ' || case n.category
       when 'aggressiv' then 'Aggressionshinweis'
       when 'waffenverbot' then 'Waffenverbot'
@@ -46,7 +48,11 @@ begin
       when 'suizidgefahr' then 'Suizidgefahr'
       when 'infektionsschutz' then 'Infektionsschutz'
       else 'Hinweis' end)::text,
-    n.note::text,
+    (n.note ||
+      case when nullif(trim(n.action_guidance),'') is not null
+        then ' · Vorgehen: ' || n.action_guidance
+        else ''
+      end)::text,
     null::integer
   from public.operational_person_notes n
   join personen p on p.id=n.person_id
@@ -83,6 +89,41 @@ begin
   from faelle s;
 
   -- Exakter Objektbezug über strukturierte Einsatzadresse.
+  return query
+  with objekte as (
+    select o.*
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'objekt'::text,
+    'operativ'::text,
+    ('Objektinformation · ' || coalesce(o.label,o.address))::text,
+    o.note::text,
+    null::integer
+  from objekte o
+  where nullif(trim(o.note),'') is not null;
+
+  return query
+  with objekte as (
+    select o.id
+    from public.operational_objects o
+    where nullif(trim(v_inc.location_street),'') is not null
+      and lower(trim(coalesce(o.strasse,''))) = lower(trim(v_inc.location_street))
+      and lower(trim(coalesce(o.hausnummer,''))) = lower(trim(coalesce(v_inc.location_house_number,'')))
+  )
+  select
+    'schluessel'::text,
+    'operativ'::text,
+    'Schlüssel zum Einsatzobjekt vorhanden'::text,
+    ('Schlüssel ' || k.schluessel_nummer || coalesce(' · ' || k.verwahrort,''))::text,
+    null::integer
+  from public.zentrale_schluessel k
+  where k.object_id in (select id from objekte)
+    and k.status='vorhanden';
+
   -- Schutzfall mit exaktem Einsatzobjekt.
   return query
   with objekte as (
@@ -136,4 +177,4 @@ revoke all on function public.incident_context(uuid) from public, anon;
 grant execute on function public.incident_context(uuid) to authenticated;
 
 comment on function public.incident_context(uuid) is
-  'Liefert ausschließlich konkrete aktive Einsatzkontexte;
+  'Liefert ausschließlich konkrete aktive Einsatzkontexte; Nahbereich nur nach Einsatzgrund-Konfiguration.';

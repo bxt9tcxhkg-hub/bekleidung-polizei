@@ -349,6 +349,7 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260919040000_genehmiger_kette.sql` | `profiles.genehmiger_rang` + `genehmiger_kette()`: feste Vertretungsreihenfolge statt „genau ein Genehmiger"-Heuristik |
 | `20260919050000_einsatz_checkliste_namensliste.sql` | `einsatz_checklist_punkte` (Checkliste Notfall/Katastrophe, Notunterkunft) und `einsatz_namensliste` (Evakuierungs-/Unterbringungslisten) als geteilter Serverzustand statt localStorage |
 | `20260919060000_datenpflege_bereich.sql` | Neuer Portalbereich `datenpflege` (Schlüssel/Kontakte/Telefonnummern/Fahndungen/Objekte) — Stufe 1 des Rechte-Umbaus, `can_manage_datenpflege` |
+| `20260919160653_save_portal_profile_v5_datenpflege.sql` | `save_portal_profile_v5`: erweitert die Admin-RPC zur Rechtevergabe um den neuen Bereich `datenpflege` (löst `save_portal_profile_v4` ab) |
 | `20260919070000_tagesfunktion_zugriff.sql` | Stufe 2: Zugriff auf Zentrale/Innendienst/Außendienst wird Tagesfunktion aus der Diensteinteilung statt Dauerberechtigung, `is_operative_duty_today()` |
 | `20260919080000_produkt_bezugsart_groessenart.sql` | `products.bezugsart` (Massa/Eigenbeschaffung) und `products.size_mode` (Größen/Universal/keine) |
 | `20260919090000_produkt_shop_bestellbar.sql` | `products.orderable_in_shop`: trennt „im Lager erfasst" von „im Shop bestellbar" |
@@ -359,13 +360,16 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260921140000_fleet_status_cleanup_inactive_items.sql` | Verwaiste Status-Einträge deaktivierter Ausstattungsstücke bereinigt, Trigger räumen künftige Deaktivierungen automatisch mit auf |
 | `20260921233000_cart_size_mode_none_universal.sql` | Fix: Warenkorb-RPCs schlugen bei Artikeln ohne Größenwahl (`size_mode` none/universal) fehl |
 | `20260922100000_test_daten_markierung_und_wipe.sql` | Testdaten-Kennzeichnung (`profiles.is_test` u. a.) + `wipe_test_data`-RPC (siehe `docs/TESTDATEN.md`) |
+| `20260922182708_wipe_test_data_function.sql` | `wipe_test_data()` erneut definiert (unveränderter Stand, Korrekturdurchlauf) |
+| `20260922182737_wipe_test_data_allow_postgres.sql` | `wipe_test_data()`: zusätzlich `postgres`/`supabase_admin` als Aufrufer erlaubt (nicht nur `service_role`) |
 | `20260922222000_operatives_streifen_cockpit.sql` | `duty_vehicle_defaults`, `incident_supports`, `complete_incident`/`support_incident`/`take_over_incident`/`reopen_incident`/`suggest_duty_vehicle`: streifenbezogene Einsatzaktionen |
 | `20260922222757_einsatz_dokumente_serverseitig.sql` | `einsatz_dokumente`: Dokument-Metadaten serverseitig statt im localStorage |
 | `20260922224500_streifenaktionen_haertung.sql` | Fremd zugeteilte Einsätze können unterstützt, aber nicht wegübernommen werden |
 | `20260922230000_duty_vehicle_defaults_index.sql` | Performance-Index für die operative Fahrzeugvorauswahl |
 | `20260922232000_einsatzgrund_und_kontext.sql` | `incident_reason_configs` + `incident_context()`: strukturierter Einsatzgrund steuert automatische Nahbereichsprüfung |
-| `20260922234500_incident_context_ohne_fahndungen.sql` | Fahndungen aus dem automatischen Einsatzkontext herausgenommen (fachlich noch nicht konkretisiert) |
-| `20260922235000_incident_context_ohne_fahndungen.sql` | Zweiter Korrekturdurchlauf zur vorherigen Migration |
+| `20260922203716_incident_context_ohne_fahndungen_v2.sql` | Fahndungen aus dem automatischen Einsatzkontext herausgenommen (fachlich noch nicht konkretisiert) |
+| `20260922203847_personenhinweise_priorisierung.sql` | Personenhinweise nach Kategorie priorisiert (sicherheit/achtung/operativ) und um Vorgehenshinweis (`action_guidance`) ergänzt |
+| `20260922204015_schutzfallanzeige_verdichten.sql` | Schutzfall-Treffer im Einsatzkontext zeigen jetzt Maßnahme, Gültigkeit, Ausnahmen und Waffenverbot statt nur PAD-Aktenzahl |
 | `20260922241000_bv_av_laufzeit_und_aufhebung.sql` | BV/AV regulär zwei Wochen ab Anordnung, vorzeitige Aufhebung durch die Sicherheitsbehörde als eigener Vorgang |
 | `20260922243500_schlanke_einsatzbearbeitung.sql` | Neue Meldungen können offen bleiben oder durch Zentrale/eigene Streife/BP bearbeitet werden |
 | `20260923002000_ereignis_meldungszettel_felder.sql` | Zusätzliche Felder für den Ereignis-Meldungszettel |
