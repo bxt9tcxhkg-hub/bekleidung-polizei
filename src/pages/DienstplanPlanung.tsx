@@ -3,12 +3,13 @@ import { AlertTriangle, CalendarDays, CheckCircle2, Sparkles, X } from 'lucide-r
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
-import { thisMonthLocal } from '../lib/ueberstunden'
-import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
+import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
+import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
 import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
 import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
+import { berechneSollstunden, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
 import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, kurznamen, sortiereNachDienstplanGruppe, type DienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
@@ -95,6 +96,8 @@ export default function DienstplanPlanung() {
   const [monat, setMonat] = useState(thisMonthLocal())
   const [monatRow, setMonatRow] = useState<{ id: string; status: string } | null>(null)
   const [mindestruhezeitStunden, setMindestruhezeitStunden] = useState(11)
+  const [stundenProWerktag, setStundenProWerktag] = useState(8.75)
+  const [beschaeftigungsgrade, setBeschaeftigungsgrade] = useState<Map<string, number>>(new Map())
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
   const [dienste, setDienste] = useState<DienstZeile[]>([])
   const [wuensche, setWuensche] = useState<Map<string, WunschEintrag[]>>(new Map())
@@ -114,13 +117,15 @@ export default function DienstplanPlanung() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(''); setVorschlaege(new Map())
-    const [regelnResult, mitarbeiterResult, monatResult] = await Promise.all([
-      dienstplanSupabase.from('dienstplan_regeln').select('mindestruhezeit_stunden').eq('id', 1).maybeSingle(),
+    const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult] = await Promise.all([
+      dienstplanSupabase.from('dienstplan_regeln').select('stunden_pro_werktag,mindestruhezeit_stunden').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
+      dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
     ])
-    if (regelnResult.error || mitarbeiterResult.error || monatResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
-    if (regelnResult.data) setMindestruhezeitStunden(regelnResult.data.mindestruhezeit_stunden)
+    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    if (regelnResult.data) { setStundenProWerktag(regelnResult.data.stunden_pro_werktag); setMindestruhezeitStunden(regelnResult.data.mindestruhezeit_stunden) }
+    setBeschaeftigungsgrade(new Map((einstellungenResult.data ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
     // Admin-Konten sind laut Kommandant nie Teil der einteilbaren Beamten;
     // Kommando/Dienstführung sollen als eigene Blöcke zusammenstehen (siehe
     // lib/dienstplanRoster.ts).
@@ -189,6 +194,29 @@ export default function DienstplanPlanung() {
   }, [mitarbeiter])
 
   const kurznamenMap = useMemo(() => kurznamen(mitarbeiter), [mitarbeiter])
+
+  // Verfügbare Stunden je Person für die Kopfzeile: Sollstunden (aus
+  // Beschäftigungsgrad, siehe lib/dienstplanSollstunden.ts) abzüglich der
+  // bereits im Grid eingeplanten Stunden (lib/dienstplanAuswertung.ts,
+  // dieselbe Berechnung wie in "Meine Dienste") - Vorschläge (Phase 4)
+  // zählen erst nach dem Übernehmen, solange sie nur lokal vorgeschlagen
+  // sind.
+  const verfuegbareStunden = useMemo(() => {
+    const dienstePerPerson = new Map<string, DienstZeile[]>()
+    for (const zeile of dienste) {
+      const liste = dienstePerPerson.get(zeile.beamter_id) ?? []
+      liste.push(zeile)
+      dienstePerPerson.set(zeile.beamter_id, liste)
+    }
+    const ergebnis = new Map<string, number>()
+    for (const person of mitarbeiter) {
+      const grad = beschaeftigungsgrade.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
+      const soll = berechneSollstunden(monat, stundenProWerktag, grad)
+      const geplant = persoenlicheStundenUebersicht(dienstePerPerson.get(person.id) ?? []).gesamt
+      ergebnis.set(person.id, soll - geplant)
+    }
+    return ergebnis
+  }, [dienste, mitarbeiter, beschaeftigungsgrade, monat, stundenProWerktag])
 
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
   const ruheVerletzt = useMemo(
@@ -355,7 +383,13 @@ export default function DienstplanPlanung() {
                 {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
               </tr>
               <tr>
-                {mitarbeiter.map(person => <th key={person.id} title={person.name} className="min-w-20 whitespace-nowrap border-b border-gray-200 px-1.5 py-2 text-center font-semibold text-gray-600">{kurznamenMap.get(person.id) ?? person.name}</th>)}
+                {mitarbeiter.map(person => {
+                  const verfuegbar = verfuegbareStunden.get(person.id) ?? 0
+                  return <th key={person.id} title={person.name} className="min-w-20 whitespace-nowrap border-b border-gray-200 px-1.5 py-2 text-center font-semibold text-gray-600">
+                    {kurznamenMap.get(person.id) ?? person.name}
+                    <span className={`block text-[0.6rem] font-normal normal-case tracking-normal ${verfuegbar < 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatStunden(verfuegbar)} Std. frei</span>
+                  </th>
+                })}
               </tr>
             </thead>
             <tbody>
