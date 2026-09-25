@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays, CheckCircle2, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
@@ -10,7 +10,7 @@ import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
-import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
+import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, sortiereNachDienstplanGruppe, type DienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planer-Grid für die Dienstplan-Planung im Portal (siehe
@@ -174,6 +174,20 @@ export default function DienstplanPlanung() {
     return map
   }, [dienste])
 
+  // Für die Kopfzeile: Kommando/Dienstführung/Übrige-Blöcke als
+  // zusammenhängende Spaltengruppen (mitarbeiter ist bereits per
+  // sortiereNachDienstplanGruppe geordnet, siehe load()).
+  const personGruppenSpans = useMemo(() => {
+    const spans: { gruppe: DienstplanGruppe; span: number }[] = []
+    for (const person of mitarbeiter) {
+      const gruppe = dienstplanGruppe(person.dienstnummer)
+      const letzter = spans[spans.length - 1]
+      if (letzter && letzter.gruppe === gruppe) letzter.span++
+      else spans.push({ gruppe, span: 1 })
+    }
+    return spans
+  }, [mitarbeiter])
+
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
   const ruheVerletzt = useMemo(
     () => ruhezeitVerletzungen(dienste.map(zeile => ({ beamterId: zeile.beamter_id, datum: zeile.datum, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie })), mindestruhezeitStunden),
@@ -304,7 +318,7 @@ export default function DienstplanPlanung() {
 
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Personen × Tage, je Person eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Tagesspalte) bzw. zu kurze Ruhezeit (Zelle).</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile) bzw. zu kurze Ruhezeit (Zelle).</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -334,39 +348,34 @@ export default function DienstplanPlanung() {
           <table className="text-xs">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 min-w-40 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Person</th>
-                {tage.map(datum => {
-                  const [, , tagText] = datum.split('-')
-                  const wochentag = new Date(Number(datum.slice(0, 4)), Number(datum.slice(5, 7)) - 1, Number(tagText)).getDay()
-                  const fehlend = fehlendeGrund.get(datum)
-                  return <th key={datum} title={fehlend?.join(', ')} className={`border-b border-gray-200 px-1.5 py-2 text-center font-semibold ${fehlend ? 'bg-red-50 text-red-700' : 'text-gray-600'}`}>
-                    <div>{WOCHENTAG_LABEL[wochentag]}</div>
-                    <div>{tagText}</div>
-                    {fehlend ? <AlertTriangle className="mx-auto mt-0.5 h-3 w-3" /> : null}
-                  </th>
-                })}
+                <th rowSpan={2} className="sticky left-0 z-20 min-w-28 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
+                {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
+              </tr>
+              <tr>
+                {mitarbeiter.map(person => <th key={person.id} className="min-w-16 border-b border-gray-200 px-1 py-2 text-center font-semibold text-gray-600">{person.name}</th>)}
               </tr>
             </thead>
             <tbody>
-              {mitarbeiter.map((person, index) => {
-                const gruppe = dienstplanGruppe(person.dienstnummer)
-                const vorherigeGruppe = index > 0 ? dienstplanGruppe(mitarbeiter[index - 1].dienstnummer) : null
-                return <Fragment key={person.id}>
-                  {gruppe !== vorherigeGruppe ? <tr><td colSpan={tage.length + 1} className="border-t border-gray-200 bg-gray-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</td></tr> : null}
-                  {(['tag', 'nacht'] as const).map(abschnitt => <tr key={`${person.id}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
-                    <td className="sticky left-0 z-10 min-w-40 border-r border-gray-200 bg-inherit px-3 py-1.5">
-                      {abschnitt === 'tag' ? <span className="font-medium text-gray-800">{person.name}</span> : null}
-                      <span className={`ml-1.5 text-[0.65rem] uppercase tracking-wide ${abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
+              {tage.map(datum => {
+                const [, , tagText] = datum.split('-')
+                const wochentag = new Date(Number(datum.slice(0, 4)), Number(datum.slice(5, 7)) - 1, Number(tagText)).getDay()
+                return (['tag', 'nacht'] as const).map(abschnitt => {
+                  const fehlend = (fehlendeGrund.get(datum) ?? []).filter(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
+                  return <tr key={`${datum}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
+                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-0 z-10 min-w-28 border-r border-gray-200 px-3 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : 'bg-inherit'}`}>
+                      {abschnitt === 'tag' ? <span className="font-medium text-gray-800">{WOCHENTAG_LABEL[wochentag]} {tagText}.</span> : null}
+                      <span className={`ml-1.5 text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
+                      {fehlend.length > 0 ? <AlertTriangle className="ml-1 inline h-3 w-3 text-red-600" /> : null}
                     </td>
-                    {tage.map(datum => {
+                    {mitarbeiter.map(person => {
                       const zeilen = (dienstByKeyAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
                       const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
                       const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
                       const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
-                      return <td key={datum}
+                      return <td key={person.id}
                         onClick={() => oeffneZelle(person.id, person.name, datum)}
                         title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
-                        className={`min-w-14 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
+                        className={`min-w-16 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
@@ -375,8 +384,8 @@ export default function DienstplanPlanung() {
                         </div>
                       </td>
                     })}
-                  </tr>)}
-                </Fragment>
+                  </tr>
+                })
               })}
             </tbody>
           </table>
