@@ -258,6 +258,7 @@ export default function Portal() {
           <NavTile to="/dienststellenkalender" label="Dienststellenkalender" description="Wer hat wann welchen Dienst - aus dem Dienstplan" icon={CalendarDays} />
           <NavTile to="/meine-dienste" label="Meine Dienste" description="Eigene Diensteinträge und geleistete Stunden aus dem Dienstplan" icon={CalendarDays} />
           <NavTile to="/meine-dienstwuensche" label="Meine Dienstwünsche" description="Freie Tage oder bevorzugte Dienstart für einen Monat vormerken" icon={CalendarDays} />
+          {isGenehmiger ? <NavTile to="/dienstplan/planung" label="Dienstplan-Planung" description="Dienstplan direkt im Portal planen - Personen × Tage" icon={CalendarDays} /> : null}
           {isGenehmiger ? <NavTile to="/dienstplan/einstellungen" label="Dienstplan-Einstellungen" description="Sollstunden-Formel, Mindestruhezeit, Wunschfrist und Beschäftigungsgrad je Person" icon={Settings2} /> : null}
           <NavTile to="/ueberstunden" label="Überstundenmeldung" description="Überstunden erfassen und zur Prüfung abgeben" icon={Clock3} />
           {isStrictAdmin ? <NavTile to="/portal/systemeinstellungen" label="Systemeinstellungen" description="Verständigungen, Einsatzgründe und Fachverwaltung" icon={Settings2} /> : null}

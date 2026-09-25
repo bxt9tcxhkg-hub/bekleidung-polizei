@@ -6,6 +6,7 @@ import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { parseDienstCode } from '../lib/dienstplanImport'
+import { KACHEL_IMMER_SICHTBAR, istUrlaubsKuerzel, kachelRang, tagOderNacht } from '../lib/dienstplanBesetzung'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
 // tageweise Tagdienste und Nachtdienste getrennt voneinander, je Zeitraum in
@@ -46,29 +47,11 @@ function formatDatum(iso: string): string {
   return `${WOCHENTAG_LABEL[datum.getDay()]} ${String(tag).padStart(2, '0')}.${String(monat).padStart(2, '0')}.${jahr}`
 }
 
-/** Tagdienst 08-19 Uhr, Nachtdienst 19-08 Uhr (siehe lib/dienstplanAuswertung.ts) - hier zur Einteilung Tagdienste/Nachtdienste. */
-function tagOderNacht(vonZeit: string | null): 'tag' | 'nacht' {
-  if (!vonZeit) return 'nacht'
-  const stunde = Number(vonZeit.split(':')[0])
-  return stunde >= 5 && stunde < 19 ? 'tag' : 'nacht'
-}
-
 interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null }
 interface DienstKachelDaten { code: string; eintraege: KachelEintrag[] }
 interface AbwesenheitEintrag { beamterId: string; name: string; dienstnummer: string | null; texte: string[]; kategorie: DienstplanKategorieDb }
 interface ZeitabschnittUebersicht { kacheln: DienstKachelDaten[] }
 interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht; abwesenheiten: AbwesenheitEintrag[] }
-
-/** Grundbesetzung wird laut Kommandant fix vorne gereiht, danach VD/ZIV und Bhf, der Rest alphabetisch (siehe kachelRang). Z/ID/JD werden immer angezeigt (auch "nicht besetzt"), siehe neuerZeitabschnitt. */
-const KACHEL_REIHENFOLGE = ['Z', 'ID', 'JD', 'VD/ZIV', 'BHF']
-const KACHEL_IMMER_SICHTBAR = ['Z', 'ID', 'JD']
-function kachelRang(code: string): number {
-  const index = KACHEL_REIHENFOLGE.indexOf(code.toUpperCase())
-  return index === -1 ? KACHEL_REIHENFOLGE.length : index
-}
-
-/** Das Kürzel "U" (Urlaub) bekommt laut Kommandant keine eigene Dienst-Kachel, sondern reiht sich wie krank/Urlaub/Sonderurlaub/Karenz in die einfache Auflistung ein. */
-function istUrlaubsKuerzel(code: string): boolean { return code.toUpperCase() === 'U' }
 
 function Kachel({ code, eintraege }: { code: string; eintraege: KachelEintrag[] }) {
   return <div className={`rounded-lg border p-2.5 ${eintraege.length === 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
