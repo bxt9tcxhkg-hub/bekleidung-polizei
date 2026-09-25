@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarDays, CheckCircle2, CheckSquare, Moon, Square, Sparkles, Sun, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, CalendarRange, CheckCircle2, Moon, Sparkles, Sun, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { isAustrianHoliday } from '../lib/austrianHolidays'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
@@ -146,13 +146,24 @@ export default function DienstplanPlanung() {
   const [speichern, setSpeichern] = useState(false)
   const [modalError, setModalError] = useState('')
 
-  // Mehrfachauswahl (z. B. Urlaub für mehrere Tage/Personen auf einmal
-  // eintragen, statt jede Zelle einzeln zu bearbeiten) - Schlüssel
+  // Mehrfachauswahl (z. B. Urlaub für einen Zeitraum/mehrere Personen auf
+  // einmal eintragen, statt jede Zelle einzeln zu bearbeiten) - Schlüssel
   // `${beamterId}|${datum}` wie beim einzelnen Zellen-Klick, wirkt also auf
-  // beide Tag-/Nacht-Unterzeilen dieses Tages.
-  const [mehrfachModus, setMehrfachModus] = useState(false)
+  // beide Tag-/Nacht-Unterzeilen dieses Tages. Auf Geräten mit Maus (grober
+  // Zeiger = false, siehe pointer:coarse) per Ziehen über die Zellen, auf
+  // Touch-Geräten (Ziehen kollidiert dort mit dem Scrollen) stattdessen
+  // über ein eigenes Zeitraum-Formular.
+  const istTouchGeraet = useMemo(() => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches, [])
   const [auswahl, setAuswahl] = useState<Set<string>>(new Set())
   const [mehrfachSpeichern, setMehrfachSpeichern] = useState(false)
+
+  const [dragStart, setDragStart] = useState<{ beamterId: string; datum: string } | null>(null)
+  const [dragEnde, setDragEnde] = useState<{ beamterId: string; datum: string } | null>(null)
+  const [dragBewegt, setDragBewegt] = useState(false)
+
+  const [zeitraumModal, setZeitraumModal] = useState(false)
+  const [zeitraumForm, setZeitraumForm] = useState({ beamterId: '', von: '', bis: '', code: '' })
+  const [zeitraumError, setZeitraumError] = useState('')
 
   // Wer am letzten Tag des Vormonats Nachtdienst hatte, darf laut
   // Kommandant am 1. dieses Monats keinen Tagdienst bekommen (24 Stunden
@@ -336,27 +347,19 @@ export default function DienstplanPlanung() {
     setBearbeitung(null)
   }
 
-  function umschalteAuswahl(beamterId: string, datum: string) {
-    const schluessel = `${beamterId}|${datum}`
-    setAuswahl(current => {
-      const naechste = new Set(current)
-      if (naechste.has(schluessel)) naechste.delete(schluessel)
-      else naechste.add(schluessel)
-      return naechste
-    })
-  }
-
   /**
-   * Mehrfachauswahl: setzt Zeile 1 für alle ausgewählten Zellen auf
-   * dasselbe Kürzel (z. B. Urlaub für mehrere Tage/Personen auf einmal,
-   * statt jede Zelle einzeln über den Editor abzutippen). Zeile 2 bleibt
-   * je Zelle unangetastet, wie beim einzelnen Speichern auch.
+   * Setzt Zeile 1 für alle Zellen in `ziel` (Schlüssel `${beamterId}|${datum}`)
+   * auf dasselbe Kürzel (z. B. Urlaub für einen ganzen Zeitraum/mehrere
+   * Personen auf einmal, statt jede Zelle einzeln über den Editor
+   * abzutippen) - genutzt sowohl von der Drag-Auswahl (Maus) als auch vom
+   * Zeitraum-Formular (Touch). Zeile 2 bleibt je Zelle unangetastet, wie
+   * beim einzelnen Speichern auch.
    */
-  async function wendeMehrfachKuerzelAn(code: string) {
-    if (!monatRow || auswahl.size === 0) return
+  async function wendeKuerzelAufZellenAn(ziel: Set<string>, code: string) {
+    if (!monatRow || ziel.size === 0) return
     setMehrfachSpeichern(true); setError('')
     const kategorie = kategorisiereRohtext(code)
-    const eintraege = Array.from(auswahl).map(schluessel => {
+    const eintraege = Array.from(ziel).map(schluessel => {
       const [beamterId, datum] = schluessel.split('|')
       return { beamterId, datum }
     })
@@ -375,10 +378,10 @@ export default function DienstplanPlanung() {
     setAuswahl(new Set())
   }
 
-  async function mehrfachLoeschen() {
-    if (!monatRow || auswahl.size === 0) return
+  async function loescheZellen(ziel: Set<string>) {
+    if (!monatRow || ziel.size === 0) return
     setMehrfachSpeichern(true); setError('')
-    const eintraege = Array.from(auswahl).map(schluessel => {
+    const eintraege = Array.from(ziel).map(schluessel => {
       const [beamterId, datum] = schluessel.split('|')
       return { beamterId, datum }
     })
@@ -393,6 +396,82 @@ export default function DienstplanPlanung() {
     })
     setNotice(`${eintraege.length} Zellen gelöscht.`)
     setAuswahl(new Set())
+  }
+
+  /** Alle Zellen im rechteckigen Bereich zwischen start und ende (Personen-Spalten × Tage-Zeilen) - für die Drag-Auswahl mit der Maus. */
+  function rechteckAuswahl(start: { beamterId: string; datum: string } | null, ende: { beamterId: string; datum: string } | null): Set<string> {
+    if (!start || !ende) return new Set()
+    const personIndex = mitarbeiter.map(person => person.id)
+    const startPersonIdx = personIndex.indexOf(start.beamterId)
+    const endePersonIdx = personIndex.indexOf(ende.beamterId)
+    const startTagIdx = tage.indexOf(start.datum)
+    const endeTagIdx = tage.indexOf(ende.datum)
+    if (startPersonIdx === -1 || endePersonIdx === -1 || startTagIdx === -1 || endeTagIdx === -1) return new Set()
+    const [minPerson, maxPerson] = [Math.min(startPersonIdx, endePersonIdx), Math.max(startPersonIdx, endePersonIdx)]
+    const [minTag, maxTag] = [Math.min(startTagIdx, endeTagIdx), Math.max(startTagIdx, endeTagIdx)]
+    const ergebnis = new Set<string>()
+    for (let pi = minPerson; pi <= maxPerson; pi++) {
+      for (let ti = minTag; ti <= maxTag; ti++) ergebnis.add(`${mitarbeiter[pi].id}|${tage[ti]}`)
+    }
+    return ergebnis
+  }
+
+  function dragStarten(beamterId: string, datum: string) {
+    setDragStart({ beamterId, datum }); setDragEnde({ beamterId, datum }); setDragBewegt(false)
+  }
+  function dragBewegen(beamterId: string, datum: string) {
+    if (!dragStart) return
+    if (beamterId !== dragStart.beamterId || datum !== dragStart.datum) setDragBewegt(true)
+    setDragEnde({ beamterId, datum })
+  }
+  // Ohne Bewegung war es ein normaler Klick (öffnet den Zellen-Editor wie
+  // bisher) - erst ein tatsächliches Ziehen über eine andere Zelle löst die
+  // Mehrfachauswahl aus. Der globale mouseup-Listener fängt auch ein
+  // Loslassen außerhalb der Tabelle ab.
+  useEffect(() => {
+    if (!dragStart) return
+    function dragBeenden() {
+      if (dragBewegt) {
+        setAuswahl(rechteckAuswahl(dragStart, dragEnde))
+      } else {
+        const person = mitarbeiter.find(p => p.id === dragStart?.beamterId)
+        if (person && dragStart) oeffneZelle(person.id, person.name, dragStart.datum)
+      }
+      setDragStart(null); setDragEnde(null); setDragBewegt(false)
+    }
+    window.addEventListener('mouseup', dragBeenden)
+    return () => window.removeEventListener('mouseup', dragBeenden)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragStart, dragEnde, dragBewegt])
+
+  const angezeigteAuswahl = dragBewegt ? rechteckAuswahl(dragStart, dragEnde) : auswahl
+
+  function zeitraumTage(von: string, bis: string): string[] {
+    if (!von || !bis || von > bis) return []
+    return tage.filter(datum => datum >= von && datum <= bis)
+  }
+
+  async function zeitraumUebernehmen() {
+    setZeitraumError('')
+    if (!zeitraumForm.beamterId) { setZeitraumError('Bitte eine Person wählen.'); return }
+    if (!zeitraumForm.code) { setZeitraumError('Bitte ein Kürzel wählen.'); return }
+    const betroffeneTage = zeitraumTage(zeitraumForm.von, zeitraumForm.bis)
+    if (betroffeneTage.length === 0) { setZeitraumError('Bitte einen gültigen Zeitraum innerhalb des angezeigten Monats wählen.'); return }
+    const ziel = new Set(betroffeneTage.map(datum => `${zeitraumForm.beamterId}|${datum}`))
+    await wendeKuerzelAufZellenAn(ziel, zeitraumForm.code)
+    setZeitraumModal(false)
+    setZeitraumForm({ beamterId: '', von: '', bis: '', code: '' })
+  }
+
+  async function zeitraumLoeschen() {
+    setZeitraumError('')
+    if (!zeitraumForm.beamterId) { setZeitraumError('Bitte eine Person wählen.'); return }
+    const betroffeneTage = zeitraumTage(zeitraumForm.von, zeitraumForm.bis)
+    if (betroffeneTage.length === 0) { setZeitraumError('Bitte einen gültigen Zeitraum innerhalb des angezeigten Monats wählen.'); return }
+    const ziel = new Set(betroffeneTage.map(datum => `${zeitraumForm.beamterId}|${datum}`))
+    await loescheZellen(ziel)
+    setZeitraumModal(false)
+    setZeitraumForm({ beamterId: '', von: '', bis: '', code: '' })
   }
 
   // Vorschlag generieren (Phase 4) - reine, lokale Berechnung über
@@ -475,16 +554,18 @@ export default function DienstplanPlanung() {
               <button type="button" onClick={vorschlaegeVerwerfen} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><X className="h-3.5 w-3.5" /> Verwerfen</button>
               <button type="button" disabled={vorschlagUebernehmen} onClick={() => void vorschlaegeUebernehmen()} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {vorschlagUebernehmen ? 'Wird übernommen…' : 'Vorschläge übernehmen'}</button>
             </> : <button type="button" onClick={vorschlagGenerieren} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><Sparkles className="h-3.5 w-3.5" /> Vorschlag generieren</button>}
-            <button type="button" onClick={() => { setMehrfachModus(current => !current); setAuswahl(new Set()) }} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${mehrfachModus ? 'border-blue-700 bg-blue-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{mehrfachModus ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />} Mehrfachauswahl</button>
+            {istTouchGeraet ? <button type="button" onClick={() => { setZeitraumError(''); setZeitraumModal(true) }} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><CalendarRange className="h-3.5 w-3.5" /> Zeitraum eintragen</button> : null}
             {monatRow.status !== 'veroeffentlicht' ? <button type="button" disabled={veroeffentlichen} onClick={() => void monatVeroeffentlichen()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {veroeffentlichen ? 'Wird veröffentlicht…' : 'Veröffentlichen'}</button> : null}
           </div>
         </div>
 
-        {mehrfachModus ? <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-          <span className="text-xs font-medium text-blue-900">{auswahl.size} Zelle{auswahl.size === 1 ? '' : 'n'} ausgewählt - Tag/Nacht-Zelle anklicken zum Markieren, dann Kürzel wählen:</span>
-          {ABWESENHEIT_KUERZEL.map(({ label, code }) => <button key={code} type="button" disabled={auswahl.size === 0 || mehrfachSpeichern} onClick={() => void wendeMehrfachKuerzelAn(code)} className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50">{label}</button>)}
-          <button type="button" disabled={auswahl.size === 0 || mehrfachSpeichern} onClick={() => void mehrfachLoeschen()} className="rounded-full border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Löschen</button>
-          {auswahl.size > 0 ? <button type="button" onClick={() => setAuswahl(new Set())} className="text-xs text-blue-800 hover:underline">Auswahl aufheben</button> : null}
+        {!istTouchGeraet ? <p className="mt-2 text-xs text-gray-400">Tipp: Über mehrere Zellen ziehen (Personen × Tage), um sie gemeinsam z. B. auf Urlaub zu setzen.</p> : null}
+
+        {auswahl.size > 0 ? <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+          <span className="text-xs font-medium text-blue-900">{auswahl.size} Zelle{auswahl.size === 1 ? '' : 'n'} ausgewählt:</span>
+          {ABWESENHEIT_KUERZEL.map(({ label, code }) => <button key={code} type="button" disabled={mehrfachSpeichern} onClick={() => void wendeKuerzelAufZellenAn(auswahl, code)} className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50">{label}</button>)}
+          <button type="button" disabled={mehrfachSpeichern} onClick={() => void loescheZellen(auswahl)} className="rounded-full border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Löschen</button>
+          <button type="button" onClick={() => setAuswahl(new Set())} className="text-xs text-blue-800 hover:underline">Auswahl aufheben</button>
         </div> : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -534,7 +615,7 @@ export default function DienstplanPlanung() {
                       const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
                       const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
                       const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
-                      const ausgewaehlt = auswahl.has(`${person.id}|${datum}`)
+                      const ausgewaehlt = angezeigteAuswahl.has(`${person.id}|${datum}`)
                       const uebertragWarnung = abschnitt === 'tag' && datum === tage[0] && naechtlicherUebertrag.has(person.id)
                       const absenz = zeilen.find(zeile => zeile.kategorie !== 'dienst')
                       const absenzFarben = absenz ? absenzFarbe(absenz.kategorie) : null
@@ -543,9 +624,11 @@ export default function DienstplanPlanung() {
                         uebertragWarnung ? 'Nachtdienst am letzten Tag des Vormonats - heute laut Ruhezeit (24 Std.) kein Tagdienst möglich' : null,
                       ].filter(Boolean).join(' · ') || undefined
                       return <td key={person.id}
-                        onClick={() => mehrfachModus ? umschalteAuswahl(person.id, datum) : oeffneZelle(person.id, person.name, datum)}
+                        onClick={istTouchGeraet ? () => oeffneZelle(person.id, person.name, datum) : undefined}
+                        onMouseDown={!istTouchGeraet ? () => dragStarten(person.id, datum) : undefined}
+                        onMouseEnter={!istTouchGeraet ? () => dragBewegen(person.id, datum) : undefined}
                         title={titel}
-                        className={`min-w-20 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzFarben ? absenzFarben.bg : ''}`}
+                        className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzFarben ? absenzFarben.bg : ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
@@ -569,6 +652,32 @@ export default function DienstplanPlanung() {
         : <button type="button" onClick={() => setZeile2(LEERE_ZEILE)} className="text-xs text-blue-700 hover:underline">+ Zweiter Eintrag</button>}
       {modalError ? <ErrorMessage text={modalError} /> : null}
       <Actions saving={speichern} close={() => setBearbeitung(null)} save={speichereZelle} />
+    </Modal> : null}
+
+    {zeitraumModal ? <Modal title="Zeitraum eintragen" close={() => setZeitraumModal(false)}>
+      <label className="block text-xs font-medium text-gray-600">Person
+        <select className={inputClass} value={zeitraumForm.beamterId} onChange={event => setZeitraumForm(form => ({ ...form, beamterId: event.target.value }))}>
+          <option value="">– wählen –</option>
+          {mitarbeiter.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
+        </select>
+      </label>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block text-xs font-medium text-gray-600">Von
+          <input type="date" className={inputClass} min={tage[0]} max={tage[tage.length - 1]} value={zeitraumForm.von} onChange={event => setZeitraumForm(form => ({ ...form, von: event.target.value }))} />
+        </label>
+        <label className="block text-xs font-medium text-gray-600">Bis
+          <input type="date" className={inputClass} min={tage[0]} max={tage[tage.length - 1]} value={zeitraumForm.bis} onChange={event => setZeitraumForm(form => ({ ...form, bis: event.target.value }))} />
+        </label>
+      </div>
+      <p className="mt-2 text-xs font-medium text-gray-600">Kürzel</p>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {ABWESENHEIT_KUERZEL.map(({ label, code }) => <button key={code} type="button" onClick={() => setZeitraumForm(form => ({ ...form, code }))} className={`rounded-full border px-2.5 py-1 text-xs font-medium ${zeitraumForm.code === code ? 'border-amber-700 bg-amber-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{label}</button>)}
+      </div>
+      {zeitraumError ? <ErrorMessage text={zeitraumError} /> : null}
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <button type="button" disabled={mehrfachSpeichern} onClick={() => void zeitraumLoeschen()} className="text-xs font-medium text-red-700 hover:underline disabled:opacity-50">Im Zeitraum löschen</button>
+        <Actions saving={mehrfachSpeichern} close={() => setZeitraumModal(false)} save={zeitraumUebernehmen} />
+      </div>
     </Modal> : null}
   </div>
 }
