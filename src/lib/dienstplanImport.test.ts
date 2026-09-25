@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, kategorisiereRohtext, parseDienstCode, parseDienstplanGrid, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
 
 describe('parseDienstCode', () => {
   it('trennt Code und Uhrzeit bei einem einfachen Dienst', () => {
@@ -16,6 +16,10 @@ describe('parseDienstCode', () => {
     expect(parseDienstCode('krank')).toEqual({ code: 'krank', vonZeit: null, bisZeit: null })
     expect(parseDienstCode('Urlaub')).toEqual({ code: 'Urlaub', vonZeit: null, bisZeit: null })
   })
+  it('entfernt einen abschließenden Punkt/Komma aus dem Code (auch ohne Uhrzeit)', () => {
+    expect(parseDienstCode('JD.')).toEqual({ code: 'JD', vonZeit: null, bisZeit: null })
+    expect(parseDienstCode('ID.')).toEqual({ code: 'ID', vonZeit: null, bisZeit: null })
+  })
 })
 
 describe('kategorisiereRohtext', () => {
@@ -25,9 +29,29 @@ describe('kategorisiereRohtext', () => {
     expect(kategorisiereRohtext('SoUrl')).toBe('sonderurlaub')
     expect(kategorisiereRohtext('Karenz')).toBe('karenz')
   })
+  it('"U" zählt ebenfalls als Urlaub - mit oder ohne Uhrzeit (z. B. Urlaubs-Halbtag)', () => {
+    expect(kategorisiereRohtext('U')).toBe('urlaub')
+    expect(kategorisiereRohtext('U 08-13')).toBe('urlaub')
+  })
+  it('ein Kürzel, das zufällig ein "u" enthält, zählt NICHT als Urlaub (nur das exakte Kürzel "U")', () => {
+    expect(kategorisiereRohtext('Kfz 17-19')).toBe('dienst')
+  })
   it('alles andere gilt als regulärer Dienst', () => {
     expect(kategorisiereRohtext('VD 08-19')).toBe('dienst')
     expect(kategorisiereRohtext('JD')).toBe('dienst')
+  })
+})
+
+describe('kuerzelKlartext', () => {
+  it('übersetzt ein einfaches Kürzel', () => {
+    expect(kuerzelKlartext('VD')).toBe('Verkehrsdienst')
+    expect(kuerzelKlartext('Z')).toBe('Zentrale')
+  })
+  it('übersetzt ein kombiniertes Kürzel (z. B. "Sch/VD")', () => {
+    expect(kuerzelKlartext('Sch/VD')).toBe('Schulung / Verkehrsdienst')
+  })
+  it('unbekannte Kürzel bleiben als Kürzel stehen', () => {
+    expect(kuerzelKlartext('Ziv')).toBe('Ziv')
   })
 })
 

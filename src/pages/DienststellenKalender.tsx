@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
 import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
+import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
+import { kuerzelKlartext, parseDienstCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
 // tageweise, wer Dienst hat - aus den importierten Dienstplan-Rohdaten
@@ -109,12 +111,19 @@ export default function DienststellenKalender() {
         {tage.map(tag => <div key={tag.datum} className="rounded-xl border border-gray-200 bg-white p-4">
           <p className="mb-2 text-sm font-bold text-gray-900">{formatDatum(tag.datum)}</p>
           <div className="space-y-1.5">
-            {tag.eintraege.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
-              {eintrag.vonZeit && eintrag.bisZeit ? <span className="flex-none font-mono text-xs text-gray-500">{eintrag.vonZeit}–{eintrag.bisZeit}</span> : null}
-              {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
-              <span className="text-gray-600">{eintrag.texte.join(' · ')}</span>
-            </div>)}
+            {tag.eintraege.map(eintrag => {
+              // Ein Dienst ohne Uhrzeit ist laut Kommandant ein Nachtdienst
+              // (regulär 19:00-08:00 Uhr, siehe lib/dienstplanAuswertung.ts).
+              const nachtdienst = eintrag.kategorie === 'dienst' && !eintrag.vonZeit
+              const zeitAnzeige = eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : nachtdienst ? `${NACHTDIENST_VON}–${NACHTDIENST_BIS}` : null
+              const texteKlartext = eintrag.texte.map(text => kuerzelKlartext(parseDienstCode(text).code)).join(' · ')
+              return <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
+                {zeitAnzeige ? <span className="flex-none font-mono text-xs text-gray-500">{zeitAnzeige}</span> : null}
+                {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
+                <span className="text-gray-600">{texteKlartext}</span>
+              </div>
+            })}
           </div>
         </div>)}
         {tage.length === 0 ? <p className="text-sm text-gray-500">Für diesen Monat sind keine Diensteinträge vorhanden.</p> : null}

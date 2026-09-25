@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
 import { inputClass } from '../components/ZentraleEntryEditor'
 import { KATEGORIEN, formatStunden, thisMonthLocal } from '../lib/ueberstunden'
-import { persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
+import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
+import { kuerzelKlartext, parseDienstCode } from '../lib/dienstplanImport'
 
 // "Meine Dienste": eigene Diensteinträge des importierten Dienstplans für
 // einen gewählten Monat, plus eine automatisch aus den Uhrzeiten berechnete
@@ -97,11 +98,15 @@ export default function MeineDienste() {
           {tage.length === 0 ? <p className="text-sm text-gray-500">Für diesen Monat sind keine eigenen Diensteinträge vorhanden.</p> : <div className="space-y-2">
             {tage.map(([datum, zeilen]) => <div key={datum} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
               <span className="w-32 flex-none font-medium text-gray-800">{formatDatum(datum)}</span>
-              {zeilen.map((zeile, index) => <span key={zeile.zeile} className="text-gray-600">
-                {index > 0 ? <span className="text-gray-300"> · </span> : null}
-                {zeile.von_zeit && zeile.bis_zeit ? <span className="font-mono text-xs text-gray-500">{zeile.von_zeit}–{zeile.bis_zeit} </span> : null}
-                {KATEGORIE_LABEL[zeile.kategorie] ?? zeile.rohtext}
-              </span>)}
+              {zeilen.map((zeile, index) => {
+                const nachtdienst = zeile.kategorie === 'dienst' && !zeile.von_zeit
+                const zeitAnzeige = zeile.von_zeit && zeile.bis_zeit ? `${zeile.von_zeit}–${zeile.bis_zeit}` : nachtdienst ? `${NACHTDIENST_VON}–${NACHTDIENST_BIS}` : null
+                return <span key={zeile.zeile} className="text-gray-600">
+                  {index > 0 ? <span className="text-gray-300"> · </span> : null}
+                  {zeitAnzeige ? <span className="font-mono text-xs text-gray-500">{zeitAnzeige} </span> : null}
+                  {KATEGORIE_LABEL[zeile.kategorie] ?? kuerzelKlartext(parseDienstCode(zeile.rohtext).code)}
+                </span>
+              })}
             </div>)}
           </div>}
         </section>
