@@ -47,10 +47,39 @@ function tageImMonat(monatIso: string): string[] {
   return Array.from({ length: letzterTag }, (_, index) => `${monatIso}-${String(index + 1).padStart(2, '0')}`)
 }
 
+/** Letzter Kalendertag des Vormonats als 'YYYY-MM-DD' - für die Ruhezeit-Prüfung über den Monatswechsel hinweg (Nachtdienst am Monatsletzten blockiert Tagdienst am 1.). */
+function vorherigerMonatLetzterTag(monatIso: string): string {
+  const [jahr, monat] = monatIso.split('-').map(Number)
+  const letzterTagVormonat = new Date(jahr, monat - 1, 0)
+  return `${letzterTagVormonat.getFullYear()}-${String(letzterTagVormonat.getMonth() + 1).padStart(2, '0')}-${String(letzterTagVormonat.getDate()).padStart(2, '0')}`
+}
+
 /** Ob ein Dienstwunsch den angegebenen Zeitabschnitt betrifft - Urlaub blockiert ganztägig, siehe lib/dienstplanWunsch.ts. */
 function wunschBetrifftAbschnitt(wunsch: DienstplanWunschTyp, abschnitt: 'tag' | 'nacht'): boolean {
   if (wunsch === 'urlaub') return true
   return wunsch === (abschnitt === 'tag' ? 'frei_tag' : 'frei_nacht')
+}
+
+/** Ganztägige Abwesenheiten (alles außer "dienst") haben keine Uhrzeit und damit auch keinen Tag-/Nachtbezug - sie werden laut Kommandant immer in der Tag-Zeile angezeigt statt (wie ein zeitloser Dienst) fälschlich in der Nacht-Zeile zu landen. */
+function abschnittFuerAnzeige(zeile: Pick<DienstZeile, 'kategorie' | 'von_zeit'>): 'tag' | 'nacht' {
+  if (zeile.kategorie !== 'dienst') return 'tag'
+  return tagOderNacht(zeile.von_zeit)
+}
+
+/** Farbe je Abwesenheits-Kategorie für die Zellen im Planer-Grid (vom Kommandanten vorgegeben) - "dienst"/"sonstiges" bekommen keine eigene Farbe. */
+function absenzFarbe(kategorie: DienstplanKategorieDb): { bg: string; text: string } | null {
+  switch (kategorie) {
+    case 'urlaub':
+    case 'sonderurlaub':
+    case 'stundenersatz':
+      return { bg: 'bg-yellow-100', text: 'text-yellow-900' }
+    case 'krank':
+      return { bg: 'bg-green-100', text: 'text-green-900' }
+    case 'karenz':
+      return { bg: 'bg-pink-100', text: 'text-pink-900' }
+    default:
+      return null
+  }
 }
 
 const QUICK_KUERZEL = ['Z', 'ID', 'JD', 'VD', 'TD', 'ET', 'SVE', 'RA', 'BHF', 'KFZ', 'MOT', 'PV', 'SCH', 'ZIV']
@@ -58,6 +87,7 @@ const ABWESENHEIT_KUERZEL: { label: string; code: string }[] = [
   { label: 'Urlaub', code: 'U' },
   { label: 'Krank', code: 'Krank' },
   { label: 'Sonderurlaub', code: 'SoUrl' },
+  { label: 'Stundenersatz', code: 'StdErsatz' },
   { label: 'Karenz', code: 'Karenz' },
 ]
 
@@ -124,17 +154,24 @@ export default function DienstplanPlanung() {
   const [auswahl, setAuswahl] = useState<Set<string>>(new Set())
   const [mehrfachSpeichern, setMehrfachSpeichern] = useState(false)
 
+  // Wer am letzten Tag des Vormonats Nachtdienst hatte, darf laut
+  // Kommandant am 1. dieses Monats keinen Tagdienst bekommen (24 Stunden
+  // Ruhezeit nach einem Nachtdienst) - wird am 1. rot markiert, siehe JSX.
+  const [naechtlicherUebertrag, setNaechtlicherUebertrag] = useState<Set<string>>(new Set())
+
   const load = useCallback(async () => {
     setLoading(true); setError(''); setVorschlaege(new Map())
-    const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult] = await Promise.all([
+    const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult, vorMonatNachtResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('stunden_pro_werktag,mindestruhezeit_stunden').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
+      dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,von_zeit').eq('datum', vorherigerMonatLetzterTag(monat)).eq('kategorie', 'dienst'),
     ])
-    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error || vorMonatNachtResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) { setStundenProWerktag(regelnResult.data.stunden_pro_werktag); setMindestruhezeitStunden(regelnResult.data.mindestruhezeit_stunden) }
     setBeschaeftigungsgrade(new Map((einstellungenResult.data ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
+    setNaechtlicherUebertrag(new Set((vorMonatNachtResult.data ?? []).filter(row => tagOderNacht(row.von_zeit) === 'nacht').map(row => row.beamter_id)))
     // Admin-Konten sind laut Kommandant nie Teil der einteilbaren Beamten;
     // Kommando/Dienstführung sollen als eigene Blöcke zusammenstehen (siehe
     // lib/dienstplanRoster.ts).
@@ -180,7 +217,7 @@ export default function DienstplanPlanung() {
   const dienstByKeyAbschnitt = useMemo(() => {
     const map = new Map<string, DienstZeile[]>()
     for (const zeile of dienste) {
-      const schluessel = `${zeile.beamter_id}|${zeile.datum}|${tagOderNacht(zeile.von_zeit)}`
+      const schluessel = `${zeile.beamter_id}|${zeile.datum}|${abschnittFuerAnzeige(zeile)}`
       const liste = map.get(schluessel) ?? []
       liste.push(zeile)
       map.set(schluessel, liste)
@@ -416,7 +453,7 @@ export default function DienstplanPlanung() {
 
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile) bzw. zu kurze Ruhezeit (Zelle). Amber: Wochenende/Feiertag. Sonne/Mond: Tag-/Nachtzeile.</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile), zu kurze Ruhezeit bzw. Nachtdienst am Vortag des Vormonats (Zelle). Amber: Wochenende/Feiertag. Sonne/Mond: Tag-/Nachtzeile. Gelb: Urlaub/Sonderurlaub/Stundenersatz. Grün: krank. Rosa: Karenz.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -498,15 +535,23 @@ export default function DienstplanPlanung() {
                       const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
                       const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
                       const ausgewaehlt = auswahl.has(`${person.id}|${datum}`)
+                      const uebertragWarnung = abschnitt === 'tag' && datum === tage[0] && naechtlicherUebertrag.has(person.id)
+                      const absenz = zeilen.find(zeile => zeile.kategorie !== 'dienst')
+                      const absenzFarben = absenz ? absenzFarbe(absenz.kategorie) : null
+                      const titel = [
+                        wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : null,
+                        uebertragWarnung ? 'Nachtdienst am letzten Tag des Vormonats - heute laut Ruhezeit (24 Std.) kein Tagdienst möglich' : null,
+                      ].filter(Boolean).join(' · ') || undefined
                       return <td key={person.id}
                         onClick={() => mehrfachModus ? umschalteAuswahl(person.id, datum) : oeffneZelle(person.id, person.name, datum)}
-                        title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
-                        className={`min-w-20 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung ? 'bg-red-50' : ''}`}
+                        title={titel}
+                        className={`min-w-20 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzFarben ? absenzFarben.bg : ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
-                          {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                          {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
                           {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}
                           {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
+                          {uebertragWarnung ? <AlertTriangle className="h-3 w-3 text-red-600" /> : null}
                         </div>
                       </td>
                     })}

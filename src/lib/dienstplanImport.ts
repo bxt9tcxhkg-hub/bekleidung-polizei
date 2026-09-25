@@ -16,7 +16,7 @@
  *   Einträge mit zeile 1/2 gespeichert statt sie zu verschmelzen)
  */
 
-export type DienstplanKategorie = 'dienst' | 'krank' | 'urlaub' | 'sonderurlaub' | 'karenz' | 'sonstiges'
+export type DienstplanKategorie = 'dienst' | 'krank' | 'urlaub' | 'sonderurlaub' | 'karenz' | 'stundenersatz' | 'sonstiges'
 export type DienstplanZelle = string | number | Date | null | undefined
 
 export interface DienstplanSpalte {
@@ -72,6 +72,7 @@ export function kategorisiereRohtext(rohtext: string): DienstplanKategorie {
   if (kuerzel.includes('sourl')) return 'sonderurlaub'
   if (kuerzel.includes('krank')) return 'krank'
   if (kuerzel.includes('karenz')) return 'karenz'
+  if (kuerzel.includes('stdersatz') || kuerzel.includes('stundenersatz')) return 'stundenersatz'
   if (kuerzel.includes('urlaub') || kuerzel === 'u') return 'urlaub'
   return 'dienst'
 }

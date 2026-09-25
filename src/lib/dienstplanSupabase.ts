@@ -17,7 +17,7 @@ import { supabase } from './supabase'
 // Minimalbeispiel hat das bestätigt (interface -> Fehler, identisches `type` -> kein Fehler).
 
 export type DienstplanMonatStatus = 'entwurf' | 'veroeffentlicht'
-export type DienstplanKategorieDb = 'dienst' | 'krank' | 'urlaub' | 'sonderurlaub' | 'karenz' | 'sonstiges'
+export type DienstplanKategorieDb = 'dienst' | 'krank' | 'urlaub' | 'sonderurlaub' | 'karenz' | 'stundenersatz' | 'sonstiges'
 
 export type DienstplanSpalteRow = {
   id: string

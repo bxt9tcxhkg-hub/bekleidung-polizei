@@ -34,9 +34,10 @@ const KATEGORIE_BADGE: Partial<Record<DienstplanKategorieDb, string>> = {
   urlaub: 'bg-amber-100 text-amber-800',
   sonderurlaub: 'bg-blue-100 text-blue-700',
   karenz: 'bg-purple-100 text-purple-700',
+  stundenersatz: 'bg-amber-100 text-amber-800',
 }
 const KATEGORIE_LABEL: Partial<Record<DienstplanKategorieDb, string>> = {
-  krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz',
+  krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz', stundenersatz: 'Stundenersatz',
 }
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
