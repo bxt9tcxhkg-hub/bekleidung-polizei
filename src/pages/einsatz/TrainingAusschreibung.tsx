@@ -114,7 +114,7 @@ type SessionParticipant = {
   assignmentId?: string
 }
 
-export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: { canManage: boolean; isGenehmiger: boolean }) {
+export default function TrainingAusschreibungPanel({ canManage }: { canManage: boolean }) {
   const { profile } = useAuth()
   const [sessions, setSessions] = useState<EinsatzTrainingSession[]>([])
   const [modules, setModules] = useState<EinsatzTrainingModule[]>([])
@@ -365,42 +365,6 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
     await unregisterParticipant(session, participant)
   }
 
-  // Genehmiger entscheidet über einen noch offenen, bereits terminierten Vorschlag.
-  async function decideAssignment(session: EinsatzTrainingSession, participant: SessionParticipant, approve: boolean) {
-    if (!isGenehmiger || participant.confirmed || !participant.assignmentId) return
-    if (!approve) {
-      const note = window.prompt('Ablehnungsgrund (optional):') ?? ''
-      if (note === null) return
-      await runDecision(session, participant, false, note)
-      return
-    }
-    await runDecision(session, participant, true, '')
-  }
-
-  async function runDecision(session: EinsatzTrainingSession, participant: SessionParticipant, approve: boolean, note: string) {
-    if (!participant.assignmentId) return
-    setBusyId(session.id)
-    setError('')
-    const { error: rpcError } = await supabase.rpc('decide_training_assignment', {
-      p_assignment_id: participant.assignmentId,
-      p_approve: approve,
-      p_session_id: session.id,
-      p_note: note.trim() || null,
-    })
-    if (rpcError) {
-      setError(rpcError.message || 'Entscheidung fehlgeschlagen.')
-      setBusyId(null)
-      return
-    }
-    const officer = officers.find(row => row.id === participant.officer_id) ?? participant.officer
-    logAudit(
-      approve ? 'Trainingsvorschlag genehmigt' : 'Trainingsvorschlag abgelehnt',
-      `${officerDisplayName(officer)} · ${session.module?.name ?? session.module_id} ${session.session_date}`,
-    )
-    setBusyId(null)
-    await load()
-  }
-
   async function removeSession(session: EinsatzTrainingSession) {
     if (!canManage) return
     const label = `${formatCompletedOn(session.session_date)} · ${session.module?.name ?? 'Ausschreibung'}`
@@ -501,29 +465,11 @@ export default function TrainingAusschreibungPanel({ canManage, isGenehmiger }: 
                           <li key={row.id} className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
                             <span className="min-w-0 truncate">{officerDisplayName(row.officer)}</span>
                             {!row.confirmed && (
+                              // Entscheidung erfolgt zentral auf der Seite "Genehmigungen"
+                              // (Freigaben), nicht mehr hier - kein zweiter Ort dafür.
                               <span className="shrink-0 text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">
-                                Wartet auf Genehmigung
+                                Wartet auf Genehmigung (Freigaben)
                               </span>
-                            )}
-                            {!row.confirmed && isGenehmiger && (
-                              <>
-                                <button
-                                  type="button"
-                                  disabled={busyId === session.id}
-                                  onClick={() => { void decideAssignment(session, row, true) }}
-                                  className="shrink-0 text-xs text-green-700 hover:underline disabled:opacity-60"
-                                >
-                                  Genehmigen
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={busyId === session.id}
-                                  onClick={() => { void decideAssignment(session, row, false) }}
-                                  className="shrink-0 text-xs text-red-700 hover:underline disabled:opacity-60"
-                                >
-                                  Ablehnen
-                                </button>
-                              </>
                             )}
                             <button
                               type="button"

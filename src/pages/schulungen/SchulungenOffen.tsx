@@ -1,44 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
-import type { SchulungAssignment, SchulungCompletion, SchulungModule, SchulungSession } from '../../lib/types'
+import type { SchulungAssignment, SchulungCompletion, SchulungModule } from '../../lib/types'
 import { formatCompletedOn, officersCompletedForModule, officersOpenForModule } from '../../lib/schulungen'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList, type PortalAdminProfile } from '../../lib/portalAdmin'
 import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 import type { Profile } from '../../lib/types'
 
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
-
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'> & PortalAdminProfile
 
-export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canManage: boolean; isGenehmiger: boolean }) {
+export default function SchulungenOffenPanel({ canManage }: { canManage: boolean }) {
   const [modules, setModules] = useState<SchulungModule[]>([])
   const [completions, setCompletions] = useState<SchulungCompletion[]>([])
   const [officers, setOfficers] = useState<OfficerOption[]>([])
-  const [sessions, setSessions] = useState<SchulungSession[]>([])
   const [assignments, setAssignments] = useState<SchulungAssignment[]>([])
   const [moduleId, setModuleId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [proposingId, setProposingId] = useState<string | null>(null)
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null)
-  const [reviewing, setReviewing] = useState<SchulungAssignment | null>(null)
-  const [reviewSessionId, setReviewSessionId] = useState('')
-  const [reviewNote, setReviewNote] = useState('')
-  const [reviewSaving, setReviewSaving] = useState(false)
   const { profile } = useAuth()
 
   async function load() {
     setLoading(true)
     try {
-      const [modRes, compRes, profRes, sessRes, assignRes] = await withTimeout(Promise.all([
+      const [modRes, compRes, profRes, assignRes] = await withTimeout(Promise.all([
         supabase.from('schulungen_module').select('*').eq('active', true).order('name'),
         supabase.from('schulungen_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
         canManage ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name') : Promise.resolve({ data: [] as OfficerOption[], error: null }),
-        supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
         canManage
           ? supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').is('session_id', null)
           : Promise.resolve({ data: [] as SchulungAssignment[], error: null }),
@@ -47,20 +38,17 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
       if (modRes.error) failures.push('Module')
       if (compRes.error) failures.push('Abschlüsse')
       if (profRes.error) failures.push('Personen')
-      if (sessRes.error) failures.push('Termine')
       if (assignRes.error) failures.push('Vorschläge')
       setError(failures.length > 0 ? `Nicht alles konnte geladen werden (${failures.join(', ')}).` : '')
       setModules(modRes.error ? [] : ((modRes.data ?? []) as SchulungModule[]))
       setCompletions(compRes.error ? [] : ((compRes.data ?? []) as SchulungCompletion[]))
       setOfficers(profRes.error ? [] : excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
-      setSessions(sessRes.error ? [] : ((sessRes.data ?? []) as SchulungSession[]))
       setAssignments(assignRes.error ? [] : ((assignRes.data ?? []) as SchulungAssignment[]))
     } catch (err) {
       setError(loadErrorMessage(err, 'Offene Liste konnte nicht geladen werden.'))
       setModules([])
       setCompletions([])
       setOfficers([])
-      setSessions([])
       setAssignments([])
     } finally {
       setLoading(false)
@@ -80,7 +68,6 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
 
   const open = useMemo(() => officersOpenForModule({ moduleId: effectiveId, officers, completions }), [effectiveId, officers, completions])
   const done = useMemo(() => officersCompletedForModule({ moduleId: effectiveId, officers, completions }), [effectiveId, officers, completions])
-  const offerings = useMemo(() => sessions.filter(s => s.module_id === effectiveId), [sessions, effectiveId])
   const moduleAssignments = useMemo(() => assignments.filter(a => a.module_id === effectiveId), [assignments, effectiveId])
 
   async function proposeForModule(officerId: string) {
@@ -113,39 +100,6 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
       return
     }
     logAudit('Schulungsvorschlag zurückgezogen', `${officerDisplayName(assignment.officer)} · ${selected?.name ?? assignment.module_id}`)
-    await load()
-  }
-
-  function openReview(assignment: SchulungAssignment) {
-    setReviewing(assignment)
-    setReviewSessionId('')
-    setReviewNote('')
-    setError('')
-  }
-
-  async function review(approve: boolean) {
-    if (!reviewing) return
-    if (approve && !reviewSessionId) {
-      setError('Bitte einen Termin für die Einteilung wählen.')
-      return
-    }
-    setReviewSaving(true)
-    const { error: rpcError } = await supabase.rpc('decide_schulung_assignment', {
-      p_assignment_id: reviewing.id,
-      p_approve: approve,
-      p_session_id: approve ? reviewSessionId : null,
-      p_note: reviewNote.trim() || null,
-    })
-    setReviewSaving(false)
-    if (rpcError) {
-      setError(rpcError.message || 'Entscheidung fehlgeschlagen.')
-      return
-    }
-    logAudit(
-      approve ? 'Schulungsvorschlag genehmigt' : 'Schulungsvorschlag abgelehnt',
-      `${officerDisplayName(reviewing.officer)} · ${selected?.name ?? reviewing.module_id}`,
-    )
-    setReviewing(null)
     await load()
   }
 
@@ -240,13 +194,8 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
                   <li key={assignment.id} className="px-4 py-3 flex items-center justify-between gap-2">
                     <span className="text-sm text-gray-800 min-w-0 truncate">{officerDisplayName(assignment.officer)}</span>
                     <div className="flex items-center gap-3 shrink-0">
-                      {isGenehmiger ? (
-                        <button type="button" onClick={() => openReview(assignment)} className="flex items-center gap-1.5 bg-blue-800 hover:bg-blue-900 text-white text-xs font-medium px-3 py-1.5 rounded-lg">
-                          Prüfen
-                        </button>
-                      ) : (
-                        <span className="text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">Wartet auf Genehmiger</span>
-                      )}
+                      {/* Entscheidung erfolgt zentral auf der Seite "Genehmigungen" (Freigaben). */}
+                      <span className="text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">Wartet auf Genehmiger (Freigaben)</span>
                       <button type="button" disabled={withdrawingId === assignment.id} onClick={() => { void withdrawProposal(assignment) }} className="text-xs text-red-700 hover:underline disabled:opacity-60">
                         Zurückziehen
                       </button>
@@ -259,46 +208,6 @@ export default function SchulungenOffenPanel({ canManage, isGenehmiger }: { canM
         </div>
       )}
 
-      {reviewing && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <div>
-                <h2 className="font-bold text-gray-900">Schulungsvorschlag prüfen</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{officerDisplayName(reviewing.officer)} · {selected?.name ?? reviewing.module_id}</p>
-              </div>
-              <button type="button" onClick={() => setReviewing(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen">
-                <XCircle className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <label className="block text-xs font-medium text-gray-600">
-                Termin für die Einteilung *
-                <select className={`${inputClass} mt-1`} value={reviewSessionId} onChange={e => setReviewSessionId(e.target.value)}>
-                  <option value="">Bitte wählen</option>
-                  {offerings.map(session => (
-                    <option key={session.id} value={session.id}>{formatCompletedOn(session.session_date)}{session.note ? ` · ${session.note}` : ''}</option>
-                  ))}
-                </select>
-                {offerings.length === 0 && <p className="text-xs text-amber-800 mt-1">Für dieses Modul ist noch kein Termin ausgeschrieben.</p>}
-              </label>
-              <label className="block text-xs font-medium text-gray-600">
-                Bemerkung / Ablehnungsgrund
-                <textarea className={`${inputClass} mt-1 min-h-24 resize-y`} maxLength={500} value={reviewNote} onChange={e => setReviewNote(e.target.value)} />
-              </label>
-              {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
-            </div>
-            <div className="flex flex-col-reverse sm:flex-row gap-3 px-6 py-4 border-t">
-              <button type="button" disabled={reviewSaving} onClick={() => { void review(false) }} className="flex-1 flex items-center justify-center gap-2 border border-red-200 text-red-700 font-medium py-2.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-60">
-                <XCircle className="w-4 h-4" /> Ablehnen
-              </button>
-              <button type="button" disabled={reviewSaving || offerings.length === 0} onClick={() => { void review(true) }} className="flex-1 flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800 disabled:opacity-60 text-white font-medium py-2.5 rounded-lg text-sm">
-                <Check className="w-4 h-4" /> Einteilen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

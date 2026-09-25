@@ -55,9 +55,9 @@ export default function EinsatztrainingPanel() {
       {visibleTab === 'module' ? (
         <TrainingModulesPanel canManage={canManage} />
       ) : visibleTab === 'offen' ? (
-        <TrainingOffenPanel canManage={canManage} isGenehmiger={isGenehmiger} />
+        <TrainingOffenPanel canManage={canManage} />
       ) : visibleTab === 'ausschreibung' ? (
-        <TrainingAusschreibungPanel canManage={canManage} isGenehmiger={isGenehmiger} />
+        <TrainingAusschreibungPanel canManage={canManage} />
       ) : (
         <TrainingProtokollPanel canManage={canManage} />
       )}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ShoppingCart, CalendarRange, CheckSquare, ShoppingBag, Euro, Truck, Scissors, Package, Footprints, Warehouse } from 'lucide-react'
+import { ShoppingCart, CalendarRange, ShoppingBag, Euro, Truck, Scissors, Package, Warehouse } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import type { Quarter } from '../lib/types'
@@ -169,64 +169,8 @@ function SachbearbeiterDashboard({ profile }: { profile: NonNullable<ReturnType<
   )
 }
 
-function GenehmDashboard({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>['profile']> }) {
-  const [pendingOrders, setPendingOrders] = useState(0)
-  const [pendingRefunds, setPendingRefunds] = useState(0)
-  const [activeQuarter, setActiveQuarter] = useState<Quarter | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    async function load() {
-      const [ordersRes, refundsRes, quarterRes] = await Promise.all([
-        supabase.from('orders').select('id', { count: 'exact' }).eq('status', 'pending_approval'),
-        supabase.from('shoe_refunds').select('id', { count: 'exact' }).eq('status', 'pending'),
-        supabase.from('quarters').select('*').eq('status', 'active').maybeSingle(),
-      ])
-      setPendingOrders(ordersRes.count ?? 0)
-      setPendingRefunds(refundsRes.count ?? 0)
-      setActiveQuarter(quarterRes.data ?? null)
-      setLoading(false)
-    }
-    load().catch(() => setError('Daten konnten nicht geladen werden.'))
-  }, [profile.id])
-
-  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
-
-  return (
-    <div className="space-y-6">
-      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
-      {activeQuarter && (
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-5 py-3 flex items-center gap-3">
-          <CalendarRange className="w-4 h-4 text-blue-600" />
-          <span className="text-sm text-blue-800 font-medium">Aktives Quartal: {activeQuarter.name}</span>
-          <span className="text-xs text-blue-500 ml-auto">{new Date(activeQuarter.start_date).toLocaleDateString('de-AT')} – {new Date(activeQuarter.end_date).toLocaleDateString('de-AT')}</span>
-        </div>
-      )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <Link to="/genehmigungen" className="rounded-xl p-5 bg-yellow-50 text-yellow-700 hover:brightness-95 transition-all">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">Bestellungen zur Genehmigung</span>
-          <div className="bg-yellow-100 p-2 rounded-lg"><CheckSquare className="w-4 h-4" /></div>
-        </div>
-        <p className="text-2xl font-bold">{pendingOrders}</p>
-        <p className="text-xs mt-1 opacity-70">Budgetüberschreitungen ausstehend</p>
-      </Link>
-      <Link to="/schuherstattungen" className="rounded-xl p-5 bg-blue-50 text-blue-700 hover:brightness-95 transition-all">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">Schuherstattungen</span>
-          <div className="bg-blue-100 p-2 rounded-lg"><Footprints className="w-4 h-4" /></div>
-        </div>
-        <p className="text-2xl font-bold">{pendingRefunds}</p>
-        <p className="text-xs mt-1 opacity-70">Ausstehend zur Genehmigung</p>
-      </Link>
-    </div>
-    </div>
-  )
-}
-
 export default function Dashboard() {
-  const { profile, isSachbearbeiter, isGenehmiger } = useAuth()
+  const { profile, isSachbearbeiter } = useAuth()
   const [activeTab, setActiveTab] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const startX = useRef<number | null>(null)
@@ -236,7 +180,6 @@ export default function Dashboard() {
   const tabs = [
     { key: 'user', label: 'Mein Bereich' },
     ...(isSachbearbeiter ? [{ key: 'sachbearbeiter', label: 'Sachbearbeiter' }] : []),
-    ...(isGenehmiger ? [{ key: 'genehmiger', label: 'Genehmiger' }] : []),
   ]
 
   function onTouchStart(e: React.TouchEvent) { startX.current = e.touches[0].clientX }
@@ -275,7 +218,6 @@ export default function Dashboard() {
       <div ref={containerRef} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         {tabs[activeTab]?.key === 'user' && <UserDashboard profile={profile} />}
         {tabs[activeTab]?.key === 'sachbearbeiter' && <SachbearbeiterDashboard profile={profile} />}
-        {tabs[activeTab]?.key === 'genehmiger' && <GenehmDashboard profile={profile} />}
       </div>
     </div>
   )

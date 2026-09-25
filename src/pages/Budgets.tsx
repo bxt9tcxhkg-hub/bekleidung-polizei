@@ -1,22 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Pencil, Check, X, RefreshCw, CalendarClock, Footprints, Search, ChevronRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowLeft, Pencil, Check, X, RefreshCw, CalendarClock, Search, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
 import {
   DEFAULT_BUDGET,
-  DEFAULT_SHOE_CAP,
   budgetUpsertPayload,
   budgetYearFromValidFrom,
   effectiveUsed,
-  existingCapIdForDate,
   parseBudgetAmount,
   remainingBudget,
-  summarizeBudgetRows,
   withoutAdminProfiles,
 } from '../lib/budget'
-import type { Profile, UserBudget, ShoeRefundCap } from '../lib/types'
+import type { Profile, UserBudget } from '../lib/types'
 
 type BudgetDrillOrder = {
   id: string
@@ -38,8 +35,12 @@ interface UserRow {
   used: number
 }
 
+// Budgetauswertung (Kennzahlen) und Schuherstattung-Maximalbetrag sind hier
+// nicht mehr - die Auswertung steht jetzt direkt auf der Genehmigungen-
+// Bekleidung-Seite (GenehmigungenBekleidung.tsx), der Maximalbetrag direkt
+// auf der Schuherstattungen-Verwaltung (ShoeRefunds.tsx). Diese Seite ist
+// dadurch ausschließlich die Jahresbudget-Verwaltung je Benutzer.
 export default function Budgets() {
-  const { profile: authProfile } = useAuth()
   const [rows, setRows] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
@@ -70,16 +71,10 @@ export default function Budgets() {
     setDrilldownLoading(false)
   }
 
-  // Shoe refund cap
-  const [caps, setCaps] = useState<ShoeRefundCap[]>([])
-  const [showCapForm, setShowCapForm] = useState(false)
-  const [capForm, setCapForm] = useState({ amount: '', valid_from: today(), note: '' })
-  const [capSaving, setCapSaving] = useState(false)
-
   async function load() {
     setLoading(true)
     const t = today()
-    const [profilesRes, budgetsRes, ordersRes, capsRes] = await Promise.all([
+    const [profilesRes, budgetsRes, ordersRes] = await Promise.all([
       supabase.from('profiles').select('*').eq('active', true).order('name'),
       supabase.from('user_budgets').select('*').eq('year', CURRENT_YEAR).order('valid_from', { ascending: false }),
       supabase.from('orders')
@@ -87,13 +82,11 @@ export default function Budgets() {
         .not('status', 'in', '(pending,cancelled)')
         .gte('created_at', `${CURRENT_YEAR}-01-01`)
         .lt('created_at', `${CURRENT_YEAR + 1}-01-01`),
-      supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }).order('created_at', { ascending: false }),
     ])
 
     const profiles = withoutAdminProfiles(profilesRes.data ?? [])
     const budgets = budgetsRes.data ?? []
     const orders = ordersRes.data ?? []
-    setCaps((capsRes.data ?? []) as ShoeRefundCap[])
 
     const usedByUser: Record<string, number> = {}
     for (const o of orders) {
@@ -191,121 +184,33 @@ export default function Budgets() {
     load()
   }
 
-  async function saveCap() {
-    const val = parseFloat(capForm.amount.replace(',', '.'))
-    if (isNaN(val) || val < 0) return
-    setCapSaving(true)
-    const existingId = existingCapIdForDate(caps, capForm.valid_from)
-    const { error } = existingId
-      ? await supabase.from('shoe_refund_caps').update({
-          cap_amount: val,
-          note: capForm.note || null,
-        }).eq('id', existingId)
-      : await supabase.from('shoe_refund_caps').insert({
-          cap_amount: val,
-          valid_from: capForm.valid_from,
-          note: capForm.note || null,
-          created_by: authProfile!.id,
-        })
-    setCapSaving(false)
-    if (error) { setError(`Maximalbetrag konnte nicht gespeichert werden: ${error.message}`); return }
-    logAudit('Schuherstattungs-Deckel geändert', `${fmtEUR(val)} ab ${capForm.valid_from}`)
-    setError('')
-    setShowCapForm(false)
-    setCapForm({ amount: '', valid_from: today(), note: '' })
-    load()
-  }
-
-  // caps ist valid_from absteigend sortiert: erster Eintrag <= heute ist der aktuelle,
-  // der LETZTE Eintrag > heute ist die nächste anstehende Änderung.
-  const currentCap = caps.find(c => c.valid_from <= today())
-  const futureCaps = caps.filter(c => c.valid_from > today())
-  const scheduledCap = futureCaps.length > 0 ? futureCaps[futureCaps.length - 1] : undefined
-
-  const { totalBudget, totalUsed, utilizationPct, overBudgetCount, unusedCount } = summarizeBudgetRows(
-    rows.map(r => ({
-      used: r.used,
-      totalBudget: r.currentBudget?.total_budget ?? DEFAULT_BUDGET,
-    })),
-  )
-
   return (
     <div className="space-y-6">
+      <Link to="/genehmigungen/bekleidung" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline">
+        <ArrowLeft className="w-4 h-4" /> Zu Bekleidung
+      </Link>
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>
         <p className="text-gray-500 text-sm mt-1">Jahresbudget und bereits verbrauchtes Budget verwalten. Rückstellung zum 01.01.</p>
       </div>
 
-      {/* Budget summary */}
-      {!loading && (
-        <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-          <p className="text-sm font-semibold text-gray-700">Budgetauswertung {CURRENT_YEAR}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Gesamtbudget</p>
-              <p className="text-xl font-bold text-gray-900">{fmtEUR(totalBudget)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Verbraucht</p>
-              <p className="text-xl font-bold text-gray-900">{fmtEUR(totalUsed)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Budget überschritten</p>
-              <p className={`text-xl font-bold ${overBudgetCount > 0 ? 'text-red-600' : 'text-green-600'}`}>{overBudgetCount} Nutzer</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">Kein Verbrauch</p>
-              <p className="text-xl font-bold text-gray-500">{unusedCount} Nutzer</p>
-            </div>
-          </div>
-          <div>
-            <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span>Ausschöpfung</span>
-              <span className={utilizationPct >= 90 ? 'text-red-600 font-semibold' : utilizationPct >= 70 ? 'text-amber-600 font-semibold' : 'text-green-600 font-semibold'}>{utilizationPct.toFixed(1)} %</span>
-            </div>
-            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${utilizationPct >= 90 ? 'bg-red-500' : utilizationPct >= 70 ? 'bg-amber-400' : 'bg-green-500'}`}
-                style={{ width: `${utilizationPct}%` }} />
-            </div>
-            {utilizationPct >= 90 && <p className="text-xs text-red-600 mt-1.5 font-medium">Budget nahezu ausgeschöpft — bei der Planung für {CURRENT_YEAR + 1} höheres Budget einplanen.</p>}
-            {overBudgetCount > 0 && <p className="text-xs text-amber-700 mt-1">{overBudgetCount} {overBudgetCount === 1 ? 'Nutzer hat' : 'Nutzer haben'} das Budget überschritten — Richtwert für {CURRENT_YEAR + 1} entsprechend anpassen.</p>}
-          </div>
-        </div>
-      )}
-
-      {/* Shoe refund cap card */}
+      {/* Gesamtanpassung - gleiche Karten-Gestaltung wie der Maximalbetrag auf
+          der Schuherstattungen-Verwaltung (Icon+Titel links, "Anpassen"-Button
+          rechts), statt eines kleinen Buttons in der Tabellen-Kopfzeile. */}
       <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="bg-teal-100 p-2 rounded-lg"><Footprints className="w-4 h-4 text-teal-700" /></div>
+            <div className="bg-blue-100 p-2 rounded-lg"><RefreshCw className="w-4 h-4 text-blue-700" /></div>
             <div>
-              <p className="font-semibold text-gray-900">Schuherstattung Maximalbetrag</p>
-              <p className="text-xs text-gray-500">Globale Obergrenze für alle Benutzer</p>
+              <p className="font-semibold text-gray-900">Jahresbudget für alle anpassen</p>
+              <p className="text-xs text-gray-500">Gilt für alle aktiven Benutzer · Standard {fmtEUR(DEFAULT_BUDGET)}</p>
             </div>
           </div>
-          <button onClick={() => { setShowCapForm(true); setCapForm({ amount: String(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP), valid_from: today(), note: currentCap?.note ?? '' }) }}
-            className="flex items-center gap-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg transition-colors">
+          <button onClick={() => setShowBulk(true)}
+            className="flex items-center gap-1.5 text-sm font-medium bg-blue-800 hover:bg-blue-900 text-white px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
             <Pencil className="w-4 h-4" /> Anpassen
           </button>
-        </div>
-        <div className="flex items-center gap-6 flex-wrap">
-          <div>
-            <p className="text-3xl font-bold text-gray-900">{fmtEUR(Number(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP))}</p>
-            {currentCap
-              ? <p className="text-xs text-gray-400 mt-0.5">gültig seit {new Date(currentCap.valid_from).toLocaleDateString('de-AT')}</p>
-              : <p className="text-xs text-gray-400 mt-0.5">kein Eintrag — Standard {fmtEUR(DEFAULT_SHOE_CAP)}</p>}
-          </div>
-          {scheduledCap && (
-            <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              <CalendarClock className="w-4 h-4 text-amber-600 flex-shrink-0" />
-              <div>
-                <p className="text-xs font-semibold text-amber-800">Geplante Änderung</p>
-                <p className="text-xs text-amber-700">{fmtEUR(Number(scheduledCap.cap_amount))} ab {new Date(scheduledCap.valid_from).toLocaleDateString('de-AT')}</p>
-                {scheduledCap.note && <p className="text-xs text-amber-600 italic mt-0.5">{scheduledCap.note}</p>}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -314,8 +219,8 @@ export default function Budgets() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50">
-            <div className="relative flex-1 max-w-xs">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+            <div className="relative max-w-xs">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input
                 type="text"
@@ -325,10 +230,6 @@ export default function Budgets() {
                 className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               />
             </div>
-            <button onClick={() => setShowBulk(true)}
-              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-white transition-colors flex-shrink-0">
-              <RefreshCw className="w-3.5 h-3.5" /> Alle anpassen
-            </button>
           </div>
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -533,47 +434,6 @@ export default function Budgets() {
                   </tfoot>
                 </table>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Shoe refund cap modal */}
-      {showCapForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-            <div className="px-6 py-4 border-b">
-              <h2 className="font-bold text-gray-900">Schuherstattung anpassen</h2>
-              <p className="text-xs text-gray-500 mt-1">Neuer Maximalbetrag mit Gültigkeitsdatum</p>
-            </div>
-            <div className="px-6 py-4 space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Maximalbetrag (€)</label>
-                <input type="number" step="0.01" min="0" autoFocus
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={capForm.amount} onChange={e => setCapForm(f => ({ ...f, amount: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Gültig ab</label>
-                <input type="date"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={capForm.valid_from} onChange={e => setCapForm(f => ({ ...f, valid_from: e.target.value }))} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Notiz (optional)</label>
-                <input type="text"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={capForm.note} onChange={e => setCapForm(f => ({ ...f, note: e.target.value }))}
-                  placeholder="z. B. Anpassung laut Beschluss 2027" />
-              </div>
-            </div>
-            <div className="flex gap-3 px-6 py-4 border-t">
-              <button onClick={() => setShowCapForm(false)}
-                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
-              <button onClick={saveCap} disabled={!capForm.amount || capSaving}
-                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
-                {capSaving ? 'Wird gespeichert...' : 'Speichern'}
-              </button>
             </div>
           </div>
         </div>

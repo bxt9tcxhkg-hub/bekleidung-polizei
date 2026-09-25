@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarDays,
   Car,
+  CheckSquare,
   ClipboardList,
   Clock3,
   Database,
@@ -112,13 +113,26 @@ export default function Portal() {
   const rawCanManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const rawCanManageSchulungen = canManageSchulungen({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const canManageDuties = isStrictAdmin || isGenehmiger || zentraleManagerRole
-  const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number }>({})
+  const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number }>({})
 
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number } = {}
+      const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number } = {}
       await Promise.all([
+        // Zählt bewusst nur die Fälle, die sonst nirgendwo auf dieser Seite auftauchen
+        // (Budgetüberschreitungen, Lagerbestellungen, Schuherstattungen, Überstunden-
+        // meldungen - alle vier werden auf /genehmigungen entschieden) - Einsatzmittel-
+        // und Schulungs-Anfragen laufen bereits über die einsatz_mt-/schulungen-Zähler
+        // unten, eine Doppelzählung würde denselben offenen Fall zweimal ausweisen.
+        isGenehmiger
+          ? Promise.all([
+              supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
+              supabase.from('stock_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
+              supabase.from('shoe_refunds').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+              supabase.from('ueberstunden_meldungen').select('id', { count: 'exact', head: true }).eq('status', 'eingereicht'),
+            ]).then(([orders, stock, refunds, ueberstunden]) => { next.genehmigungen = (orders.count ?? 0) + (stock.count ?? 0) + (refunds.count ?? 0) + (ueberstunden.count ?? 0) })
+          : Promise.resolve(),
         rawCanManageZentrale
           ? Promise.all([
               supabase.from('zentrale_entries').select('id', { count: 'exact', head: true }).eq('priority', 'kritisch').neq('status', 'erledigt'),
@@ -141,10 +155,11 @@ export default function Portal() {
     }
     void load()
     return () => { cancelled = true }
-  }, [rawCanManageZentrale, rawCanManageFuhrpark, rawCanManageEinsatzmittel, rawCanManageSchulungen])
+  }, [isGenehmiger, rawCanManageZentrale, rawCanManageFuhrpark, rawCanManageEinsatzmittel, rawCanManageSchulungen])
 
   const totalOpenTasks = Object.values(openCounts).reduce((sum: number, value) => sum + (value ?? 0), 0)
   const openTaskLinks: { key: string; label: string; count: number; to: string }[] = [
+    { key: 'genehmigungen', label: 'Genehmigungen · offene Bestellungen, Erstattungen und Überstundenmeldungen', count: openCounts.genehmigungen ?? 0, to: '/genehmigungen' },
     { key: 'zentrale', label: 'Zentrale · kritische offene Einträge', count: openCounts.zentrale ?? 0, to: '/zentrale' },
     { key: 'fuhrpark', label: 'Fuhrpark · unvollständig ausgestattete Fahrzeuge', count: openCounts.fuhrpark ?? 0, to: '/fuhrpark' },
     { key: 'einsatz_mt', label: 'Einsatzmittel · offene Anfragen', count: openCounts.einsatz_mt ?? 0, to: '/einsatz' },
@@ -216,6 +231,15 @@ export default function Portal() {
         </PortalSection>
 
         <PortalSection title="Organisatorische Angelegenheiten" description="Verwaltung, Ausstattung, Ausbildung, Fuhrpark und Datenpflege" tone="organisation">
+          {isGenehmiger ? (
+            <NavTile
+              to="/genehmigungen"
+              label="Genehmigungen"
+              description="Bestellungen, Anträge und Zuteilungsvorschläge nach Bereich entscheiden"
+              icon={CheckSquare}
+              badge={openCounts.genehmigungen}
+            />
+          ) : null}
           {hasAreaAccess('zentrale') || hasAreaAccess('datenpflege') || eigeneBereicheHeute.size > 0 ? (
             <NavTile
               to="/stammdaten"

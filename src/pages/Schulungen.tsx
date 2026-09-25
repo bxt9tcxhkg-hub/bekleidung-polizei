@@ -60,9 +60,9 @@ export default function Schulungen() {
       {visibleTab === 'module' ? (
         <SchulungenModulePanel canManage={canManage} />
       ) : visibleTab === 'offen' ? (
-        <SchulungenOffenPanel canManage={canManage} isGenehmiger={isGenehmiger} />
+        <SchulungenOffenPanel canManage={canManage} />
       ) : visibleTab === 'ausschreibung' ? (
-        <SchulungenAusschreibungPanel canManage={canManage} isGenehmiger={isGenehmiger} />
+        <SchulungenAusschreibungPanel canManage={canManage} />
       ) : visibleTab === 'protokoll' ? (
         <SchulungenProtokollPanel canManage={canManage} />
       ) : (
