@@ -212,116 +212,234 @@ Migrationsdateien liegen in `supabase/migrations/`.
 
 | Datei | Inhalt |
 |---|---|
-| `20260501_000000_initial_schema.sql` | Rekonstruierte Baseline (Tabellen, Views, RPCs-Helfer, Benutzer-Policies) |
-| `20260511_approved_status.sql` | Status-Hinweis |
-| `20260512_proc_listed.sql` | `proc_listed` (eigene 8-stellige Version, nicht `20260511…`) |
-| `20260702_drop_foreign_project_tables.sql` | Fremde Tabellen entfernen |
-| `20260703_security_hardening.sql` | Security-Hardening (eigene 8-stellige Version, nicht `20260702…`) |
-| `20260707_*` … `20260708_*` | RPCs, Indizes, Rollenabdeckung |
-| `20260830_production_readiness.sql` | Genehmiger-WITH-CHECK, deliveries-RLS, `has_role` prüft `active` |
-| `20260831_preview_rebuild.sql` | No-op (`SELECT 1`) — nur Preview-Rebuild nach der 20260501-Korrektur, keine Schemaänderung |
-| `20260901_user_admin_rights.sql` | Genehmiger darf Profile aktualisieren; Status nur Genehmiger/Admin |
-| `20260903_support_tickets.sql` | Interner Support (Tickets in Supabase, kein Drittanbieter) |
-| `20260906_portal_area_roles.sql` | Portal-Bereichsrechte (`portal_area_roles`), Backfill, Sync-Trigger |
-| `20260907_personal_einsatzmittel.sql` | Persönliche Einsatzmittel (eine Tabelle + category), RLS über `einsatz_mt` |
-| `20260908_pool_einsatzmittel.sql` | Pool-Einsatzmittel + Verwahrungsort (eine Tabelle + category), RLS über `einsatz_mt` |
-| `20260909_einsatztraining.sql` | Einsatztraining: Module, Trainingstage, Protokoll, Abschlüsse/Sperre, RLS über `einsatz_mt` |
-| `20260910_personal_em_verwahrungsort.sql` | Persönliche EM: optionaler Officer + Verwahrungsort (Lager) |
-| `20260911_portal_benutzer_genehmiger.sql` | Genehmiger darf `portal_area_roles` lesen; Schreiben bleibt Admin |
-| `20260912_pool_verwahrungsorte_lager.sql` | Pool-Orte Spind/Waffentresor + Lager-Notiz |
-| `20260913_munition_verbrauch_ausbuchung.sql` | Munitionsverbrauch am Trainingstag, Ausbuchung `removed_at` |
-| `20260914_official_et_roles.sql` | Offizielle ET-Module + Rollen aus users-seed.json |
-| `20260915_et_roster_stadtpolizei.sql` | Stadtpolizei-Organisation für ET-Liste |
-| `20260916_parkaufsicht_roster.sql` | Parkaufsicht-Organisation für Owner-Liste |
-| `20260917_force_username_set.sql` | `username` nullable (`DROP NOT NULL`), Wipe `dn{N}`, `force_username_set`, Erstlogin setzt PC-Namen |
-| `20260918_budget_used_adjustment.sql` | `user_budgets.used_adjustment`, Verbrauchskorrektur je Kalenderjahr, `submit_cart` berücksichtigt Korrektur |
-| `20260919_einsatztraining_fachlogik.sql` | Pflicht/Zusatz, schiesst, Halbjahr, Ausschreibung/Anmeldung |
-| `20260920_einsatztraining_geltung.sql` | Geltung `applies_to` (Polizei/Parkaufsicht/Alle), Selbstanmeldung prüft Organisation |
-| `20260921_lookup_login_email.sql` | RPC `lookup_login_email`: anon, Username → Auth-E-Mail |
-| `20260911100000_vehicle_checks_and_mail_deliveries.sql` | `vehicle_checks` (Fahrzeug-/Materialcheck je Fahrzeug/Tag/Schicht) und `mail_deliveries` (RSa/RSb je Person, Status, Akteneigentümer) samt RPC `record_mail_delivery_action` für die Schnellaktionen |
-| `20260911110000_innendienst_cockpit.sql` | `innendienst_shift_tasks` (Kassen-Bestätigung je Person/Tag/Schicht) und `innendienst_records` (schlankes Protokoll für Bescheide Straßenmusik/-kunst und Verstöße – ohne Bescheidinhalte/Gebühren) |
-| `20260911120000_innendienst_verstoss_bescheid_bezug.sql` | `innendienst_records.related_bescheid_id`: Verstöße gegen Auflagen müssen sich auf einen konkreten Bescheid (Straßenmusik/-kunst) beziehen, per Trigger geprüft |
-| `20260923204222_innendienst_bescheide_arbeitsablauf.sql` | Straßenmusik/-kunst fachlich geschlossen: maximal zwei Bescheide pro Tag, Planbeilage verpflichtend, Außendienst-Ein-Klick-Widerruf und personenbezogene Kommandantenentscheidung |
-| `20260924084401_cleanup_event_after_incident_delete.sql` | Entfernt beim Löschen des letzten zugeordneten Einsatzes das Ereignis samt Verständigungen und sonstigen Ereignisdaten; gemeinsame Ereignisse mit weiteren Einsätzen bleiben erhalten |
-| `20260924100000_close_orphaned_central_events.sql` | Schließt bereits vorhandene aktive Ereignisse ohne Einsatzzuordnung einmalig; Verlauf und Dokumente bleiben erhalten, offene Verständigungen verschwinden aus dem Arbeitsstand |
-| `20260924180124_portal_integrationen_vorbereitung.sql` | Administrator-Konfiguration für Outlook und Rainbow sowie getrennte, geschützte Tabellen für künftige Kontakte und Anrufereignisse; siehe `docs/INTEGRATIONEN_OUTLOOK_RAINBOW.md` |
-| `20260924181942_mehrere_kontaktnummern.sql` | Büro-Telefon, Diensthandy und Privathandy je Kontakt; bestehende Nummern bleiben unverändert und ohne angenommene Zuordnung erhalten |
-| `20260924182752_benutzer_telefonnummern.sql` | Eigene Dienst- und Privathandys je Benutzer mit getrennten Leserechten für den dienstlichen Kontaktbereich |
-| `20260924191728_admin_verstaendigung_und_kontaktanzeigen.sql` | Adminregeln je Ereignisstufe, feste Verständigungsschritte pro Ereignis und Verknüpfung wichtiger Telefonnummern mit konkreten Kontaktnummern |
-| `20260924192905_admin_ablaufvorlagen.sql` | Admin-Vorlagen für Maßnahmen und Entscheidungen; unveränderliche Schritte je Einsatz/Ereignis mit RLS und Übernahme bestehender Vorgänge |
-| `20260924195435_funktionskontakte_systemeinstellungen.sql` | Zentrale, einmalig gepflegte Funktionskontakte für Stadtführung, Einsatzorganisation und Fachabteilungen; Verständigungsregeln übernehmen stufenübergreifend die jeweils aktuelle Person und Rufnummer; Kontaktinstitutionen sind frei erweiterbar |
-| `20260924195529_kontaktinstitutionen_fk_indizes.sql` | Abdeckende Fremdschlüsselindizes für verwaltete Kontaktinstitutionen und deren Zuordnung zu Kontakten |
-| `20260924215016_funktionskontakte_aktive_ereignisse.sql` | Zuständige Personen und Rufnummern in aktiven Ereignissen nachführen; bestehende aktive Verständigungsschritte einmalig ergänzen und Löschung verwendeter Funktionen verhindern |
-| `20260924215021_profil_als_funktionskontakt.sql` | Aktive Portalbenutzer einschließlich Kommando direkt als Funktionskontakt und Vertretung auswählbar; Profilrufnummern bleiben zentral gepflegt und erscheinen in Verständigungen |
-| `20260924215028_namenslisten_operativ_freigeben.sql` | Evakuierungs- und Unterbringungslisten aus ZMR-Daten für Zentrale sowie diensthabende Einsatzkräfte wieder beschreibbar; ersetzt die versehentliche Beschränkung auf reine Hauslisten |
-| `20260925021129_dienstplan_import.sql` | Schritt 1-3 des Dienstplan-Imports: `dienstplan_spalten` (einmalig gepflegte Zuordnung Excel-Namensspalte → Profil, `immer_aktiv` für Sonderfälle wie Kommandant/Stellvertreter ohne Diensteintrag), `dienstplan_monate` (ein Eintrag je hochgeladenem Monat, Status `entwurf`/`veroeffentlicht`), `dienstplan_dienste` (Rohzeilen je Beamten/Tag, zeile 1/2 unverändert getrennt gespeichert) + RPCs `dienstplan_monat_ersetzen` (atomarer Delete+Insert beim erneuten Upload desselben Monats) und `dienstplan_monat_veroeffentlichen`. Reine Anzeige, bewusst getrennt vom Überstunden-Meldeworkflow; Parser in `lib/dienstplanImport.ts`, Admin-Import-Seite unter `/portal/systemeinstellungen/dienstplan-import` |
-| `20260925051510_dienstplan_dienststellenweit_lesen.sql` | Schritt 4-5: `dienstplan_dienste`-Lese-Policy von "nur eigene Zeilen" auf dienststellenweit (jede/r aktive Bedienstete sieht alle Zeilen eines veröffentlichten Monats) geändert - analog zu `duty_assignments`, wer Dienst hat ist Basisinformation für die ganze Dienststelle. Grundlage für `/dienststellenkalender` (wer hat wann Dienst) und `/meine-dienste` (eigene Diensteinträge + automatisch aus den Uhrzeiten berechnete Stunden, siehe `lib/dienstplanAuswertung.ts` - reine Anzeige, ersetzt nicht die Überstundenmeldung) |
-| `20260925071826_dienstplan_sollstunden.sql` | `dienstplan_monate.sollstunden` (nullable) - die Sollstunden des Monats stehen in einer Textbox der Excel-Vorlage, nicht im Zellenraster (siehe `lib/dienstplanImport.ts::extrahiereSollstundenEintraege`, per JSZip aus `xl/drawings/drawingN.xml` gelesen); Import trägt sie nach dem Speichern der Diensteinträge nach. Grundlage für die Gesamt-/Sollstunden-Gegenüberstellung in `/meine-dienste` |
-| `20260911180000_innendienst_kassensturz.sql` | `innendienst_shift_tasks`: Kassensturz-Felder `float_amount`, `expected_revenue`, `cash_denominations`, `counted_total` |
-| `20260911190000_mail_deliveries_owner_vernehmung_close.sql` | `mail_deliveries`: Typ `vernehmung`, Status `durchgefuehrt`, Akteneigentümer automatisch = Ersteller (Trigger), `closed_at`/`closed_by` + RPC `close_mail_delivery` (endgültiges Schließen durch den Akteneigentümer) |
-| `20260911200000_fuhrpark_vollstaendig.sql` | Fuhrpark komplett: `fleet_equipment_items`/`fleet_equipment_status` (Füllliste/Mängel), `fleet_care_tasks` (Reinigung & Pflege), `fleet_appointments` (Werkstatt & Termine, Fristen), `is_vehicle_responsible()`, Fahrzeugkontrolle auch für Fuhrpark-Mitglieder, Unterlagenbereich `fuhrpark` |
-| `20260911210000_fuhrpark_dokumente_pro_fahrzeug.sql` | Fuhrparkweiter Unterlagenbereich `fuhrpark` wieder entfernt (Rückbau von `einsatz_material_tabs`/`einsatz_materials` auf `einsatzmittel`/`einsatztraining`/`schulungen`), stattdessen `fleet_documents` (Zulassung, Serviceheft etc. direkt je Fahrzeug) |
-| `20261001_genehmiger_bereichsuebergreifend.sql` | Genehmiger (globale Rolle) bekommt in `has_portal_area_access()`, `can_manage_zentrale()`, `can_manage_fuhrpark()`, `can_manage_einsatzmittel()`, `can_manage_schulungen()` dieselben Rechte wie ein Bereichs-Sachbearbeiter, unabhängig von einer eigenen `portal_area_roles`-Zeile — bereichsübergreifende Aufsicht |
-| `20261002_fahrzeugverantwortlicher_lesen.sql` | Lese-Policies auf `fleet_vehicles`/`fleet_equipment_status`/`fleet_care_tasks`/`fleet_appointments` um `is_vehicle_responsible()` ergänzt — analog zu den bereits bestehenden Schreib-Policies, damit Fahrzeugverantwortliche ihr Fahrzeug auch ohne eigene Fuhrpark-Bereichsrolle lesen können (Portal-Widget „Mein Fahrzeug“) |
-| `20261003_training_zuteilung_vorschlag.sql` | `einsatz_training_assignments` (Trainingsvorschlag, mit oder ohne Termin) + `is_genehmiger()` (reine Genehmiger-Prüfung ohne Bereichsrollen-Fallback) + RPC `decide_training_assignment` — Anmeldung zu einem Einsatztraining (Selbst- oder Fremdanmeldung) ist ab jetzt nur noch ein Vorschlag, erst der Genehmiger macht daraus per Einteilung eine echte `einsatz_training_registrations`-Zeile (oder lehnt ab) |
-| `20261004_pool_einsatzmittel_beschaffung.sql` | `pool_einsatzmittel_requests` (Beschaffungsantrag: Kategorie, Verwahrungsort, Anzahl, Begründung) + RPC `decide_pool_einsatzmittel_request` — direktes Anlegen neuer Pool-Einsatzmittel (`pool_einsatzmittel` INSERT) ist ab jetzt dem Genehmiger vorbehalten (`is_genehmiger()`), der Sachbearbeiter meldet Bedarf nur noch als Antrag; bei Genehmigung entsteht atomar der Pool-Eintrag (Langwaffen einzeln je Stück). Bearbeiten/Ausbuchen bestehender Einträge bleibt unverändert Sachbearbeiter-Aufgabe |
-| `20261005_innendienst_gebuehrenordnung.sql` | Gebührenordnung als reine Referenztabelle: `innendienst_gebuehrenpositionen` (Position + Betrag, z. B. Bundesabgabe, Verwaltungsgebühr), `innendienst_gebuehrensaetze` (benannte Sätze, z. B. „Bescheid Straßenmusik") + `innendienst_gebuehrensatz_positionen` (Zusammensetzung). Lesen für den gesamten operativen Bereich (`has_portal_area_access('zentrale')`), Schreiben ausschließlich `is_genehmiger()` — kein Bezug zu `innendienst_records` |
-| `20261006_schulungen_tracking.sql` | Schulungen bekommen ein Modul-/Termin-Tracking analog zu Einsatztraining, aber bewusst einfacher (einmalig/ad-hoc, keine Halbjahrespflicht): `schulungen_module`, `schulungen_sessions`, `schulungen_registrations`, `schulungen_completions` + `schulungen_assignments` (Vorschlag → Genehmiger-Entscheidung, RPC `decide_schulung_assignment`, `can_self_register_schulung()`). Kapazität wird per Trigger unabhängig vom Schreibweg durchgesetzt. Abschlüsse bleiben reines Sachbearbeiter-Tracking ohne Genehmiger-Zwang |
-| `20260917081000_einsatz_parteien.sql` | `einsatz_parteien`: beteiligte Parteien eines Einsatzes (Beschuldigter/Opfer/Zeuge/Sonstige), getrennt vom Melder (`caller_person_id`), verweist wie überall sonst auf `operational_persons` - dieselbe Person lässt sich unverändert zusätzlich als Gefährder/geschützte Person in einem Schutzfall verwenden. Erfassung erst beim Weiterarbeiten mit einem bestehenden Einsatz, nicht beim Anlegen der Meldung |
-| `20260917090000_merge_operational_persons.sql` | RPC `merge_operational_persons` (Admin-only): führt zwei versehentlich doppelt angelegte Personen zusammen - hängt alle Verweise (Personenhinweise, RSa/RSb, AV/BV & EV, Fahndungen, Einsatz-Parteien, Schutzmaßnahmen, Telefonnummern) auf die verbleibende Person um, ergänzt fehlende Stammdaten, löscht danach die entfernte Person |
-| `20260917100000_zentrale_reads_profiles.sql` | Zusätzliche, additive SELECT-Policy auf `profiles` über `has_portal_area_access('zentrale')` - Kontakte-Register spiegelt automatisch alle aktiven Benutzer, das muss auch für Zentrale-Personal ohne eigene Bekleidungs-Rolle lesbar sein |
-| `20260917110000_zentrale_can_create_objects.sql` | Behebt denselben Admin-only-Bug wie zuvor bei Personen: "Objekte anlegen" war seit `admin_only_register_maintenance` fälschlich Admin-only, jetzt wieder `has_portal_area_access('zentrale')` - nötig, damit ein Einsatzort direkt beim Vormerken eines Schutzfalls als Objekt angelegt werden kann |
-| `20260918193000_schutzfall_kontrollauftrag.sql` | `zentrale_entries.schutzfall_id` (Verweis auf `schutzfaelle`) + Trigger `schutzbereich_ensure_kontrollauftrag` (SECURITY DEFINER, feuert auf `schutzbereiche`-Insert): erzeugt automatisch einen Kontrollauftrag (Kategorie `kontrollauftrag`, Priorität hoch, Frist `due_at` = Beginn + 72 Stunden), sobald ein Schutzfall (BV/AV oder EV) mit seinem ersten Schutzbereich gespeichert wird - bewusst als Trigger statt Frontend-Insert, weil "Kontrollaufträge anlegen" per RLS auf `is_genehmiger()` beschränkt ist, ein automatisch erzeugter Auftrag aber keine Genehmiger-Entscheidung ist |
-| `20260918200000_incident_streife_zuweisung.sql` | `incident_reports.assigned_vehicle_id` (von der Zentrale zugewiesene Streife/Fahrzeug, zusätzlich zur groben Disposition JD/VD/BP) sowie `taken_over_by`/`taken_over_at` (Streife übernimmt eine offene Meldung selbst) + RPCs `take_over_incident`/`release_incident_takeover` (SECURITY DEFINER, nur `has_portal_area_access('zentrale')` nötig statt der sonst für `incident_reports`-UPDATE erforderlichen Zentralist-Rechte) |
-| `20260918210000_revert_schutzfall_kontrollauftrag.sql` | Rückbau von `20260918193000_schutzfall_kontrollauftrag.sql` - nicht gewünscht: weder sollten bereits angelegte Schutzfälle rückwirkend Kontrollaufträge bekommen (passierte ungewollt beim bloßen Bearbeiten, weil das Speichern eines Schutzfalls alle Schutzbereiche löscht und neu einfügt, was den Trigger erneut auslöste) noch soll das automatisch weiterlaufen. Trigger, Funktion und `zentrale_entries.schutzfall_id` entfernt, bereits automatisch erzeugte Kontrollaufträge gelöscht |
-| `20260918220000_kontrollauftrag_zeitfenster_und_karte.sql` | `zentrale_entries.zeitfenster` (Freitext für eine zeitliche Eingrenzung innerhalb der Gültigkeit, z. B. "ab 19:00 Uhr" - täglich wiederkehrendes Zeitfenster im Streifendienst, kein einzelner Zeitpunkt, daher kein weiteres Datumsfeld) sowie `location_lat`/`location_lng` für die Kartenansicht im Kontrollauftrag-Formular (wie bei "Neue Meldung") |
-| `20260918230000_schutzfall_kontrollauftrag_optional.sql` | Zweiter Anlauf nach dem Rückbau: `zentrale_entries.schutzfall_id` wieder da, plus RPC `create_schutzfall_kontrollauftrag` (SECURITY DEFINER, idempotent) - diesmal kein Trigger, sondern eine Checkbox "Kontrolle durch die Streife erforderlich" beim Anlegen eines Schutzfalls in ZentraleAvBv.tsx, die genau einmal einen echten, für den Genehmiger unter Kontrollaufträge bearbeitbaren Eintrag erzeugt |
-| `20260918240000_schutzfall_kontrolle_erforderlich_persistieren.sql` | `schutzfaelle.kontrolle_erforderlich` (die Checkbox aus 20260918230000 wurde bis dahin nirgends gespeichert und beim erneuten Öffnen immer auf true zurückgesetzt) + RPC `remove_schutzfall_kontrollauftrag` (SECURITY DEFINER, gleiche Berechtigung wie das Anlegen), damit ein nachträgliches Wegklicken beim Bearbeiten einen zuvor erzeugten Kontrollauftrag auch wirklich zurücknimmt |
-| `20260918250000_schutzfall_kontrolle_ohne_eigenes_flag.sql` | Rückbau von `kontrolle_erforderlich`: das eigene Flag lief gegenüber dem tatsächlichen Kontrollauftrag auseinander, sobald der Genehmiger ihn direkt auf der Kontrollaufträge-Seite löschte ("kein Effekt auf den Schutzfall"). Einzige Wahrheit ist ab jetzt, ob ein verknüpfter `zentrale_entries`-Eintrag existiert - ZentraleAvBv.tsx liest/schreibt die Checkbox direkt gegen diesen Ist-Zustand, Vorbelegung je nach Maßnahme (BV/AV: an, EV: aus, gesetzliche 72h-Erstkontrollpflicht gilt nur für BV/AV), frei änderbar |
-| `20260918260000_wichtige_telefonnummern.sql` | Neue Tabelle `wichtige_telefonnummern` (Kategorie intern/extern, Bezeichnung, Nummer, optionaler Hinweis, Sortierung) inkl. Erstbefüllung aus den bisherigen Klebezetteln am Bildschirm ("POLIZEI" / "Telefonnummern Dienststelle"). Lesen für alle mit Zentrale-Zugriff (deckt auch Innendienst ab), Pflege nur Admin/Genehmiger. Neue Kachel "Wichtige Telefonnummern" auf der Zentrale- und Innendienst-Hauptseite, Pflege über `/stammdaten/telefonnummern` |
-| `20260919000000_operational_today_nachtdienst.sql` | Neue Funktion `operational_today()`: ein Nachtdienst läuft über Mitternacht, bleibt aber mit dem Kalendertag seines Beginns als `duty_date` erfasst. `is_zentralist_on_duty()` verglich bisher gegen `CURRENT_DATE` (Session-Zeitzone UTC, kein Nachtdienst-Ausgleich) - ein Zentralist verlor dadurch kurz nach (UTC-)Mitternacht, mitten im eigenen Nachtdienst, die per RLS gewährten Rechte. `operational_today()` rechnet in Europe/Vienna und zählt vor 6 Uhr lokal noch den Vortag - client-seitig gespiegelt als `operationalToday()`/`startOfOperationalDayIso()` in `lib/zentraleShared.ts`, ersetzt dort die alten `todayLocal()`-Aufrufe für Diensteinteilung und "heutige" Einsätze in ZentraleShell.tsx, AussendienstShell.tsx und AuthContext.tsx (Ursache dafür, dass heute erfasste Einsätze kurz nach Mitternacht aus der Liste verschwanden) |
-| `20260919010000_unterlagen_je_bereich.sql` | `zentrale_unterlagen.bereich` (zentrale/aussendienst/innendienst, Default 'zentrale' für Bestandsdaten): "Kontrollbehelfe" im Außendienst und "Unterlagen" im Innendienst verlinkten bisher direkt auf die Zentrale-Seite (dieselbe Tabelle, keine eigene Kopie) - fachlich falsch, da es unterschiedliche Inhalte für unterschiedliche Bereiche sind. Alle drei laufen weiterhin unter derselben Portal-Berechtigung (`has_portal_area_access('zentrale')`/`can_manage_zentrale()`), nur die Inhalte sind jetzt per bereich-Spalte getrennt - neue Seiten `/aussendienst/kontrollbehelfe` und `/innendienst/unterlagen` (gemeinsame Komponente `UnterlagenRegister.tsx`, gefiltert je Bereich) statt gemeinsam genutzter `/zentrale/unterlagen` |
-| `20260919020000_material_unterordner.sql` | `einsatz_material_tabs.parent_id` (selbstreferenzierend, on delete cascade) für beliebig tief verschachtelbare Unterordner bei den Unterlagen (Einsatzmittel/Einsatztraining/Schulungen teilen sich `EinsatzMaterials.tsx`) statt einer flachen Tab-Ebene. Eindeutigkeit des Namens jetzt je Ordner statt bereichsweit. Trigger `check_einsatz_material_tab_no_cycle` verhindert zyklische Verschachtelung (Ordner als eigener indirekter Unterordner) |
-| `20260919030000_sole_genehmiger_name.sql` | RPC `sole_genehmiger_name()` (SECURITY DEFINER): lieferte den Namen des einzigen aktiven Admin/Genehmiger/Approver, sonst `null` (mehrdeutig bei mehreren) - ersetzt durch `20260919040000_genehmiger_kette.sql`, da in der Praxis nie genau einer war |
-| `20260919040000_genehmiger_kette.sql` | `profiles.genehmiger_rang` (1 = primär, 2/3 = Stellvertreter falls der/die Vorherige nicht da ist) + RPC `genehmiger_kette()` (SECURITY DEFINER, liefert id/name/rang der Kette): feste, vom Kommandanten vorgegebene Reihenfolge (Hans-Peter Schwendinger → Andreas Gisinger → Martin Feurstein) statt der bisherigen "genau ein Genehmiger"-Heuristik. `ueberstunden_meldungen.genehmiger_wahl_id`: beim Anlegen einer Meldung wählt der Ersteller aus der Kette, wer sie voraussichtlich vorgelegt bekommt (rein informativ, ersetzt nicht die tatsächliche Entscheidung über `genehmiger_id`). Gisinger und Feurstein haben dabei die Rolle `genehmiger` erhalten, damit sie auch tatsächlich entscheiden können, sobald sie ausgewählt wurden |
-| `20260919050000_einsatz_checkliste_namensliste.sql` | Digitale Abbildung der offiziellen "Checkliste Notfall/Katastrophe" (Erstmeldung) und "Checkliste Notunterkunft" (Stadt Dornbirn) als geteilter Server-Zustand statt localStorage: neue Tabelle `einsatz_checklist_punkte` (erledigt/wer je Checklisten-Punkt, fester `punkt_key`) und `einsatz_namensliste` (ersetzt die bisher rein lokale ZMR-Personenliste aus `lib/zmrPersonen.ts` um eine "unterbringung"-Listenart mit den Spalten der offiziellen Namensliste-Vorlage: Alter/Geschlecht/Sprache/Familie/Telefon/Ort Unterkunft/Anmerkungen). Beide Tabellen lesen/schreiben unter `has_portal_area_access('zentrale')` - bewusst nicht auf Zentralist/Admin beschränkt (anders als `einsatz_parteien`), da sowohl Zentrale als auch Streife vor Ort damit arbeiten sollen. Neue Komponente `EinsatzChecklisten.tsx` (Tab "Ablauf" in `EinsatzArbeitModal.tsx`, aufklappbar bei der Streife in `aussendienstShared.tsx`). Die Personen-/Namensliste ist bewusst als eigene Komponente `IncidentNamensliste.tsx` (Tab "Listen") von den reinen Dateien (`IncidentDocs.tsx`, Tab "Dateien") getrennt statt gemeinsam in einem Tab: ein ZMR-Auszug landet beim Hochladen automatisch in der Liste "Haus/Bewohner", ausgewählte Personen daraus lassen sich im Listen-Tab gezielt in die Notunterkunft-Namensliste kopieren (nicht automatisch). `IncidentNamensliste.tsx` sortiert nach Top-Nr und druckt die jeweilige Liste über `lib/einsatzNamenslistePdf.ts` als befüllte PDF-Vorlage (bei "unterbringung" an die offizielle Namensliste-Vorlage angelehnt) |
-| `20260919060000_datenpflege_bereich.sql` | Stufe 1 des Rechte-Umbaus (Audit-Punkt 4 - bisher hingen Stammdaten/Außendienst/Innendienst technisch alle am einzigen Bereich `zentrale`): neuer eigenständiger Portalbereich `datenpflege` mit eigener Sachbearbeiter-Rolle für die Register, die inhaltlich eine dauerhafte Administrationsaufgabe sind, nicht an eine Tagesfunktion gebunden (Schlüssel, Kontakte, wichtige Telefonnummern, Fahndungen, Objekte). Neue Funktion `can_manage_datenpflege()`; RLS dieser Tabellen liest jetzt `has_portal_area_access('zentrale') OR has_portal_area_access('datenpflege')`, Pflege zusätzlich zu Admin auch durch Datenpflege-Sachbearbeiter. Objekte sind bewusst ein gemeinsames Register (sowohl aus Einsätzen als auch eigenständig aus der Datenpflege befüllt), damit der Zentralist beim Einsatz an einer Adresse alle bekannten Infos sieht. RSa/RSb (`mail_deliveries`) ist jetzt für jeden aktiven Benutzer offen, unabhängig von jedem Portalbereich. Bestehende Zentrale-Sachbearbeiter/Admins wurden einmalig automatisch auch zu Datenpflege-Sachbearbeitern gemacht, damit die Register am Umstelltag nicht verwaist sind. `save_portal_profile_v4` → `save_portal_profile_v5` (neuer Parameter `p_datenpflege_roles`) für die Rechtevergabe in `Users.tsx`; `create-user`-Edge-Function ebenso erweitert (`datenpflege_roles`). Die tagesfunktionsbasierte Zugriffssteuerung für Zentrale/Innendienst/Außendienst selbst (inkl. Sidebar-Umbau für Sachbearbeiter/Genehmiger) ist bewusst noch nicht Teil dieser Migration und folgt separat |
-| `20260919070000_tagesfunktion_zugriff.sql` | Stufe 2 des Rechte-Umbaus: Zugriff auf Zentrale/Innendienst/Außendienst ist keine Dauerberechtigung mehr, sondern eine Tagesfunktion aus der Diensteinteilung (`duty_assignments`) - jede/r Benutzer/in der Stadtpolizei kann an einem Tag Zentrale, an einem anderen Innendienst oder Außendienst (Funktionen `jd`/`vd`) haben. Neue Funktion `is_operative_duty_today()` (verallgemeinert `is_zentralist_on_duty()` auf alle drei Tagesfunktionen), zusätzlich zur bisherigen `has_portal_area_access('zentrale')`-Prüfung bei ca. 30 Lese-Policies verwendet (additiv - bestehende Dauerberechtigungen bleiben erhalten). `duty_assignments`/`duty_functions` sind jetzt für jede/n aktive/n Benutzer/in weder an `zentrale`-Recht gebunden lesbar noch (eigene Zeile) beschreibbar - vorher konnte niemand ohne bestehende Zentrale-Berechtigung überhaupt eine Tagesfunktion wählen, ein Henne-Ei-Problem. `zentrale_baustellen` prüfte bisher zusätzlich `has_portal_area_access('aussendienst')` - ein Bereich, der über die Rechteverwaltung nie vergeben werden konnte (totes Recht) - jetzt durch die echte Tagesfunktions-Prüfung ersetzt. Client: neuer Hook `useOwnOperativBereicheToday()` (`lib/dutyAccess.ts`) ersetzt in `Portal.tsx`/den drei Shells/allen Stammdaten-Seiten die reine `hasAreaAccess('zentrale')`-Prüfung; im Portal zeigt der "Operative Bereich" jetzt nur die heute zugeteilte Kachel (Admin sieht als Aufsicht weiterhin immer alle drei), die Funktionswahl (`TodayFunctionCard`) ist für jede/n Benutzer/in sichtbar statt nur mit Zentrale-Recht. Schreibrechte (`is_zentralist_on_duty()`-gesteuert, weiterhin nur zentrale+innendienst) und der Sidebar-Umbau für Sachbearbeiter/Genehmiger (Schieberegler-Entfernung) sind bewusst noch nicht Teil dieser Migration |
-| `20260919080000_produkt_bezugsart_groessenart.sql` | `products.bezugsart` (`massa`/`eigenbeschaffung`) und `products.size_mode` (`sizes`/`universal`/`none`): der Sachbearbeiter legt pro Artikel fest, ob er über die Massa-Sammelbestellung läuft oder eigenbeschafft wird, und ob er eine Größenliste, eine Universalgröße oder gar keine Größenangabe hat (z. B. Schuhbänder). Bestehende Produkte ohne definierte Größe wurden auf `size_mode = 'none'` migriert, alle anderen bleiben `sizes`; `bezugsart` startet für alle bei `massa` (bisheriges Verhalten). Die Bestellungen-Seite teilt die "Massa Wien"-Sammelbestellung dadurch jetzt in zwei getrennte Kurzbriefe (Massa per Mail-Entwurf, Eigenbeschaffung als reine CSV-Liste ohne festen Empfänger); Shop, Lager, MyOrders, Approvals, Lieferungen und Grundausstattung blenden die Größenauswahl/-anzeige für `universal`/`none`-Artikel aus |
-| `20260919090000_produkt_shop_bestellbar.sql` | `products.orderable_in_shop` (Default `true`): trennt "im Lager erfasst/nachbestellbar" von "im Bekleidungskatalog für Beamte bestellbar" - bisher hing beides allein am Aktiv-Schalter. Rein intern verwaltetes Material (z. B. Verbrauchsmaterial) lässt sich damit im Lager führen und über die Bestellungen-Seite nachbestellen, ohne je im Shop aufzutauchen. `Shop.tsx` filtert zusätzlich zur bisherigen Aktiv/Restbestand-Logik auf `orderable_in_shop`; Produktverwaltung hat dafür einen eigenen Schalter neben Aktiv |
-| `20260920100000_pool_em_pfefferspray_klein.sql` | Neue Pool-Einsatzmittel-Kategorie `pfefferspray_klein` (Pfefferspray Nachfüllkartusche klein, analog zu `pfefferspray_gross`): erweitert die CHECK-Constraints `pool_einsatzmittel_category_check` und `pool_einsatzmittel_requests_category_check` um den neuen Wert |
-| `20260921110000_support_messages_delete.sql` | Neue DELETE-Policy `support_messages`: wer den Themenbereich eines Support-Tickets verwaltet (`can_manage_support_topic()`), kann einzelne Nachrichten im Thread löschen (z. B. Fehleintrag/Spam) - eigene Nachrichten bleiben für gewöhnliche Benutzer weiterhin nicht selbst löschbar, bisher gab es für die Tabelle gar keine DELETE-Policy |
-| `20260921120000_support_tickets_delete.sql` | Neue DELETE-Policy `support_tickets`: wer den Themenbereich verwaltet, kann jetzt auch den gesamten Vorgang inkl. Chatverlauf löschen, nicht nur einzelne Nachrichten - `support_messages.ticket_id` hat bereits `ON DELETE CASCADE`, die Nachrichten verschwinden also automatisch mit |
-| `20260921130000_support_delete_grants.sql` | Fix zu den beiden vorherigen Migrationen: `GRANT DELETE` an `authenticated` auf `support_messages`/`support_tickets` nachgetragen - die RLS-Policies allein liefen ins Leere, weil das darunterliegende SQL-Recht fehlte (`permission denied for table ...`) |
-| `20260921140000_fleet_status_cleanup_inactive_items.sql` | Fix: Ein deaktiviertes Ausstattungsstück (`fleet_equipment_items.active = false`) ließ seinen `fleet_equipment_status`-Eintrag stehen - Portal-Banner, Fleet-Übersicht, "Mein Fahrzeug"-Karte und Mängel-Liste zählten ihn dadurch dauerhaft als offene Aufgabe mit, obwohl die Fahrzeug-Detailseite selbst korrekt filtert. Verwaiste Einträge bereinigt, neue Trigger `cleanup_inactive_fleet_equipment_status`/`cleanup_inactive_fleet_check_item_status` räumen künftige Deaktivierungen automatisch mit auf (analoges Muster bei `fleet_check_items`/`fleet_check_item_status`, die Füllliste, vorsorglich mit) |
+| `20260511210803_add_approved_status_and_proc_listed.sql` | `orders.status` um `approved` erweitert, `proc_listed`-Spalte ergänzt |
+| `20260511231627_add_budget_system.sql` | `user_budgets` (Budget je Nutzer/Jahr), `orders.unit_price` (Preis zum Bestellzeitpunkt) |
+| `20260512120501_add_gender_to_products_and_profiles.sql` | Geschlecht an Produkten und Profilen |
+| `20260512121710_budget_valid_from_and_shoe_cap.sql` | `user_budgets.valid_from` (planbare Budgetänderungen), `shoe_refund_caps` (Historie Erstattungs-Höchstbetrag) |
+| `20260512124620_add_organisation_to_profiles.sql` | `profiles.organisation` |
+| `20260512131037_products_unique_article_number_per_organisation.sql` | Artikelnummer eindeutig je Organisation statt global |
+| `20260513200950_add_stock_orders.sql` | `stock_orders` (Lagerbestellungen) inkl. RLS |
+| `20260514081937_add_sub_category_to_products.sql` | `products.sub_category` |
+| `20260514112133_add_shoe_refund_status.sql` | Status-Spalte für Schuherstattungen |
+| `20260514120301_add_product_min_quantity.sql` | `products.min_quantity` (Mindestbestand) |
+| `20260514122845_create_grundausstattung.sql` | `grundausstattung`-Tabelle |
+| `20260514124055_grundausstattung_drop_size.sql` | Größe aus `grundausstattung` entfernt |
+| `20260517122218_create_vending_schema.sql` | Fremdprojekt (Kaffee-/Verkaufsautomaten): Kategorien, Artikel, Transaktionen, Pulverautomat, Bohnenkaffee-Logs — vollständig entfernt durch `20260702191625_drop_foreign_project_tables.sql` |
+| `20260517123034_allow_anon_access.sql` | Fremdprojekt Verkaufsautomaten: Allow-All-Policies |
+| `20260517190329_add_mhd_to_articles.sql` | Fremdprojekt Verkaufsautomaten: Mindesthaltbarkeitsdatum an Artikeln |
+| `20260517213435_add_machine_slots_table.sql` | Fremdprojekt Verkaufsautomaten: `machine_slots` |
+| `20260517213442_add_machine_slots_to_allowed.sql` | Fremdprojekt Verkaufsautomaten: Allow-All-Policy für `machine_slots` |
+| `20260518105843_add_type_and_note_to_transactions.sql` | Fremdprojekt Verkaufsautomaten: Typ/Notiz an Transaktionen |
+| `20260518165019_add_machines_table.sql` | Fremdprojekt Verkaufsautomaten: `machines`-Tabelle |
+| `20260519102541_add_pfand_to_articles.sql` | Fremdprojekt Verkaufsautomaten: Pfand an Artikeln |
+| `20260519160249_add_powders_column.sql` | Fremdprojekt Verkaufsautomaten: `powder_settings.powders` |
+| `20260519193040_add_powder_id_to_measurements.sql` | Fremdprojekt Verkaufsautomaten: Pulver-Zuordnung an Messungen |
+| `20260519213453_create_vending_kontrollen.sql` | Fremdprojekt Verkaufsautomaten: `vending_kontrollen` |
+| `20260519234855_add_vk_aufschlag_to_powder_settings.sql` | Fremdprojekt Verkaufsautomaten: Verkaufsaufschlag |
+| `20260520021847_add_puffer_columns.sql` | Fremdprojekt Verkaufsautomaten: Pfand-/Strichpuffer |
+| `20260520095029_add_pfand_wert.sql` | Fremdprojekt Verkaufsautomaten: Pfandwert |
+| `20260520130506_add_deliveries_table.sql` | `deliveries` (Sammellieferung an Massa/Lieferant) + `orders.delivery_id` |
+| `20260520131210_remove_lieferschein_columns.sql` | Alte Lieferschein-Spalten entfernt (abgelöst durch `deliveries`) |
+| `20260520165525_add_payment_and_analysis_to_deliveries.sql` | Zahlungs- und Analysefelder an `deliveries` |
+| `20260630105513_add_orders_delete_and_user_update_policy.sql` | Nutzer dürfen eigene offene Bestellungen (Warenkorb) löschen/ändern |
+| `20260630145104_add_size_preferences_to_profiles.sql` | `profiles.size_preferences` (gemerkte Größen) |
+| `20260702190139_security_hardening_rls_views_functions.sql` | Security-Hardening: RLS auf `shoe_refund_caps`/`grundausstattung`, Allow-All bei `stock_orders` durch Rollenprüfung ersetzt, SECURITY-DEFINER-Views auf Invoker-Rechte umgestellt, Funktionen gehärtet (`search_path`, Ausführungsrechte) |
+| `20260702191116_revoke_public_execute_on_functions.sql` | EXECUTE-Grant an `PUBLIC` entfernt (Postgres-Default), `has_role` bleibt für `authenticated` ausführbar |
+| `20260702191625_drop_foreign_project_tables.sql` | Fremdprojekt-Tabellen (Kaffee-/Verkaufsautomaten) entfernt — gehören nicht zur Bekleidungsverwaltung |
+| `20260707191338_fix_pack_rpcs_and_indexes.sql` | Atomare Bestandsbuchung (`adjust_inventory`), serverseitiges `submit_cart` (Budget-Entscheidung atomar in der DB statt mit veralteten Client-Daten), fehlende FK-Indizes |
+| `20260708080817_rls_role_coverage_fix.sql` | Rollenabdeckung der RLS-Policies repariert: Sachbearbeiter konnte nichts verwalten (nur admin), Rolle `genehmiger` fehlte überall, Nutzer konnten eigenes Profil nicht ändern |
+| `20260908200808_user_edit_orders_until_ordered.sql` | Nutzer dürfen Größe/Menge einer eingereichten Bestellung per eng begrenzter RPC (`update_editable_order`) ändern, solange der Sachbearbeiter sie noch nicht beim Lieferanten bestellt hat |
+| `20260908220954_einsatz_workflow_materialien.sql` | `einsatz_material_tabs`/`einsatz_materials` (Unterlagen) + `personal_einsatzmittel_requests` |
+| `20260908221103_einsatz_workflow_indexes.sql` | Fehlende Indizes für die neuen Einsatz-Workflow-Fremdschlüssel |
+| `20260909115209_support_ticket_topics.sql` | Interner Support: Themenbereiche, `can_manage_support_topic`, Ticket-/Nachrichten-Policies |
+| `20260909122751_einsatz_mt_multiple_roles.sql` | Mehrere Rollen gleichzeitig je Bereich `einsatz_mt` erlaubt |
+| `20260909125508_add_police_rank_to_profiles.sql` | Dienstgrad an Profilen |
+| `20260909134214_exclude_admin_from_police_rank.sql` | Admin-Konten von der Dienstgrad-Pflicht ausgenommen |
+| `20260910131859_secure_admin_profile_role_updates.sql` | `save_portal_profile`-RPC + `protect_profile_fields`: Rollenvergabe nur über kontrollierte Funktion statt freiem UPDATE |
+| `20260910131946_secure_user_order_workflow.sql` | `guard_cart_order`/`submit_cart`/`update_editable_order`, Policy „Benutzer erstellt Warenkorb" |
+| `20260910132017_atomic_support_request_creation.sql` | `create_support_request` (atomare Ticket- + Erstnachricht-Erstellung) |
+| `20260910132034_atomic_training_records_and_safe_delete.sql` | Übergeordnetes Löschen darf einzeln gepflegte Trainingsdatensätze nicht mehr stillschweigend mitreißen |
+| `20260910132053_atomic_inventory_and_order_bookings.sql` | `book_order_inventory`/`receive_stock_order` atomar, FK-Löschschutz gegen mit der Löschung wettlaufende Inserts |
+| `20260910132128_secure_audit_actor_identity.sql` | `audit_log.source`, Policy für ergänzende eigene Protokolleinträge |
+| `20260910132207_restrict_training_session_cascade_deletes.sql` | Gleicher FK-Löschschutz wie zuvor bei Bestand/Bestellungen, jetzt auch für Trainingstermine |
+| `20260910132509_lock_down_trigger_functions.sql` | Trigger-Funktionen gehärtet (Ausführungsrechte) |
+| `20260910182519_move_einsatz_material_between_tabs.sql` | `move_einsatz_material` (Unterlage in anderen Ordner verschieben) |
+| `20260910185624_create_schulungen_material_area.sql` | Unterlagen-Bereich `schulungen`, `can_manage_schulungen` |
+| `20260910193124_activate_fleet_management.sql` | `fleet_vehicles` + `can_manage_fuhrpark` |
+| `20260910201254_activate_operations_center.sql` | `zentrale_entries` (generische Zentrale-Einträge) + `can_manage_zentrale` |
+| `20260911064418_zentrale_assistive_duty_and_incidents.sql` | `duty_assignments` (Diensteinteilung), `incident_reports` (Einsatzmeldungen), `operational_person_notes`, `is_zentralist_on_duty` |
+| `20260911064531_index_zentrale_actor_foreign_keys.sql` | Fehlende Indizes für Zentrale-Fremdschlüssel |
+| `20260911073153_configurable_duties_and_patrol_vehicles.sql` | `duty_functions` (konfigurierbare Diensttypen), `duty_assignments.vehicle_id` |
+| `20260911081053_vehicle_responsibility_and_dynamic_zentralist.sql` | Fahrzeugverantwortlichkeit, `has_portal_area_access`/`can_manage_zentrale`/`can_manage_fuhrpark`/`can_manage_schulungen`/`can_manage_einsatzmittel` als zentrale Helferfunktionen eingeführt |
+| `20260911172820_vehicle_checks_and_mail_deliveries.sql` | Fahrzeug-/Materialcheck vor Dienstbeginn (`vehicle_checks`) und strukturierte RSa/RSb-Übersicht (`mail_deliveries`) mit Schnellaktion `record_mail_delivery_action` |
+| `20260911172837_innendienst_cockpit.sql` | `innendienst_shift_tasks` (Kassen-Bestätigung je Schicht) und `innendienst_records` (schlankes Protokoll für Bescheide Straßenmusik/-kunst und Verstöße) |
+| `20260911172847_innendienst_verstoss_bescheid_bezug.sql` | Verstöße gegen Auflagen müssen sich auf einen konkreten Bescheid beziehen (per Trigger geprüft) |
+| `20260911173441_innendienst_kassensturz.sql` | Kassensturz-Felder an `innendienst_shift_tasks` (erwarteter Erlös, Bargeld-Stückelung, Grundbestand 500 €) |
+| `20260911181231_mail_deliveries_owner_vernehmung_close.sql` | `mail_deliveries`: Typ `vernehmung`, Akteneigentümer automatisch = Ersteller, zweistufiger Erledigt-Workflow, `close_mail_delivery` |
+| `20260911185004_fuhrpark_vollstaendig.sql` | Fuhrpark komplett: `fleet_equipment_items`/`fleet_equipment_status` (Füllliste/Mängel), `fleet_care_tasks` (Pflege), `fleet_appointments` (Werkstatt/Termine/Fristen), `is_vehicle_responsible` |
+| `20260911191817_fuhrpark_dokumente_pro_fahrzeug.sql` | Fuhrparkweiter Unterlagenbereich zurückgebaut, stattdessen `fleet_documents` direkt je Fahrzeug (Zulassung, Serviceheft) |
+| `20260911212346_genehmiger_bereichsuebergreifend.sql` | Globale Rolle `genehmiger` bekommt in `has_portal_area_access`/`can_manage_zentrale`/`can_manage_fuhrpark`/`can_manage_einsatzmittel`/`can_manage_schulungen` dieselben Rechte wie ein Bereichs-Sachbearbeiter, unabhängig von einer eigenen `portal_area_roles`-Zeile |
+| `20260911213443_fahrzeugverantwortlicher_lesen.sql` | Lese-Policies auf `fleet_vehicles`/`fleet_appointments`/`fleet_equipment_status`/`fleet_care_tasks` um `is_vehicle_responsible()` ergänzt |
+| `20260911232855_training_zuteilung_vorschlag.sql` | `einsatz_training_assignments` (Trainingsvorschlag) + `is_genehmiger()` + `decide_training_assignment`: Anmeldung ist nur noch ein Vorschlag, der Genehmiger entscheidet |
+| `20260911235731_pool_einsatzmittel_beschaffung.sql` | `pool_einsatzmittel_requests` (Beschaffungsantrag) + `decide_pool_einsatzmittel_request`: Neuanlage von Pool-Einsatzmitteln ist Genehmiger-Entscheidung, Sachbearbeiter meldet nur Bedarf |
+| `20260912001612_innendienst_gebuehrenordnung.sql` | Gebührenordnung als Referenztabelle: `innendienst_gebuehrenpositionen`/-`saetze`/-`satz_positionen`, Lesen für den ganzen operativen Bereich, Schreiben nur Genehmiger |
+| `20260912003212_schulungen_tracking.sql` | Schulungen-Tracking analog zu Einsatztraining, aber einfacher (ad-hoc, keine Halbjahrespflicht): `schulungen_module`/`_sessions`/`_registrations`/`_completions`/`_assignments`, `decide_schulung_assignment` |
+| `20260912003318_schulungen_registration_capacity_trigger.sql` | Kapazitätsprüfung für Schulungsanmeldungen gilt auch beim SECURITY-DEFINER-Insert der Entscheidungs-RPC |
+| `20260912021540_kontrollauftrag_zielfunktion.sql` | `zentrale_entries.target_function` (JD/VD/beide), Anlegen/Ändern/Löschen von Kontrollaufträgen nur noch dem Genehmiger vorbehalten |
+| `20260912113546_strassenzustand.sql` | Straßenzustand: digitale Abbildung des bisherigen Word-Formulars — `strassenzustand_berichte`/-`zeilen`/-`strassen`/-`melder`/-`auftraggeber`, automatische Ableitung Neuzugang/Änderung/Widerruf |
+| `20260912113629_strassenzustand_fix_created_at_clock.sql` | `clock_timestamp()` statt transaktionskonstantem `now()` für die zeitlich korrekte Meldungsart-Ableitung mehrerer Zeilen derselben Transaktion |
+| `20260912115450_strassenzustand_vereinfachen.sql` | Nur noch 3 Zustände (Frei befahrbar/Gesperrt/Sonstige) statt fünf, Zeitraum als `timestamptz` statt `date` |
+| `20260912123244_incident_reports_geokoordinaten.sql` | `incident_reports.location_lat`/`location_lng` |
+| `20260912135948_operational_person_notes_location.sql` | Standortbezug für Personenhinweise |
+| `20260912140928_operational_person_notes_show_expired.sql` | Abgelaufene Personenhinweise bleiben sichtbar (mit „Abgelaufen"-Hinweis in der UI), statt automatisch aus der RLS-Sicht zu verschwinden |
+| `20260912155928_strassenzustand_meldungsart_chronological.sql` | Vorbereitung „Bericht bearbeiten": Meldungsart-Ableitung vergleicht jetzt korrekt chronologisch statt gegen die global neueste Zeile |
+| `20260912161416_strassenzustand_bericht_ersetzen_atomic.sql` | `strassenzustand_bericht_ersetzen`-RPC: Bearbeiten eines Berichts atomar in einer Transaktion statt Update+Delete+Insert einzeln |
+| `20260913100316_operational_persons_and_objects_registers.sql` | Zentrales Personen- (`operational_persons`) und Objekte-Register (`operational_objects`), damit alle Kategorien auf dieselbe Person/dasselbe Objekt verweisen können |
+| `20260913100325_link_person_notes_and_mail_deliveries_to_persons.sql` | Personenhinweise und RSa/RSb verweisen auf das Personen-Register statt Name/Geburtsdatum als Freitext zu duplizieren |
+| `20260913100357_zentrale_register_category_tables.sql` | Ersetzt sechs generische `zentrale_entries`-Kategorien (AV/BV & EV, Fahndungen, Schlüssel, Kontakte, Alarmierung, Unterlagen) durch eigene Tabellen mit passenden Feldern |
+| `20260913100406_zentrale_entries_drop_migrated_categories.sql` | Die in eigene Tabellen ausgelagerten Kategorien werden in `zentrale_entries` nicht mehr angelegt |
+| `20260913103621_operational_persons_vorname_nachname.sql` | Vor-/Nachname statt kombiniertem Freitext-Namen (mindestens eines muss gesetzt sein) |
+| `20260913104327_zentrale_entries_drop_uebergabe_category.sql` | Kategorie „Übergabe" entfernt — ergibt sich aus offenen Einsatzmeldungen statt manueller Erfassung |
+| `20260913104536_zentrale_entries_restore_uebergabe_category.sql` | Korrektur: Innendienst nutzt „Übergabe" weiterhin als eigenen, manuell gepflegten Punkt |
+| `20260913110625_zentrale_entries_lage_incident_link.sql` | Kategorie „Lage" erfordert zwingend eine verknüpfte Einsatzmeldung (`incident_id`) |
+| `20260913110827_zentrale_alarmierung_lage_bereich_stadtfuehrung.sql` | Grundgerüst für Alarmierung: Verknüpfung zur Lage, Bereich (Polizei/Städtisch/Beide), Stadtführung-informiert-Feld |
+| `20260913111338_operational_persons_allow_area_access_insert.sql` | Wer RSa/RSb anlegen darf (jede Zentrale-Rolle, nicht nur Sachbearbeiter/Admin), darf dafür auch eine noch nicht erfasste Person anlegen |
+| `20260913113209_operational_person_notes_managers_see_archived.sql` | Verwaltungsrollen sehen auch archivierte Personenhinweise |
+| `20260913120301_zentrale_register_tables_grants.sql` | Fehlende SQL-Grants für die neuen Zentrale-Registertabellen nachgetragen |
+| `20260913143256_zentrale_baustellen.sql` | `zentrale_baustellen` (Baustellen-Register) |
+| `20260913144949_zentrale_baustellen_strassenverlauf.sql` | `zentrale_baustellen.path` (Straßenverlauf für die Kartenansicht) |
+| `20260913195014_adresse_telefon_kontrollauftrag_frist.sql` | Strukturierte Objekt-Adresse (Straße/Hausnummer/PLZ/Ort), `operational_phone_numbers`, Person-Objekt-Verknüpfung, `zentrale_entries.due_at` |
+| `20260913201029_phone_numbers_erhoben_am.sql` | `operational_phone_numbers.erhoben_am` (Zeitpunkt der Erhebung, kann von „heute" abweichen) |
+| `20260913202139_incident_reports_person_links.sql` | Melder und beteiligte Person über das Personen-Register verknüpft statt Namens-/Geburtsdatum-Freitext |
+| `20260913205819_kontrollauftrag_todo.sql` | Kontrollaufträge als To-do für die Streife: `erledigt_at`, `enforce_kontrollauftrag_todo_only` |
+| `20260913211633_bescheid_person_und_entzug.sql` | Bescheid/Verstoß über das Personen-Register verknüpft; ein Verstoß entzieht automatisch den zugehörigen Bescheid (`revoke_bescheid_on_verstoss`) |
+| `20260913225959_fahrzeugcheck_checkliste.sql` | `fleet_check_items`/`fleet_check_item_status`: eigene Checkliste für den Fahrzeugzustand (unabhängig von der Füllliste) |
+| `20260914123409_zentrale_baustellen_aussendienst_lesen.sql` | Außendienst darf Baustellen lesen |
+| `20260914123411_strassenzustand_geometrie.sql` | Geometriedaten für Straßenzustand |
+| `20260914212056_innendienst_bescheid_pdf_felder.sql` | Zusätzliche Felder für den Bescheid-PDF-Ausdruck |
+| `20260914212829_ueberstundenmeldung.sql` | `ueberstunden_meldungen` (Überstunden-Meldeworkflow) |
+| `20260914215952_ueberstunden_zeitraum_und_auto_aufschluesselung.sql` | `ueberstunden_meldungen.bis_datum` (Zeitraum statt Einzeltag) |
+| `20260914222548_ueberstunden_serverseitige_berechnung.sql` | Lohnarten-Aufschlüsselung (50%/100%/Nacht-/Sonntagszuschlag) serverseitig statt im Frontend berechnet, inkl. österreichischer Feiertage |
+| `20260914222716_ueberstunden_helper_funcs_search_path.sql` | `search_path` der Überstunden-Hilfsfunktionen fixiert |
+| `20260914223023_ueberstunden_verguetung_rueckfrage.sql` | Vergütungsart und Rückfrage-Status bei Überstundenmeldungen |
+| `20260914224120_innendienst_bescheid_planbeilage.sql` | Planbeilage (Luftbild/Kataster) ist jetzt ein explizites, je Bescheid gesetztes Feld statt automatisch immer angehängt |
+| `20260914224408_ueberstunden_faire_reallokation.sql` | Nachträgliche Änderung einer Meldung verteilt Folgetage fair neu (`ueberstunden_reallocate_nachfolgende`) |
+| `20260914224854_ueberstunden_review_runde3.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 3) |
+| `20260914225445_ueberstunden_review_runde4.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 4) |
+| `20260914230011_ueberstunden_review_runde5.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 5) |
+| `20260914230719_ueberstunden_review_runde6.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 6) |
+| `20260915081301_zentrale_on_duty_operative_write_access.sql` | Diensthabende Zentralisten dürfen auch bei Personen/Objekten, Personenhinweisen und den sechs Zentrale-Kategorietabellen operative Einträge erfassen (nicht nur bei Meldungen/Baustellen wie bisher) |
+| `20260915081935_ueberstunden_review_runde11.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 11) |
+| `20260915082346_zentrale_on_duty_phone_numbers.sql` | Diensthabende Zentralisten dürfen auch Telefonnummern im Personen-Register pflegen |
+| `20260915083328_zentrale_on_duty_restricted_visibility.sql` | Lese-Policies der Zentrale-Kategorietabellen an die neue Diensthabenden-Berechtigung angepasst |
+| `20260915083706_ueberstunden_review_runde12.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 12) |
+| `20260915090411_ueberstunden_review_runde13.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 13) |
+| `20260915091611_ueberstunden_review_runde14.sql` | Korrekturen an der Überstunden-Aufschlüsselung (Review-Runde 14) |
+| `20260915092805_zentrale_ueberstunden_review_runde15.sql` | `enforce_operational_person_notes_active` ergänzt |
+| `20260915094331_ueberstunden_review_runde16.sql` | Reihenfolge von CHECK-Constraint und BEFORE-Trigger bei Überstundenmeldungen korrigiert (Review-Runde 16) |
+| `20260915095417_ueberstunden_review_runde17.sql` | `ueberstunden_monatsanteile` bekommt deterministisches `ORDER BY` für die client-seitige Pagination (Review-Runde 17) |
+| `20260915111845_zentralist_on_duty_includes_innendienst.sql` | Diensthabender Innendienst bekommt dieselben operativen Zentrale-Rechte wie ein diensthabender Zentralist |
+| `20260915113331_zentralist_voller_operativer_zugriff.sql` | Diensthabende Zentralisten/Innendienst dürfen operative Daten (Einsätze, Straßenzustand, AV/BV & EV, Personenhinweise, Baustellen, Lagen, Fahndungen) auch bearbeiten und löschen, nicht nur anlegen |
+| `20260915150115_admin_only_register_maintenance.sql` | Stammdaten-Register: Lesen für berechtigte Zentrale-Nutzer, Anlegen/Ändern/Löschen ausschließlich Admin |
+| `20260915182823_create_schutzmassnahmen.sql` | `schutzfaelle`/`schutzbereiche`/`schutzfall_personen`/`schutzkontrollen` (AV/BV & EV) |
+| `20260915183556_harden_schutzmassnahmen.sql` | `preserve_schutzfall_created_by`: Ersteller eines Schutzfalls bleibt beim Bearbeiten erhalten |
+| `20260915185744_zentrale_can_create_persons.sql` | Behebt Admin-only-Bug aus `admin_only_register_maintenance`: Personen anlegen wieder für alle mit Zentrale-Zugriff |
+| `20260917081000_einsatz_parteien.sql` | `einsatz_parteien`: beteiligte Parteien eines Einsatzes (Beschuldigter/Opfer/Zeuge/Sonstige), getrennt vom Melder |
+| `20260917090000_merge_operational_persons.sql` | `merge_operational_persons`-RPC (Admin-only): führt zwei doppelt angelegte Personen inkl. aller Verweise zusammen |
+| `20260917100000_zentrale_reads_profiles.sql` | Zusätzliche SELECT-Policy auf `profiles` über `has_portal_area_access('zentrale')`, damit das Kontakte-Register auch für Zentrale-Personal ohne eigene Bekleidungs-Rolle lesbar ist |
+| `20260917110000_zentrale_can_create_objects.sql` | Behebt denselben Admin-only-Bug wie bei Personen: Objekte anlegen wieder für alle mit Zentrale-Zugriff |
+| `20260918193000_schutzfall_kontrollauftrag.sql` | Trigger erzeugt automatisch einen Kontrollauftrag, sobald ein Schutzfall seinen ersten Schutzbereich bekommt |
+| `20260918200000_incident_streife_zuweisung.sql` | `incident_reports.assigned_vehicle_id`, `taken_over_by`/`taken_over_at`, `take_over_incident`/`release_incident_takeover` |
+| `20260918210000_revert_schutzfall_kontrollauftrag.sql` | Rückbau von `20260918193000`: automatisches Erzeugen war nicht gewünscht (feuerte auch beim bloßen Bearbeiten erneut) |
+| `20260918220000_kontrollauftrag_zeitfenster_und_karte.sql` | `zentrale_entries.zeitfenster` (Freitext-Zeitfenster) sowie `location_lat`/`location_lng` für die Kartenansicht |
+| `20260918230000_schutzfall_kontrollauftrag_optional.sql` | Zweiter Anlauf: Checkbox „Kontrolle erforderlich" beim Anlegen eines Schutzfalls erzeugt bewusst (nicht automatisch) einen Kontrollauftrag (`create_schutzfall_kontrollauftrag`) |
+| `20260918240000_schutzfall_kontrolle_erforderlich_persistieren.sql` | `schutzfaelle.kontrolle_erforderlich` wird jetzt gespeichert, `remove_schutzfall_kontrollauftrag` als Gegenstück |
+| `20260918250000_schutzfall_kontrolle_ohne_eigenes_flag.sql` | Eigenes Flag entfernt — einzige Wahrheit ist ab jetzt, ob ein verknüpfter Kontrollauftrag existiert |
+| `20260918260000_wichtige_telefonnummern.sql` | `wichtige_telefonnummern` (interne/externe Rufnummern), ersetzt die bisherigen Klebezettel am Bildschirm |
+| `20260919000000_operational_today_nachtdienst.sql` | `operational_today()`: Nachtdienst über Mitternacht bleibt dem Kalendertag seines Beginns zugeordnet (Europe/Vienna statt UTC) |
+| `20260919010000_unterlagen_je_bereich.sql` | `zentrale_unterlagen.bereich`: getrennte Inhalte für Zentrale/Außendienst/Innendienst statt einer gemeinsam verlinkten Seite |
+| `20260919020000_material_unterordner.sql` | `einsatz_material_tabs.parent_id`: beliebig tief verschachtelbare Unterordner für Unterlagen, Zyklen-Schutz per Trigger |
+| `20260919030000_sole_genehmiger_name.sql` | `sole_genehmiger_name()`: Name des einzigen aktiven Genehmigers für den Ausdruck — ersetzt durch die Genehmiger-Kette (siehe unten) |
+| `20260919040000_genehmiger_kette.sql` | `profiles.genehmiger_rang` + `genehmiger_kette()`: feste Vertretungsreihenfolge statt „genau ein Genehmiger"-Heuristik |
+| `20260919050000_einsatz_checkliste_namensliste.sql` | `einsatz_checklist_punkte` (Checkliste Notfall/Katastrophe, Notunterkunft) und `einsatz_namensliste` (Evakuierungs-/Unterbringungslisten) als geteilter Serverzustand statt localStorage |
+| `20260919060000_datenpflege_bereich.sql` | Neuer Portalbereich `datenpflege` (Schlüssel/Kontakte/Telefonnummern/Fahndungen/Objekte) — Stufe 1 des Rechte-Umbaus, `can_manage_datenpflege` |
+| `20260919070000_tagesfunktion_zugriff.sql` | Stufe 2: Zugriff auf Zentrale/Innendienst/Außendienst wird Tagesfunktion aus der Diensteinteilung statt Dauerberechtigung, `is_operative_duty_today()` |
+| `20260919080000_produkt_bezugsart_groessenart.sql` | `products.bezugsart` (Massa/Eigenbeschaffung) und `products.size_mode` (Größen/Universal/keine) |
+| `20260919090000_produkt_shop_bestellbar.sql` | `products.orderable_in_shop`: trennt „im Lager erfasst" von „im Shop bestellbar" |
+| `20260920100000_pool_em_pfefferspray_klein.sql` | Neue Pool-Einsatzmittel-Kategorie „Pfefferspray klein" |
+| `20260921110000_support_messages_delete.sql` | DELETE-Policy für `support_messages`: Themenbereich-Verwalter dürfen einzelne Nachrichten löschen |
+| `20260921120000_support_tickets_delete.sql` | DELETE-Policy für `support_tickets`: Themenbereich-Verwalter dürfen den ganzen Vorgang löschen |
+| `20260921130000_support_delete_grants.sql` | Fix zu den beiden vorherigen Migrationen: fehlendes `GRANT DELETE` an `authenticated` nachgetragen |
+| `20260921140000_fleet_status_cleanup_inactive_items.sql` | Verwaiste Status-Einträge deaktivierter Ausstattungsstücke bereinigt, Trigger räumen künftige Deaktivierungen automatisch mit auf |
+| `20260921233000_cart_size_mode_none_universal.sql` | Fix: Warenkorb-RPCs schlugen bei Artikeln ohne Größenwahl (`size_mode` none/universal) fehl |
+| `20260922100000_test_daten_markierung_und_wipe.sql` | Testdaten-Kennzeichnung (`profiles.is_test` u. a.) + `wipe_test_data`-RPC (siehe `docs/TESTDATEN.md`) |
+| `20260922222000_operatives_streifen_cockpit.sql` | `duty_vehicle_defaults`, `incident_supports`, `complete_incident`/`support_incident`/`take_over_incident`/`reopen_incident`/`suggest_duty_vehicle`: streifenbezogene Einsatzaktionen |
+| `20260922222757_einsatz_dokumente_serverseitig.sql` | `einsatz_dokumente`: Dokument-Metadaten serverseitig statt im localStorage |
+| `20260922224500_streifenaktionen_haertung.sql` | Fremd zugeteilte Einsätze können unterstützt, aber nicht wegübernommen werden |
+| `20260922230000_duty_vehicle_defaults_index.sql` | Performance-Index für die operative Fahrzeugvorauswahl |
+| `20260922232000_einsatzgrund_und_kontext.sql` | `incident_reason_configs` + `incident_context()`: strukturierter Einsatzgrund steuert automatische Nahbereichsprüfung |
+| `20260922234500_incident_context_ohne_fahndungen.sql` | Fahndungen aus dem automatischen Einsatzkontext herausgenommen (fachlich noch nicht konkretisiert) |
+| `20260922235000_incident_context_ohne_fahndungen.sql` | Zweiter Korrekturdurchlauf zur vorherigen Migration |
+| `20260922241000_bv_av_laufzeit_und_aufhebung.sql` | BV/AV regulär zwei Wochen ab Anordnung, vorzeitige Aufhebung durch die Sicherheitsbehörde als eigener Vorgang |
+| `20260922243500_schlanke_einsatzbearbeitung.sql` | Neue Meldungen können offen bleiben oder durch Zentrale/eigene Streife/BP bearbeitet werden |
+| `20260923002000_ereignis_meldungszettel_felder.sql` | Zusätzliche Felder für den Ereignis-Meldungszettel |
+| `20260923003000_ereignis_entscheidungen.sql` | `ereignis_entscheidungen` (dokumentierte Entscheidungen zu einem Ereignis) |
+| `20260923004100_einsatz_dokumente_grants_haerten.sql` | SQL-Grants für `einsatz_dokumente` gehärtet |
+| `20260923023000_incident_assistance_requests.sql` | `incident_assistance_requests` (Unterstützungsanfragen zwischen Dienststellen) |
+| `20260923030000_namensliste_field_permissions.sql` | Feldweise Berechtigungen für die Namensliste |
+| `20260923092000_police_namensliste_readonly.sql` | Namensliste für reine Polizeisicht schreibgeschützt |
+| `20260923113009_central_event_lifecycle_rpcs.sql` | `link_incident_to_event`/`unlink_incident_from_event`/`set_event_status`: Ereignis-Lebenszyklus als RPCs statt freiem UPDATE |
+| `20260923113815_central_least_privilege_grants.sql` | SQL-Grants der Zentrale-Tabellen auf das tatsächlich nötige Minimum reduziert |
+| `20260923114255_lock_down_test_and_staff_rpcs.sql` | Ausführungsrechte von Test- und Staff-RPCs eingeschränkt |
+| `20260923123000_cross_org_assistance_requests.sql` | Unterstützungsanfragen auch organisationsübergreifend möglich |
+| `20260923125000_event_documents.sql` | `ereignis_dokumente` (Dokument-Metadaten je Ereignis) |
+| `20260923131500_central_records_external_requests.sql` | Zentrale Protokolle für externe Anfragen |
+| `20260923204222_innendienst_bescheide_arbeitsablauf.sql` | Straßenmusik/-kunst fachlich geschlossen: max. zwei Bescheide/Tag, Planbeilage-Pflicht, Ein-Klick-Widerruf aus dem Außendienst, `innendienst_person_entscheidungen` für künftige Ausstellungen |
+| `20260923210000_ereignis_grundlage.sql` | `ereignisse`/`ereignis_einsaetze`/`ereignis_verlauf`/`ereignis_verstaendigungen`: Grundgerüst für ereignisübergreifende Einsatzbündelung |
+| `20260923211000_ereignis_dimension_rpc.sql` | `set_incident_event_dimension`-RPC |
+| `20260923212000_ereignis_fk_indizes.sql` | Fehlende Indizes für Ereignis-Fremdschlüssel |
+| `20260924084401_cleanup_event_after_incident_delete.sql` | Ereignis ohne verbleibenden Einsatz wird beim Löschen der letzten Meldung automatisch mitentfernt |
+| `20260924100000_close_orphaned_central_events.sql` | Einmalige Bereinigung bereits vorhandener aktiver Ereignisse ohne Einsatzzuordnung |
+| `20260924180124_portal_integrationen_vorbereitung.sql` | `integration_outlook_contacts`/`integration_rainbow_calls`/`portal_integration_settings`: Vorbereitung für Outlook/Rainbow, keine Secrets in der Tabelle (siehe `docs/INTEGRATIONEN_OUTLOOK_RAINBOW.md`) |
+| `20260924181942_mehrere_kontaktnummern.sql` | Büro-Telefon, Diensthandy und Privathandy je Kontakt statt einer Nummer |
+| `20260924182752_benutzer_telefonnummern.sql` | `profile_phone_numbers`: eigene Dienst-/Privathandys je Benutzer, getrennt von Kontaktregister-Nummern |
+| `20260924191728_admin_verstaendigung_und_kontaktanzeigen.sql` | `verstaendigungsregeln`/`ereignis_verstaendigungsschritte`: admin-gepflegte Verständigungsregeln, eigener Stand je Ereignis |
+| `20260924192905_admin_ablaufvorlagen.sql` | `ablaufvorlagen`/`einsatz_ablauf_schritte`/`ereignis_entscheidungsschritte`: bearbeitbare Vorlagen, eingefrorene Ablaufpunkte je Einsatz/Ereignis |
+| `20260924195435_funktionskontakte_systemeinstellungen.sql` | `portal_funktionskontakte`/`zentrale_kontakt_institutionen`: Funktion (z. B. Bürgermeister) getrennt von der aktuellen Person |
+| `20260924195529_kontaktinstitutionen_fk_indizes.sql` | Fehlende Indizes für Kontaktinstitutionen-Fremdschlüssel |
+| `20260924215016_funktionskontakte_aktive_ereignisse.sql` | Zuständige Person/Rufnummer in aktiven Ereignissen bleibt aktuell, abgeschlossene Ereignisse behalten ihren Stand |
+| `20260924215021_profil_als_funktionskontakt.sql` | Ein Funktionskontakt kann auch direkt einen aktiven Portalbenutzer referenzieren |
+| `20260924215028_namenslisten_operativ_freigeben.sql` | Korrektur: Namenslisten aus ZMR-Daten waren versehentlich auf reine Hauslisten beschränkt, jetzt wieder für Zentrale/diensthabende Kräfte beschreibbar |
+| `20260925021129_dienstplan_import.sql` | Dienstplan-Import Schritt 1-3: `dienstplan_spalten`/`dienstplan_monate`/`dienstplan_dienste`, `dienstplan_monat_ersetzen`/`_veroeffentlichen` |
+| `20260925051510_dienstplan_dienststellenweit_lesen.sql` | Dienstplan-Import Schritt 4-5: Lese-Policy dienststellenweit statt nur eigene Zeilen (Grundlage für den Dienststellenkalender) |
+| `20260925052718_operational_today_nachtdienst_ende_8uhr.sql` | Nachtdienst-Ende korrekt auf 08:00 Uhr statt 06:00 Uhr |
+| `20260925054715_ereignis_automatisch_abschliessen.sql` | Ereignis wird automatisch geschlossen, sobald der letzte offene Einsatz erledigt ist |
+| `20260925071826_dienstplan_sollstunden.sql` | `dienstplan_monate.sollstunden` (aus der Excel-Textbox extrahiert) für die Gegenüberstellung in „Meine Dienste" |
 
 Hosted Branching nimmt den Präfix vor dem ersten `_` als Version. Zwei Dateien
 mit gleichem Präfix → `duplicate key`. Eine 8-stellige Version plus eine
-14-stellige mit demselben Präfix (`20260511` + `20260511000002`) löst im CLI
-einen Sortierfehler aus ([supabase/cli#6036](https://github.com/supabase/cli/issues/6036)):
-`Remote migration versions not found`. Neue Dateien daher mit eigener
-8-stelliger Version ohne gemeinsames Präfix.
+14-stellige mit demselben Präfix löst im CLI einen Sortierfehler aus
+([supabase/cli#6036](https://github.com/supabase/cli/issues/6036)):
+`Remote migration versions not found`. Neue Dateien daher mit `date +%Y%m%d%H%M%S`
+als eigenem, garantiert einzigartigem 14-stelligem Präfix.
 
 Schema-Änderungen immer als neue Migrationsdatei dokumentieren.
 
-Auf einer **bestehenden** Produktionsdatenbank:
-
 ```bash
 supabase db push
-# oder die SQL-Dateien 20260501 und 20260830 im Dashboard ausführen.
-# 20260501 ist idempotent (IF NOT EXISTS / OR REPLACE).
 ```
 
-`20260501` auf einer bestehenden DB auszuführen, legt fehlende Objekte an und
-berührt die späteren Staff-Policies nicht (alte Policy-Namen werden dort nicht
-neu erzeugt).
+wendet alle noch fehlenden Migrationen aus `supabase/migrations/` in
+chronologischer Reihenfolge an — es gibt keine gesonderte Bootstrap-Datei,
+die erste Migration (`20260511210803_add_approved_status_and_proc_listed.sql`)
+setzt bereits ein bestehendes Grundschema voraus.
 
 ## Offene Punkte für den Betreiber
 
 Diese Schritte brauchen Zugangsdaten bzw. eine fachliche Entscheidung — sie
 sind im Code vorbereitet, aber ohne Secrets nicht automatisch erledigt:
 
-1. **Migrationen anwenden** (`20260501`, `20260830`, `20260901`, `20260903`, `20260906`–`20260920`) auf das Supabase-Projekt.
+1. **Migrationen anwenden** (alle Dateien in `supabase/migrations/`, siehe Tabelle oben) auf das Supabase-Projekt.
 2. **`create-user` deployen** (`supabase functions deploy create-user`) — nötig
    auch wegen CORS (kein `*`) und wegen `action: reset_password`.
 3. **Cloudflare Pages**: `SUPABASE_URL` und `SUPABASE_ANON_KEY` setzen, sonst
