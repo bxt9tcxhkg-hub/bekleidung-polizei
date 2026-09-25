@@ -23,11 +23,12 @@ describe('parseDienstCode', () => {
 })
 
 describe('kategorisiereRohtext', () => {
-  it('erkennt krank, Urlaub, Sonderurlaub und Karenz unabhängig von Groß-/Kleinschreibung', () => {
+  it('erkennt krank, Urlaub, Sonderurlaub, Karenz und Stundenersatz unabhängig von Groß-/Kleinschreibung', () => {
     expect(kategorisiereRohtext('krank')).toBe('krank')
     expect(kategorisiereRohtext('Urlaub')).toBe('urlaub')
     expect(kategorisiereRohtext('SoUrl')).toBe('sonderurlaub')
     expect(kategorisiereRohtext('Karenz')).toBe('karenz')
+    expect(kategorisiereRohtext('StdErsatz')).toBe('stundenersatz')
   })
   it('"U" zählt ebenfalls als Urlaub - mit oder ohne Uhrzeit (z. B. Urlaubs-Halbtag)', () => {
     expect(kategorisiereRohtext('U')).toBe('urlaub')

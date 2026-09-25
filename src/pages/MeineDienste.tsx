@@ -27,7 +27,7 @@ function formatDatum(iso: string): string {
 }
 
 const KATEGORIE_LABEL: Partial<Record<DienstplanKategorieDb, string>> = {
-  krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz',
+  krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz', stundenersatz: 'Stundenersatz',
 }
 
 export default function MeineDienste() {
