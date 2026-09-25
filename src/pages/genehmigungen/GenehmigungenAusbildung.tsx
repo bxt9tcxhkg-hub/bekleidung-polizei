@@ -40,6 +40,29 @@ function groupAssignmentsByModule<T extends { module_id: string; proposed_at: st
   }))
 }
 
+// Der Genehmiger braucht direkt in der Liste (nicht erst im Prüfen-Dialog),
+// wann das Training/die Schulung stattfinden soll. Ein einzelner Vorschlag
+// hat oft schon einen fixen Termin (session_id, z. B. bei Selbstanmeldung
+// über die Ausschreibung) - sonst zeigt die Modul-Karte die angekündigten
+// Termine dieses Moduls als Orientierung, aus denen der Genehmiger beim
+// Prüfen ohnehin wählen muss.
+function formatSessionDate(session: { session_date: string; note: string | null }) {
+  return new Date(session.session_date).toLocaleDateString('de-AT') + (session.note ? ` · ${session.note}` : '')
+}
+
+function itemTerminLabel(sessionId: string | null, sessions: { id: string; session_date: string; note: string | null }[]) {
+  if (!sessionId) return null
+  const session = sessions.find(s => s.id === sessionId)
+  return session ? formatSessionDate(session) : null
+}
+
+function moduleTerminLabel(moduleId: string, sessions: { module_id: string | null; session_date: string; note: string | null }[]) {
+  const matches = sessions.filter(s => s.module_id === moduleId)
+  if (matches.length === 0) return 'Kein Termin angekündigt'
+  if (matches.length === 1) return `Termin ${formatSessionDate(matches[0])}`
+  return `Termine ${matches.map(formatSessionDate).join(' · ')}`
+}
+
 // Zwei Vorschlag-Zuteilungen (Einsatztraining/Schulungen) sind strukturell
 // identisch - eine Genehmigung braucht zwingend einen gewählten Termin,
 // beides läuft über dieselbe Art RPC (nur der Funktionsname unterscheidet
@@ -216,18 +239,21 @@ export default function GenehmigungenAusbildung() {
                   <div key={group.moduleId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
                       <p className="font-semibold text-gray-900">{group.moduleName}</p>
-                      <p className="text-xs text-gray-500">{group.items.length} Vorschlag{group.items.length === 1 ? '' : 'e'}</p>
+                      <p className="text-xs text-gray-500">{group.items.length} Vorschlag{group.items.length === 1 ? '' : 'e'} · {moduleTerminLabel(group.moduleId, trainingSessions)}</p>
                     </div>
                     <div className="divide-y divide-gray-100">
-                      {group.items.map(item => (
-                        <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{officerDisplayName(item.officer)}</p>
-                            <p className="text-xs text-gray-400">Vorgeschlagen am {new Date(item.proposed_at).toLocaleDateString('de-AT')}</p>
+                      {group.items.map(item => {
+                        const eigenerTermin = itemTerminLabel(item.session_id, trainingSessions)
+                        return (
+                          <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900">{officerDisplayName(item.officer)}</p>
+                              <p className="text-xs text-gray-400">{eigenerTermin ? `Termin ${eigenerTermin}` : `Vorgeschlagen am ${new Date(item.proposed_at).toLocaleDateString('de-AT')}, noch kein Termin gewählt`}</p>
+                            </div>
+                            <button type="button" onClick={() => openAssignmentReview('training', item)} className="flex-shrink-0 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button>
                           </div>
-                          <button type="button" onClick={() => openAssignmentReview('training', item)} className="flex-shrink-0 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
@@ -245,18 +271,21 @@ export default function GenehmigungenAusbildung() {
                   <div key={group.moduleId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
                       <p className="font-semibold text-gray-900">{group.moduleName}</p>
-                      <p className="text-xs text-gray-500">{group.items.length} Vorschlag{group.items.length === 1 ? '' : 'e'}</p>
+                      <p className="text-xs text-gray-500">{group.items.length} Vorschlag{group.items.length === 1 ? '' : 'e'} · {moduleTerminLabel(group.moduleId, schulungSessions)}</p>
                     </div>
                     <div className="divide-y divide-gray-100">
-                      {group.items.map(item => (
-                        <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{officerDisplayName(item.officer)}</p>
-                            <p className="text-xs text-gray-400">Vorgeschlagen am {new Date(item.proposed_at).toLocaleDateString('de-AT')}</p>
+                      {group.items.map(item => {
+                        const eigenerTermin = itemTerminLabel(item.session_id, schulungSessions)
+                        return (
+                          <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-900">{officerDisplayName(item.officer)}</p>
+                              <p className="text-xs text-gray-400">{eigenerTermin ? `Termin ${eigenerTermin}` : `Vorgeschlagen am ${new Date(item.proposed_at).toLocaleDateString('de-AT')}, noch kein Termin gewählt`}</p>
+                            </div>
+                            <button type="button" onClick={() => openAssignmentReview('schulung', item)} className="flex-shrink-0 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button>
                           </div>
-                          <button type="button" onClick={() => openAssignmentReview('schulung', item)} className="flex-shrink-0 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
