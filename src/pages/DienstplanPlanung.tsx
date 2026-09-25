@@ -350,7 +350,8 @@ export default function DienstplanPlanung() {
           <table className="text-xs">
             <thead>
               <tr>
-                <th rowSpan={2} className="sticky left-0 z-20 min-w-28 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
+                <th rowSpan={2} className="sticky left-0 z-20 w-24 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
+                <th rowSpan={2} className="sticky left-24 z-20 w-14 border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold text-gray-600"></th>
                 {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
               </tr>
               <tr>
@@ -364,9 +365,13 @@ export default function DienstplanPlanung() {
                 return (['tag', 'nacht'] as const).map(abschnitt => {
                   const fehlend = (fehlendeGrund.get(datum) ?? []).filter(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
                   return <tr key={`${datum}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
-                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-0 z-10 min-w-28 border-r border-gray-200 px-3 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : 'bg-inherit'}`}>
-                      {abschnitt === 'tag' ? <span className="font-medium text-gray-800">{WOCHENTAG_LABEL[wochentag]} {tagText}.</span> : null}
-                      <span className={`ml-1.5 text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
+                    {abschnitt === 'tag' ? (
+                      <td rowSpan={2} className="sticky left-0 z-10 w-24 border-r border-gray-200 bg-inherit px-3 py-1.5 align-top">
+                        <span className="font-medium text-gray-800">{WOCHENTAG_LABEL[wochentag]} {tagText}.</span>
+                      </td>
+                    ) : null}
+                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-24 z-10 w-14 border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : 'bg-inherit'}`}>
+                      <span className={`text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
                       {fehlend.length > 0 ? <AlertTriangle className="ml-1 inline h-3 w-3 text-red-600" /> : null}
                     </td>
                     {mitarbeiter.map(person => {
