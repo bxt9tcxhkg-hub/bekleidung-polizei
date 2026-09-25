@@ -30,6 +30,29 @@ export function werktageImMonat(jahr: number, monatNr: number): number {
 /** Bei den Sollstunden zählt laut Kommandant nur die volle Stunde - es wird immer abgerundet, nie aufgerundet. */
 export function rundeAbVolleStunde(wert: number): number { return Math.floor(wert) }
 
+/** Nächster Kalendermonat als 'YYYY-MM'. */
+function naechsterMonat(monat: string): string {
+  const [jahrText, monatText] = monat.split('-')
+  const jahr = Number(jahrText)
+  const monatNr = Number(monatText)
+  return monatNr === 12 ? `${jahr + 1}-01` : `${jahr}-${String(monatNr + 1).padStart(2, '0')}`
+}
+
+/**
+ * Der nächste Monat, für den noch kein Dienstplan angelegt wurde (egal ob
+ * Entwurf oder veröffentlicht) - für die Sollstunden-Vorschau in den
+ * Dienstplan-Einstellungen. Ausgangspunkt ist der aktuelle Kalendermonat,
+ * aber wenn dafür (und für folgende Monate) bereits ein Dienstplan existiert
+ * - z. B. weil der Oktober-Dienstplan schon verschickt wurde, während wir
+ * uns noch im September befinden - zählt erst der erste freie Monat danach.
+ */
+export function naechsterPlanbarerMonat(vorhandeneMonate: readonly string[], heute: string): string {
+  const vorhanden = new Set(vorhandeneMonate.map(monat => monat.slice(0, 7)))
+  let kandidat = heute.slice(0, 7)
+  while (vorhanden.has(kandidat)) kandidat = naechsterMonat(kandidat)
+  return kandidat
+}
+
 /**
  * Sollstunden für eine Person in einem Monat.
  * @param monat 'YYYY-MM' oder 'YYYY-MM-DD' (nur Jahr/Monat werden ausgewertet)

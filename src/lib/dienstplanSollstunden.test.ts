@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { berechneSollstunden, istWerktag, werktageImMonat } from './dienstplanSollstunden'
+import { berechneSollstunden, istWerktag, naechsterPlanbarerMonat, werktageImMonat } from './dienstplanSollstunden'
 
 describe('istWerktag', () => {
   it('zählt Montag bis Freitag als Werktag', () => {
@@ -44,5 +44,21 @@ describe('berechneSollstunden', () => {
     expect(berechneSollstunden('2026-02', 8.7, 90)).toBe(Math.floor((20 * 8.7 * 90) / 111))
     // 20 Werktage × 8.75 × 111/111 = 175 - exakt, bleibt unverändert
     expect(berechneSollstunden('2026-02', 8.75, 111)).toBe(175)
+  })
+})
+
+describe('naechsterPlanbarerMonat', () => {
+  it('bleibt beim aktuellen Monat, wenn dafür noch kein Dienstplan existiert', () => {
+    expect(naechsterPlanbarerMonat([], '2026-09')).toBe('2026-09')
+    expect(naechsterPlanbarerMonat(['2026-08'], '2026-09')).toBe('2026-09')
+  })
+
+  it('springt zum ersten noch freien Folgemonat, wenn der aktuelle und folgende Monate schon angelegt sind', () => {
+    // September und Oktober bereits angelegt (Oktober z. B. schon verschickt) - nächster freier Monat ist November.
+    expect(naechsterPlanbarerMonat(['2026-09', '2026-10'], '2026-09')).toBe('2026-11')
+  })
+
+  it('springt über den Jahreswechsel', () => {
+    expect(naechsterPlanbarerMonat(['2026-12'], '2026-12')).toBe('2027-01')
   })
 })
