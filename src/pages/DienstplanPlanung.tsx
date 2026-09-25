@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarDays, CheckCircle2, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, CheckCircle2, CheckSquare, Square, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
@@ -114,6 +114,14 @@ export default function DienstplanPlanung() {
   const [zeile2, setZeile2] = useState<ZeileForm | null>(null)
   const [speichern, setSpeichern] = useState(false)
   const [modalError, setModalError] = useState('')
+
+  // Mehrfachauswahl (z. B. Urlaub für mehrere Tage/Personen auf einmal
+  // eintragen, statt jede Zelle einzeln zu bearbeiten) - Schlüssel
+  // `${beamterId}|${datum}` wie beim einzelnen Zellen-Klick, wirkt also auf
+  // beide Tag-/Nacht-Unterzeilen dieses Tages.
+  const [mehrfachModus, setMehrfachModus] = useState(false)
+  const [auswahl, setAuswahl] = useState<Set<string>>(new Set())
+  const [mehrfachSpeichern, setMehrfachSpeichern] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError(''); setVorschlaege(new Map())
@@ -290,6 +298,65 @@ export default function DienstplanPlanung() {
     setBearbeitung(null)
   }
 
+  function umschalteAuswahl(beamterId: string, datum: string) {
+    const schluessel = `${beamterId}|${datum}`
+    setAuswahl(current => {
+      const naechste = new Set(current)
+      if (naechste.has(schluessel)) naechste.delete(schluessel)
+      else naechste.add(schluessel)
+      return naechste
+    })
+  }
+
+  /**
+   * Mehrfachauswahl: setzt Zeile 1 für alle ausgewählten Zellen auf
+   * dasselbe Kürzel (z. B. Urlaub für mehrere Tage/Personen auf einmal,
+   * statt jede Zelle einzeln über den Editor abzutippen). Zeile 2 bleibt
+   * je Zelle unangetastet, wie beim einzelnen Speichern auch.
+   */
+  async function wendeMehrfachKuerzelAn(code: string) {
+    if (!monatRow || auswahl.size === 0) return
+    setMehrfachSpeichern(true); setError('')
+    const kategorie = kategorisiereRohtext(code)
+    const eintraege = Array.from(auswahl).map(schluessel => {
+      const [beamterId, datum] = schluessel.split('|')
+      return { beamterId, datum }
+    })
+    const ergebnisse = await Promise.all(eintraege.map(({ beamterId, datum }) =>
+      dienstplanSupabase.rpc('dienstplan_dienst_setzen', { p_monat_id: monatRow.id, p_beamter_id: beamterId, p_datum: datum, p_zeile: 1, p_rohtext: code, p_von_zeit: '', p_bis_zeit: '', p_kategorie: kategorie }),
+    ))
+    setMehrfachSpeichern(false)
+    if (ergebnisse.some(ergebnis => ergebnis.error)) { setError('Nicht alle ausgewählten Zellen konnten gespeichert werden.'); return }
+    setDienste(current => {
+      const betroffen = new Set(eintraege.map(({ beamterId, datum }) => `${beamterId}|${datum}|1`))
+      const rest = current.filter(zeile => !betroffen.has(`${zeile.beamter_id}|${zeile.datum}|${zeile.zeile}`))
+      const neu = eintraege.map(({ beamterId, datum }): DienstZeile => ({ beamter_id: beamterId, datum, zeile: 1, rohtext: code, von_zeit: null, bis_zeit: null, kategorie }))
+      return [...rest, ...neu]
+    })
+    setNotice(`${eintraege.length} Zellen auf "${code}" gesetzt.`)
+    setAuswahl(new Set())
+  }
+
+  async function mehrfachLoeschen() {
+    if (!monatRow || auswahl.size === 0) return
+    setMehrfachSpeichern(true); setError('')
+    const eintraege = Array.from(auswahl).map(schluessel => {
+      const [beamterId, datum] = schluessel.split('|')
+      return { beamterId, datum }
+    })
+    const ergebnisse = await Promise.all(eintraege.map(({ beamterId, datum }) =>
+      dienstplanSupabase.rpc('dienstplan_dienst_loeschen', { p_monat_id: monatRow.id, p_beamter_id: beamterId, p_datum: datum, p_zeile: 1 }),
+    ))
+    setMehrfachSpeichern(false)
+    if (ergebnisse.some(ergebnis => ergebnis.error)) { setError('Nicht alle ausgewählten Zellen konnten gelöscht werden.'); return }
+    setDienste(current => {
+      const betroffen = new Set(eintraege.map(({ beamterId, datum }) => `${beamterId}|${datum}|1`))
+      return current.filter(zeile => !betroffen.has(`${zeile.beamter_id}|${zeile.datum}|${zeile.zeile}`))
+    })
+    setNotice(`${eintraege.length} Zellen gelöscht.`)
+    setAuswahl(new Set())
+  }
+
   // Vorschlag generieren (Phase 4) - reine, lokale Berechnung über
   // lib/dienstplanVorschlag.ts, keine DB-Schreibzugriffe. Ersetzt
   // bestehende Vorschläge komplett (kein Zusammenführen über mehrere
@@ -370,9 +437,17 @@ export default function DienstplanPlanung() {
               <button type="button" onClick={vorschlaegeVerwerfen} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><X className="h-3.5 w-3.5" /> Verwerfen</button>
               <button type="button" disabled={vorschlagUebernehmen} onClick={() => void vorschlaegeUebernehmen()} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {vorschlagUebernehmen ? 'Wird übernommen…' : 'Vorschläge übernehmen'}</button>
             </> : <button type="button" onClick={vorschlagGenerieren} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><Sparkles className="h-3.5 w-3.5" /> Vorschlag generieren</button>}
+            <button type="button" onClick={() => { setMehrfachModus(current => !current); setAuswahl(new Set()) }} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${mehrfachModus ? 'border-blue-700 bg-blue-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{mehrfachModus ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />} Mehrfachauswahl</button>
             {monatRow.status !== 'veroeffentlicht' ? <button type="button" disabled={veroeffentlichen} onClick={() => void monatVeroeffentlichen()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {veroeffentlichen ? 'Wird veröffentlicht…' : 'Veröffentlichen'}</button> : null}
           </div>
         </div>
+
+        {mehrfachModus ? <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+          <span className="text-xs font-medium text-blue-900">{auswahl.size} Zelle{auswahl.size === 1 ? '' : 'n'} ausgewählt - Tag/Nacht-Zelle anklicken zum Markieren, dann Kürzel wählen:</span>
+          {ABWESENHEIT_KUERZEL.map(({ label, code }) => <button key={code} type="button" disabled={auswahl.size === 0 || mehrfachSpeichern} onClick={() => void wendeMehrfachKuerzelAn(code)} className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50 disabled:opacity-50">{label}</button>)}
+          <button type="button" disabled={auswahl.size === 0 || mehrfachSpeichern} onClick={() => void mehrfachLoeschen()} className="rounded-full border border-red-300 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">Löschen</button>
+          {auswahl.size > 0 ? <button type="button" onClick={() => setAuswahl(new Set())} className="text-xs text-blue-800 hover:underline">Auswahl aufheben</button> : null}
+        </div> : null}
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
           <table className="text-xs">
@@ -413,10 +488,11 @@ export default function DienstplanPlanung() {
                       const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
                       const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
                       const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
+                      const ausgewaehlt = auswahl.has(`${person.id}|${datum}`)
                       return <td key={person.id}
-                        onClick={() => oeffneZelle(person.id, person.name, datum)}
+                        onClick={() => mehrfachModus ? umschalteAuswahl(person.id, datum) : oeffneZelle(person.id, person.name, datum)}
                         title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
-                        className={`min-w-20 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
+                        className={`min-w-20 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung ? 'bg-red-50' : ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
