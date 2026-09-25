@@ -224,20 +224,6 @@ Migrationsdateien liegen in `supabase/migrations/`.
 | `20260514120301_add_product_min_quantity.sql` | `products.min_quantity` (Mindestbestand) |
 | `20260514122845_create_grundausstattung.sql` | `grundausstattung`-Tabelle |
 | `20260514124055_grundausstattung_drop_size.sql` | Größe aus `grundausstattung` entfernt |
-| `20260517122218_create_vending_schema.sql` | Fremdprojekt (Kaffee-/Verkaufsautomaten): Kategorien, Artikel, Transaktionen, Pulverautomat, Bohnenkaffee-Logs — vollständig entfernt durch `20260702191625_drop_foreign_project_tables.sql` |
-| `20260517123034_allow_anon_access.sql` | Fremdprojekt Verkaufsautomaten: Allow-All-Policies |
-| `20260517190329_add_mhd_to_articles.sql` | Fremdprojekt Verkaufsautomaten: Mindesthaltbarkeitsdatum an Artikeln |
-| `20260517213435_add_machine_slots_table.sql` | Fremdprojekt Verkaufsautomaten: `machine_slots` |
-| `20260517213442_add_machine_slots_to_allowed.sql` | Fremdprojekt Verkaufsautomaten: Allow-All-Policy für `machine_slots` |
-| `20260518105843_add_type_and_note_to_transactions.sql` | Fremdprojekt Verkaufsautomaten: Typ/Notiz an Transaktionen |
-| `20260518165019_add_machines_table.sql` | Fremdprojekt Verkaufsautomaten: `machines`-Tabelle |
-| `20260519102541_add_pfand_to_articles.sql` | Fremdprojekt Verkaufsautomaten: Pfand an Artikeln |
-| `20260519160249_add_powders_column.sql` | Fremdprojekt Verkaufsautomaten: `powder_settings.powders` |
-| `20260519193040_add_powder_id_to_measurements.sql` | Fremdprojekt Verkaufsautomaten: Pulver-Zuordnung an Messungen |
-| `20260519213453_create_vending_kontrollen.sql` | Fremdprojekt Verkaufsautomaten: `vending_kontrollen` |
-| `20260519234855_add_vk_aufschlag_to_powder_settings.sql` | Fremdprojekt Verkaufsautomaten: Verkaufsaufschlag |
-| `20260520021847_add_puffer_columns.sql` | Fremdprojekt Verkaufsautomaten: Pfand-/Strichpuffer |
-| `20260520095029_add_pfand_wert.sql` | Fremdprojekt Verkaufsautomaten: Pfandwert |
 | `20260520130506_add_deliveries_table.sql` | `deliveries` (Sammellieferung an Massa/Lieferant) + `orders.delivery_id` |
 | `20260520131210_remove_lieferschein_columns.sql` | Alte Lieferschein-Spalten entfernt (abgelöst durch `deliveries`) |
 | `20260520165525_add_payment_and_analysis_to_deliveries.sql` | Zahlungs- und Analysefelder an `deliveries` |
