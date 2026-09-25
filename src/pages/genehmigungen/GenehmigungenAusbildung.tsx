@@ -200,10 +200,10 @@ export default function GenehmigungenAusbildung() {
       {loading ? (
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
-        <div className="space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Einsatztraining und Schulungen bleiben bewusst auf einer Seite (bei zwei
               Vorschlägen je Zuteilung reicht das aus), aber klar als zwei getrennte
-              Gruppen mit eigenem Titel und Icon - dieselben Icons wie im Einsatz-/
+              Spalten mit eigenem Titel und Icon - dieselben Icons wie im Einsatz-/
               Schulungen-Bereich selbst (Target/GraduationCap), damit "Modul" nicht
               wie eine einzige gemeinsame Liste wirkt. */}
           <div className="space-y-3">
@@ -235,7 +235,7 @@ export default function GenehmigungenAusbildung() {
             )}
           </div>
 
-          <div className="border-t border-gray-200 pt-8 space-y-3">
+          <div className="space-y-3 lg:border-l lg:border-gray-200 lg:pl-8">
             <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><GraduationCap className="w-4 h-4 text-blue-700" /> Schulungen</h2>
             {schulungGroups.length === 0 ? (
               <Empty icon={GraduationCap} title="Keine offenen Schulungsvorschläge" />
