@@ -68,7 +68,7 @@ function ZeileEditor({ titel, form, setForm, entfernen }: { titel: string; form:
   return <div className="rounded-lg border border-gray-200 p-3">
     <div className="flex items-center justify-between">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{titel}</p>
-      {entfernen ? <button type="button" onClick={entfernen} className="text-xs text-red-700 hover:underline">entfernen</button> : null}
+      {entfernen ? <button type="button" onClick={entfernen} className="text-xs text-red-700 hover:underline">löschen</button> : null}
     </div>
     <div className="mt-2 flex flex-wrap gap-1.5">
       {QUICK_KUERZEL.map(code => <button key={code} type="button" onClick={() => setForm({ ...form, code })} className={`rounded-full border px-2.5 py-1 text-xs font-medium ${form.code.toUpperCase() === code ? 'border-blue-700 bg-blue-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{code}</button>)}
@@ -400,7 +400,7 @@ export default function DienstplanPlanung() {
       </>}
 
     {bearbeitung ? <Modal title={`${bearbeitung.name} – ${bearbeitung.datum.split('-').reverse().join('.')}`} close={() => setBearbeitung(null)}>
-      <ZeileEditor titel="Zeile 1" form={zeile1} setForm={setZeile1} />
+      <ZeileEditor titel="Zeile 1" form={zeile1} setForm={setZeile1} entfernen={zeile1.code ? () => setZeile1(LEERE_ZEILE) : undefined} />
       {zeile2 ? <ZeileEditor titel="Zeile 2" form={zeile2} setForm={setZeile2} entfernen={() => setZeile2(null)} />
         : <button type="button" onClick={() => setZeile2(LEERE_ZEILE)} className="text-xs text-blue-700 hover:underline">+ Zweiter Eintrag</button>}
       {modalError ? <ErrorMessage text={modalError} /> : null}
