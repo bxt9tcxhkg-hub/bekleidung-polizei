@@ -1,4 +1,4 @@
-import { isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { hasPortalAreaAccess, isAuthenticated, isOperativeDutyToday, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 
 interface Env extends AuthEnv {
   BEKLEIDUNG: R2Bucket
@@ -6,12 +6,22 @@ interface Env extends AuthEnv {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-// Einsatz-Unterlagen haben keine eigene DB-Tabelle (Metadaten liegen nur im localStorage
-// der Zentrale/Streife). Berechtigung folgt daher der beim Upload: angemeldet + aktives
-// Profil reicht, der Datei-Key muss aber unter dem angegebenen Einsatz liegen.
+// Metadaten liegen in der Tabelle einsatz_dokumente (siehe registerEinsatzdokument);
+// die DB-Zeile wird vom Frontend nach diesem Aufruf separat entfernt. Die Berechtigung
+// hier deckt sich mit der RLS-Policy "Einsatzdokumente löschen" auf einsatz_dokumente.
 export const onRequestDelete: PagesFunction<Env> = async ({ request, env }) => {
   if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(request, env))) return unauthorized()
+  const allowed = await Promise.all([
+    hasPortalAreaAccess(request, env, 'zentrale'),
+    isOperativeDutyToday(request, env),
+  ])
+  if (!allowed.some(Boolean)) {
+    return new Response(JSON.stringify({ error: 'Keine Berechtigung für Einsatzunterlagen.' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
   const incidentId = request.headers.get('X-Incident-Id') ?? ''
   const key = request.headers.get('X-File-Key') ?? ''

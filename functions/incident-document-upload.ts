@@ -1,4 +1,4 @@
-import { isAuthenticated, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
+import { hasPortalAreaAccess, isAuthenticated, isOperativeDutyToday, serviceUnavailable, unauthorized, type AuthEnv } from './_auth'
 import { countUploadBytes, uploadSize } from './_upload'
 
 interface Env extends AuthEnv {
@@ -19,6 +19,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!context.env.SUPABASE_URL || !context.env.SUPABASE_ANON_KEY) return serviceUnavailable()
   if (!(await isAuthenticated(context.request, context.env))) return unauthorized()
+  const allowed = await Promise.all([
+    hasPortalAreaAccess(context.request, context.env, 'zentrale'),
+    isOperativeDutyToday(context.request, context.env),
+  ])
+  if (!allowed.some(Boolean)) {
+    return new Response(JSON.stringify({ error: 'Keine Berechtigung für Einsatzunterlagen.' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
 
   const incidentId = context.request.headers.get('X-Incident-Id') ?? ''
   if (!UUID.test(incidentId)) {

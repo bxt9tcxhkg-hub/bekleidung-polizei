@@ -64,8 +64,9 @@ export default function GenehmigungenPersonal() {
     const result = await supabase.from('ueberstunden_meldungen')
       .update({ status, genehmiger_id: profile.id, genehmigt_at: new Date().toISOString(), genehmiger_note: note.trim() || null })
       .eq('id', item.id)
+      .select('id')
     setProcessing(null)
-    if (result.error) { setError('Die Entscheidung konnte nicht gespeichert werden.'); return }
+    if (result.error || !result.data?.length) { setError('Die Entscheidung konnte nicht gespeichert werden.'); return }
     logAudit(
       `Überstundenmeldung ${status === 'genehmigt' ? 'genehmigt' : status === 'abgelehnt' ? 'abgelehnt' : 'zur Rückfrage zurückgelegt'}`,
       `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`,

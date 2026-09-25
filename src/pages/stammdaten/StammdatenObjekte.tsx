@@ -84,9 +84,9 @@ export default function StammdatenObjekte() {
       address, strasse: form.strasse.trim(), hausnummer: form.hausnummer.trim() || null, plz: form.plz.trim(), ort: form.ort.trim(),
       label: form.label.trim() || null, note: form.note.trim() || null,
     }
-    const response = editing ? await supabase.from('operational_objects').update(payload).eq('id', editing.id) : await supabase.from('operational_objects').insert({ ...payload, created_by: profile?.id ?? null })
+    const response = editing ? await supabase.from('operational_objects').update(payload).eq('id', editing.id).select('id') : await supabase.from('operational_objects').insert({ ...payload, created_by: profile?.id ?? null }).select('id')
     setSaving(false)
-    if (response.error) { setError('Objekt konnte nicht gespeichert werden.'); return }
+    if (response.error || !response.data?.length) { setError('Objekt konnte nicht gespeichert werden.'); return }
     logAudit(editing ? 'Objekt bearbeitet' : 'Objekt angelegt', address); setShowForm(false); setNotice('Objekt wurde gespeichert.'); await load()
   }
   async function remove() {

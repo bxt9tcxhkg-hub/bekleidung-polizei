@@ -371,7 +371,7 @@ export default function ZentraleShell() {
     await load()
   }
 
-  async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id); if (result.error) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
+  async function completeIncident(item: IncidentReport) { const result = await supabase.from('incident_reports').update({ status: 'erledigt' }).eq('id', item.id).select('id'); if (result.error || !result.data?.length) { setError('Die Meldung konnte nicht abgeschlossen werden.'); return } setNotice('Meldung wurde als erledigt markiert.'); await load() }
   async function deleteIncident(item: IncidentReport) {
     if (!window.confirm('Diese Einsatzmeldung endgültig löschen? Ein Ereignis ohne weitere Einsätze und seine Verständigungen werden ebenfalls gelöscht.')) return
     const result = await supabase.from('incident_reports').delete().eq('id', item.id).select('id').maybeSingle()

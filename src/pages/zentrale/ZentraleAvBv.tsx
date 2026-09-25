@@ -204,8 +204,8 @@ export default function ZentraleAvBvPage() {
     }
     let id = editing?.id
     if (editing) {
-      const result = await supabase.from('schutzfaelle').update(payload).eq('id', editing.id)
-      if (result.error) { setSaving(false); setError(result.error.code === '23505' ? 'Diese PAD-Aktenzahl ist für diese Maßnahme bereits vorhanden.' : 'Schutzmaßnahme konnte nicht gespeichert werden.'); return }
+      const result = await supabase.from('schutzfaelle').update(payload).eq('id', editing.id).select('id')
+      if (result.error || !result.data?.length) { setSaving(false); setError(result.error?.code === '23505' ? 'Diese PAD-Aktenzahl ist für diese Maßnahme bereits vorhanden.' : 'Schutzmaßnahme konnte nicht gespeichert werden.'); return }
       const [personsDelete, areasDelete] = await Promise.all([supabase.from('schutzfall_personen').delete().eq('schutzfall_id', editing.id), supabase.from('schutzbereiche').delete().eq('schutzfall_id', editing.id)])
       if (personsDelete.error || areasDelete.error) { setSaving(false); setError('Die Zuordnungen konnten nicht aktualisiert werden.'); return }
     } else {
@@ -315,9 +315,9 @@ export default function ZentraleAvBvPage() {
           aufgehoben_am: new Date().toISOString(),
           aufgehoben_durch: 'Bezirkshauptmannschaft Dornbirn',
           aufhebungsgrund: 'Prüfung durch Sicherheitsbehörde: Anordnung nicht gerechtfertigt'
-        }).eq('id', editing.id)
+        }).eq('id', editing.id).select('id')
         setSaving(false)
-        if (result.error) { setError('Die Aufhebung konnte nicht gespeichert werden.'); return }
+        if (result.error || !result.data?.length) { setError('Die Aufhebung konnte nicht gespeichert werden.'); return }
         logAudit('BV/AV durch Sicherheitsbehörde aufgehoben', `PAD ${editing.pad_aktenzahl} · BH Dornbirn`)
         setShowForm(false); setNotice('BV/AV wurde als durch die Sicherheitsbehörde aufgehoben markiert.'); await load()
       }} className="mr-auto inline-flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-amber-800 hover:bg-amber-50"><X className="h-4 w-4" /> Durch BH aufgehoben</button> : editing && canOperate ? <button type="button" disabled={saving} onClick={() => void remove()} className="mr-auto inline-flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Endgültig löschen</button> : null}<button type="button" onClick={() => setShowForm(false)} className="rounded-lg border border-gray-300 px-4 py-2.5 text-sm">Abbrechen</button><button type="button" onClick={() => void save()} disabled={saving} className="rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60">{saving ? 'Speichern…' : 'Speichern'}</button></div>

@@ -340,9 +340,9 @@ export default function AussendienstShell() {
     }
     setSaving(true)
     const payload = { category: 'kontrollauftrag' as const, title: auftrag.title.trim(), description: auftrag.description.trim() || null, location: auftrag.location.trim() || null, location_lat: auftrag.lat, location_lng: auftrag.lng, zeitfenster: auftrag.zeitfenster.trim() || null, valid_from: auftrag.validFrom || null, valid_until: auftrag.validUntil || null, target_function: auftrag.targetFunction }
-    const response = editingAuftrag ? await supabase.from('zentrale_entries').update(payload).eq('id', editingAuftrag.id) : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null })
+    const response = editingAuftrag ? await supabase.from('zentrale_entries').update(payload).eq('id', editingAuftrag.id).select('id') : await supabase.from('zentrale_entries').insert({ ...payload, created_by: profile?.id ?? null }).select('id')
     setSaving(false)
-    if (response.error) { setAuftragError('Kontrollauftrag konnte nicht gespeichert werden.'); return }
+    if (response.error || !response.data?.length) { setAuftragError('Kontrollauftrag konnte nicht gespeichert werden.'); return }
     logAudit(editingAuftrag ? 'Kontrollauftrag bearbeitet' : 'Kontrollauftrag angelegt', auftrag.title.trim()); setShowAuftragForm(false); await load()
   }
   async function deleteAuftrag() {
@@ -357,8 +357,8 @@ export default function AussendienstShell() {
   // Datenbank ausschließlich diese beiden Felder ändern (siehe Migration).
   async function toggleKontrollauftragErledigt(item: ZentraleEntry) {
     const nowErledigt = item.status !== 'erledigt'
-    const result = await supabase.from('zentrale_entries').update({ status: nowErledigt ? 'erledigt' : 'offen', erledigt_at: nowErledigt ? new Date().toISOString() : null }).eq('id', item.id)
-    if (result.error) { setError('Der Status konnte nicht geändert werden.'); return }
+    const result = await supabase.from('zentrale_entries').update({ status: nowErledigt ? 'erledigt' : 'offen', erledigt_at: nowErledigt ? new Date().toISOString() : null }).eq('id', item.id).select('id')
+    if (result.error || !result.data?.length) { setError('Der Status konnte nicht geändert werden.'); return }
     await load()
   }
 

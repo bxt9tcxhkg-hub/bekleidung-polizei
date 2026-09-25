@@ -122,8 +122,8 @@ export function TodayFunctionCard({ userId, canManage }: { userId: string; canMa
   async function setVehicle(id: string) {
     setVehicleId(id)
     if (!selected) return
-    setSaving(true); const { error } = await supabase.from('duty_assignments').update({ vehicle_id: id || null }).eq('id', selected.id); setSaving(false)
-    if (error) { setMessage('Das Fahrzeug konnte nicht gespeichert werden.'); return }
+    setSaving(true); const { error, data } = await supabase.from('duty_assignments').update({ vehicle_id: id || null }).eq('id', selected.id).select('id'); setSaving(false)
+    if (error || !data?.length) { setMessage('Das Fahrzeug konnte nicht gespeichert werden.'); return }
     await load()
   }
   async function addFunction() {

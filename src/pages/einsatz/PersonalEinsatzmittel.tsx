@@ -299,12 +299,13 @@ export default function PersonalEinsatzmittelPanel() {
     setSaving(true)
     setError('')
     if (editId) {
-      const { error: updateError } = await supabase
+      const { error: updateError, data: updateData } = await supabase
         .from('personal_einsatzmittel')
         .update(result.payload)
         .eq('id', editId)
-      if (updateError) {
-        setError(updateError.message || 'Speichern fehlgeschlagen.')
+        .select('id')
+      if (updateError || !updateData?.length) {
+        setError(updateError?.message || 'Speichern fehlgeschlagen.')
         setSaving(false)
         return
       }
@@ -346,13 +347,14 @@ export default function PersonalEinsatzmittelPanel() {
     }
     setAusbuchungSaving(true)
     setError('')
-    const { error: updateError } = await supabase
+    const { error: updateError, data: updateData } = await supabase
       .from('personal_einsatzmittel')
       .update(result.payload)
       .eq('id', ausbuchungItem.id)
       .is('removed_at', null)
-    if (updateError) {
-      setError(updateError.message || 'Ausbuchen fehlgeschlagen.')
+      .select('id')
+    if (updateError || !updateData?.length) {
+      setError(updateError?.message || 'Ausbuchen fehlgeschlagen.')
       setAusbuchungSaving(false)
       return
     }
@@ -372,12 +374,13 @@ export default function PersonalEinsatzmittelPanel() {
     if (!window.confirm(`«${PERSONAL_EM_CATEGORY_LABELS[item.category]}» ins Lager stellen? Die Zuweisung an den Polizisten wird aufgehoben.`)) return
     setCellPicker(null)
     closeForm()
-    const { error: updateError } = await supabase
+    const { error: updateError, data: updateData } = await supabase
       .from('personal_einsatzmittel')
       .update(toPersonalLagerAssignment())
       .eq('id', item.id)
-    if (updateError) {
-      setError(updateError.message || 'Einlagern fehlgeschlagen.')
+      .select('id')
+    if (updateError || !updateData?.length) {
+      setError(updateError?.message || 'Einlagern fehlgeschlagen.')
       return
     }
     logAudit('Persönliches Einsatzmittel eingelagert', PERSONAL_EM_CATEGORY_LABELS[item.category])

@@ -280,8 +280,9 @@ export default function Users() {
 
   async function toggleActive(u: Profile) {
     if (!canDeactivate) return
-    const { error } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id)
+    const { error, data } = await supabase.from('profiles').update({ active: !u.active }).eq('id', u.id).select('id')
     if (error) { setError(`Status konnte nicht geändert werden: ${error.message}`); return }
+    if (!data?.length) { setError('Status konnte nicht geändert werden: keine Berechtigung.'); return }
     logAudit(u.active ? 'Benutzer deaktiviert' : 'Benutzer aktiviert', u.username ?? u.name)
     load()
   }
@@ -292,10 +293,10 @@ export default function Users() {
     const previousDienstgrad = u.dienstgrad ?? null
     const dienstgrad = organisation === 'Stadtpolizei' ? previousDienstgrad : null
     setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation, dienstgrad } : row))
-    const { error: moveError } = await supabase.from('profiles').update({ organisation, dienstgrad }).eq('id', u.id)
-    if (moveError) {
+    const { error: moveError, data: moveData } = await supabase.from('profiles').update({ organisation, dienstgrad }).eq('id', u.id).select('id')
+    if (moveError || !moveData?.length) {
       setUsers(current => current.map(row => row.id === u.id ? { ...row, organisation: previous, dienstgrad: previousDienstgrad } : row))
-      setError(`Organisation konnte nicht geändert werden: ${moveError.message}`)
+      setError(`Organisation konnte nicht geändert werden: ${moveError?.message ?? 'keine Berechtigung.'}`)
       return
     }
     setError('')

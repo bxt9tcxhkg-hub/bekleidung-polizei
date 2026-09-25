@@ -92,9 +92,9 @@ export function useOrders() {
     if (!items.length) return
     setSaving(true)
     setError('')
-    const results = await Promise.all(items.map(o => supabase.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', o.id)))
+    const results = await Promise.all(items.map(o => supabase.from('orders').update({ status: nextStatus, updated_at: new Date().toISOString() }).eq('id', o.id).select('id')))
     setSaving(false)
-    if (results.some(r => r.error)) {
+    if (results.some(r => r.error || !r.data?.length)) {
       setError('Statusänderung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       load()
       return
@@ -129,9 +129,9 @@ export function useOrders() {
       status: 'cancelled',
       cancel_reason: cancelReason.trim(),
       updated_at: new Date().toISOString(),
-    }).eq('id', o.id)))
+    }).eq('id', o.id).select('id')))
     setSaving(false)
-    if (results.some(r => r.error)) {
+    if (results.some(r => r.error || !r.data?.length)) {
       setError('Stornierung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       load()
       return
@@ -148,9 +148,9 @@ export function useOrders() {
     }
     setSaving(true)
     setError('')
-    const { error: err } = await supabase.from('orders').update({ quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', order.id)
+    const { error: err, data } = await supabase.from('orders').update({ quantity_received: qr, updated_at: new Date().toISOString() }).eq('id', order.id).select('id')
     setSaving(false)
-    if (err) {
+    if (err || !data?.length) {
       setError('Erhalten-Menge konnte nicht gespeichert werden. Bitte erneut versuchen.')
       return
     }
@@ -209,9 +209,9 @@ export function useOrders() {
           status: 'ordered_supplier',
           updated_at: new Date().toISOString(),
           ...(deliveryId ? { delivery_id: deliveryId } : {}),
-        }).eq('id', o.id)
+        }).eq('id', o.id).select('id')
       ))
-      if (results.some(r => r.error)) {
+      if (results.some(r => r.error || !r.data?.length)) {
         setSaving(false)
         setError('Sammelbestellung konnte nicht vollständig gespeichert werden. Bitte erneut versuchen.')
         load()
@@ -251,10 +251,10 @@ export function useOrders() {
     setSaving(true)
     setError('')
     const results = await Promise.all(eligible.map(o =>
-      supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id),
+      supabase.from('orders').update({ status: 'ready_for_issue', updated_at: new Date().toISOString() }).eq('id', o.id).select('id'),
     ))
     setSaving(false)
-    if (results.some(r => r.error)) {
+    if (results.some(r => r.error || !r.data?.length)) {
       setError('Statusänderung konnte nicht gespeichert werden. Bitte erneut versuchen.')
       load()
       return

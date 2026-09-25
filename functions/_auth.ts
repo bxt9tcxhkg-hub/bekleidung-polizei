@@ -97,6 +97,40 @@ export async function isZentralistOnDuty(request: Request, env: AuthEnv): Promis
   }
 }
 
+/** Deckt sich mit has_portal_area_access(p_area) in RLS-Policies der jeweiligen Tabellen. */
+export async function hasPortalAreaAccess(request: Request, env: AuthEnv, area: string): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/has_portal_area_access`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ p_area: area }),
+    })
+    return response.ok && await response.json() === true
+  } catch {
+    return false
+  }
+}
+
+/** Deckt sich mit is_operative_duty_today() in RLS-Policies (Tagesfunktion zentrale/innendienst/jd/vd). */
+export async function isOperativeDutyToday(request: Request, env: AuthEnv): Promise<boolean> {
+  if (!env.SUPABASE_URL) return false
+  const headers = bearerHeaders(request, env)
+  if (!headers) return false
+  try {
+    const response = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/is_operative_duty_today`, {
+      method: 'POST',
+      headers,
+      body: '{}',
+    })
+    return response.ok && await response.json() === true
+  } catch {
+    return false
+  }
+}
+
 /** Archivierte Straßenzustandsberichte: Leserecht folgt RLS auf strassenzustand_berichte (has_portal_area_access('zentrale')). */
 export async function canReadStrassenzustandBericht(request: Request, env: AuthEnv, key: string): Promise<boolean> {
   if (!env.SUPABASE_URL) return false

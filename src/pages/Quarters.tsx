@@ -59,9 +59,9 @@ export default function Quarters() {
     const today = new Date().toISOString().split('T')[0]
     const active = existing.find(q => q.status === 'active')
     if (active && active.end_date < today) {
-      await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id)
+      await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id).select('id')
       const next = existing.find(q => q.quarter_num === active.quarter_num + 1 && q.status === 'planned')
-      if (next) await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
+      if (next) await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id).select('id')
       const { data: updated } = await supabase.from('quarters').select('*').eq('year', CURRENT_YEAR).order('quarter_num')
       setQuarters(updated ?? [])
       setLoading(false)
@@ -81,15 +81,15 @@ export default function Quarters() {
     if (!confirm(`${active.name} abschließen?${next ? ` ${next.name} startet sofort.` : ' Es gibt kein weiteres geplantes Quartal.'}`)) return
     setClosing(true)
     setLoadError('')
-    const { error: closeErr } = await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id)
-    if (closeErr) {
-      setLoadError('Quartal konnte nicht abgeschlossen werden: ' + closeErr.message)
+    const { error: closeErr, data: closeData } = await supabase.from('quarters').update({ status: 'closed' }).eq('id', active.id).select('id')
+    if (closeErr || !closeData?.length) {
+      setLoadError('Quartal konnte nicht abgeschlossen werden: ' + (closeErr?.message ?? 'keine Berechtigung.'))
       setClosing(false)
       return
     }
     if (next) {
-      const { error: actErr } = await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id)
-      if (actErr) setLoadError('Folgequartal konnte nicht aktiviert werden: ' + actErr.message)
+      const { error: actErr, data: actData } = await supabase.from('quarters').update({ status: 'active' }).eq('id', next.id).select('id')
+      if (actErr || !actData?.length) setLoadError('Folgequartal konnte nicht aktiviert werden: ' + (actErr?.message ?? 'keine Berechtigung.'))
     }
     logAudit('Quartal abgeschlossen', `${active.name}${next ? `, ${next.name} aktiviert` : ''}`)
     setClosing(false)
@@ -102,15 +102,15 @@ export default function Quarters() {
     // Close any currently active quarter first
     const current = quarters.find(nq => nq.status === 'active')
     if (current) {
-      const { error: closeErr } = await supabase.from('quarters').update({ status: 'closed' }).eq('id', current.id)
-      if (closeErr) {
-        setLoadError('Aktives Quartal konnte nicht geschlossen werden: ' + closeErr.message)
+      const { error: closeErr, data: closeData } = await supabase.from('quarters').update({ status: 'closed' }).eq('id', current.id).select('id')
+      if (closeErr || !closeData?.length) {
+        setLoadError('Aktives Quartal konnte nicht geschlossen werden: ' + (closeErr?.message ?? 'keine Berechtigung.'))
         return
       }
     }
-    const { error: actErr } = await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id)
-    if (actErr) {
-      setLoadError('Quartal konnte nicht reaktiviert werden: ' + actErr.message)
+    const { error: actErr, data: actData } = await supabase.from('quarters').update({ status: 'active' }).eq('id', q.id).select('id')
+    if (actErr || !actData?.length) {
+      setLoadError('Quartal konnte nicht reaktiviert werden: ' + (actErr?.message ?? 'keine Berechtigung.'))
       return
     }
     logAudit('Quartal reaktiviert', q.name)
@@ -128,8 +128,8 @@ export default function Quarters() {
     if (!form.start_date || !form.end_date) { setError('Start- und Enddatum sind Pflicht.'); return }
     if (form.start_date >= form.end_date) { setError('Startdatum muss vor dem Enddatum liegen.'); return }
     setSaving(true)
-    const { error } = await supabase.from('quarters').update(form).eq('id', editId!)
-    if (error) { setError(error.message); setSaving(false); return }
+    const { error, data } = await supabase.from('quarters').update(form).eq('id', editId!).select('id')
+    if (error || !data?.length) { setError(error?.message ?? 'Keine Berechtigung.'); setSaving(false); return }
     setSaving(false)
     setEditId(null)
     load()

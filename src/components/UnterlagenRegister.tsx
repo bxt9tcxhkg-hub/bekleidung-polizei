@@ -63,9 +63,9 @@ export default function UnterlagenRegister({ bereich, title, description, areaTa
     if (!form.titel.trim()) { setError('Bitte einen Titel eingeben.'); return }
     setSaving(true)
     const payload = { bereich, titel: form.titel.trim(), typ: form.typ.trim() || null, fundort: form.fundort.trim() || null, gueltig_bis: form.gueltigBis || null, note: form.note.trim() || null, restricted: form.restricted }
-    const response = editing ? await supabase.from('zentrale_unterlagen').update(payload).eq('id', editing.id) : await supabase.from('zentrale_unterlagen').insert({ ...payload, created_by: profile?.id ?? null })
+    const response = editing ? await supabase.from('zentrale_unterlagen').update(payload).eq('id', editing.id).select('id') : await supabase.from('zentrale_unterlagen').insert({ ...payload, created_by: profile?.id ?? null }).select('id')
     setSaving(false)
-    if (response.error) { setError('Unterlage konnte nicht gespeichert werden.'); return }
+    if (response.error || !response.data?.length) { setError('Unterlage konnte nicht gespeichert werden.'); return }
     logAudit(editing ? 'Unterlage bearbeitet' : 'Unterlage angelegt', form.titel.trim()); setShowForm(false); setNotice('Unterlage wurde gespeichert.'); await load()
   }
   async function remove() {

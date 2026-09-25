@@ -73,8 +73,8 @@ export function FleetTermineList({ category, title, description, placeholder }: 
   }
   async function setStatus(item: FleetAppointment, status: 'erledigt' | 'storniert' | 'offen') {
     if (!profile?.id) return
-    const { error: updateError } = await supabase.from('fleet_appointments').update({ status, resolved_by: status === 'offen' ? null : profile.id, resolved_at: status === 'offen' ? null : new Date().toISOString() }).eq('id', item.id)
-    if (updateError) { setError('Der Status konnte nicht geändert werden.'); return }
+    const { error: updateError, data: updateData } = await supabase.from('fleet_appointments').update({ status, resolved_by: status === 'offen' ? null : profile.id, resolved_at: status === 'offen' ? null : new Date().toISOString() }).eq('id', item.id).select('id')
+    if (updateError || !updateData?.length) { setError('Der Status konnte nicht geändert werden.'); return }
     setNotice('Termin wurde aktualisiert.'); await load()
   }
   async function remove(item: FleetAppointment) {

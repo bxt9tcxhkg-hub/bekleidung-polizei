@@ -55,8 +55,8 @@ export default function FleetPflege() {
   }
   async function resolve(task: FleetCareTask) {
     if (!profile?.id) return
-    const { error: updateError } = await supabase.from('fleet_care_tasks').update({ status: 'erledigt', resolved_by: profile.id, resolved_at: new Date().toISOString() }).eq('id', task.id)
-    if (updateError) { setError('Konnte nicht als erledigt markiert werden.'); return }
+    const { error: updateError, data: updateData } = await supabase.from('fleet_care_tasks').update({ status: 'erledigt', resolved_by: profile.id, resolved_at: new Date().toISOString() }).eq('id', task.id).select('id')
+    if (updateError || !updateData?.length) { setError('Konnte nicht als erledigt markiert werden.'); return }
     setNotice('Aufgabe wurde als erledigt markiert.'); await load()
   }
   async function remove(task: FleetCareTask) {
