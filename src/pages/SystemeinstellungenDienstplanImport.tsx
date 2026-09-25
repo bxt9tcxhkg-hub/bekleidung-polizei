@@ -43,6 +43,7 @@ export default function SystemeinstellungenDienstplanImport() {
   const [dateiname, setDateiname] = useState('')
   const [dateiSollstunden, setDateiSollstunden] = useState<number | null>(null)
   const [ergebnis, setErgebnis] = useState<DienstplanParseErgebnis | null>(null)
+  const [ueberschreibWarnung, setUeberschreibWarnung] = useState(false)
   const [zuordnungen, setZuordnungen] = useState<Map<string, DienstplanSpaltenZuordnung>>(new Map())
   const [speichern, setSpeichern] = useState(false)
   const [veroeffentlichen, setVeroeffentlichen] = useState<string | null>(null)
@@ -69,7 +70,7 @@ export default function SystemeinstellungenDienstplanImport() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    setError(''); setNotice(''); setErgebnis(null); setDateiSollstunden(null)
+    setError(''); setNotice(''); setErgebnis(null); setDateiSollstunden(null); setUeberschreibWarnung(false)
     try {
       const buffer = await file.arrayBuffer()
       const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
@@ -79,6 +80,11 @@ export default function SystemeinstellungenDienstplanImport() {
       if ('error' in geparst) { setError(geparst.error); return }
       setDateiname(file.name)
       setErgebnis(geparst)
+      // Ein Monat kann schon Diensteinträge haben - importiert ODER manuell
+      // geplant (siehe Dienstplan-Planung) - dienstplan_monat_ersetzen ersetzt
+      // beim Speichern in jedem Fall den kompletten Monat. Reiner Hinweis,
+      // blockiert den Import nicht.
+      setUeberschreibWarnung(monate.some(monat => monat.monat === `${geparst.monat}-01`))
       // Für noch nicht gemerkte, aktive Spalten automatisch das eindeutig
       // passende Profil vorschlagen (siehe automatischeSpaltenZuordnung) -
       // bleibt bewusst nur ein Vorschlag: die Zuordnung ist im Formular
@@ -206,6 +212,7 @@ export default function SystemeinstellungenDienstplanImport() {
         <p className="text-xs text-gray-500">{dateiname} · {ergebnis.eintraege.length} Roheinträge{dateiSollstunden !== null ? ` · Sollstunden: ${dateiSollstunden}` : ' · Sollstunden nicht erkannt'}</p>
       </div>
       <p className="mt-2 text-xs text-gray-500">Zuordnungen werden automatisch anhand des Namens vorgeschlagen (bzw. aus einem früheren Monat übernommen) - bitte kurz prüfen, bevor gespeichert wird. Nur bei Namensgleichheit/Kürzeln ohne eindeutigen Treffer ist eine manuelle Auswahl nötig.</p>
+      {ueberschreibWarnung ? <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Für {monatLabel(ergebnis.monat)} gibt es bereits einen Dienstplan (importiert oder manuell geplant) - beim Speichern wird er vollständig ersetzt.</p> : null}
 
       <div className="mt-4 space-y-3">
         {aktiveSpalten.map(spalte => {

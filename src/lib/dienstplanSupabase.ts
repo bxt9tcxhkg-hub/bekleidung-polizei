@@ -81,6 +81,21 @@ type DienstplanDatabase = {
     Functions: {
       dienstplan_monat_ersetzen: { Args: { p_monat: string; p_dateiname: string; p_dienste: Record<string, unknown>[] }; Returns: string }
       dienstplan_monat_veroeffentlichen: { Args: { p_monat_id: string }; Returns: undefined }
+      dienstplan_monat_anlegen: { Args: { p_monat: string; p_dateiname?: string }; Returns: string }
+      dienstplan_dienst_setzen: {
+        Args: {
+          p_monat_id: string
+          p_beamter_id: string
+          p_datum: string
+          p_zeile: 1 | 2
+          p_rohtext: string
+          p_von_zeit: string
+          p_bis_zeit: string
+          p_kategorie: DienstplanKategorieDb
+        }
+        Returns: undefined
+      }
+      dienstplan_dienst_loeschen: { Args: { p_monat_id: string; p_beamter_id: string; p_datum: string; p_zeile: 1 | 2 }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
