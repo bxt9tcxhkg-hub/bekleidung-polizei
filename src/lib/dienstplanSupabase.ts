@@ -72,7 +72,7 @@ export type DienstplanPersonEinstellungenRow = {
   updated_at: string
 }
 
-export type DienstplanWunschTyp = 'frei' | 'tagdienst_bevorzugt' | 'nachtdienst_bevorzugt'
+export type DienstplanWunschTyp = 'frei_tag' | 'frei_nacht' | 'urlaub' | 'tagdienst_bevorzugt' | 'nachtdienst_bevorzugt'
 
 export type DienstplanWunschRow = {
   id: string
@@ -144,7 +144,7 @@ type DienstplanDatabase = {
       }
       dienstplan_dienst_loeschen: { Args: { p_monat_id: string; p_beamter_id: string; p_datum: string; p_zeile: 1 | 2 }; Returns: undefined }
       dienstplan_wunsch_setzen: { Args: { p_monat: string; p_datum: string; p_wunsch: DienstplanWunschTyp; p_notiz?: string | null }; Returns: undefined }
-      dienstplan_wunsch_loeschen: { Args: { p_monat: string; p_datum: string }; Returns: undefined }
+      dienstplan_wunsch_loeschen: { Args: { p_monat: string; p_datum: string; p_wunsch: DienstplanWunschTyp }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

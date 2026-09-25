@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanPersonEinstellungenRow, type DienstplanRegelRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
-import { berechneSollstunden } from '../lib/dienstplanSollstunden'
+import { berechneSollstunden, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
+import { monatsKontingent } from '../lib/dienstplanWunsch'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planungsregeln für die Dienstplan-Planung im Portal (siehe
@@ -78,7 +79,7 @@ export default function DienstplanEinstellungen() {
 
   async function speicherePerson(beamterId: string) {
     const grad = Number(editGrad.replace(',', '.'))
-    if (!Number.isFinite(grad) || grad <= 0 || grad > 100) { setError('Beschäftigungsgrad muss zwischen 1 und 100 liegen.'); return }
+    if (!Number.isFinite(grad) || grad <= 0 || grad > VOLLZEIT_BESCHAEFTIGUNGSGRAD) { setError(`Beschäftigungsgrad muss zwischen 1 und ${VOLLZEIT_BESCHAEFTIGUNGSGRAD} (Vollzeit) liegen.`); return }
     setPersonSpeichern(true); setError('')
     const result = await dienstplanSupabase.from('dienstplan_person_einstellungen').upsert({ beamter_id: beamterId, beschaeftigungsgrad: grad, updated_by: profile?.id ?? null }, { onConflict: 'beamter_id' })
     setPersonSpeichern(false)
@@ -122,7 +123,7 @@ export default function DienstplanEinstellungen() {
 
       <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="font-semibold text-gray-900">Beschäftigungsgrad je Person</h2>
-        <p className="mt-1 text-xs text-gray-500">Sollstunden-Vorschau für {aktuellerMonat} bei aktuell hinterlegtem Grad.</p>
+        <p className="mt-1 text-xs text-gray-500">{VOLLZEIT_BESCHAEFTIGUNGSGRAD} = Vollzeit. Sollstunden-Vorschau für {aktuellerMonat} sowie das monatliche Freiplanungswunsch-Kontingent (18 bei Vollzeit) bei aktuell hinterlegtem Grad.</p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -130,12 +131,13 @@ export default function DienstplanEinstellungen() {
                 <th className="px-3 py-2 text-left font-semibold text-gray-600">Person</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Beschäftigungsgrad</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Sollstunden ({aktuellerMonat})</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-600">Freiplanungswünsche/Monat</th>
                 <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {mitarbeiter.map(person => {
-                const grad = einstellungen.get(person.id) ?? 100
+                const grad = einstellungen.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
                 const editing = editId === person.id
                 const angezeigterGrad = editing ? (Number(editGrad.replace(',', '.')) || 0) : grad
                 return <tr key={person.id}>
@@ -144,9 +146,10 @@ export default function DienstplanEinstellungen() {
                     {editing ? <input type="text" inputMode="decimal" autoFocus className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       value={editGrad} onChange={event => setEditGrad(event.target.value)}
                       onKeyDown={event => { if (event.key === 'Enter') void speicherePerson(person.id); if (event.key === 'Escape') setEditId(null) }} />
-                      : <span className={grad === 100 ? 'text-gray-900' : 'font-medium text-amber-700'}>{grad} %</span>}
+                      : <span className={grad === VOLLZEIT_BESCHAEFTIGUNGSGRAD ? 'text-gray-900' : 'font-medium text-amber-700'}>{grad}</span>}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums text-gray-700">{berechneSollstunden(aktuellerMonat, stundenProWerktagVorschau, angezeigterGrad)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{monatsKontingent(angezeigterGrad)}</td>
                   <td className="px-3 py-2 text-right">
                     {editing ? <div className="flex justify-end gap-1">
                       <button type="button" disabled={personSpeichern} onClick={() => void speicherePerson(person.id)} className="rounded p-1 text-green-600 hover:bg-green-50"><Check className="h-4 w-4" /></button>

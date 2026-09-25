@@ -1,5 +1,76 @@
 import { describe, expect, it } from 'vitest'
-import { wunschfristAblaufdatum, wunschfristAbgelaufen } from './dienstplanWunsch'
+import { kontingentEinheiten, kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAblaufdatum, wunschfristAbgelaufen } from './dienstplanWunsch'
+
+describe('monatsKontingent', () => {
+  it('ergibt 18 bei Vollzeit (Beschäftigungsgrad 111)', () => {
+    expect(monatsKontingent(111)).toBe(18)
+  })
+
+  it('skaliert linear mit dem Beschäftigungsgrad und rundet', () => {
+    expect(monatsKontingent(55.5)).toBe(9)
+    expect(monatsKontingent(74)).toBe(12) // 18 * 74/111 = 12 genau
+  })
+})
+
+describe('kontingentEinheiten / kontingentVerbrauch', () => {
+  it('frei_tag, frei_nacht und urlaub kosten je 1 Einheit, Präferenzen kosten nichts', () => {
+    expect(kontingentEinheiten('frei_tag')).toBe(1)
+    expect(kontingentEinheiten('frei_nacht')).toBe(1)
+    expect(kontingentEinheiten('urlaub')).toBe(1)
+    expect(kontingentEinheiten('tagdienst_bevorzugt')).toBe(0)
+    expect(kontingentEinheiten('nachtdienst_bevorzugt')).toBe(0)
+  })
+
+  it('ein ganzer freier Tag (frei_tag + frei_nacht) kostet 2 Einheiten', () => {
+    const eintraege = [{ datum: '2026-10-05', wunsch: 'frei_tag' as const }, { datum: '2026-10-05', wunsch: 'frei_nacht' as const }]
+    expect(kontingentVerbrauch(eintraege)).toBe(2)
+  })
+
+  it('ein Urlaubstag kostet nur 1 Einheit, obwohl er ganztägig blockiert', () => {
+    expect(kontingentVerbrauch([{ datum: '2026-10-05', wunsch: 'urlaub' as const }])).toBe(1)
+  })
+})
+
+describe('laengsteSlotFolge', () => {
+  it('ist 0 ohne Wünsche', () => {
+    expect(laengsteSlotFolge([])).toBe(0)
+  })
+
+  it('zählt frei_tag + frei_nacht desselben Tages als 2 aufeinanderfolgende Slots', () => {
+    const eintraege = [{ datum: '2026-10-05', wunsch: 'frei_tag' as const }, { datum: '2026-10-05', wunsch: 'frei_nacht' as const }]
+    expect(laengsteSlotFolge(eintraege)).toBe(2)
+  })
+
+  it('ein Urlaubstag zählt wie 2 aufeinanderfolgende Slots (ganztägig)', () => {
+    expect(laengsteSlotFolge([{ datum: '2026-10-05', wunsch: 'urlaub' as const }])).toBe(2)
+  })
+
+  it('drei komplette freie Tage in Folge ergeben eine Kette von 6 Slots', () => {
+    const eintraege = ['2026-10-05', '2026-10-06', '2026-10-07'].flatMap(datum => [
+      { datum, wunsch: 'frei_tag' as const },
+      { datum, wunsch: 'frei_nacht' as const },
+    ])
+    expect(laengsteSlotFolge(eintraege)).toBe(6)
+  })
+
+  it('unterbricht die Kette bei einer Lücke', () => {
+    const eintraege = [
+      { datum: '2026-10-05', wunsch: 'frei_tag' as const },
+      { datum: '2026-10-05', wunsch: 'frei_nacht' as const },
+      { datum: '2026-10-08', wunsch: 'frei_tag' as const },
+    ]
+    expect(laengsteSlotFolge(eintraege)).toBe(2)
+  })
+
+  it('Präferenzen belegen keinen Slot und verlängern die Kette nicht', () => {
+    const eintraege = [
+      { datum: '2026-10-05', wunsch: 'frei_tag' as const },
+      { datum: '2026-10-05', wunsch: 'frei_nacht' as const },
+      { datum: '2026-10-06', wunsch: 'tagdienst_bevorzugt' as const },
+    ]
+    expect(laengsteSlotFolge(eintraege)).toBe(2)
+  })
+})
 
 describe('wunschfristAblaufdatum', () => {
   it('zieht die Frist-Tage vom Monatsbeginn ab', () => {
