@@ -17,16 +17,9 @@ export const WUNSCH_LABEL: Record<DienstplanWunschTyp, string> = {
   frei_tag: 'Tag frei',
   frei_nacht: 'Nacht frei',
   urlaub: 'Urlaub (ganzer Tag)',
-  tagdienst_bevorzugt: 'Tagdienst bevorzugt',
-  nachtdienst_bevorzugt: 'Nachtdienst bevorzugt',
 }
 
 const VOLLZEIT_KONTINGENT = 18
-
-/** Wie viele Kontingenteinheiten ein Wunsch-Typ verbraucht - nur die drei konkreten Freiplanungswünsche verbrauchen Kontingent, die unverbindlichen Präferenzen nicht. */
-export function kontingentEinheiten(typ: DienstplanWunschTyp): number {
-  return typ === 'frei_tag' || typ === 'frei_nacht' || typ === 'urlaub' ? 1 : 0
-}
 
 /** Monatliches Freiplanungswunsch-Kontingent, linear nach Beschäftigungsgrad skaliert und gerundet. */
 export function monatsKontingent(beschaeftigungsgrad: number): number {
@@ -35,19 +28,18 @@ export function monatsKontingent(beschaeftigungsgrad: number): number {
 
 export interface WunschEintragKurz { datum: string; wunsch: DienstplanWunschTyp }
 
-/** Summe der verbrauchten Kontingenteinheiten über eine Liste von Wünschen. */
+/** Summe der verbrauchten Kontingenteinheiten über eine Liste von Wünschen - jeder Wunsch-Typ (frei_tag/frei_nacht/urlaub) kostet 1 Einheit. */
 export function kontingentVerbrauch(eintraege: readonly WunschEintragKurz[]): number {
-  return eintraege.reduce((summe, eintrag) => summe + kontingentEinheiten(eintrag.wunsch), 0)
+  return eintraege.length
 }
 
 type Zeitabschnitt = 'tag' | 'nacht'
 
-/** Welche Tag/Nacht-Slots ein Wunsch belegt - Urlaub belegt beide Slots des Tages (ganztägig), kostet aber trotzdem nur 1 Kontingenteinheit (siehe kontingentEinheiten). Präferenzen belegen keinen Slot. */
+/** Welche Tag/Nacht-Slots ein Wunsch belegt - Urlaub belegt beide Slots des Tages (ganztägig), kostet aber trotzdem nur 1 Kontingenteinheit (siehe kontingentVerbrauch). */
 function belegteSlots(eintrag: WunschEintragKurz): { datum: string; abschnitt: Zeitabschnitt }[] {
   if (eintrag.wunsch === 'frei_tag') return [{ datum: eintrag.datum, abschnitt: 'tag' }]
   if (eintrag.wunsch === 'frei_nacht') return [{ datum: eintrag.datum, abschnitt: 'nacht' }]
-  if (eintrag.wunsch === 'urlaub') return [{ datum: eintrag.datum, abschnitt: 'tag' }, { datum: eintrag.datum, abschnitt: 'nacht' }]
-  return []
+  return [{ datum: eintrag.datum, abschnitt: 'tag' }, { datum: eintrag.datum, abschnitt: 'nacht' }]
 }
 
 function slotIndex(datum: string, abschnitt: Zeitabschnitt): number {
