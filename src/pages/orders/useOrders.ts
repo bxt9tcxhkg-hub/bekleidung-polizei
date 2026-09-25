@@ -19,6 +19,7 @@ export function useOrders() {
   const { profile } = useAuth()
   const [searchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
+  const [counts, setCounts] = useState<Record<AdminTab, number>>(() => Object.fromEntries(ADMIN_TABS.map(t => [t.key, 0])) as Record<AdminTab, number>)
   const [inventoryMap, setInventoryMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<AdminTab>(() => {
@@ -36,18 +37,42 @@ export function useOrders() {
   const [massaDraft, setMassaDraft] = useState<MassaOrderDraft | null>(null)
   const [massaResult, setMassaResult] = useState<MassaSendResult | null>(null)
 
+  // Nur der aktive Tab wird als volle, verknüpfte Zeile geladen - vermeidet,
+  // bei jedem Laden den kompletten (mit der Zeit wachsenden) Bestand samt
+  // Produkt-/Quartals-/Profil-Joins zu übertragen, nur um ihn anschließend
+  // clientseitig nach Tab zu filtern. Für die Tab-Zähler reicht eine schlanke
+  // Status-only-Abfrage ohne Joins.
+  function statusFilterFor(tab: AdminTab): OrderStatus[] | null {
+    if (tab === 'lieferungen') return null
+    if (tab === 'ausgabe') return ['ready_for_issue', 'partially_issued']
+    const status = ADMIN_TABS.find(t => t.key === tab)?.status
+    return status ? [status] : null
+  }
+
   async function load() {
     setLoading(true)
-    const [ordersRes, invRes] = await Promise.all([
-      supabase
-        .from('orders')
-        .select('*, products(id,name,category,article_number,needs_tailoring,bezugsart,size_mode), quarters(id,name), profiles(id,name,username,dienstnummer)')
-        .not('status', 'in', '("pending","pending_approval")')
-        .order('created_at', { ascending: false }),
+    const statusFilter = statusFilterFor(activeTab)
+    const [ordersRes, countsRes, invRes] = await Promise.all([
+      statusFilter
+        ? supabase
+            .from('orders')
+            .select('*, products(id,name,category,article_number,needs_tailoring,bezugsart,size_mode), quarters(id,name), profiles(id,name,username,dienstnummer)')
+            .in('status', statusFilter)
+            .order('created_at', { ascending: false })
+        : Promise.resolve({ data: [] as Order[], error: null }),
+      supabase.from('orders').select('status').not('status', 'in', '("pending","pending_approval")'),
       supabase.from('inventory').select('product_id,size,quantity'),
     ])
     const loaded = (ordersRes.data ?? []) as Order[]
     setOrders(loaded)
+    const countByStatus: Partial<Record<OrderStatus, number>> = {}
+    for (const row of (countsRes.data ?? []) as { status: OrderStatus }[]) countByStatus[row.status] = (countByStatus[row.status] ?? 0) + 1
+    setCounts(Object.fromEntries(ADMIN_TABS.map(t => [
+      t.key,
+      t.key === 'ausgabe'
+        ? (countByStatus.ready_for_issue ?? 0) + (countByStatus.partially_issued ?? 0)
+        : (t.status ? countByStatus[t.status] ?? 0 : 0),
+    ])) as Record<AdminTab, number>)
     const rec: Record<string, string> = {}
     loaded.forEach(o => { if (o.quantity_received != null) rec[o.id] = String(o.quantity_received) })
     setReceivedInputs(rec)
@@ -56,25 +81,17 @@ export function useOrders() {
     setLoading(false)
   }
 
-  useEffect(() => { if (profile) load().catch(() => setError('Bestellungen konnten nicht geladen werden.')) }, [profile])
+  useEffect(() => { if (profile) load().catch(() => setError('Bestellungen konnten nicht geladen werden.')) }, [profile, activeTab])
 
   function switchTab(tab: AdminTab) { setActiveTab(tab); setSelectedIds(new Set()); setPage(0) }
 
-  const tabOrders = useMemo(() => orders.filter(o => {
-    if (activeTab === 'ausgabe') return o.status === 'ready_for_issue' || o.status === 'partially_issued'
-    return ADMIN_TABS.find(t => t.key === activeTab)?.status === o.status
-  }), [orders, activeTab])
+  // orders ist bereits serverseitig auf den aktiven Tab gefiltert.
+  const tabOrders = orders
   const sorted = useMemo(() => (activeTab === 'ausgabe' || activeTab === 'ausgegeben')
     ? [...tabOrders].sort((a, b) => (a.profiles?.name ?? '').localeCompare(b.profiles?.name ?? ''))
     : tabOrders, [tabOrders, activeTab])
   const paginated = useMemo(() => sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [sorted, page])
   const allSelected = tabOrders.length > 0 && tabOrders.every(o => selectedIds.has(o.id))
-  const counts = useMemo(() => Object.fromEntries(ADMIN_TABS.map(t => [
-    t.key,
-    t.key === 'ausgabe'
-      ? orders.filter(o => o.status === 'ready_for_issue' || o.status === 'partially_issued').length
-      : (t.status ? orders.filter(o => o.status === t.status).length : 0),
-  ])) as Record<AdminTab, number>, [orders])
 
   // Wenn die aktuelle Seite über die letzte Seite hinauszeigt, auf letzte gültige Seite zurücksetzen
   useEffect(() => {
