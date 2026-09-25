@@ -234,7 +234,7 @@ export default function Portal() {
             <NavTile
               to="/genehmigungen"
               label="Genehmigungen"
-              description="Bestellungen, Lagerbestellungen und Anträge zur Entscheidung"
+              description="Bestellungen, Anträge und Zuteilungsvorschläge nach Bereich entscheiden"
               icon={CheckSquare}
               badge={openCounts.genehmigungen}
             />

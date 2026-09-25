@@ -28,7 +28,11 @@ const Orders = lazy(() => import('./pages/Orders'))
 const Quarters = lazy(() => import('./pages/Quarters'))
 const ShoeRefunds = lazy(() => import('./pages/ShoeRefunds'))
 const AuditLog = lazy(() => import('./pages/AuditLog'))
-const Approvals = lazy(() => import('./pages/Approvals'))
+const GenehmigungenUebersicht = lazy(() => import('./pages/genehmigungen/GenehmigungenUebersicht'))
+const GenehmigungenBekleidung = lazy(() => import('./pages/genehmigungen/GenehmigungenBekleidung'))
+const GenehmigungenAusbildung = lazy(() => import('./pages/genehmigungen/GenehmigungenAusbildung'))
+const GenehmigungenEinsatzmittel = lazy(() => import('./pages/genehmigungen/GenehmigungenEinsatzmittel'))
+const GenehmigungenPersonal = lazy(() => import('./pages/genehmigungen/GenehmigungenPersonal'))
 const Budgets = lazy(() => import('./pages/Budgets'))
 const Lager = lazy(() => import('./pages/Lager'))
 const Analyse = lazy(() => import('./pages/Analyse'))
@@ -316,8 +320,16 @@ export default function App() {
           >
             {/* Portalweite Genehmiger-Werkzeuge, unabhängig vom Bekleidung-Layout
                 (siehe GenehmigerLayout.tsx) - "Freigaben" bündelt offene Fälle aus
-                allen Bereichen, nicht nur Bekleidung. */}
-            <Route path="/genehmigungen" element={<ProtectedRoute genehmigerOnly><Approvals /></ProtectedRoute>} />
+                allen Bereichen, nicht nur Bekleidung. /genehmigungen ist die
+                Kachel-Übersicht (GenehmigungenUebersicht.tsx, Muster: Stammdaten-
+                Übersicht) - jede Kachel führt zu einer eigenen Bereichsseite, auf
+                der ausschließlich dieser Bereich entschieden wird (keine
+                Vermischung). */}
+            <Route path="/genehmigungen" element={<ProtectedRoute genehmigerOnly><GenehmigungenUebersicht /></ProtectedRoute>} />
+            <Route path="/genehmigungen/bekleidung" element={<ProtectedRoute genehmigerOnly><GenehmigungenBekleidung /></ProtectedRoute>} />
+            <Route path="/genehmigungen/ausbildung" element={<ProtectedRoute genehmigerOnly><GenehmigungenAusbildung /></ProtectedRoute>} />
+            <Route path="/genehmigungen/einsatzmittel" element={<ProtectedRoute genehmigerOnly><GenehmigungenEinsatzmittel /></ProtectedRoute>} />
+            <Route path="/genehmigungen/personal" element={<ProtectedRoute genehmigerOnly><GenehmigungenPersonal /></ProtectedRoute>} />
             <Route path="/schuherstattungen" element={<ProtectedRoute genehmigerOnly><ShoeRefunds /></ProtectedRoute>} />
             <Route path="/budgets" element={<ProtectedRoute genehmigerOnly><Budgets /></ProtectedRoute>} />
           </Route>
