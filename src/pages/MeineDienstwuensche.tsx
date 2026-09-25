@@ -98,15 +98,29 @@ export default function MeineDienstwuensche() {
     if (aktiv) {
       const result = await dienstplanSupabase.rpc('dienstplan_wunsch_loeschen', { p_monat: `${monat}-01`, p_datum: datum, p_wunsch: wunsch })
       if (result.error) { setSpeichernSchluessel(null); setError('Der Wunsch konnte nicht entfernt werden.'); return }
+      setWuensche(current => {
+        const naechste = new Map(current)
+        const menge = new Set(naechste.get(datum) ?? [])
+        menge.delete(wunsch)
+        if (menge.size === 0) naechste.delete(datum); else naechste.set(datum, menge)
+        return naechste
+      })
     } else {
       for (const zuLoeschen of loeschenZusaetzlich) {
         if (wuensche.get(datum)?.has(zuLoeschen)) await dienstplanSupabase.rpc('dienstplan_wunsch_loeschen', { p_monat: `${monat}-01`, p_datum: datum, p_wunsch: zuLoeschen })
       }
       const result = await dienstplanSupabase.rpc('dienstplan_wunsch_setzen', { p_monat: `${monat}-01`, p_datum: datum, p_wunsch: wunsch })
       if (result.error) { setSpeichernSchluessel(null); setError('Der Wunsch konnte nicht gespeichert werden.'); return }
+      setWuensche(current => {
+        const naechste = new Map(current)
+        const menge = new Set(naechste.get(datum) ?? [])
+        for (const zuLoeschen of loeschenZusaetzlich) menge.delete(zuLoeschen)
+        menge.add(wunsch)
+        naechste.set(datum, menge)
+        return naechste
+      })
     }
     setSpeichernSchluessel(null)
-    await load()
   }
 
   return <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
