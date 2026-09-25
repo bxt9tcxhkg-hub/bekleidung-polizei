@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ClipboardCheck } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { loadOpenAssistanceRequests } from '../../lib/incidentAssistance'
-import { loadActiveEreignisse, loadVerstaendigungen } from '../../lib/ereignis'
-import { ladeEreignisschritte } from '../../lib/verstaendigungsregeln'
+import { loadActiveEreignisse } from '../../lib/ereignis'
 import type { IncidentReport } from '../../lib/types'
 
 export default function CentralDutyOverview({ openIncidents }: { openIncidents: IncidentReport[] }) {
@@ -21,14 +21,27 @@ export default function CentralDutyOverview({ openIncidents }: { openIncidents: 
         if (cancelled) return
         setOpenAssistance(requests.length)
         setActiveEvents(events.length)
-        const notifications = await Promise.all(events.map(async event => {
-          const required = (await ladeEreignisschritte(event.id)).filter(row => row.pflicht)
-          if (required.length === 0) return 0
-          const rows = await loadVerstaendigungen(event.id)
-          const done = new Set(rows.filter(row => row.versucht_at || row.erreicht_at).map(row => row.empfaenger_key))
-          return required.filter(row => !done.has(row.schluessel)).length
-        }))
-        if (!cancelled) setPendingNotifications(notifications.reduce((sum, value) => sum + value, 0))
+        const eventIds = events.map(event => event.id)
+        let pending = 0
+        if (eventIds.length > 0) {
+          const [stepsRes, verstaendigungenRes] = await Promise.all([
+            supabase.from('ereignis_verstaendigungsschritte').select('ereignis_id, schluessel, pflicht').in('ereignis_id', eventIds).eq('pflicht', true),
+            supabase.from('ereignis_verstaendigungen').select('ereignis_id, empfaenger_key, versucht_at, erreicht_at').in('ereignis_id', eventIds),
+          ])
+          if (stepsRes.error) throw stepsRes.error
+          if (verstaendigungenRes.error) throw verstaendigungenRes.error
+          const doneByEvent = new Map<string, Set<string>>()
+          for (const row of verstaendigungenRes.data ?? []) {
+            if (!row.versucht_at && !row.erreicht_at) continue
+            const done = doneByEvent.get(row.ereignis_id) ?? new Set<string>()
+            done.add(row.empfaenger_key)
+            doneByEvent.set(row.ereignis_id, done)
+          }
+          for (const step of stepsRes.data ?? []) {
+            if (!doneByEvent.get(step.ereignis_id)?.has(step.schluessel)) pending += 1
+          }
+        }
+        if (!cancelled) setPendingNotifications(pending)
       } catch {
         if (!cancelled) setIncomplete(true)
       }

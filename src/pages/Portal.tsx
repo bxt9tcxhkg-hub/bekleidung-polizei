@@ -108,10 +108,10 @@ export default function Portal() {
   const apps = visiblePortalApps(PORTAL_APPS, { isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const adminLinks = visiblePortalAdminLinks(isAdmin)
   const zentraleManagerRole = (areaRoles?.find(row => row.area === 'zentrale')?.roles ?? []).some(role => ['sachbearbeiter', 'admin'].includes(role))
-  const rawCanManageZentrale = isStrictAdmin || isGenehmigerEntitlement || zentraleManagerRole
-  const rawCanManageFuhrpark = canManageFuhrpark({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
-  const rawCanManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
-  const rawCanManageSchulungen = canManageSchulungen({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
+  const rawCanManageZentrale = isStrictAdmin || isGenehmiger || zentraleManagerRole
+  const rawCanManageFuhrpark = canManageFuhrpark({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const rawCanManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger, rows: areaRoles })
+  const rawCanManageSchulungen = canManageSchulungen({ isStrictAdmin, isGenehmiger, rows: areaRoles })
   const canManageDuties = isStrictAdmin || isGenehmiger || zentraleManagerRole
   const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number }>({})
 

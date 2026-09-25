@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -60,21 +60,21 @@ export function useOrders() {
 
   function switchTab(tab: AdminTab) { setActiveTab(tab); setSelectedIds(new Set()); setPage(0) }
 
-  const tabOrders = orders.filter(o => {
+  const tabOrders = useMemo(() => orders.filter(o => {
     if (activeTab === 'ausgabe') return o.status === 'ready_for_issue' || o.status === 'partially_issued'
     return ADMIN_TABS.find(t => t.key === activeTab)?.status === o.status
-  })
-  const sorted = (activeTab === 'ausgabe' || activeTab === 'ausgegeben')
+  }), [orders, activeTab])
+  const sorted = useMemo(() => (activeTab === 'ausgabe' || activeTab === 'ausgegeben')
     ? [...tabOrders].sort((a, b) => (a.profiles?.name ?? '').localeCompare(b.profiles?.name ?? ''))
-    : tabOrders
-  const paginated = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+    : tabOrders, [tabOrders, activeTab])
+  const paginated = useMemo(() => sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE), [sorted, page])
   const allSelected = tabOrders.length > 0 && tabOrders.every(o => selectedIds.has(o.id))
-  const counts = Object.fromEntries(ADMIN_TABS.map(t => [
+  const counts = useMemo(() => Object.fromEntries(ADMIN_TABS.map(t => [
     t.key,
     t.key === 'ausgabe'
       ? orders.filter(o => o.status === 'ready_for_issue' || o.status === 'partially_issued').length
       : (t.status ? orders.filter(o => o.status === t.status).length : 0),
-  ])) as Record<AdminTab, number>
+  ])) as Record<AdminTab, number>, [orders])
 
   // Wenn die aktuelle Seite über die letzte Seite hinauszeigt, auf letzte gültige Seite zurücksetzen
   useEffect(() => {

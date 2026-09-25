@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle, Footprints, Package, ShoppingBag, User, Wal
 import { supabase } from '../../lib/supabase'
 import type { Order, ShoeRefund, StockOrder } from '../../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../../lib/types'
-import { DEFAULT_BUDGET, effectiveUsed, getCurrentBudget, getUsedBudget, getCurrentShoeRefundCapResult, summarizeBudgetRows, withoutAdminProfiles } from '../../lib/budget'
+import { DEFAULT_BUDGET, effectiveUsed, getCurrentShoeRefundCapResult, summarizeBudgetRows, withoutAdminProfiles } from '../../lib/budget'
 import { logAudit } from '../../lib/audit'
 import { fmtEUR } from '../../lib/format'
 import { Actions, Empty, GenehmigungenBereichHeader, Table } from '../../components/genehmigungenShared'
@@ -81,28 +81,30 @@ export default function GenehmigungenBekleidung() {
     if (profilesRes.error || userBudgetsRes.error || yearOrdersRes.error) {
       failed.push('Budgetauswertung')
       setBudgetSummary(null)
+      setBudgets({})
     } else {
-      const profiles = withoutAdminProfiles(profilesRes.data ?? [])
       const usedByUser: Record<string, number> = {}
       for (const o of yearOrdersRes.data ?? []) usedByUser[o.user_id] = (usedByUser[o.user_id] ?? 0) + o.unit_price * o.quantity
+      const currentBudgetFor = (userId: string) =>
+        (userBudgetsRes.data ?? []).filter(b => b.user_id === userId).find(b => b.valid_from <= t) ?? null
+
+      const profiles = withoutAdminProfiles(profilesRes.data ?? [])
       const rows = profiles.map(p => {
-        const userBudgets = (userBudgetsRes.data ?? []).filter(b => b.user_id === p.id)
-        const current = userBudgets.find(b => b.valid_from <= t) ?? null
+        const current = currentBudgetFor(p.id)
         const orderUsed = usedByUser[p.id] ?? 0
         return { used: effectiveUsed(orderUsed, Number(current?.used_adjustment ?? 0)), totalBudget: current?.total_budget ?? DEFAULT_BUDGET }
       })
       setBudgetSummary(summarizeBudgetRows(rows))
+
+      // Budget je Antragsteller aus denselben bereits geladenen Daten ableiten,
+      // statt pro offenem Antrag erneut zwei Queries zu stellen (N+1).
+      const userIds = Array.from(new Set(pending.map(o => o.user_id)))
+      setBudgets(Object.fromEntries(userIds.map(uid => {
+        const current = currentBudgetFor(uid)
+        return [uid, { total: current?.total_budget ?? DEFAULT_BUDGET, used: effectiveUsed(usedByUser[uid] ?? 0, Number(current?.used_adjustment ?? 0)) }]
+      })))
     }
     setLoadError(failed.length > 0 ? `Nicht alles konnte geladen werden (${failed.join(', ')}). Bitte Seite neu laden.` : '')
-    const userIds = Array.from(new Set(pending.map(o => o.user_id)))
-    const budgetEntries = await Promise.all(userIds.map(async uid => {
-      const [total, used] = await Promise.all([
-        getCurrentBudget(uid, CURRENT_YEAR),
-        getUsedBudget(uid, CURRENT_YEAR),
-      ])
-      return [uid, { total, used }] as const
-    }))
-    setBudgets(Object.fromEntries(budgetEntries))
     setLoading(false)
   }, [])
 
