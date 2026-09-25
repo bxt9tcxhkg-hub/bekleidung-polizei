@@ -7,7 +7,7 @@ import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanMonatRow, type DienstplanSpalteRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
-import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, parseDienstplanGrid, type DienstplanParseErgebnis, type DienstplanSpaltenZuordnung, type DienstplanZelle } from '../lib/dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, parseDienstplanGrid, type DienstplanParseErgebnis, type DienstplanSpalte, type DienstplanSpaltenZuordnung, type DienstplanZelle } from '../lib/dienstplanImport'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Schritt 1-3 des Dienstplan-Imports (siehe AGENTS.md-Analyse): Datei einlesen,
@@ -98,8 +98,22 @@ export default function SystemeinstellungenDienstplanImport() {
     reader.readAsArrayBuffer(file)
   }
 
-  const aktiveSpalten = useMemo(() => ergebnis ? ergebnis.spalten.filter(spalte => istSpalteAktiv(spalte, zuordnungen.get(spalte.name))) : [], [ergebnis, zuordnungen])
-  const inaktiveSpalten = useMemo(() => ergebnis ? ergebnis.spalten.filter(spalte => !istSpalteAktiv(spalte, zuordnungen.get(spalte.name))) : [], [ergebnis, zuordnungen])
+  // Dieselbe Namensspalte kann in der Vorlage mehrfach auftauchen (z. B. eine
+  // leere Karteileiche neben der aktiven Spalte, siehe Analyse) - da die
+  // Zuordnung ohnehin pro NAME gespeichert wird, wird hier einmal je Name
+  // dedupliziert (aktiv gewinnt gegen inaktiv), statt sie als zwei getrennt
+  // bearbeitbare, aber tatsächlich verkoppelte Zeilen anzuzeigen.
+  const spaltenJeName = useMemo(() => {
+    if (!ergebnis) return []
+    const nachName = new Map<string, DienstplanSpalte>()
+    for (const spalte of ergebnis.spalten) {
+      const bisherig = nachName.get(spalte.name)
+      if (!bisherig || (!bisherig.hatEintraege && spalte.hatEintraege)) nachName.set(spalte.name, spalte)
+    }
+    return Array.from(nachName.values())
+  }, [ergebnis])
+  const aktiveSpalten = useMemo(() => spaltenJeName.filter(spalte => istSpalteAktiv(spalte, zuordnungen.get(spalte.name))), [spaltenJeName, zuordnungen])
+  const inaktiveSpalten = useMemo(() => spaltenJeName.filter(spalte => !istSpalteAktiv(spalte, zuordnungen.get(spalte.name))), [spaltenJeName, zuordnungen])
   const nichtZugeordnet = aktiveSpalten.filter(spalte => !zuordnungen.get(spalte.name)?.beamterId)
 
   function setZuordnung(spaltenname: string, changes: Partial<DienstplanSpaltenZuordnung>) {
@@ -118,11 +132,17 @@ export default function SystemeinstellungenDienstplanImport() {
 
     // Alle betroffenen Zuordnungen (auch reine "ignorieren"-Entscheidungen)
     // dauerhaft merken, damit beim nächsten Monat nicht erneut gefragt wird.
-    const zuordnungsZeilen = ergebnis.spalten
-      .filter(spalte => zuordnungen.has(spalte.name))
-      .map(spalte => {
-        const zuordnung = zuordnungen.get(spalte.name) as DienstplanSpaltenZuordnung
-        return { spaltenname: spalte.name, beamter_id: zuordnung.beamterId, immer_aktiv: zuordnung.immerAktiv, updated_by: profile.id }
+    // Über die EINDEUTIGEN Spaltennamen iterieren, nicht über ergebnis.spalten
+    // direkt - dieselbe Namensspalte kann in der Vorlage mehrfach auftauchen
+    // (z. B. eine leere Karteileiche neben der aktiven Spalte, siehe Analyse),
+    // ein Upsert mit demselben Konfliktziel zweimal in einem Aufruf scheitert
+    // an Postgres ("ON CONFLICT DO UPDATE command cannot affect row a second time").
+    const spaltennamenDieserDatei = new Set(ergebnis.spalten.map(spalte => spalte.name))
+    const zuordnungsZeilen = Array.from(spaltennamenDieserDatei)
+      .filter(spaltenname => zuordnungen.has(spaltenname))
+      .map(spaltenname => {
+        const zuordnung = zuordnungen.get(spaltenname) as DienstplanSpaltenZuordnung
+        return { spaltenname, beamter_id: zuordnung.beamterId, immer_aktiv: zuordnung.immerAktiv, updated_by: profile.id }
       })
     if (zuordnungsZeilen.length > 0) {
       const zuordnungsResult = await dienstplanSupabase.from('dienstplan_spalten').upsert(zuordnungsZeilen, { onConflict: 'spaltenname' })
@@ -176,7 +196,7 @@ export default function SystemeinstellungenDienstplanImport() {
         {aktiveSpalten.map(spalte => {
           const zuordnung = zuordnungen.get(spalte.name)
           const anzahl = ergebnis.eintraege.filter(eintrag => eintrag.spaltenname === spalte.name).length
-          return <div key={spalte.name} className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 p-3">
+          return <div key={spalte.index} className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 p-3">
             <div className="min-w-32 flex-1">
               <p className="text-sm font-semibold text-gray-900">{spalte.name}</p>
               <p className="text-xs text-gray-500">{spalte.hatEintraege ? `${anzahl} Einträge diesen Monat` : 'keine Einträge diesen Monat'}</p>
@@ -193,7 +213,7 @@ export default function SystemeinstellungenDienstplanImport() {
       {inaktiveSpalten.length > 0 ? <details className="mt-4">
         <summary className="cursor-pointer text-sm text-gray-500">{inaktiveSpalten.length} Spalten ohne Einträge diesen Monat (übersprungen)</summary>
         <div className="mt-2 space-y-2">
-          {inaktiveSpalten.map(spalte => <div key={spalte.name} className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-2.5 text-sm text-gray-600">
+          {inaktiveSpalten.map(spalte => <div key={spalte.index} className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-2.5 text-sm text-gray-600">
             <span className="flex-1">{spalte.name}</span>
             <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" checked={zuordnungen.get(spalte.name)?.immerAktiv ?? false} onChange={event => setZuordnung(spalte.name, { immerAktiv: event.target.checked })} /> trotzdem berücksichtigen (immer aktiv)</label>
           </div>)}
