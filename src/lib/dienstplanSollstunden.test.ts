@@ -29,19 +29,20 @@ describe('werktageImMonat', () => {
 
 describe('berechneSollstunden', () => {
   it('rechnet Werktage × Stunden pro Werktag für Vollzeit (Beschäftigungsgrad 111)', () => {
-    expect(berechneSollstunden('2026-02', 8.75, 111)).toBeCloseTo(20 * 8.75, 5)
+    expect(berechneSollstunden('2026-02', 8.75, 111)).toBe(Math.floor(20 * 8.75))
   })
 
   it('skaliert linear mit dem Beschäftigungsgrad (55.5 = halbe Vollzeit)', () => {
-    expect(berechneSollstunden('2026-02', 8.75, 55.5)).toBeCloseTo((20 * 8.75) / 2, 5)
+    expect(berechneSollstunden('2026-02', 8.75, 55.5)).toBe(Math.floor((20 * 8.75) / 2))
   })
 
   it('akzeptiert sowohl YYYY-MM als auch YYYY-MM-DD', () => {
     expect(berechneSollstunden('2026-02-01', 8.75, 111)).toBe(berechneSollstunden('2026-02', 8.75, 111))
   })
 
-  it('rundet auf Viertelstunden', () => {
-    const ergebnis = berechneSollstunden('2026-02', 8.7, 90)
-    expect(ergebnis * 4).toBeCloseTo(Math.round(ergebnis * 4), 10)
+  it('rundet immer ab auf die volle Stunde, nie auf', () => {
+    expect(berechneSollstunden('2026-02', 8.7, 90)).toBe(Math.floor((20 * 8.7 * 90) / 111))
+    // 20 Werktage × 8.75 × 111/111 = 175 - exakt, bleibt unverändert
+    expect(berechneSollstunden('2026-02', 8.75, 111)).toBe(175)
   })
 })
