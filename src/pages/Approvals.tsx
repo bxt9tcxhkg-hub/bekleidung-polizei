@@ -557,44 +557,60 @@ export default function Approvals() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <>
-          {/* ── Überstundenmeldungen ── direkt hier entscheidbar (nicht mehr nur
-              verlinkt) - Ueberstunden.tsx bleibt für "Meine Meldungen" (jede/r
-              erfasst dort die eigenen) und die Monatsübersicht/Sammel-PDF für die
-              Lohnverrechnung, aber die Entscheidung selbst gehört hierher. */}
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Clock3 className="w-4 h-4" /> Überstundenmeldungen</h2>
-            {ueberstundenItems.length === 0 ? (
-              <Empty icon={Clock3} title="Keine offenen Überstundenmeldungen" />
-            ) : (
-              <div className="space-y-3">
-                {ueberstundenItems.map(item => (
-                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-gray-900">{item.beamter?.name ?? '–'}</span>
-                          {item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}
-                          <span className="text-xs text-gray-400">{formatZeitraum(item)}</span>
-                        </div>
-                        <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
-                        <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
-                      </div>
-                      <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
-                        <button type="button" onClick={() => printUeberstundenMeldung(item)} className="p-2 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Als PDF ausgeben"><FileOutput className="w-4 h-4" /></button>
-                        <button type="button" disabled={processing === item.id} onClick={() => void decideUeberstunden(item, 'genehmigt', '')} className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 border border-green-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><ThumbsUp className="w-3.5 h-3.5" /> Genehmigen</button>
-                        <button type="button" disabled={processing === item.id} onClick={() => { setUeberstundenDeciding({ item, status: 'rueckfrage' }); setUeberstundenDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><HelpCircle className="w-3.5 h-3.5" /> Rückfrage</button>
-                        <button type="button" disabled={processing === item.id} onClick={() => { setUeberstundenDeciding({ item, status: 'abgelehnt' }); setUeberstundenDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><ThumbsDown className="w-3.5 h-3.5" /> Ablehnen</button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+          {/* ── Bereiche in alphabetischer Reihenfolge (Ausbildung, Bekleidung,
+              Einsatzmittel, Personal) - bewusst keine Reihenfolge nach "was zuerst
+              da war" (Bekleidung), sonst wirkt diese Seite trotz Bereichsübergriff
+              wie eine Bekleidung-Seite mit ein paar Zusätzen. Jeder Bereich bekommt
+              dieselbe Kopfzeilen-Behandlung, unabhängig von Anzahl seiner Unterpunkte. */}
+
+          {/* ══ Ausbildung ══ */}
+          <div className="space-y-6">
+            <h2 className="text-lg font-bold text-gray-900">Ausbildung</h2>
+
+            {/* ── Trainings-Zuteilungsvorschläge ── */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Trainings-Zuteilungsvorschläge</h3>
+              {trainingAssignments.length === 0 ? (
+                <Empty icon={GraduationCap} title="Keine offenen Trainingsvorschläge" />
+              ) : (
+                <Table
+                  head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
+                  rows={trainingAssignments.map(item => [
+                    trainingModules.find(m => m.id === item.module_id)?.name ?? item.module_id,
+                    officerDisplayName(item.officer),
+                    new Date(item.proposed_at).toLocaleDateString('de-AT'),
+                    <div key="ac" className="flex justify-end"><button type="button" onClick={() => openAssignmentReview('training', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
+                  ])}
+                />
+              )}
+            </div>
+
+            {/* ── Schulungs-Zuteilungsvorschläge ── */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Schulungs-Zuteilungsvorschläge</h3>
+              {schulungAssignments.length === 0 ? (
+                <Empty icon={GraduationCap} title="Keine offenen Schulungsvorschläge" />
+              ) : (
+                <Table
+                  head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
+                  rows={schulungAssignments.map(item => [
+                    schulungModules.find(m => m.id === item.module_id)?.name ?? item.module_id,
+                    officerDisplayName(item.officer),
+                    new Date(item.proposed_at).toLocaleDateString('de-AT'),
+                    <div key="ac" className="flex justify-end"><button type="button" onClick={() => openAssignmentReview('schulung', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
+                  ])}
+                />
+              )}
+            </div>
           </div>
+
+          {/* ══ Bekleidung ══ */}
+          <div className="space-y-6">
+            <h2 className="text-lg font-bold text-gray-900">Bekleidung</h2>
 
           {/* ── Budgetüberschreitungen ── */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><ShoppingBag className="w-4 h-4" /> Budgetüberschreitungen</h2>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><ShoppingBag className="w-4 h-4" /> Budgetüberschreitungen</h3>
             {orders.length === 0 ? (
               <Empty icon={CheckCircle} title="Keine offenen Freigaben" subtitle="Alle Bestellungen liegen im Budget" />
             ) : (
@@ -660,7 +676,7 @@ export default function Approvals() {
 
           {/* ── Lagerbestellungen ── */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Lagerbestellungen</h2>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Package className="w-4 h-4" /> Lagerbestellungen</h3>
             {stockOrders.length === 0 ? (
               <Empty icon={Package} title="Keine offenen Lagerbestellungen" />
             ) : (
@@ -680,10 +696,10 @@ export default function Approvals() {
 
           {/* ── Schuherstattungen ── */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
               <Footprints className="w-4 h-4" /> Schuherstattungen
               {shoeRefundCap != null && <span className="normal-case font-normal text-gray-400">· Maximalbetrag {fmtEUR(shoeRefundCap)}</span>}
-            </h2>
+            </h3>
             {shoeRefunds.length === 0 ? (
               <Empty icon={Footprints} title="Keine offenen Schuherstattungen" />
             ) : (
@@ -707,10 +723,15 @@ export default function Approvals() {
               />
             )}
           </div>
+          </div>
+
+          {/* ══ Einsatzmittel ══ */}
+          <div className="space-y-6">
+            <h2 className="text-lg font-bold text-gray-900">Einsatzmittel</h2>
 
           {/* ── Personal-Einsatzmittel-Meldungen ── */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Einsatzmittel-Meldungen (persönlich)</h2>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Einsatzmittel-Meldungen (persönlich)</h3>
             {personalEm.length === 0 ? (
               <Empty icon={Shield} title="Keine offenen Einsatzmittel-Meldungen" />
             ) : (
@@ -729,7 +750,7 @@ export default function Approvals() {
 
           {/* ── Pool-Einsatzmittel-Beschaffung ── */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Beschaffungsanträge (Pool-Einsatzmittel)</h2>
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Beschaffungsanträge (Pool-Einsatzmittel)</h3>
             {poolEm.length === 0 ? (
               <Empty icon={Shield} title="Keine offenen Beschaffungsanträge" />
             ) : (
@@ -746,41 +767,46 @@ export default function Approvals() {
               />
             )}
           </div>
-
-          {/* ── Trainings-Zuteilungsvorschläge ── */}
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Trainings-Zuteilungsvorschläge</h2>
-            {trainingAssignments.length === 0 ? (
-              <Empty icon={GraduationCap} title="Keine offenen Trainingsvorschläge" />
-            ) : (
-              <Table
-                head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
-                rows={trainingAssignments.map(item => [
-                  trainingModules.find(m => m.id === item.module_id)?.name ?? item.module_id,
-                  officerDisplayName(item.officer),
-                  new Date(item.proposed_at).toLocaleDateString('de-AT'),
-                  <div key="ac" className="flex justify-end"><button type="button" onClick={() => openAssignmentReview('training', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
-                ])}
-              />
-            )}
           </div>
 
-          {/* ── Schulungs-Zuteilungsvorschläge ── */}
+          {/* ══ Personal ══ */}
+          <div className="space-y-6">
+            <h2 className="text-lg font-bold text-gray-900">Personal</h2>
+
+          {/* ── Überstundenmeldungen ── direkt hier entscheidbar (nicht mehr nur
+              verlinkt) - Ueberstunden.tsx bleibt für "Meine Meldungen" (jede/r
+              erfasst dort die eigenen) und die Monatsübersicht/Sammel-PDF für die
+              Lohnverrechnung, aber die Entscheidung selbst gehört hierher. */}
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Schulungs-Zuteilungsvorschläge</h2>
-            {schulungAssignments.length === 0 ? (
-              <Empty icon={GraduationCap} title="Keine offenen Schulungsvorschläge" />
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Clock3 className="w-4 h-4" /> Überstundenmeldungen</h3>
+            {ueberstundenItems.length === 0 ? (
+              <Empty icon={Clock3} title="Keine offenen Überstundenmeldungen" />
             ) : (
-              <Table
-                head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
-                rows={schulungAssignments.map(item => [
-                  schulungModules.find(m => m.id === item.module_id)?.name ?? item.module_id,
-                  officerDisplayName(item.officer),
-                  new Date(item.proposed_at).toLocaleDateString('de-AT'),
-                  <div key="ac" className="flex justify-end"><button type="button" onClick={() => openAssignmentReview('schulung', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
-                ])}
-              />
+              <div className="space-y-3">
+                {ueberstundenItems.map(item => (
+                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-gray-900">{item.beamter?.name ?? '–'}</span>
+                          {item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}
+                          <span className="text-xs text-gray-400">{formatZeitraum(item)}</span>
+                        </div>
+                        <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
+                        <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
+                      </div>
+                      <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                        <button type="button" onClick={() => printUeberstundenMeldung(item)} className="p-2 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Als PDF ausgeben"><FileOutput className="w-4 h-4" /></button>
+                        <button type="button" disabled={processing === item.id} onClick={() => void decideUeberstunden(item, 'genehmigt', '')} className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 border border-green-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><ThumbsUp className="w-3.5 h-3.5" /> Genehmigen</button>
+                        <button type="button" disabled={processing === item.id} onClick={() => { setUeberstundenDeciding({ item, status: 'rueckfrage' }); setUeberstundenDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><HelpCircle className="w-3.5 h-3.5" /> Rückfrage</button>
+                        <button type="button" disabled={processing === item.id} onClick={() => { setUeberstundenDeciding({ item, status: 'abgelehnt' }); setUeberstundenDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><ThumbsDown className="w-3.5 h-3.5" /> Ablehnen</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
+          </div>
           </div>
         </>
       )}
