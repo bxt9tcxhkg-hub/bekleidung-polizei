@@ -7,6 +7,7 @@ import { thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { parseDienstCode } from '../lib/dienstplanImport'
 import { KACHEL_IMMER_SICHTBAR, istUrlaubsKuerzel, kachelRang, tagOderNacht } from '../lib/dienstplanBesetzung'
+import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
 // tageweise Tagdienste und Nachtdienste getrennt voneinander, je Zeitraum in
@@ -54,16 +55,17 @@ interface AbwesenheitEintrag { beamterId: string; name: string; dienstnummer: st
 interface ZeitabschnittUebersicht { kacheln: DienstKachelDaten[] }
 interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht; abwesenheiten: AbwesenheitEintrag[] }
 
-function Kachel({ code, eintraege }: { code: string; eintraege: KachelEintrag[] }) {
-  return <div className={`rounded-lg border p-2.5 ${eintraege.length === 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{code}</p>
-    {eintraege.length === 0 ? <p className="mt-1 flex items-center gap-1 text-sm font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5 flex-none" /> nicht besetzt</p>
-      : <div className="mt-1 space-y-0.5">
-        {eintraege.map(eintrag => <p key={eintrag.beamterId} className="text-sm font-medium text-gray-800">
-          {eintrag.name}
-          <span className="ml-1.5 font-mono text-xs font-normal text-gray-500">{eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`}</span>
-        </p>)}
-      </div>}
+function Kachel({ code, eintraege, erforderlich }: { code: string; eintraege: KachelEintrag[]; erforderlich: number }) {
+  const unterbesetzt = eintraege.length < erforderlich
+  return <div className={`rounded-lg border p-2.5 ${unterbesetzt ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{code}{erforderlich > 1 ? ` (${eintraege.length}/${erforderlich})` : ''}</p>
+    {unterbesetzt ? <p className="mt-1 flex items-center gap-1 text-sm font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5 flex-none" /> {eintraege.length === 0 ? 'nicht besetzt' : 'unterbesetzt'}</p> : null}
+    {eintraege.length > 0 ? <div className="mt-1 space-y-0.5">
+      {eintraege.map(eintrag => <p key={eintrag.beamterId} className="text-sm font-medium text-gray-800">
+        {eintrag.name}
+        <span className="ml-1.5 font-mono text-xs font-normal text-gray-500">{eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`}</span>
+      </p>)}
+    </div> : null}
   </div>
 }
 
@@ -71,7 +73,7 @@ function Zeitabschnitt({ titel, daten }: { titel: string; daten: ZeitabschnittUe
   return <div>
     <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">{titel}</p>
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-      {daten.kacheln.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} />)}
+      {daten.kacheln.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} erforderlich={MINDESTBESETZUNG[kachel.code as GrundbesetzungCode] ?? 1} />)}
     </div>
   </div>
 }

@@ -10,25 +10,31 @@ const MITARBEITER: VorschlagPerson[] = [
 // Für Tag+Nacht am selben Tag braucht es mehr Personen als nur 3 - Tag
 // 08-19 gefolgt von Nacht 19-08 derselben Person hätte 0 Stunden
 // Ruhezeit, wird also vom harten Kriterium korrekt verhindert (siehe
-// eigener Test weiter unten). Mit 6 Personen kann für Tag und Nacht je ein
-// eigenes Trio einspringen.
-const SECHS_MITARBEITER: VorschlagPerson[] = [
-  { id: 'a', name: 'Anna' }, { id: 'b', name: 'Bernd' }, { id: 'c', name: 'Clara' },
-  { id: 'd', name: 'Doris' }, { id: 'e', name: 'Erik' }, { id: 'f', name: 'Frida' },
+// eigener Test weiter unten). Mindestbesetzung ist 1x Z, 1x ID, 2x JD (4
+// Personen) je Abschnitt - mit 8 Personen kann für Tag und Nacht je eine
+// eigene Vierergruppe einspringen.
+const ACHT_MITARBEITER: VorschlagPerson[] = [
+  { id: 'a', name: 'Anna' }, { id: 'b', name: 'Bernd' }, { id: 'c', name: 'Clara' }, { id: 'd', name: 'Doris' },
+  { id: 'e', name: 'Erik' }, { id: 'f', name: 'Frida' }, { id: 'g', name: 'Gustav' }, { id: 'h', name: 'Hannah' },
 ]
 
 describe('generiereGrundbesetzungsVorschlag', () => {
-  it('besetzt Z/ID/JD für Tag und Nacht an einem einzigen Tag (6 Slots), wenn genug Personen verfügbar sind', () => {
-    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: SECHS_MITARBEITER, tage: ['2026-10-05'], bestehendeDienste: [], wuensche: [], mindestruhezeitStunden: 11 })
-    expect(ergebnis).toHaveLength(6)
-    expect(new Set(ergebnis.map(e => `${e.abschnitt}|${e.code}`))).toEqual(new Set(['tag|Z', 'tag|ID', 'tag|JD', 'nacht|Z', 'nacht|ID', 'nacht|JD']))
+  it('besetzt 1x Z, 1x ID, 2x JD für Tag und Nacht an einem einzigen Tag (8 Slots), wenn genug Personen verfügbar sind', () => {
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: ACHT_MITARBEITER, tage: ['2026-10-05'], bestehendeDienste: [], wuensche: [], mindestruhezeitStunden: 11 })
+    expect(ergebnis).toHaveLength(8)
+    const anzahlProAbschnittUndCode = new Map<string, number>()
+    for (const eintrag of ergebnis) {
+      const key = `${eintrag.abschnitt}|${eintrag.code}`
+      anzahlProAbschnittUndCode.set(key, (anzahlProAbschnittUndCode.get(key) ?? 0) + 1)
+    }
+    expect(anzahlProAbschnittUndCode).toEqual(new Map([['tag|Z', 1], ['tag|ID', 1], ['tag|JD', 2], ['nacht|Z', 1], ['nacht|ID', 1], ['nacht|JD', 2]]))
   })
 
   it('lässt einen bereits besetzten Slot unangetastet', () => {
     const bestehendeDienste: VorschlagBestehenderDienst[] = [{ beamterId: 'a', datum: '2026-10-05', vonZeit: '08:00', bisZeit: '19:00', kategorie: 'dienst', code: 'Z' }]
-    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: SECHS_MITARBEITER, tage: ['2026-10-05'], bestehendeDienste, wuensche: [], mindestruhezeitStunden: 11 })
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: ACHT_MITARBEITER, tage: ['2026-10-05'], bestehendeDienste, wuensche: [], mindestruhezeitStunden: 11 })
     expect(ergebnis.some(e => e.abschnitt === 'tag' && e.code === 'Z')).toBe(false)
-    expect(ergebnis).toHaveLength(5)
+    expect(ergebnis).toHaveLength(7)
   })
 
   it('schlägt niemanden vor, der an diesem Tag abwesend (krank/Urlaub) ist', () => {
@@ -53,11 +59,11 @@ describe('generiereGrundbesetzungsVorschlag', () => {
     expect(tagZ?.beamterId).not.toBe('a')
   })
 
-  it('respektiert einen Freiplanungswunsch, wenn genug Alternativen für alle drei Tag-Slots verfügbar sind', () => {
-    // 4 Personen für 3 Tag-Codes - auch ohne a bleiben genug Alternativen übrig.
-    const vierPersonen: VorschlagPerson[] = [...MITARBEITER, { id: 'd', name: 'Doris' }]
+  it('respektiert einen Freiplanungswunsch, wenn genug Alternativen für alle vier Tag-Slots (Z, ID, 2x JD) verfügbar sind', () => {
+    // 5 Personen für 4 Tag-Slots - auch ohne a bleiben genug Alternativen übrig (b, c, d, e).
+    const fuenfPersonen: VorschlagPerson[] = [...MITARBEITER, { id: 'd', name: 'Doris' }, { id: 'e', name: 'Erik' }]
     const wuensche: VorschlagWunsch[] = [{ beamterId: 'a', datum: '2026-10-05', wunsch: 'frei_tag' }]
-    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: vierPersonen, tage: ['2026-10-05'], bestehendeDienste: [], wuensche, mindestruhezeitStunden: 11 })
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: fuenfPersonen, tage: ['2026-10-05'], bestehendeDienste: [], wuensche, mindestruhezeitStunden: 11 })
     const tagEintraege = ergebnis.filter(e => e.abschnitt === 'tag')
     expect(tagEintraege.every(e => e.beamterId !== 'a')).toBe(true)
     // Nachts (kein Wunsch dagegen) darf a weiterhin eingeteilt werden.
