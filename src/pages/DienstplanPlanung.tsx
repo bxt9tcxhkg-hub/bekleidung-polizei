@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays, CheckCircle2, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
@@ -10,6 +10,7 @@ import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
+import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planer-Grid für die Dienstplan-Planung im Portal (siehe
@@ -115,12 +116,16 @@ export default function DienstplanPlanung() {
     setLoading(true); setError(''); setVorschlaege(new Map())
     const [regelnResult, mitarbeiterResult, monatResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('mindestruhezeit_stunden').eq('id', 1).maybeSingle(),
-      supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
+      supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
     ])
     if (regelnResult.error || mitarbeiterResult.error || monatResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) setMindestruhezeitStunden(regelnResult.data.mindestruhezeit_stunden)
-    setMitarbeiter(mitarbeiterResult.data ?? [])
+    // Admin-Konten sind laut Kommandant nie Teil der einteilbaren Beamten;
+    // Kommando/Dienstführung sollen als eigene Blöcke zusammenstehen (siehe
+    // lib/dienstplanRoster.ts).
+    const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
+    setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setMonatRow(monatResult.data)
 
     if (!monatResult.data) { setDienste([]); setWuensche(new Map()); setLoading(false); return }
@@ -251,7 +256,11 @@ export default function DienstplanPlanung() {
       const [beamterId, datum] = schluessel.split('|')
       return liste.map(eintrag => ({ beamterId, datum, wunsch: eintrag.wunsch }))
     })
-    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter, tage, bestehendeDienste: eingabeDienste, wuensche: eingabeWuensche, mindestruhezeitStunden })
+    // Kommando ist nicht Teil der automatischen Grundbesetzungs-Zuteilung
+    // (siehe lib/dienstplanRoster.ts) - kann aber weiterhin manuell über die
+    // Zelle im Grid eingeteilt werden.
+    const einteilbareMitarbeiter = mitarbeiter.filter(person => istAutomatischEinteilbar(person.dienstnummer))
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einteilbareMitarbeiter, tage, bestehendeDienste: eingabeDienste, wuensche: eingabeWuensche, mindestruhezeitStunden })
     setVorschlaege(new Map(ergebnis.map(eintrag => [`${eintrag.beamterId}|${eintrag.datum}|${eintrag.abschnitt}`, eintrag])))
     setNotice(ergebnis.length > 0 ? `${ergebnis.length} Vorschläge generiert - bitte prüfen und übernehmen.` : 'Es gibt aktuell nichts vorzuschlagen (alles besetzt oder niemand verfügbar).')
     setError('')
@@ -339,29 +348,36 @@ export default function DienstplanPlanung() {
               </tr>
             </thead>
             <tbody>
-              {mitarbeiter.map(person => (['tag', 'nacht'] as const).map(abschnitt => <tr key={`${person.id}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
-                <td className="sticky left-0 z-10 min-w-40 border-r border-gray-200 bg-inherit px-3 py-1.5">
-                  {abschnitt === 'tag' ? <span className="font-medium text-gray-800">{person.name}</span> : null}
-                  <span className={`ml-1.5 text-[0.65rem] uppercase tracking-wide ${abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
-                </td>
-                {tage.map(datum => {
-                  const zeilen = (dienstByKeyAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
-                  const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
-                  const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
-                  const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
-                  return <td key={datum}
-                    onClick={() => oeffneZelle(person.id, person.name, datum)}
-                    title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
-                    className={`min-w-14 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
-                  >
-                    <div className="flex flex-col items-center gap-0.5">
-                      {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
-                      {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}
-                      {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
-                    </div>
-                  </td>
-                })}
-              </tr>))}
+              {mitarbeiter.map((person, index) => {
+                const gruppe = dienstplanGruppe(person.dienstnummer)
+                const vorherigeGruppe = index > 0 ? dienstplanGruppe(mitarbeiter[index - 1].dienstnummer) : null
+                return <Fragment key={person.id}>
+                  {gruppe !== vorherigeGruppe ? <tr><td colSpan={tage.length + 1} className="border-t border-gray-200 bg-gray-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</td></tr> : null}
+                  {(['tag', 'nacht'] as const).map(abschnitt => <tr key={`${person.id}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
+                    <td className="sticky left-0 z-10 min-w-40 border-r border-gray-200 bg-inherit px-3 py-1.5">
+                      {abschnitt === 'tag' ? <span className="font-medium text-gray-800">{person.name}</span> : null}
+                      <span className={`ml-1.5 text-[0.65rem] uppercase tracking-wide ${abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
+                    </td>
+                    {tage.map(datum => {
+                      const zeilen = (dienstByKeyAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
+                      const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
+                      const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
+                      const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
+                      return <td key={datum}
+                        onClick={() => oeffneZelle(person.id, person.name, datum)}
+                        title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
+                        className={`min-w-14 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
+                      >
+                        <div className="flex flex-col items-center gap-0.5">
+                          {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                          {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}
+                          {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
+                        </div>
+                      </td>
+                    })}
+                  </tr>)}
+                </Fragment>
+              })}
             </tbody>
           </table>
         </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Check, Pencil, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -7,6 +7,7 @@ import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { berechneSollstunden, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { monatsKontingent } from '../lib/dienstplanWunsch'
+import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planungsregeln für die Dienstplan-Planung im Portal (siehe
@@ -44,7 +45,7 @@ export default function DienstplanEinstellungen() {
     setLoading(true); setError('')
     const [regelnResult, mitarbeiterResult, einstellungenResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('id,stunden_pro_werktag,mindestruhezeit_stunden,wunschfrist_tage,updated_by,updated_at').eq('id', 1).maybeSingle(),
-      supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
+      supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
     ])
     if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
@@ -52,7 +53,8 @@ export default function DienstplanEinstellungen() {
       setRegeln(regelnResult.data)
       setRegelForm({ stundenProWerktag: String(regelnResult.data.stunden_pro_werktag), mindestruhezeitStunden: String(regelnResult.data.mindestruhezeit_stunden), wunschfristTage: String(regelnResult.data.wunschfrist_tage) })
     }
-    setMitarbeiter(mitarbeiterResult.data ?? [])
+    const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
+    setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setEinstellungen(new Map((einstellungenResult.data as PersonEinstellungRow[] ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
     setLoading(false)
   }, [])
@@ -136,27 +138,32 @@ export default function DienstplanEinstellungen() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {mitarbeiter.map(person => {
+              {mitarbeiter.map((person, index) => {
                 const grad = einstellungen.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
                 const editing = editId === person.id
                 const angezeigterGrad = editing ? (Number(editGrad.replace(',', '.')) || 0) : grad
-                return <tr key={person.id}>
-                  <td className="px-3 py-2 font-medium text-gray-900">{person.name}{person.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {person.dienstnummer})</span> : null}</td>
-                  <td className="px-3 py-2 text-right">
-                    {editing ? <input type="text" inputMode="decimal" autoFocus className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={editGrad} onChange={event => setEditGrad(event.target.value)}
-                      onKeyDown={event => { if (event.key === 'Enter') void speicherePerson(person.id); if (event.key === 'Escape') setEditId(null) }} />
-                      : <span className={grad === VOLLZEIT_BESCHAEFTIGUNGSGRAD ? 'text-gray-900' : 'font-medium text-amber-700'}>{grad}</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{berechneSollstunden(aktuellerMonat, stundenProWerktagVorschau, angezeigterGrad)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-gray-700">{monatsKontingent(angezeigterGrad)}</td>
-                  <td className="px-3 py-2 text-right">
-                    {editing ? <div className="flex justify-end gap-1">
-                      <button type="button" disabled={personSpeichern} onClick={() => void speicherePerson(person.id)} className="rounded p-1 text-green-600 hover:bg-green-50"><Check className="h-4 w-4" /></button>
-                      <button type="button" onClick={() => setEditId(null)} className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
-                    </div> : <button type="button" onClick={() => beginneBearbeitung(person.id, grad)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Pencil className="h-4 w-4" /></button>}
-                  </td>
-                </tr>
+                const gruppe = dienstplanGruppe(person.dienstnummer)
+                const vorherigeGruppe = index > 0 ? dienstplanGruppe(mitarbeiter[index - 1].dienstnummer) : null
+                return <Fragment key={person.id}>
+                  {gruppe !== vorherigeGruppe ? <tr><td colSpan={5} className="bg-gray-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</td></tr> : null}
+                  <tr>
+                    <td className="px-3 py-2 font-medium text-gray-900">{person.name}{person.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {person.dienstnummer})</span> : null}</td>
+                    <td className="px-3 py-2 text-right">
+                      {editing ? <input type="text" inputMode="decimal" autoFocus className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={editGrad} onChange={event => setEditGrad(event.target.value)}
+                        onKeyDown={event => { if (event.key === 'Enter') void speicherePerson(person.id); if (event.key === 'Escape') setEditId(null) }} />
+                        : <span className={grad === VOLLZEIT_BESCHAEFTIGUNGSGRAD ? 'text-gray-900' : 'font-medium text-amber-700'}>{grad}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{berechneSollstunden(aktuellerMonat, stundenProWerktagVorschau, angezeigterGrad)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{monatsKontingent(angezeigterGrad)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {editing ? <div className="flex justify-end gap-1">
+                        <button type="button" disabled={personSpeichern} onClick={() => void speicherePerson(person.id)} className="rounded p-1 text-green-600 hover:bg-green-50"><Check className="h-4 w-4" /></button>
+                        <button type="button" onClick={() => setEditId(null)} className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+                      </div> : <button type="button" onClick={() => beginneBearbeitung(person.id, grad)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Pencil className="h-4 w-4" /></button>}
+                    </td>
+                  </tr>
+                </Fragment>
               })}
             </tbody>
           </table>
