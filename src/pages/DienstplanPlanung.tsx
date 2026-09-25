@@ -151,8 +151,8 @@ export default function DienstplanPlanung() {
     setAnlegen(true); setError('')
     const result = await dienstplanSupabase.rpc('dienstplan_monat_anlegen', { p_monat: `${monat}-01` })
     setAnlegen(false)
-    if (result.error) { setError('Der Monat konnte nicht angelegt werden.'); return }
-    await load()
+    if (result.error || !result.data) { setError('Der Monat konnte nicht angelegt werden.'); return }
+    setMonatRow({ id: result.data, status: 'entwurf' })
   }
 
   async function monatVeroeffentlichen() {
@@ -162,7 +162,7 @@ export default function DienstplanPlanung() {
     setVeroeffentlichen(false)
     if (result.error) { setError('Der Monat konnte nicht veröffentlicht werden.'); return }
     setNotice('Der Monat ist jetzt veröffentlicht.')
-    await load()
+    setMonatRow(current => current ? { ...current, status: 'veroeffentlicht' } : current)
   }
 
   function zeileZuForm(zeile: DienstZeile | undefined): ZeileForm {
@@ -183,24 +183,34 @@ export default function DienstplanPlanung() {
     if (!bearbeitung || !monatRow) return
     setSpeichern(true); setModalError('')
     const aufgaben: PromiseLike<{ error: unknown }>[] = []
+    const neueZeilen = new Map<1 | 2, DienstZeile | null>()
     for (const [nummer, form] of [[1, zeile1], [2, zeile2]] as const) {
       const bestandVorher = (dienstByKey.get(`${bearbeitung.beamterId}|${bearbeitung.datum}`) ?? []).some(zeile => zeile.zeile === nummer)
       if (!form || !form.code.trim()) {
         if (bestandVorher) aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_loeschen', { p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer }))
+        neueZeilen.set(nummer, null)
         continue
       }
       const code = form.code.trim()
       const kategorie = kategorisiereRohtext(code)
+      const vonZeit = kategorie === 'dienst' ? form.vonZeit : ''
+      const bisZeit = kategorie === 'dienst' ? form.bisZeit : ''
       aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_setzen', {
         p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer,
-        p_rohtext: code, p_von_zeit: kategorie === 'dienst' ? form.vonZeit : '', p_bis_zeit: kategorie === 'dienst' ? form.bisZeit : '', p_kategorie: kategorie,
+        p_rohtext: code, p_von_zeit: vonZeit, p_bis_zeit: bisZeit, p_kategorie: kategorie,
       }))
+      neueZeilen.set(nummer, { beamter_id: bearbeitung.beamterId, datum: bearbeitung.datum, zeile: nummer, rohtext: code, von_zeit: vonZeit || null, bis_zeit: bisZeit || null, kategorie })
     }
     const ergebnisse = await Promise.all(aufgaben)
     setSpeichern(false)
     if (ergebnisse.some(ergebnis => ergebnis.error)) { setModalError('Der Diensteintrag konnte nicht gespeichert werden.'); return }
+    const { beamterId, datum } = bearbeitung
+    setDienste(current => {
+      const rest = current.filter(zeile => !(zeile.beamter_id === beamterId && zeile.datum === datum && neueZeilen.has(zeile.zeile)))
+      const hinzu = Array.from(neueZeilen.values()).filter((zeile): zeile is DienstZeile => zeile !== null)
+      return [...rest, ...hinzu]
+    })
     setBearbeitung(null)
-    await load()
   }
 
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
