@@ -36,10 +36,6 @@ const TOGGLE_STIL: Record<'aktiv' | 'inaktiv', string> = {
   aktiv: 'border-blue-700 bg-blue-700 text-white',
   inaktiv: 'border-gray-300 text-gray-700 hover:bg-gray-50',
 }
-const PRAEFERENZ_STIL: Record<'aktiv' | 'inaktiv', string> = {
-  aktiv: 'border-gray-400 bg-gray-200 text-gray-800',
-  inaktiv: 'border-gray-300 text-gray-500 hover:bg-gray-50',
-}
 
 export default function MeineDienstwuensche() {
   const { profile } = useAuth()
@@ -115,7 +111,7 @@ export default function MeineDienstwuensche() {
 
   return <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Meine Dienstwünsche</h1><p className="mt-1 text-sm text-gray-500">Freiplanungswünsche und bevorzugte Dienstart für einen Monat vormerken - der Planer sieht das, ist aber nicht daran gebunden.</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Meine Dienstwünsche</h1><p className="mt-1 text-sm text-gray-500">Freiplanungswünsche für einen Monat vormerken - der Planer sieht das, ist aber nicht daran gebunden.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -144,9 +140,6 @@ export default function MeineDienstwuensche() {
               <button type="button" disabled={deaktiviert('frei_tag')} onClick={() => void toggleWunsch(datum, 'frei_tag', ['urlaub'])} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TOGGLE_STIL[menge.has('frei_tag') ? 'aktiv' : 'inaktiv']}`}>Tag frei</button>
               <button type="button" disabled={deaktiviert('frei_nacht')} onClick={() => void toggleWunsch(datum, 'frei_nacht', ['urlaub'])} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TOGGLE_STIL[menge.has('frei_nacht') ? 'aktiv' : 'inaktiv']}`}>Nacht frei</button>
               <button type="button" disabled={deaktiviert('urlaub')} onClick={() => void toggleWunsch(datum, 'urlaub', ['frei_tag', 'frei_nacht'])} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TOGGLE_STIL[menge.has('urlaub') ? 'aktiv' : 'inaktiv']}`}>Urlaub</button>
-              <span className="mx-1 h-4 w-px bg-gray-200" />
-              <button type="button" disabled={deaktiviert('tagdienst_bevorzugt')} onClick={() => void toggleWunsch(datum, 'tagdienst_bevorzugt', ['nachtdienst_bevorzugt'])} className={`rounded-full border px-2.5 py-1 text-xs disabled:opacity-50 ${PRAEFERENZ_STIL[menge.has('tagdienst_bevorzugt') ? 'aktiv' : 'inaktiv']}`}>Tagdienst bevorzugt</button>
-              <button type="button" disabled={deaktiviert('nachtdienst_bevorzugt')} onClick={() => void toggleWunsch(datum, 'nachtdienst_bevorzugt', ['tagdienst_bevorzugt'])} className={`rounded-full border px-2.5 py-1 text-xs disabled:opacity-50 ${PRAEFERENZ_STIL[menge.has('nachtdienst_bevorzugt') ? 'aktiv' : 'inaktiv']}`}>Nachtdienst bevorzugt</button>
             </div>
           </div>
         })}

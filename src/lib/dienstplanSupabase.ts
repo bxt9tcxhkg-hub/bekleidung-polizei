@@ -72,7 +72,7 @@ export type DienstplanPersonEinstellungenRow = {
   updated_at: string
 }
 
-export type DienstplanWunschTyp = 'frei_tag' | 'frei_nacht' | 'urlaub' | 'tagdienst_bevorzugt' | 'nachtdienst_bevorzugt'
+export type DienstplanWunschTyp = 'frei_tag' | 'frei_nacht' | 'urlaub'
 
 export type DienstplanWunschRow = {
   id: string

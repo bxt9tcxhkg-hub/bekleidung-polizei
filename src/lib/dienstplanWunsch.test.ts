@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { kontingentEinheiten, kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAblaufdatum, wunschfristAbgelaufen } from './dienstplanWunsch'
+import { kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAblaufdatum, wunschfristAbgelaufen } from './dienstplanWunsch'
 
 describe('monatsKontingent', () => {
   it('ergibt 18 bei Vollzeit (Beschäftigungsgrad 111)', () => {
@@ -12,15 +12,7 @@ describe('monatsKontingent', () => {
   })
 })
 
-describe('kontingentEinheiten / kontingentVerbrauch', () => {
-  it('frei_tag, frei_nacht und urlaub kosten je 1 Einheit, Präferenzen kosten nichts', () => {
-    expect(kontingentEinheiten('frei_tag')).toBe(1)
-    expect(kontingentEinheiten('frei_nacht')).toBe(1)
-    expect(kontingentEinheiten('urlaub')).toBe(1)
-    expect(kontingentEinheiten('tagdienst_bevorzugt')).toBe(0)
-    expect(kontingentEinheiten('nachtdienst_bevorzugt')).toBe(0)
-  })
-
+describe('kontingentVerbrauch', () => {
   it('ein ganzer freier Tag (frei_tag + frei_nacht) kostet 2 Einheiten', () => {
     const eintraege = [{ datum: '2026-10-05', wunsch: 'frei_tag' as const }, { datum: '2026-10-05', wunsch: 'frei_nacht' as const }]
     expect(kontingentVerbrauch(eintraege)).toBe(2)
@@ -58,15 +50,6 @@ describe('laengsteSlotFolge', () => {
       { datum: '2026-10-05', wunsch: 'frei_tag' as const },
       { datum: '2026-10-05', wunsch: 'frei_nacht' as const },
       { datum: '2026-10-08', wunsch: 'frei_tag' as const },
-    ]
-    expect(laengsteSlotFolge(eintraege)).toBe(2)
-  })
-
-  it('Präferenzen belegen keinen Slot und verlängern die Kette nicht', () => {
-    const eintraege = [
-      { datum: '2026-10-05', wunsch: 'frei_tag' as const },
-      { datum: '2026-10-05', wunsch: 'frei_nacht' as const },
-      { datum: '2026-10-06', wunsch: 'tagdienst_bevorzugt' as const },
     ]
     expect(laengsteSlotFolge(eintraege)).toBe(2)
   })
