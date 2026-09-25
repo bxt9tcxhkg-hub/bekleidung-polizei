@@ -1,4 +1,4 @@
-import { ArrowLeft, BellRing, BookOpenCheck, Car, ContactRound, Database, GraduationCap, KeyRound, ListChecks, ListTree, Phone, ScrollText, ShieldCheck, Shirt, Users, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, BellRing, BookOpenCheck, Calendar, Car, ContactRound, Database, GraduationCap, KeyRound, ListChecks, ListTree, Phone, ScrollText, ShieldCheck, Shirt, Users, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 type Kachel = { to: string; titel: string; beschreibung: string; icon: LucideIcon }
@@ -13,6 +13,7 @@ const GRUPPEN: { titel: string; beschreibung: string; kacheln: Kachel[] }[] = [
       { to: '/portal/systemeinstellungen/einsatzgruende', titel: 'Einsatzgründe', beschreibung: 'Auswahl, Reihenfolge, Sichtbarkeit und Hinweis-Umkreis verwalten.', icon: ListChecks },
       { to: '/portal/systemeinstellungen/ablaufvorlagen', titel: 'Ablaufvorlagen', beschreibung: 'Maßnahmen und Entscheidungsfragen für neue Ereignisse vorgeben.', icon: ListTree },
       { to: '/portal/systemeinstellungen/telefonnummern', titel: 'Wichtige Telefonnummern', beschreibung: 'Festlegen, welche konkrete Nummer in den operativen Bereichen erscheint.', icon: Phone },
+      { to: '/portal/systemeinstellungen/dienstplan-import', titel: 'Dienstplan-Import', beschreibung: 'Monatliche Dienstplan-Datei hochladen und Namensspalten den Profilen zuordnen.', icon: Calendar },
     ],
   },
   {

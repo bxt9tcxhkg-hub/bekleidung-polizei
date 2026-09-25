@@ -44,6 +44,7 @@ const SystemeinstellungenFunktionskontakte = lazy(() => import('./pages/Systemei
 const SystemeinstellungenVerstaendigungen = lazy(() => import('./pages/SystemeinstellungenVerstaendigungen'))
 const SystemeinstellungenEinsatzgruende = lazy(() => import('./pages/SystemeinstellungenEinsatzgruende'))
 const SystemeinstellungenAblaufvorlagen = lazy(() => import('./pages/SystemeinstellungenAblaufvorlagen'))
+const SystemeinstellungenDienstplanImport = lazy(() => import('./pages/SystemeinstellungenDienstplanImport'))
 const Ueberstunden = lazy(() => import('./pages/Ueberstunden'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
@@ -120,6 +121,7 @@ export default function App() {
           <Route path="/portal/systemeinstellungen/verstaendigungen" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenVerstaendigungen /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/einsatzgruende" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenEinsatzgruende /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/ablaufvorlagen" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenAblaufvorlagen /></PortalChrome></ProtectedRoute>} />
+          <Route path="/portal/systemeinstellungen/dienstplan-import" element={<ProtectedRoute adminOnly><PortalChrome wide><SystemeinstellungenDienstplanImport /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/kontakte" element={<ProtectedRoute adminOnly><PortalChrome wide><StammdatenKontakte context={{ areaLabel: 'Systemeinstellungen', backTo: '/portal/systemeinstellungen', backLabel: 'Zu Systemeinstellungen', allowManage: true }} /></PortalChrome></ProtectedRoute>} />
           <Route path="/portal/systemeinstellungen/telefonnummern" element={<ProtectedRoute adminOnly><PortalChrome wide><StammdatenTelefonnummern context={{ areaLabel: 'Systemeinstellungen', backTo: '/portal/systemeinstellungen', backLabel: 'Zu Systemeinstellungen', allowManage: true }} /></PortalChrome></ProtectedRoute>} />
           <Route
