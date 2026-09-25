@@ -50,8 +50,11 @@ describe('kuerzelKlartext', () => {
   it('übersetzt ein kombiniertes Kürzel (z. B. "Sch/VD")', () => {
     expect(kuerzelKlartext('Sch/VD')).toBe('Schulung / Verkehrsdienst')
   })
+  it('übersetzt Ziv als Zivilstreife', () => {
+    expect(kuerzelKlartext('Ziv')).toBe('Zivilstreife')
+  })
   it('unbekannte Kürzel bleiben als Kürzel stehen', () => {
-    expect(kuerzelKlartext('Ziv')).toBe('Ziv')
+    expect(kuerzelKlartext('Unbekannt')).toBe('Unbekannt')
   })
 })
 

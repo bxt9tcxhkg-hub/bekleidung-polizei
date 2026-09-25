@@ -78,8 +78,7 @@ export function kategorisiereRohtext(rohtext: string): DienstplanKategorie {
 
 /**
  * Klartext-Bezeichnungen der Dienst-Kürzel (vom Kommandanten bestätigt).
- * "Ziv" ist noch ungeklärt und bewusst nicht enthalten - kuerzelKlartext()
- * zeigt für unbekannte Kürzel einfach das Kürzel selbst.
+ * Unbekannte Kürzel zeigt kuerzelKlartext() einfach als das Kürzel selbst.
  */
 export const DIENST_KUERZEL_LABEL: Record<string, string> = {
   VD: 'Verkehrsdienst',
@@ -95,6 +94,7 @@ export const DIENST_KUERZEL_LABEL: Record<string, string> = {
   MOT: 'Motorraddienst',
   PV: 'Personalvertretung',
   SCH: 'Schulung',
+  ZIV: 'Zivilstreife',
 }
 
 /** Übersetzt ein (auch kombiniertes, z. B. "Sch/VD") Dienst-Kürzel in Klartext - unbekannte Teile bleiben als Kürzel stehen. */
