@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { baueDienstePayload, istSpalteAktiv, kategorisiereRohtext, parseDienstCode, parseDienstplanGrid, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, kategorisiereRohtext, parseDienstCode, parseDienstplanGrid, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
 
 describe('parseDienstCode', () => {
   it('trennt Code und Uhrzeit bei einem einfachen Dienst', () => {
@@ -124,5 +124,37 @@ describe('baueDienstePayload', () => {
     expect(payload.every(p => p.beamter_id === 'profil-1')).toBe(true)
     expect(payload.some(p => p.rohtext === 'krank')).toBe(false) // 'Beispiel'-Spalte, ignoriert
     expect(payload.find(p => p.rohtext === 'VD 08-19')).toMatchObject({ von_zeit: '08:00', bis_zeit: '19:00', kategorie: 'dienst', datum: '2026-02-02' })
+  })
+})
+
+describe('automatischeSpaltenZuordnung', () => {
+  const profile: DienstplanProfilOption[] = [
+    { id: 'p-hp', name: 'Hans-Peter Schwendinger' },
+    { id: 'p-dietmar', name: 'Dietmar Schwendinger' },
+    { id: 'p-verona', name: 'Verona Schwendinger' },
+    { id: 'p-ludwig', name: 'Ludwig Alge-Faißt' },
+    { id: 'p-andreas', name: 'Andreas Bachmann' },
+  ]
+
+  it('matcht einen eindeutigen Nachnamen direkt', () => {
+    expect(automatischeSpaltenZuordnung('Bachmann', profile)).toBe('p-andreas')
+    expect(automatischeSpaltenZuordnung('Alge-Faißt', profile)).toBe('p-ludwig')
+  })
+
+  it('nutzt eine Vornamens-Initiale zur Unterscheidung mehrerer gleicher Nachnamen', () => {
+    expect(automatischeSpaltenZuordnung('Schwendinger D.', profile)).toBe('p-dietmar')
+    expect(automatischeSpaltenZuordnung('Schwendinger V', profile)).toBe('p-verona')
+  })
+
+  it('ohne Initiale bleibt ein mehrdeutiger Nachname unzugeordnet', () => {
+    expect(automatischeSpaltenZuordnung('Schwendinger', profile)).toBeNull()
+  })
+
+  it('ein Kürzel ohne Treffer (z. B. "SchwendHP") bleibt unzugeordnet statt falsch zu raten', () => {
+    expect(automatischeSpaltenZuordnung('SchwendHP', profile)).toBeNull()
+  })
+
+  it('kein Treffer bei unbekanntem Namen', () => {
+    expect(automatischeSpaltenZuordnung('Unbekannt', profile)).toBeNull()
   })
 })

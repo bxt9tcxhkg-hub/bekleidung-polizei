@@ -7,15 +7,20 @@ import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanMonatRow, type DienstplanSpalteRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
-import { baueDienstePayload, istSpalteAktiv, parseDienstplanGrid, type DienstplanParseErgebnis, type DienstplanSpaltenZuordnung, type DienstplanZelle } from '../lib/dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, parseDienstplanGrid, type DienstplanParseErgebnis, type DienstplanSpaltenZuordnung, type DienstplanZelle } from '../lib/dienstplanImport'
+import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Schritt 1-3 des Dienstplan-Imports (siehe AGENTS.md-Analyse): Datei einlesen,
-// Spalten (Nachname je Excel-Spalte) einmalig einem Profil zuordnen - die
-// Zuordnung wird in dienstplan_spalten gemerkt und bei künftigen Monaten
-// automatisch wiederverwendet -, dann atomar über die RPC
-// dienstplan_monat_ersetzen speichern. Dienststellenkalender und persönliche
-// Stunden-Übersicht (Auswertung der hier gespeicherten Rohdaten) folgen als
-// eigene, spätere Schritte.
+// Spalten (Nachname je Excel-Spalte) einem Profil zuordnen - per
+// automatischeSpaltenZuordnung() anhand des Namens vorgeschlagen (Nachname,
+// bei Dubletten zusätzlich Vornamens-Initiale), sonst manuell auswählbar.
+// Die bestätigte Zuordnung wird in dienstplan_spalten gemerkt und bei
+// künftigen Monaten automatisch wiederverwendet, dann atomar über die RPC
+// dienstplan_monat_ersetzen gespeichert. Profile nur aus der Stadtpolizei
+// (ET_ROSTER_ORGANISATION) - andere Organisationen (Parkaufsicht etc.)
+// erscheinen weder im Vorschlag noch in der Auswahl. Dienststellenkalender
+// und persönliche Stunden-Übersicht (Auswertung der hier gespeicherten
+// Rohdaten) sind eigene, spätere Schritte.
 
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
 type SpaltenZuordnungRow = Pick<DienstplanSpalteRow, 'spaltenname' | 'beamter_id' | 'immer_aktiv'>
@@ -43,7 +48,7 @@ export default function SystemeinstellungenDienstplanImport() {
   const ladeGrunddatenFn = useCallback(async () => {
     setLadeGrunddaten(true)
     const [mitarbeiterResult, spaltenResult, monateResult] = await Promise.all([
-      supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name'),
+      supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_spalten').select('spaltenname,beamter_id,immer_aktiv'),
       dienstplanSupabase.from('dienstplan_monate').select('id,monat,dateiname,status,hochgeladen_at').order('monat', { ascending: false }),
     ])
@@ -73,6 +78,19 @@ export default function SystemeinstellungenDienstplanImport() {
         if ('error' in geparst) { setError(geparst.error); return }
         setDateiname(file.name)
         setErgebnis(geparst)
+        // Für noch nicht gemerkte, aktive Spalten automatisch das eindeutig
+        // passende Profil vorschlagen (siehe automatischeSpaltenZuordnung) -
+        // bleibt bewusst nur ein Vorschlag: die Zuordnung ist im Formular
+        // weiterhin änderbar, bevor sie gespeichert wird.
+        setZuordnungen(current => {
+          const naechste = new Map(current)
+          for (const spalte of geparst.spalten) {
+            if (naechste.has(spalte.name) || !spalte.hatEintraege) continue
+            const treffer = automatischeSpaltenZuordnung(spalte.name, mitarbeiter)
+            if (treffer) naechste.set(spalte.name, { beamterId: treffer, immerAktiv: false })
+          }
+          return naechste
+        })
       } catch {
         setError('Datei konnte nicht gelesen werden - ist das eine gültige Dienstplan-Excel-Datei (.xlsx/.xlsm)?')
       }
@@ -134,7 +152,7 @@ export default function SystemeinstellungenDienstplanImport() {
   return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
     <Link to="/portal/systemeinstellungen" className="inline-flex items-center gap-1 text-sm text-blue-700 hover:underline"><ArrowLeft className="h-4 w-4" /> Zu Systemeinstellungen</Link>
     <h1 className="mt-5 text-2xl font-bold text-gray-900">Dienstplan-Import</h1>
-    <p className="mt-2 max-w-3xl text-sm text-gray-600">Monatliche Dienstplan-Datei (.xlsx/.xlsm) hochladen. Jede Namensspalte wird einmalig einem Profil zugeordnet - die Zuordnung wird für künftige Monate gemerkt. Ein erneuter Upload desselben Monats ersetzt dessen Daten vollständig (Korrektur).</p>
+    <p className="mt-2 max-w-3xl text-sm text-gray-600">Monatliche Dienstplan-Datei (.xlsx/.xlsm) hochladen. Jede Namensspalte wird automatisch anhand des Namens einem Profil (nur Stadtpolizei) zugeordnet und für künftige Monate gemerkt - nur bei mehrdeutigen Namen oder Kürzeln ist eine manuelle Auswahl nötig. Ein erneuter Upload desselben Monats ersetzt dessen Daten vollständig (Korrektur).</p>
 
     {error ? <div className="mt-4"><ErrorMessage text={error} /></div> : null}
     {notice ? <p role="status" className="mt-4 rounded-lg bg-green-50 p-3 text-sm text-green-800">{notice}</p> : null}
@@ -152,6 +170,7 @@ export default function SystemeinstellungenDienstplanImport() {
         <h2 className="font-semibold text-gray-900">Vorschau: {monatLabel(ergebnis.monat)}</h2>
         <p className="text-xs text-gray-500">{dateiname} · {ergebnis.eintraege.length} Roheinträge</p>
       </div>
+      <p className="mt-2 text-xs text-gray-500">Zuordnungen werden automatisch anhand des Namens vorgeschlagen (bzw. aus einem früheren Monat übernommen) - bitte kurz prüfen, bevor gespeichert wird. Nur bei Namensgleichheit/Kürzeln ohne eindeutigen Treffer ist eine manuelle Auswahl nötig.</p>
 
       <div className="mt-4 space-y-3">
         {aktiveSpalten.map(spalte => {

@@ -184,6 +184,44 @@ export function parseDienstplanGrid(grid: readonly DienstplanZelle[][]): Dienstp
 
 export interface DienstplanSpaltenZuordnung { beamterId: string | null; immerAktiv: boolean }
 
+export interface DienstplanProfilOption { id: string; name: string }
+
+function normalisiereNamen(text: string): string {
+  return text.trim().toLowerCase().replace(/\s*-\s*/g, '-')
+}
+
+/**
+ * Ordnet eine Dienstplan-Spalte (nur Nachname, z. B. "Schwendinger D." zur
+ * Unterscheidung mehrerer Träger desselben Nachnamens) automatisch einem
+ * Profil zu, wenn GENAU EIN aktives Profil passt. Profile mit `name` im
+ * Format "Vorname Nachname" (siehe lib/csvUsers.ts) - endet die Spalte auf
+ * einen einzelnen Buchstaben (+ optionaler Punkt), gilt er als Vornamens-
+ * Initiale zur Unterscheidung. Mehrdeutige oder gar keine Treffer (z. B.
+ * Kürzel wie "SchwendHP") liefern null - dann bleibt die manuelle Zuordnung
+ * nötig, damit nie eine falsche Person automatisch verknüpft wird.
+ */
+export function automatischeSpaltenZuordnung(spaltenname: string, profile: readonly DienstplanProfilOption[]): string | null {
+  const woerter = spaltenname.trim().split(/\s+/)
+  let initiale: string | null = null
+  let nachname = spaltenname
+  if (woerter.length > 1 && /^[a-zäöüß]\.?$/i.test(woerter[woerter.length - 1])) {
+    initiale = woerter[woerter.length - 1].replace('.', '').toLowerCase()
+    nachname = woerter.slice(0, -1).join(' ')
+  }
+  const nachnameNormalisiert = normalisiereNamen(nachname)
+
+  const treffer = profile.filter(person => {
+    const teile = person.name.trim().split(/\s+/)
+    const profilNachname = normalisiereNamen(teile.slice(1).join(' '))
+    if (profilNachname !== nachnameNormalisiert) return false
+    if (!initiale) return true
+    const vorname = teile[0] ?? ''
+    return vorname.toLowerCase().startsWith(initiale)
+  })
+
+  return treffer.length === 1 ? treffer[0].id : null
+}
+
 /** Aktive Spalten = solche mit mindestens einem Diensteintrag ODER explizit als "immer aktiv" gepflegt (z. B. Kommandant/Stellvertreter, die auch ganz ohne Eintrag in der Zuordnung bleiben sollen). */
 export function istSpalteAktiv(spalte: DienstplanSpalte, zuordnung: DienstplanSpaltenZuordnung | undefined): boolean {
   return spalte.hatEintraege || (zuordnung?.immerAktiv ?? false)
