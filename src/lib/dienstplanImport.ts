@@ -108,6 +108,9 @@ export const GRUNDBESETZUNG_CODES = ['Z', 'ID', 'JD'] as const
 export type GrundbesetzungCode = (typeof GRUNDBESETZUNG_CODES)[number]
 export const GRUNDBESETZUNG_TITEL: Record<GrundbesetzungCode, string> = { Z: 'Zentrale', ID: 'Innendienst', JD: 'Journaldienst' }
 
+/** Mindestbesetzung je Grundbesetzungs-Kürzel, gleichermaßen für Tag und Nacht (vom Kommandanten vorgegeben: 1x Zentrale, 1x Innendienst, 2x Journaldienst). */
+export const MINDESTBESETZUNG: Record<GrundbesetzungCode, number> = { Z: 1, ID: 1, JD: 2 }
+
 /** Ordnet einen (evtl. kombinierten, z. B. "Sch/VD") Dienst-Code einem Grundbesetzungs-Kürzel zu, falls einer der Teile exakt passt. */
 export function grundbesetzungCode(code: string): GrundbesetzungCode | null {
   const teile = code.split('/').map(teil => teil.trim().toUpperCase())

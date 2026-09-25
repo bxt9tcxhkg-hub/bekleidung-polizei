@@ -16,7 +16,7 @@
 //      wird nie vorgenommen (hartes Kriterium).
 // Liefert nur VORSCHLÄGE (reine Funktion, keine DB-Schreibzugriffe) - der
 // Planer sichtet sie im Grid und übernimmt/verwirft sie bewusst.
-import { GRUNDBESETZUNG_CODES, grundbesetzungCode, type GrundbesetzungCode } from './dienstplanImport'
+import { GRUNDBESETZUNG_CODES, MINDESTBESETZUNG, grundbesetzungCode, type GrundbesetzungCode } from './dienstplanImport'
 import { tagOderNacht } from './dienstplanBesetzung'
 import { ruhezeitVerletzungen, type DienstFuerRuhezeitpruefung } from './dienstplanRegelpruefung'
 import type { DienstplanKategorieDb, DienstplanWunschTyp } from './dienstplanSupabase'
@@ -45,7 +45,7 @@ export function generiereGrundbesetzungsVorschlag(parameter: VorschlagParameter)
 
   const besetzterSlot = new Set<string>() // `${beamterId}|${datum}|${abschnitt}` - hat schon irgendeinen Dienst
   const abwesenderTag = new Set<string>() // `${beamterId}|${datum}` - krank/Urlaub/... an diesem Tag
-  const grundbesetztSlot = new Set<string>() // `${datum}|${abschnitt}|${code}` - Grundbesetzung schon vergeben
+  const grundbesetztAnzahl = new Map<string, number>() // `${datum}|${abschnitt}|${code}` - wie oft die Grundbesetzung schon vergeben ist (siehe MINDESTBESETZUNG, z. B. 2x JD)
   const personEintraege = new Map<string, DienstFuerRuhezeitpruefung[]>()
   const grundZaehler = new Map<string, number>()
 
@@ -58,7 +58,8 @@ export function generiereGrundbesetzungsVorschlag(parameter: VorschlagParameter)
     personEintraege.set(zeile.beamterId, liste)
     const grund = grundbesetzungCode(zeile.code)
     if (grund) {
-      grundbesetztSlot.add(`${zeile.datum}|${abschnitt}|${grund}`)
+      const key = `${zeile.datum}|${abschnitt}|${grund}`
+      grundbesetztAnzahl.set(key, (grundbesetztAnzahl.get(key) ?? 0) + 1)
       grundZaehler.set(zeile.beamterId, (grundZaehler.get(zeile.beamterId) ?? 0) + 1)
     }
   }
@@ -77,30 +78,33 @@ export function generiereGrundbesetzungsVorschlag(parameter: VorschlagParameter)
       const bisZeit = abschnitt === 'tag' ? '19:00' : null
 
       for (const code of GRUNDBESETZUNG_CODES) {
-        if (grundbesetztSlot.has(`${datum}|${abschnitt}|${code}`)) continue
+        const key = `${datum}|${abschnitt}|${code}`
+        const erforderlich = MINDESTBESETZUNG[code]
 
-        const verfuegbar = (ohneWunschkonflikt: boolean) => mitarbeiter.filter(person => {
-          if (besetzterSlot.has(`${person.id}|${datum}|${abschnitt}`)) return false
-          if (abwesenderTag.has(`${person.id}|${datum}`)) return false
-          if (ohneWunschkonflikt && widerspruchsWunsch.has(`${person.id}|${datum}|${abschnitt}`)) return false
-          const kandidat: DienstFuerRuhezeitpruefung = { beamterId: person.id, datum, vonZeit, bisZeit, kategorie: 'dienst' }
-          return !wuerdeRuhezeitVerletzen(personEintraege.get(person.id) ?? [], kandidat, mindestruhezeitStunden)
-        })
+        while ((grundbesetztAnzahl.get(key) ?? 0) < erforderlich) {
+          const verfuegbar = (ohneWunschkonflikt: boolean) => mitarbeiter.filter(person => {
+            if (besetzterSlot.has(`${person.id}|${datum}|${abschnitt}`)) return false
+            if (abwesenderTag.has(`${person.id}|${datum}`)) return false
+            if (ohneWunschkonflikt && widerspruchsWunsch.has(`${person.id}|${datum}|${abschnitt}`)) return false
+            const kandidat: DienstFuerRuhezeitpruefung = { beamterId: person.id, datum, vonZeit, bisZeit, kategorie: 'dienst' }
+            return !wuerdeRuhezeitVerletzen(personEintraege.get(person.id) ?? [], kandidat, mindestruhezeitStunden)
+          })
 
-        const kandidaten = verfuegbar(true).length > 0 ? verfuegbar(true) : verfuegbar(false)
-        if (kandidaten.length === 0) continue
+          const kandidaten = verfuegbar(true).length > 0 ? verfuegbar(true) : verfuegbar(false)
+          if (kandidaten.length === 0) break
 
-        kandidaten.sort((a, b) => (grundZaehler.get(a.id) ?? 0) - (grundZaehler.get(b.id) ?? 0) || a.name.localeCompare(b.name, 'de-AT'))
-        const gewaehlt = kandidaten[0]
+          kandidaten.sort((a, b) => (grundZaehler.get(a.id) ?? 0) - (grundZaehler.get(b.id) ?? 0) || a.name.localeCompare(b.name, 'de-AT'))
+          const gewaehlt = kandidaten[0]
 
-        ergebnis.push({ beamterId: gewaehlt.id, datum, code, abschnitt, vonZeit, bisZeit })
+          ergebnis.push({ beamterId: gewaehlt.id, datum, code, abschnitt, vonZeit, bisZeit })
 
-        besetzterSlot.add(`${gewaehlt.id}|${datum}|${abschnitt}`)
-        grundbesetztSlot.add(`${datum}|${abschnitt}|${code}`)
-        grundZaehler.set(gewaehlt.id, (grundZaehler.get(gewaehlt.id) ?? 0) + 1)
-        const liste = personEintraege.get(gewaehlt.id) ?? []
-        liste.push({ beamterId: gewaehlt.id, datum, vonZeit, bisZeit, kategorie: 'dienst' })
-        personEintraege.set(gewaehlt.id, liste)
+          besetzterSlot.add(`${gewaehlt.id}|${datum}|${abschnitt}`)
+          grundbesetztAnzahl.set(key, (grundbesetztAnzahl.get(key) ?? 0) + 1)
+          grundZaehler.set(gewaehlt.id, (grundZaehler.get(gewaehlt.id) ?? 0) + 1)
+          const liste = personEintraege.get(gewaehlt.id) ?? []
+          liste.push({ beamterId: gewaehlt.id, datum, vonZeit, bisZeit, kategorie: 'dienst' })
+          personEintraege.set(gewaehlt.id, liste)
+        }
       }
     }
   }

@@ -2,7 +2,7 @@
 // Anzeige) und Planer-Grid (Dienstplan-Planung, Phase 3) - beide müssen
 // dieselbe Vorstellung davon haben, wann Z/ID/JD als "besetzt" gelten.
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
-import { parseDienstCode } from './dienstplanImport'
+import { MINDESTBESETZUNG, parseDienstCode, type GrundbesetzungCode } from './dienstplanImport'
 
 /** Tagdienst 08-19 Uhr, Nachtdienst 19-08 Uhr (siehe lib/dienstplanAuswertung.ts) - hier zur Einteilung Tagdienste/Nachtdienste in Kalender und Planung. */
 export function tagOderNacht(vonZeit: string | null): 'tag' | 'nacht' {
@@ -27,25 +27,33 @@ interface DienstZeileMitCode { datum: string; rohtext: string; von_zeit: string 
 
 /**
  * Für jeden übergebenen Tag: welche Grundbesetzungs-Kürzel (Z/ID/JD) weder
- * tagsüber noch nachts besetzt sind (z. B. "Z (Nacht)"). Grundlage für die
- * Live-Warnung im Planer-Grid und die "nicht besetzt"-Kacheln im
+ * tagsüber noch nachts ihre Mindestbesetzung (siehe MINDESTBESETZUNG - 1x
+ * Zentrale, 1x Innendienst, 2x Journaldienst) erreichen (z. B. "Z (Nacht)"
+ * bzw. bei Codes mit Mindestbesetzung > 1 "JD 1/2 (Tag)"). Grundlage für
+ * die Live-Warnung im Planer-Grid und die "nicht besetzt"-Kacheln im
  * Dienststellenkalender.
  */
 export function fehlendeGrundbesetzung(dienste: readonly DienstZeileMitCode[], tage: readonly string[]): Map<string, string[]> {
-  const besetzt = new Set<string>()
+  const besetztAnzahl = new Map<string, number>()
   for (const zeile of dienste) {
     if (zeile.kategorie !== 'dienst') continue
     const { code } = parseDienstCode(zeile.rohtext)
     const schluessel = code.toUpperCase()
     if (!KACHEL_IMMER_SICHTBAR.includes(schluessel)) continue
-    besetzt.add(`${zeile.datum}|${tagOderNacht(zeile.von_zeit)}|${schluessel}`)
+    const key = `${zeile.datum}|${tagOderNacht(zeile.von_zeit)}|${schluessel}`
+    besetztAnzahl.set(key, (besetztAnzahl.get(key) ?? 0) + 1)
   }
   const ergebnis = new Map<string, string[]>()
   for (const datum of tage) {
     const fehlend: string[] = []
     for (const abschnitt of ['tag', 'nacht'] as const) {
       for (const code of KACHEL_IMMER_SICHTBAR) {
-        if (!besetzt.has(`${datum}|${abschnitt}|${code}`)) fehlend.push(`${code} (${abschnitt === 'tag' ? 'Tag' : 'Nacht'})`)
+        const erforderlich = MINDESTBESETZUNG[code as GrundbesetzungCode] ?? 1
+        const vorhanden = besetztAnzahl.get(`${datum}|${abschnitt}|${code}`) ?? 0
+        if (vorhanden < erforderlich) {
+          const mengenHinweis = erforderlich > 1 ? ` ${vorhanden}/${erforderlich}` : ''
+          fehlend.push(`${code}${mengenHinweis} (${abschnitt === 'tag' ? 'Tag' : 'Nacht'})`)
+        }
       }
     }
     if (fehlend.length > 0) ergebnis.set(datum, fehlend)
