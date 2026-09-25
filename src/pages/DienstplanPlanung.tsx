@@ -10,7 +10,7 @@ import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
-import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, sortiereNachDienstplanGruppe, type DienstplanGruppe } from '../lib/dienstplanRoster'
+import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, kurznamen, sortiereNachDienstplanGruppe, type DienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planer-Grid für die Dienstplan-Planung im Portal (siehe
@@ -188,6 +188,8 @@ export default function DienstplanPlanung() {
     return spans
   }, [mitarbeiter])
 
+  const kurznamenMap = useMemo(() => kurznamen(mitarbeiter), [mitarbeiter])
+
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
   const ruheVerletzt = useMemo(
     () => ruhezeitVerletzungen(dienste.map(zeile => ({ beamterId: zeile.beamter_id, datum: zeile.datum, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie })), mindestruhezeitStunden),
@@ -352,7 +354,7 @@ export default function DienstplanPlanung() {
                 {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
               </tr>
               <tr>
-                {mitarbeiter.map(person => <th key={person.id} className="min-w-16 border-b border-gray-200 px-1 py-2 text-center font-semibold text-gray-600">{person.name}</th>)}
+                {mitarbeiter.map(person => <th key={person.id} title={person.name} className="min-w-16 border-b border-gray-200 px-1 py-2 text-center font-semibold text-gray-600">{kurznamenMap.get(person.id) ?? person.name}</th>)}
               </tr>
             </thead>
             <tbody>

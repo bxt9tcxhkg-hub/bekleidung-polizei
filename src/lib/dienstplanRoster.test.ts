@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, sortiereNachDienstplanGruppe } from './dienstplanRoster'
+import { dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, kurznamen, sortiereNachDienstplanGruppe } from './dienstplanRoster'
 
 describe('dienstplanGruppe', () => {
   it('erkennt Kommando anhand der Dienstnummer', () => {
@@ -65,5 +65,29 @@ describe('istAdminProfil', () => {
     expect(istAdminProfil([])).toBe(false)
     expect(istAdminProfil(null)).toBe(false)
     expect(istAdminProfil(undefined)).toBe(false)
+  })
+})
+
+describe('kurznamen', () => {
+  it('zeigt nur den Nachnamen, wenn er eindeutig ist', () => {
+    const personen = [
+      { id: 'a', name: 'Andreas Gisinger' },
+      { id: 'b', name: 'Bernhard Nenning' },
+    ]
+    const ergebnis = kurznamen(personen)
+    expect(ergebnis.get('a')).toBe('Gisinger')
+    expect(ergebnis.get('b')).toBe('Nenning')
+  })
+
+  it('ergänzt bei Namensgleichheit den Anfangsbuchstaben des Vornamens', () => {
+    const personen = [
+      { id: 'a', name: 'Hans-Peter Schwendinger' },
+      { id: 'b', name: 'Dietmar Schwendinger' },
+      { id: 'c', name: 'Andreas Gisinger' },
+    ]
+    const ergebnis = kurznamen(personen)
+    expect(ergebnis.get('a')).toBe('Schwendinger H.')
+    expect(ergebnis.get('b')).toBe('Schwendinger D.')
+    expect(ergebnis.get('c')).toBe('Gisinger')
   })
 })

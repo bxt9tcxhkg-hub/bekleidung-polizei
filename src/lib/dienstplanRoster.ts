@@ -48,3 +48,33 @@ export function sortiereNachDienstplanGruppe<T extends { name: string; dienstnum
 export function istAdminProfil(roles: readonly string[] | null | undefined): boolean {
   return roles?.includes('admin') ?? false
 }
+
+/** profiles.name ist "Vorname Nachname" (z. B. "Hans-Peter Schwendinger") - letztes Wort ist der Nachname. */
+function nachnameVon(name: string): string {
+  const teile = name.trim().split(/\s+/)
+  return teile[teile.length - 1] ?? name
+}
+
+function vornameInitialVon(name: string): string {
+  const teile = name.trim().split(/\s+/)
+  return teile[0]?.charAt(0).toUpperCase() ?? ''
+}
+
+/**
+ * Kurzname fürs Planer-Grid: nur Nachname - bei Namensgleichheit
+ * (z. B. zwei Schwendinger) ergänzt um den Anfangsbuchstaben des Vornamens.
+ */
+export function kurznamen<T extends { id: string; name: string }>(personen: readonly T[]): Map<string, string> {
+  const nachnameAnzahl = new Map<string, number>()
+  for (const person of personen) {
+    const nachname = nachnameVon(person.name)
+    nachnameAnzahl.set(nachname, (nachnameAnzahl.get(nachname) ?? 0) + 1)
+  }
+  const ergebnis = new Map<string, string>()
+  for (const person of personen) {
+    const nachname = nachnameVon(person.name)
+    const eindeutig = (nachnameAnzahl.get(nachname) ?? 0) <= 1
+    ergebnis.set(person.id, eindeutig ? nachname : `${nachname} ${vornameInitialVon(person.name)}.`)
+  }
+  return ergebnis
+}
