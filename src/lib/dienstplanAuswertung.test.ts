@@ -38,37 +38,30 @@ describe('persoenlicheStundenUebersicht', () => {
       zeile({ datum: '2026-02-03', kategorie: 'krank', von_zeit: null, bis_zeit: null }),
       zeile({ datum: '2026-02-04', kategorie: 'urlaub', von_zeit: null, bis_zeit: null }),
     ])
-    expect(ergebnis.stunden.std_werktag_50).toBe(11) // 08-19 Uhr
-    expect(ergebnis.gesamt).toBe(11)
+    expect(ergebnis).toEqual({ gesamt: 11, sonnFeiertag: 0, tag: 11, nacht: 0 })
   })
 
-  it('ein Dienst ohne Uhrzeit zählt als Nachtdienst 19:00-08:00 Uhr (13 Std.)', () => {
+  it('ein Dienst ohne Uhrzeit zählt als Nachtdienst 19:00-08:00 Uhr (13 Std., davon 2 Std. Tag nach 06:00)', () => {
     // Montag 2.2.2026, Nachtdienst ohne Uhrzeit in der Zelle.
     const ergebnis = persoenlicheStundenUebersicht([zeile({ datum: '2026-02-02', von_zeit: null, bis_zeit: null })])
-    expect(ergebnis.gesamt).toBe(13)
+    expect(ergebnis).toEqual({ gesamt: 13, sonnFeiertag: 0, tag: 2, nacht: 11 })
   })
 
-  it('kategorisiert einen Sonntagsdienst korrekt (100%/200%-Schwelle)', () => {
+  it('ein Sonntagsdienst zählt komplett zu Sonn-/Feiertagsstunden, unabhängig von der Uhrzeit', () => {
     // Sonntag 1.2.2026.
     const ergebnis = persoenlicheStundenUebersicht([zeile({ datum: '2026-02-01', von_zeit: '08:00', bis_zeit: '19:00' })])
-    expect(ergebnis.stunden.std_sonn_100).toBe(8)
-    expect(ergebnis.stunden.std_sonn_200).toBe(3)
-    expect(ergebnis.gesamt).toBe(11)
+    expect(ergebnis).toEqual({ gesamt: 11, sonnFeiertag: 11, tag: 11, nacht: 0 })
   })
 
-  it('summiert mehrere Dienste über den Monat hinweg', () => {
+  it('summiert mehrere Dienste über den Monat hinweg (Tag- und Nachtstunden getrennt)', () => {
     const ergebnis = persoenlicheStundenUebersicht([
-      zeile({ datum: '2026-02-02', von_zeit: '08:00', bis_zeit: '19:00' }), // 11 Std Werktag
+      zeile({ datum: '2026-02-02', von_zeit: '08:00', bis_zeit: '19:00' }), // 11 Std Tag
       zeile({ datum: '2026-02-05', von_zeit: '22:00', bis_zeit: '06:00' }), // 8 Std Nacht (22-06)
     ])
-    expect(ergebnis.stunden.std_werktag_50).toBe(11)
-    expect(ergebnis.stunden.std_22_06).toBe(8)
-    expect(ergebnis.gesamt).toBe(19)
+    expect(ergebnis).toEqual({ gesamt: 19, sonnFeiertag: 0, tag: 11, nacht: 8 })
   })
 
   it('leere Liste ergibt lauter Nullen', () => {
-    const ergebnis = persoenlicheStundenUebersicht([])
-    expect(ergebnis.gesamt).toBe(0)
-    expect(ergebnis.stunden).toEqual({ std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 })
+    expect(persoenlicheStundenUebersicht([])).toEqual({ gesamt: 0, sonnFeiertag: 0, tag: 0, nacht: 0 })
   })
 })

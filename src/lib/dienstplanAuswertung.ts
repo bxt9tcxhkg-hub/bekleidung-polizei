@@ -4,15 +4,22 @@
  * Kategorie "dienst" aus (krank/Urlaub/Sonderurlaub/Karenz haben keine
  * Dauer). Fehlt bei einem Dienst die Uhrzeit, ist das laut Kommandant ein
  * Nachtdienst und zählt mit dem Standardzeitraum 19:00-08:00 Uhr (siehe
- * dienstZeitraumMitNachtdienstDefault). Nutzt dieselbe Zeitfenster-Kategorisierung wie
- * die Überstundenmeldung (lib/ueberstunden.ts::berechneAufschluesselung),
- * daher dieselben fünf Kategorien (Werktag/19-22/22-06/Sonn 100%/Sonn 200%) -
- * das ist eine reine "wann fiel die Stunde an"-Auswertung des GEPLANTEN
- * Dienstplans, unabhängig davon, ob einzelne Stunden davon später auch als
- * Überstunde gemeldet/genehmigt werden (das bleibt der eigenständige
- * Melde-/Genehmigungsworkflow in Ueberstunden.tsx).
+ * dienstZeitraumMitNachtdienstDefault).
+ *
+ * BEWUSST KEINE Lohnart-/Überstunden-Kategorisierung (das 50%/100%/200%-
+ * Schema aus lib/ueberstunden.ts ist für die Überstundenmeldung gedacht, wo
+ * jede erfasste Stunde per Definition bereits eine gemeldete Überstunde
+ * ist) - hier fließt der GESAMTE geplante Dienst aus dem Dienstplan ein,
+ * das als "Überstunden an Werktagen" o. Ä. zu labeln wäre irreführend
+ * (macht normale Diensstunden fälschlich zu Überstunden). Stattdessen nur
+ * eine rein informative Aufschlüsselung: Gesamt, Sonn-/Feiertagsstunden
+ * (ganzer Kalendertag zählt, wie bei berechneAufschluesselung) sowie
+ * Tag-/Nachtstunden (06-19 Uhr bzw. 19-06 Uhr, unabhängig vom Sonn-Status -
+ * eine Sonntags-Tagesstunde zählt also sowohl zu Sonn-/Feiertag als auch zu
+ * Tag). Echte Überstunden bleiben allein Sache des eigenständigen Melde-/
+ * Genehmigungsworkflows in Ueberstunden.tsx.
  */
-import { berechneAufschluesselung, KATEGORIEN, type UeberstundenKategorieKey } from './ueberstunden'
+import { isSonnOderFeiertag } from './austrianHolidays'
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
 
 export interface DienstplanDienstZeile {
@@ -45,22 +52,55 @@ export function dienstZeitraumMitNachtdienstDefault(zeile: Pick<DienstplanDienst
   return dienstZeitraum({ datum: zeile.datum, von_zeit: NACHTDIENST_VON, bis_zeit: NACHTDIENST_BIS })
 }
 
-const LEER: Record<UeberstundenKategorieKey, number> = { std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 }
+/**
+ * Zerlegt [von, bis) tageweise (wie berechneAufschluesselung in
+ * lib/ueberstunden.ts) und liefert je Abschnitt die Tagesstunden sowie den
+ * Anteil davon, der auf 06:00-19:00 Uhr fällt (Rest = Nachtstunden) und ob
+ * der Kalendertag ein Sonn-/Feiertag ist.
+ */
+function tagesAbschnitte(von: Date, bis: Date): { tagStunden: number; nachtStunden: number; istSonnFeiertag: boolean; dauer: number }[] {
+  const ergebnis: { tagStunden: number; nachtStunden: number; istSonnFeiertag: boolean; dauer: number }[] = []
+  let cursor = new Date(von)
+  while (cursor < bis) {
+    const tagesbeginn = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate())
+    const naechsterTag = new Date(tagesbeginn.getFullYear(), tagesbeginn.getMonth(), tagesbeginn.getDate() + 1)
+    const abschnittsende = bis < naechsterTag ? bis : naechsterTag
+    const dauer = (abschnittsende.getTime() - cursor.getTime()) / 3_600_000
 
-export interface PersoenlicheStundenUebersicht {
-  stunden: Record<UeberstundenKategorieKey, number>
-  gesamt: number
+    const sechsUhr = new Date(tagesbeginn.getTime() + 6 * 3_600_000)
+    const neunzehnUhr = new Date(tagesbeginn.getTime() + 19 * 3_600_000)
+    const tagUeberlappStart = cursor > sechsUhr ? cursor : sechsUhr
+    const tagUeberlappEnde = abschnittsende < neunzehnUhr ? abschnittsende : neunzehnUhr
+    const tagStunden = Math.max(0, (tagUeberlappEnde.getTime() - tagUeberlappStart.getTime()) / 3_600_000)
+
+    ergebnis.push({ tagStunden, nachtStunden: dauer - tagStunden, istSonnFeiertag: isSonnOderFeiertag(tagesbeginn), dauer })
+    cursor = abschnittsende
+  }
+  return ergebnis
 }
 
+export interface PersoenlicheStundenUebersicht {
+  gesamt: number
+  sonnFeiertag: number
+  tag: number
+  nacht: number
+}
+
+/** Rundet auf Viertelstunden - wie bei der Lohnverrechnung üblich (siehe lib/ueberstunden.ts). */
+function rundeViertelstunde(wert: number): number { return Math.round(wert * 4) / 4 }
+
 export function persoenlicheStundenUebersicht(dienste: readonly DienstplanDienstZeile[]): PersoenlicheStundenUebersicht {
-  const stunden: Record<UeberstundenKategorieKey, number> = { ...LEER }
+  let gesamt = 0, sonnFeiertag = 0, tag = 0, nacht = 0
   for (const zeile of dienste) {
     if (zeile.kategorie !== 'dienst') continue
     const zeitraum = dienstZeitraumMitNachtdienstDefault(zeile)
     if (!zeitraum) continue
-    const aufschluesselung = berechneAufschluesselung(zeitraum.von, zeitraum.bis)
-    for (const kat of KATEGORIEN) stunden[kat.key] += aufschluesselung[kat.key]
+    for (const abschnitt of tagesAbschnitte(zeitraum.von, zeitraum.bis)) {
+      gesamt += abschnitt.dauer
+      tag += abschnitt.tagStunden
+      nacht += abschnitt.nachtStunden
+      if (abschnitt.istSonnFeiertag) sonnFeiertag += abschnitt.dauer
+    }
   }
-  const gesamt = KATEGORIEN.reduce((summe, kat) => summe + stunden[kat.key], 0)
-  return { stunden, gesamt }
+  return { gesamt: rundeViertelstunde(gesamt), sonnFeiertag: rundeViertelstunde(sonnFeiertag), tag: rundeViertelstunde(tag), nacht: rundeViertelstunde(nacht) }
 }
