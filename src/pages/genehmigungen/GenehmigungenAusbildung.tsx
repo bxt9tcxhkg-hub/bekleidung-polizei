@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { GraduationCap } from 'lucide-react'
+import { GraduationCap, Target } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type {
   EinsatzTrainingAssignment,
@@ -23,11 +23,11 @@ type SchulungAssignmentWithOfficer = SchulungAssignment & { officer?: ProfileMin
 // sich). Gemeinsam behandelt, um die Sektionen nicht zu duplizieren.
 type AssignmentKind = 'training' | 'schulung'
 
-// Bereichsseite "Ausbildung" (Trainings-/Schulungs-Zuteilungsvorschläge) -
-// eine der vier gleich behandelten Genehmigungen-Bereichsseiten (siehe
-// GenehmigungenUebersicht.tsx). Inhaltlich unverändert gegenüber der
-// vormaligen Ausbildung-Sektion in Approvals.tsx, nur auf eine eigene Seite
-// ausgelagert.
+// Bereichsseite "Ausbildung" - eine der vier gleich behandelten Genehmigungen-
+// Bereichsseiten (siehe GenehmigungenUebersicht.tsx). Bündelt bewusst zwei
+// fachlich getrennte Systeme (Einsatztraining und Schulungen - je eigene
+// Module/Termine/Tabellen) auf einer Seite, aber klar als zwei Gruppen mit
+// eigenem Titel/Icon dargestellt statt als eine gemeinsame Liste.
 export default function GenehmigungenAusbildung() {
   const [trainingModules, setTrainingModules] = useState<EinsatzTrainingModule[]>([])
   const [trainingSessions, setTrainingSessions] = useState<EinsatzTrainingSession[]>([])
@@ -176,10 +176,15 @@ export default function GenehmigungenAusbildung() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <div className="space-y-8">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Trainings-Zuteilungsvorschläge</h2>
+          {/* Einsatztraining und Schulungen bleiben bewusst auf einer Seite (bei zwei
+              Vorschlägen je Zuteilung reicht das aus), aber klar als zwei getrennte
+              Gruppen mit eigenem Titel und Icon - dieselben Icons wie im Einsatz-/
+              Schulungen-Bereich selbst (Target/GraduationCap), damit "Modul" nicht
+              wie eine einzige gemeinsame Liste wirkt. */}
+          <div className="space-y-3">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><Target className="w-4 h-4 text-blue-700" /> Einsatztraining</h2>
             {trainingAssignments.length === 0 ? (
-              <Empty icon={GraduationCap} title="Keine offenen Trainingsvorschläge" />
+              <Empty icon={Target} title="Keine offenen Trainingsvorschläge" />
             ) : (
               <Table
                 head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
@@ -193,8 +198,8 @@ export default function GenehmigungenAusbildung() {
             )}
           </div>
 
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><GraduationCap className="w-4 h-4" /> Schulungs-Zuteilungsvorschläge</h2>
+          <div className="border-t border-gray-200 pt-8 space-y-3">
+            <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><GraduationCap className="w-4 h-4 text-blue-700" /> Schulungen</h2>
             {schulungAssignments.length === 0 ? (
               <Empty icon={GraduationCap} title="Keine offenen Schulungsvorschläge" />
             ) : (
