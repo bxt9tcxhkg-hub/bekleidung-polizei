@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanPersonEinstellungenRow, type DienstplanRegelRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
-import { berechneSollstunden, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
+import { berechneSollstunden, naechsterPlanbarerMonat, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { monatsKontingent } from '../lib/dienstplanWunsch'
 import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
@@ -30,6 +30,7 @@ export default function DienstplanEinstellungen() {
   const [regeln, setRegeln] = useState<DienstplanRegelRow | null>(null)
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
   const [einstellungen, setEinstellungen] = useState<Map<string, number>>(new Map())
+  const [vorhandeneMonate, setVorhandeneMonate] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -43,12 +44,13 @@ export default function DienstplanEinstellungen() {
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
-    const [regelnResult, mitarbeiterResult, einstellungenResult] = await Promise.all([
+    const [regelnResult, mitarbeiterResult, einstellungenResult, monateResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('id,stunden_pro_werktag,mindestruhezeit_stunden,wunschfrist_tage,updated_by,updated_at').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
+      dienstplanSupabase.from('dienstplan_monate').select('monat'),
     ])
-    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monateResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) {
       setRegeln(regelnResult.data)
       setRegelForm({ stundenProWerktag: String(regelnResult.data.stunden_pro_werktag), mindestruhezeitStunden: String(regelnResult.data.mindestruhezeit_stunden), wunschfristTage: String(regelnResult.data.wunschfrist_tage) })
@@ -56,6 +58,7 @@ export default function DienstplanEinstellungen() {
     const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
     setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setEinstellungen(new Map((einstellungenResult.data as PersonEinstellungRow[] ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
+    setVorhandeneMonate((monateResult.data ?? []).map(row => row.monat))
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
@@ -90,7 +93,7 @@ export default function DienstplanEinstellungen() {
     await load()
   }
 
-  const aktuellerMonat = thisMonthLocal()
+  const aktuellerMonat = useMemo(() => naechsterPlanbarerMonat(vorhandeneMonate, thisMonthLocal()), [vorhandeneMonate])
   const stundenProWerktagVorschau = useMemo(() => Number(regelForm.stundenProWerktag.replace(',', '.')) || regeln?.stunden_pro_werktag || 0, [regelForm.stundenProWerktag, regeln])
 
   return <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
