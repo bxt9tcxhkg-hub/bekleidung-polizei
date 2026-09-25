@@ -3,17 +3,19 @@ import { CalendarDays } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
 import { inputClass } from '../components/ZentraleEntryEditor'
-import { KATEGORIEN, formatStunden, thisMonthLocal } from '../lib/ueberstunden'
+import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
 import { kuerzelKlartext, parseDienstCode } from '../lib/dienstplanImport'
 
 // "Meine Dienste": eigene Diensteinträge des importierten Dienstplans für
 // einen gewählten Monat, plus eine automatisch aus den Uhrzeiten berechnete
-// Stunden-Übersicht (siehe lib/dienstplanAuswertung.ts - dieselbe Zeitfenster-
-// Kategorisierung wie bei der Überstundenmeldung). Rein informativ: eine
-// Stunde, die hier als Sonn-/Nachtstunde auftaucht, ist damit noch keine
-// genehmigte Überstunde - das bleibt der eigenständige Melde-/Genehmigungs-
-// workflow in Ueberstunden.tsx.
+// Stunden-Übersicht (siehe lib/dienstplanAuswertung.ts). Bewusst KEINE
+// Lohnart-/Überstunden-Kategorisierung - das würde normale, geplante
+// Diensstunden mit tatsächlich gemeldeten Überstunden vermischen (zwei
+// unterschiedliche Dinge: Dienstplan = Soll-Diensteinteilung, Überstunden-
+// meldung = eigenständig gemeldete UND genehmigte Mehrarbeit). Stattdessen
+// nur Gesamt-/Sollstunden sowie Sonn-/Feiertags- und Tag-/Nachtstunden als
+// reine Information.
 
 interface DienstZeile { datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
 
@@ -33,6 +35,7 @@ export default function MeineDienste() {
   const profileId = profile?.id
   const [monat, setMonat] = useState(thisMonthLocal())
   const [monatVeroeffentlicht, setMonatVeroeffentlicht] = useState<boolean | null>(null)
+  const [sollstunden, setSollstunden] = useState<number | null>(null)
   const [dienste, setDienste] = useState<DienstZeile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -40,13 +43,14 @@ export default function MeineDienste() {
   const load = useCallback(async () => {
     if (!profileId) return
     setLoading(true); setError('')
-    const monatResult = await dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle()
+    const monatResult = await dienstplanSupabase.from('dienstplan_monate').select('id,status,sollstunden').eq('monat', `${monat}-01`).maybeSingle()
     if (monatResult.error) { setError('Die eigenen Dienste konnten nicht geladen werden.'); setLoading(false); return }
     const monatRow = monatResult.data
     if (!monatRow || monatRow.status !== 'veroeffentlicht') {
-      setMonatVeroeffentlicht(false); setDienste([]); setLoading(false); return
+      setMonatVeroeffentlicht(false); setDienste([]); setSollstunden(null); setLoading(false); return
     }
     setMonatVeroeffentlicht(true)
+    setSollstunden(monatRow.sollstunden)
     const dienstResult = await dienstplanSupabase.from('dienstplan_dienste').select('datum,zeile,rohtext,von_zeit,bis_zeit,kategorie').eq('dienstplan_monat_id', monatRow.id).eq('beamter_id', profileId).order('datum').order('zeile')
     if (dienstResult.error) { setError('Die eigenen Dienste konnten nicht geladen werden.'); setLoading(false); return }
     setDienste(dienstResult.data ?? [])
@@ -78,19 +82,26 @@ export default function MeineDienste() {
       : monatVeroeffentlicht === false ? <div className="mt-8 rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CalendarDays className="mx-auto mb-2 h-8 w-8 text-gray-300" /><p className="text-sm text-gray-500">Für diesen Monat wurde noch kein Dienstplan veröffentlicht.</p></div>
       : <div className="mt-6 space-y-6">
         <section className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 font-semibold text-gray-900">Geleistete Stunden nach Lohnart</h2>
-          <div className="overflow-hidden rounded-lg border border-gray-200">
-            <table className="w-full text-sm">
-              <tbody>
-                {KATEGORIEN.map(kat => <tr key={kat.key} className="border-b border-gray-100 last:border-0">
-                  <td className="px-3 py-2 align-top"><p className="font-medium text-gray-800">{kat.label}</p><p className="mt-0.5 text-xs text-gray-400">{kat.hinweis} · {kat.satz} · {kat.code}</p></td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right align-top font-semibold tabular-nums text-gray-900">{formatStunden(uebersicht.stunden[kat.key])} Std.</td>
-                </tr>)}
-                <tr className="bg-gray-50"><td className="px-3 py-2 font-bold text-gray-900">Gesamt</td><td className="whitespace-nowrap px-3 py-2 text-right font-bold tabular-nums text-gray-900">{formatStunden(uebersicht.gesamt)} Std.</td></tr>
-              </tbody>
-            </table>
+          <h2 className="mb-3 font-semibold text-gray-900">Geleistete Stunden</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Gesamtstunden</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-gray-900">{formatStunden(uebersicht.gesamt)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Sollstunden</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-gray-900">{sollstunden !== null ? formatStunden(sollstunden) : '–'}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Sonn-/Feiertagsstunden</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-gray-900">{formatStunden(uebersicht.sonnFeiertag)}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Tag- / Nachtstunden</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-gray-900">{formatStunden(uebersicht.tag)} / {formatStunden(uebersicht.nacht)}</p>
+            </div>
           </div>
-          <p className="mt-2 text-xs text-gray-400">Automatisch aus den Uhrzeiten der Diensteinträge berechnet (österreichische Feiertage berücksichtigt) - kein Ersatz für die Überstundenmeldung, die weiterhin eigenständig eingereicht und genehmigt wird.</p>
+          <p className="mt-3 text-xs text-gray-400">Automatisch aus den Uhrzeiten der Diensteinträge berechnet (Tag = 06-19 Uhr, Nacht = 19-06 Uhr; ein Sonntagsdienst zählt ganztägig zu Sonn-/Feiertagsstunden, unabhängig von der Uhrzeit). Das sind die geplanten Diensstunden laut Dienstplan, keine Überstunden - für gemeldete/genehmigte Überstunden siehe Überstundenmeldung.</p>
         </section>
 
         <section>

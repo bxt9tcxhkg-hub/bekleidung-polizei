@@ -292,3 +292,47 @@ export function baueDienstePayload(ergebnis: DienstplanParseErgebnis, zuordnunge
       rohtext: eintrag.rohtext, von_zeit: eintrag.vonZeit ?? '', bis_zeit: eintrag.bisZeit ?? '', kategorie: eintrag.kategorie,
     }))
 }
+
+/**
+ * Die Sollstunden des Monats stehen NICHT im Zellenraster, sondern in einer
+ * frei platzierten Textbox der Vorlage ("Monat : Februar" / "Jahr 2026" /
+ * "Sollstunden: 171" als drei aufeinanderfolgende Textzeilen) - siehe Analyse
+ * der echten Datei (xl/drawings/drawingN.xml, <a:t>-Textläufe). Die Vorlage
+ * enthält dabei oft mehrere solcher Blöcke (alte, stehengelassene Monate als
+ * Kopiervorlage plus der tatsächlich aktuelle) - bei mehreren Treffern für
+ * denselben Monat zählt der zuletzt im Dokument stehende (siehe
+ * sollstundenFuerMonat), das war in der Praxis immer der echte.
+ */
+const MONATSNAMEN = ['januar', 'februar', 'märz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember']
+
+function monatsnameZuNummer(name: string): number | null {
+  const normalisiert = name.trim().toLowerCase() === 'jänner' ? 'januar' : name.trim().toLowerCase()
+  const index = MONATSNAMEN.indexOf(normalisiert)
+  return index === -1 ? null : index + 1
+}
+
+export interface SollstundenEintrag { monat: string; sollstunden: number }
+
+/** Extrahiert alle "Monat : X" / "Jahr Y" / "Sollstunden: Z"-Dreiergruppen aus den <a:t>-Textläufen einer Drawing-XML-Datei (in Dokumentreihenfolge). */
+export function extrahiereSollstundenEintraege(drawingXml: string): SollstundenEintrag[] {
+  const texte = Array.from(drawingXml.matchAll(/<a:t>([^<]*)<\/a:t>/g)).map(m => m[1])
+  const ergebnisse: SollstundenEintrag[] = []
+  for (let i = 0; i < texte.length; i++) {
+    const monatMatch = texte[i].match(/^\s*Monat\s*:\s*(\S+)\s*$/i)
+    if (!monatMatch) continue
+    const monatNr = monatsnameZuNummer(monatMatch[1])
+    if (!monatNr) continue
+    const jahrMatch = texte[i + 1]?.match(/^\s*Jahr\s*(\d{4})\s*$/i)
+    if (!jahrMatch) continue
+    const sollMatch = texte[i + 2]?.match(/Sollstunden\s*:\s*(\d+)/i)
+    if (!sollMatch) continue
+    ergebnisse.push({ monat: `${jahrMatch[1]}-${String(monatNr).padStart(2, '0')}`, sollstunden: Number(sollMatch[1]) })
+  }
+  return ergebnisse
+}
+
+/** Sollstunden für einen bestimmten Monat (YYYY-MM) aus mehreren extrahierten Einträgen - bei Dubletten zählt der zuletzt gefundene (siehe extrahiereSollstundenEintraege). */
+export function sollstundenFuerMonat(eintraege: readonly SollstundenEintrag[], monat: string): number | null {
+  const treffer = eintraege.filter(eintrag => eintrag.monat === monat)
+  return treffer.length ? treffer[treffer.length - 1].sollstunden : null
+}

@@ -38,6 +38,8 @@ export type DienstplanMonatRow = {
   hochgeladen_at: string
   veroeffentlicht_von: string | null
   veroeffentlicht_at: string | null
+  /** Aus einer Textbox der Vorlage extrahiert (siehe lib/dienstplanImport.ts::extrahiereSollstundenEintraege), nicht aus dem Zellenraster - kann fehlen. */
+  sollstunden: number | null
 }
 
 export type DienstplanDienstRow = {

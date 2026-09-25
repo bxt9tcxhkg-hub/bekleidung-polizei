@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
 
 describe('parseDienstCode', () => {
   it('trennt Code und Uhrzeit bei einem einfachen Dienst', () => {
@@ -183,5 +183,42 @@ describe('automatischeSpaltenZuordnung', () => {
 
   it('kein Treffer bei unbekanntem Namen', () => {
     expect(automatischeSpaltenZuordnung('Unbekannt', profile)).toBeNull()
+  })
+})
+
+// Nachbildung von xl/drawings/drawingN.xml (siehe Analyse der echten Datei
+// Februar 2026): mehrere alte, stehengelassene "Jänner 2024"-Blöcke als
+// Kopiervorlage, danach der tatsächlich aktuelle Block.
+function beispielDrawingXml(): string {
+  const alterBlock = '<a:t>D I E N S T P L A N </a:t><a:t>Monat : Jänner</a:t><a:t>Jahr 2024</a:t><a:t>Sollstunden:  191</a:t>'
+  const aktuellerBlock = '<a:t>D I E N S T P L A N </a:t><a:t>Monat : Februar</a:t><a:t>Jahr 2026</a:t><a:t>Sollstunden: 171</a:t>'
+  return `<xdr:wsDr>${alterBlock}${alterBlock}${aktuellerBlock}</xdr:wsDr>`
+}
+
+describe('extrahiereSollstundenEintraege', () => {
+  it('findet alle Monat/Jahr/Sollstunden-Dreiergruppen', () => {
+    const eintraege = extrahiereSollstundenEintraege(beispielDrawingXml())
+    expect(eintraege).toEqual([
+      { monat: '2024-01', sollstunden: 191 },
+      { monat: '2024-01', sollstunden: 191 },
+      { monat: '2026-02', sollstunden: 171 },
+    ])
+  })
+  it('kennt "Jänner" als österreichische Schreibweise für Januar', () => {
+    expect(extrahiereSollstundenEintraege('<a:t>Monat : Jänner</a:t><a:t>Jahr 2026</a:t><a:t>Sollstunden: 191</a:t>')).toEqual([{ monat: '2026-01', sollstunden: 191 }])
+  })
+  it('ohne passende Textbox-Struktur bleibt die Liste leer', () => {
+    expect(extrahiereSollstundenEintraege('<a:t>Irgendein Text</a:t>')).toEqual([])
+  })
+})
+
+describe('sollstundenFuerMonat', () => {
+  it('nimmt bei mehreren Treffern für denselben Monat den zuletzt gefundenen', () => {
+    const eintraege = extrahiereSollstundenEintraege(beispielDrawingXml())
+    expect(sollstundenFuerMonat(eintraege, '2024-01')).toBe(191)
+    expect(sollstundenFuerMonat(eintraege, '2026-02')).toBe(171)
+  })
+  it('kein Treffer für einen nicht enthaltenen Monat', () => {
+    expect(sollstundenFuerMonat(extrahiereSollstundenEintraege(beispielDrawingXml()), '2026-03')).toBeNull()
   })
 })

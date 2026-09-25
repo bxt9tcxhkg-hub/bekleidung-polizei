@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, CheckCircle2, Upload } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import * as XLSX from 'xlsx'
+import JSZip from 'jszip'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanMonatRow, type DienstplanSpalteRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
-import { automatischeSpaltenZuordnung, baueDienstePayload, istSpalteAktiv, parseDienstplanGrid, type DienstplanParseErgebnis, type DienstplanSpalte, type DienstplanSpaltenZuordnung, type DienstplanZelle } from '../lib/dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, istSpalteAktiv, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanParseErgebnis, type DienstplanSpalte, type DienstplanSpaltenZuordnung, type DienstplanZelle, type SollstundenEintrag } from '../lib/dienstplanImport'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Schritt 1-3 des Dienstplan-Imports (siehe AGENTS.md-Analyse): Datei einlesen,
@@ -24,7 +25,7 @@ import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
 type SpaltenZuordnungRow = Pick<DienstplanSpalteRow, 'spaltenname' | 'beamter_id' | 'immer_aktiv'>
-type MonatListRow = Pick<DienstplanMonatRow, 'id' | 'monat' | 'dateiname' | 'status' | 'hochgeladen_at'>
+type MonatListRow = Pick<DienstplanMonatRow, 'id' | 'monat' | 'dateiname' | 'status' | 'hochgeladen_at' | 'sollstunden'>
 
 function monatLabel(monatIso: string): string {
   const [jahr, monat] = monatIso.split('-').map(Number)
@@ -40,6 +41,7 @@ export default function SystemeinstellungenDienstplanImport() {
   const [notice, setNotice] = useState('')
 
   const [dateiname, setDateiname] = useState('')
+  const [dateiSollstunden, setDateiSollstunden] = useState<number | null>(null)
   const [ergebnis, setErgebnis] = useState<DienstplanParseErgebnis | null>(null)
   const [zuordnungen, setZuordnungen] = useState<Map<string, DienstplanSpaltenZuordnung>>(new Map())
   const [speichern, setSpeichern] = useState(false)
@@ -50,7 +52,7 @@ export default function SystemeinstellungenDienstplanImport() {
     const [mitarbeiterResult, spaltenResult, monateResult] = await Promise.all([
       supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_spalten').select('spaltenname,beamter_id,immer_aktiv'),
-      dienstplanSupabase.from('dienstplan_monate').select('id,monat,dateiname,status,hochgeladen_at').order('monat', { ascending: false }),
+      dienstplanSupabase.from('dienstplan_monate').select('id,monat,dateiname,status,hochgeladen_at,sollstunden').order('monat', { ascending: false }),
     ])
     if (mitarbeiterResult.error || spaltenResult.error || monateResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLadeGrunddaten(false); return }
     setMitarbeiter(mitarbeiterResult.data ?? [])
@@ -63,39 +65,49 @@ export default function SystemeinstellungenDienstplanImport() {
   }, [])
   useEffect(() => { void ladeGrunddatenFn() }, [ladeGrunddatenFn])
 
-  function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    setError(''); setNotice(''); setErgebnis(null)
-    const reader = new FileReader()
-    reader.onload = readEvent => {
+    setError(''); setNotice(''); setErgebnis(null); setDateiSollstunden(null)
+    try {
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null }) as DienstplanZelle[][]
+      const geparst = parseDienstplanGrid(grid)
+      if ('error' in geparst) { setError(geparst.error); return }
+      setDateiname(file.name)
+      setErgebnis(geparst)
+      // Für noch nicht gemerkte, aktive Spalten automatisch das eindeutig
+      // passende Profil vorschlagen (siehe automatischeSpaltenZuordnung) -
+      // bleibt bewusst nur ein Vorschlag: die Zuordnung ist im Formular
+      // weiterhin änderbar, bevor sie gespeichert wird.
+      setZuordnungen(current => {
+        const naechste = new Map(current)
+        for (const spalte of geparst.spalten) {
+          if (naechste.has(spalte.name) || !spalte.hatEintraege) continue
+          const treffer = automatischeSpaltenZuordnung(spalte.name, mitarbeiter)
+          if (treffer) naechste.set(spalte.name, { beamterId: treffer, immerAktiv: false })
+        }
+        return naechste
+      })
+      // Die Sollstunden stehen in einer Textbox der Vorlage, nicht im
+      // Zellenraster (siehe lib/dienstplanImport.ts::extrahiereSollstundenEintraege) -
+      // optional: schlägt die Suche fehl (z. B. andere Vorlagenvariante),
+      // bricht der Import trotzdem nicht ab, es fehlt dann nur die Sollstunden-Anzeige.
       try {
-        const workbook = XLSX.read(readEvent.target?.result, { type: 'array', cellDates: true })
-        const sheet = workbook.Sheets[workbook.SheetNames[0]]
-        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null }) as DienstplanZelle[][]
-        const geparst = parseDienstplanGrid(grid)
-        if ('error' in geparst) { setError(geparst.error); return }
-        setDateiname(file.name)
-        setErgebnis(geparst)
-        // Für noch nicht gemerkte, aktive Spalten automatisch das eindeutig
-        // passende Profil vorschlagen (siehe automatischeSpaltenZuordnung) -
-        // bleibt bewusst nur ein Vorschlag: die Zuordnung ist im Formular
-        // weiterhin änderbar, bevor sie gespeichert wird.
-        setZuordnungen(current => {
-          const naechste = new Map(current)
-          for (const spalte of geparst.spalten) {
-            if (naechste.has(spalte.name) || !spalte.hatEintraege) continue
-            const treffer = automatischeSpaltenZuordnung(spalte.name, mitarbeiter)
-            if (treffer) naechste.set(spalte.name, { beamterId: treffer, immerAktiv: false })
-          }
-          return naechste
-        })
+        const zip = await JSZip.loadAsync(buffer.slice(0))
+        const drawingDateien = Object.keys(zip.files).filter(name => /^xl\/drawings\/drawing\d+\.xml$/.test(name))
+        const alleEintraege: SollstundenEintrag[] = []
+        for (const name of drawingDateien) alleEintraege.push(...extrahiereSollstundenEintraege(await zip.files[name].async('string')))
+        setDateiSollstunden(sollstundenFuerMonat(alleEintraege, geparst.monat))
       } catch {
-        setError('Datei konnte nicht gelesen werden - ist das eine gültige Dienstplan-Excel-Datei (.xlsx/.xlsm)?')
+        setDateiSollstunden(null)
       }
+    } catch {
+      setError('Datei konnte nicht gelesen werden - ist das eine gültige Dienstplan-Excel-Datei (.xlsx/.xlsm)?')
     }
-    reader.readAsArrayBuffer(file)
   }
 
   // Dieselbe Namensspalte kann in der Vorlage mehrfach auftauchen (z. B. eine
@@ -151,8 +163,11 @@ export default function SystemeinstellungenDienstplanImport() {
 
     const dienste = baueDienstePayload(ergebnis, zuordnungen)
     const rpcResult = await dienstplanSupabase.rpc('dienstplan_monat_ersetzen', { p_monat: ergebnis.monat, p_dateiname: dateiname, p_dienste: dienste as unknown as Record<string, unknown>[] })
+    if (rpcResult.error) { setSpeichern(false); setError('Der Dienstplan konnte nicht gespeichert werden.'); return }
+    // Sollstunden separat nachtragen (Best-Effort - ein Fehler hier soll den
+    // bereits erfolgreichen Import der Diensteinträge nicht als Ganzes scheitern lassen).
+    await dienstplanSupabase.from('dienstplan_monate').update({ sollstunden: dateiSollstunden }).eq('id', rpcResult.data)
     setSpeichern(false)
-    if (rpcResult.error) { setError('Der Dienstplan konnte nicht gespeichert werden.'); return }
     logAudit('Dienstplan importiert', `${monatLabel(ergebnis.monat)} · ${dienste.length} Einträge, ${aktiveSpalten.length} Bedienstete`)
     setNotice(`${monatLabel(ergebnis.monat)} wurde importiert (${dienste.length} Einträge). Als Entwurf gespeichert - unten „Veröffentlichen", sobald die Zuordnung geprüft ist.`)
     setErgebnis(null)
@@ -180,7 +195,7 @@ export default function SystemeinstellungenDienstplanImport() {
     <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
       <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-900">
         <Upload className="h-4 w-4" /> Dienstplan-Datei wählen
-        <input type="file" accept=".xlsx,.xls,.xlsm" className="hidden" onChange={handleFile} />
+        <input type="file" accept=".xlsx,.xls,.xlsm" className="hidden" onChange={event => void handleFile(event)} />
       </label>
       {ladeGrunddaten ? <p className="mt-3 text-sm text-gray-500">Grunddaten werden geladen…</p> : null}
     </section>
@@ -188,7 +203,7 @@ export default function SystemeinstellungenDienstplanImport() {
     {ergebnis ? <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-semibold text-gray-900">Vorschau: {monatLabel(ergebnis.monat)}</h2>
-        <p className="text-xs text-gray-500">{dateiname} · {ergebnis.eintraege.length} Roheinträge</p>
+        <p className="text-xs text-gray-500">{dateiname} · {ergebnis.eintraege.length} Roheinträge{dateiSollstunden !== null ? ` · Sollstunden: ${dateiSollstunden}` : ' · Sollstunden nicht erkannt'}</p>
       </div>
       <p className="mt-2 text-xs text-gray-500">Zuordnungen werden automatisch anhand des Namens vorgeschlagen (bzw. aus einem früheren Monat übernommen) - bitte kurz prüfen, bevor gespeichert wird. Nur bei Namensgleichheit/Kürzeln ohne eindeutigen Treffer ist eine manuelle Auswahl nötig.</p>
 
@@ -229,7 +244,7 @@ export default function SystemeinstellungenDienstplanImport() {
       <h2 className="text-lg font-bold text-gray-900">Bisher importierte Monate</h2>
       {monate.length === 0 ? <p className="mt-3 text-sm text-gray-500">Noch kein Dienstplan importiert.</p> : <div className="mt-3 space-y-2">
         {monate.map(monat => <div key={monat.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white p-3">
-          <div className="flex-1"><p className="text-sm font-semibold text-gray-900">{monatLabel(monat.monat)}</p><p className="text-xs text-gray-500">{monat.dateiname}</p></div>
+          <div className="flex-1"><p className="text-sm font-semibold text-gray-900">{monatLabel(monat.monat)}</p><p className="text-xs text-gray-500">{monat.dateiname}{monat.sollstunden !== null ? ` · Sollstunden: ${monat.sollstunden}` : ''}</p></div>
           {monat.status === 'veroeffentlicht' ? <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800"><CheckCircle2 className="h-3.5 w-3.5" /> Veröffentlicht</span>
             : <button type="button" disabled={veroeffentlichen === monat.id} onClick={() => void veroeffentlicheMonat(monat.id)} className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50">{veroeffentlichen === monat.id ? 'Wird veröffentlicht…' : 'Veröffentlichen'}</button>}
         </div>)}
