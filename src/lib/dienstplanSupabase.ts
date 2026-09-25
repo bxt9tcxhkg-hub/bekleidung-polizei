@@ -55,6 +55,23 @@ export type DienstplanDienstRow = {
   created_at: string
 }
 
+export type DienstplanRegelRow = {
+  id: number
+  stunden_pro_werktag: number
+  mindestruhezeit_stunden: number
+  wunschfrist_tage: number
+  updated_by: string | null
+  updated_at: string
+}
+
+export type DienstplanPersonEinstellungenRow = {
+  beamter_id: string
+  beschaeftigungsgrad: number
+  zusatz: Record<string, unknown>
+  updated_by: string | null
+  updated_at: string
+}
+
 type DienstplanDatabase = {
   public: {
     Tables: {
@@ -74,6 +91,18 @@ type DienstplanDatabase = {
         Row: DienstplanDienstRow
         Insert: Omit<DienstplanDienstRow, 'id' | 'created_at'>
         Update: Partial<Omit<DienstplanDienstRow, 'id'>>
+        Relationships: []
+      }
+      dienstplan_regeln: {
+        Row: DienstplanRegelRow
+        Insert: Pick<DienstplanRegelRow, 'id'> & Partial<Omit<DienstplanRegelRow, 'id' | 'updated_at'>>
+        Update: Partial<Omit<DienstplanRegelRow, 'id' | 'updated_at'>>
+        Relationships: []
+      }
+      dienstplan_person_einstellungen: {
+        Row: DienstplanPersonEinstellungenRow
+        Insert: Pick<DienstplanPersonEinstellungenRow, 'beamter_id'> & Partial<Omit<DienstplanPersonEinstellungenRow, 'beamter_id' | 'updated_at'>>
+        Update: Partial<Omit<DienstplanPersonEinstellungenRow, 'beamter_id' | 'updated_at'>>
         Relationships: []
       }
     }
