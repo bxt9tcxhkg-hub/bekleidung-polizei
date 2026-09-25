@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle, Footprints, Package, ShoppingBag, User, XCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { AlertTriangle, CheckCircle, Footprints, Package, ShoppingBag, User, Wallet, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Order, ShoeRefund, StockOrder } from '../../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../../lib/types'
@@ -190,7 +191,14 @@ export default function GenehmigungenBekleidung() {
 
   return (
     <div>
-      <GenehmigungenBereichHeader title="Bekleidung" description="Budgetüberschreitungen, Lagerbestellungen und Schuherstattungen entscheiden." />
+      <GenehmigungenBereichHeader
+        title="Bekleidung"
+        description="Budgetüberschreitungen, Lagerbestellungen und Schuherstattungen entscheiden."
+        links={<>
+          <Link to="/budgets" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50"><Wallet className="w-3.5 h-3.5" /> Budgetverwaltung</Link>
+          <Link to="/schuherstattungen" className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-50"><Footprints className="w-3.5 h-3.5" /> Schuherstattungen (Verwaltung)</Link>
+        </>}
+      />
 
       {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
       {error && <div ref={topErrorRef} className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}

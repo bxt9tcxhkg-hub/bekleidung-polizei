@@ -1,19 +1,18 @@
 import { LayoutDashboard, LayoutGrid } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
-import { GENEHMIGER_BEKLEIDUNG_ITEMS, genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
+import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
 import { PortalSidebarShell } from './PortalSidebar'
 
-// Eigenes, schlankes Layout für die portalweiten Genehmiger-Seiten (Freigaben,
-// Budgetverwaltung, Schuherstattungen). Liefen diese Seiten bislang unter dem
-// Bekleidung-Layout mit, zeigte "Mein Bereich" dort fälschlich Bekleidung-
-// Bestellfunktionen ("Bekleidung bestellen", "Meine Bestellungen"), die mit
-// der bereichsübergreifenden Prüfung nichts zu tun haben - "Freigaben"
-// bündelt z. B. auch offene Einsatzmittel- und Schulungs-Fälle.
-// GENEHMIGER_BEKLEIDUNG_ITEMS (Budgetverwaltung/Schuherstattungen) werden hier
-// bewusst als Zusatzpunkte eingehängt statt über GENEHMIGER_ITEMS - sonst
-// würden sie in JEDEM Bereich (Zentrale, Einsatzmittel, ...) im Genehmiger-Menü
-// auftauchen, obwohl sie reine Bekleidung-Themen sind.
+// Eigenes, schlankes Layout für die Genehmigungen-Kachel-Übersicht und ihre
+// vier Bereichsseiten. Zeigt bewusst nur "Freigaben" im Genehmiger-Menü,
+// genau wie jeder andere Bereich (Zentrale, Einsatzmittel, ...) - der
+// Genehmiger soll seine gesamte Arbeit auf dieser einen Kachel-Übersicht
+// erledigen, ohne dass die Sidebar mit Budgetverwaltung/Schuherstattungen
+// (reine Bekleidung-Verwaltungswerkzeuge, kein Entscheidungs-Posteingang)
+// eine zweite, konkurrierende Navigation aufmacht. Diese beiden sind stattdessen
+// als Links auf der Bekleidung-Bereichsseite selbst verlinkt (siehe
+// GenehmigungenBekleidung.tsx).
 export default function GenehmigerLayout() {
   const { profile, isAdmin, isSachbearbeiter, isGenehmiger } = useAuth()
 
@@ -22,7 +21,7 @@ export default function GenehmigerLayout() {
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     ]),
-    ...genehmigerSection(isGenehmiger, GENEHMIGER_BEKLEIDUNG_ITEMS),
+    ...genehmigerSection(isGenehmiger),
   ]
 
   const footerLine = [
