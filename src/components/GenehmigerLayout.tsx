@@ -1,16 +1,19 @@
 import { LayoutDashboard, LayoutGrid } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
-import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
+import { GENEHMIGER_BEKLEIDUNG_ITEMS, genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
 import { PortalSidebarShell } from './PortalSidebar'
 
-// Eigenes, schlankes Layout nur für die portalweiten Genehmiger-Werkzeuge
-// (Freigaben, Budgetverwaltung, Schuherstattungen - siehe GENEHMIGER_ITEMS in
-// sidebarSections.ts). Liefen diese Seiten bislang unter dem Bekleidung-Layout
-// mit, zeigte "Mein Bereich" dort fälschlich Bekleidung-Bestellfunktionen
-// ("Bekleidung bestellen", "Meine Bestellungen"), die mit der bereichsübergreifenden
-// Prüfung nichts zu tun haben - "Freigaben" bündelt z. B. auch offene
-// Einsatzmittel- und Schulungs-Fälle.
+// Eigenes, schlankes Layout für die portalweiten Genehmiger-Seiten (Freigaben,
+// Budgetverwaltung, Schuherstattungen). Liefen diese Seiten bislang unter dem
+// Bekleidung-Layout mit, zeigte "Mein Bereich" dort fälschlich Bekleidung-
+// Bestellfunktionen ("Bekleidung bestellen", "Meine Bestellungen"), die mit
+// der bereichsübergreifenden Prüfung nichts zu tun haben - "Freigaben"
+// bündelt z. B. auch offene Einsatzmittel- und Schulungs-Fälle.
+// GENEHMIGER_BEKLEIDUNG_ITEMS (Budgetverwaltung/Schuherstattungen) werden hier
+// bewusst als Zusatzpunkte eingehängt statt über GENEHMIGER_ITEMS - sonst
+// würden sie in JEDEM Bereich (Zentrale, Einsatzmittel, ...) im Genehmiger-Menü
+// auftauchen, obwohl sie reine Bekleidung-Themen sind.
 export default function GenehmigerLayout() {
   const { profile, isAdmin, isSachbearbeiter, isGenehmiger } = useAuth()
 
@@ -19,7 +22,7 @@ export default function GenehmigerLayout() {
       { to: '/', label: 'Portal', icon: LayoutGrid },
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     ]),
-    ...genehmigerSection(isGenehmiger),
+    ...genehmigerSection(isGenehmiger, GENEHMIGER_BEKLEIDUNG_ITEMS),
   ]
 
   const footerLine = [

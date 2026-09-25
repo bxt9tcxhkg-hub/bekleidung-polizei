@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
-import { genehmigerSection, meinBereichSection, sachbearbeiterSection, type NavSection } from '../lib/sidebarSections'
+import { GENEHMIGER_BEKLEIDUNG_ITEMS, genehmigerSection, meinBereichSection, sachbearbeiterSection, type NavSection } from '../lib/sidebarSections'
 import { PortalSidebarShell } from './PortalSidebar'
 
 export default function Layout() {
@@ -25,8 +25,14 @@ export default function Layout() {
       { to: '/produkte', label: 'Produkte', icon: Package },
       { to: '/quartale', label: 'Quartale', icon: CalendarRange },
     ]),
-    // Analyse steht schon im Sachbearbeiter-Abschnitt - hier nur zusätzlich, falls jemand ausschließlich Genehmiger ist.
-    ...genehmigerSection(isGenehmiger, !isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
+    // Analyse steht schon im Sachbearbeiter-Abschnitt - hier nur zusätzlich, falls jemand
+    // ausschließlich Genehmiger ist. Budgetverwaltung/Schuherstattungen gehören hier dazu,
+    // weil man im Bekleidung-Bereich tatsächlich im Bekleidungskontext ist (anders als in
+    // Zentrale/Einsatzmittel/Schulungen, wo nur "Freigaben" auftaucht - siehe sidebarSections.ts).
+    ...genehmigerSection(isGenehmiger, [
+      ...GENEHMIGER_BEKLEIDUNG_ITEMS,
+      ...(!isSachbearbeiter ? [{ to: '/analyse', label: 'Analyse', icon: BarChart3 }] : []),
+    ]),
   ]
 
   const footerLine = [

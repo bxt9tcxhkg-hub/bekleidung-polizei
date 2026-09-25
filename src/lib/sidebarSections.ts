@@ -28,16 +28,25 @@ export const SECTION_META = {
   genehmiger: { label: 'Genehmiger', color: 'text-green-300' },
 } as const
 
-/** Portalweite Genehmiger-Werkzeuge - überall gleich erreichbar, unabhängig davon, in welchem Bereich man sich gerade befindet.
- * "Freigaben" ist die einzige Entscheidungs-Warteschlange (bündelt inzwischen auch die
- * Überstundenmeldungen, siehe Approvals.tsx) - Budgetverwaltung/Schuherstattungen sind
- * bewusst reine Verwaltungs-/Historien-Werkzeuge ohne eigene Entscheidungsfunktion mehr
- * (die wurde aus ShoeRefunds.tsx entfernt, um nicht zwei Orte für dieselbe Entscheidung
- * zu haben). Ein eigener Link zu Ueberstunden.tsx gehört nicht hierher - die eigene
- * Meldung erfassen kann jede/r, das ist keine Genehmiger-exklusive Funktion (siehe
- * Portal.tsx, Kachel "Überstundenmeldung" unter "Mein Bereich"). */
+/** Einzige wirklich portalweite Genehmiger-Warteschlange - überall gleich erreichbar,
+ * unabhängig davon, in welchem Bereich man sich gerade befindet. Bündelt inzwischen
+ * auch die Überstundenmeldungen (siehe Approvals.tsx). Absichtlich der EINZIGE Eintrag,
+ * der in jedem Bereich auftaucht - Budgetverwaltung/Schuherstattungen (siehe
+ * GENEHMIGER_BEKLEIDUNG_ITEMS) sind reine Bekleidung-Themen und würden z. B. in der
+ * Zentrale oder bei Einsatzmitteln nur verwirren ("warum sehe ich hier Bekleidung-Kram").
+ */
 export const GENEHMIGER_ITEMS: NavItem[] = [
   { to: '/genehmigungen', label: 'Freigaben', icon: CheckSquare },
+]
+
+/** Bekleidung-spezifische Genehmiger-Verwaltungswerkzeuge (Jahresbudget, Schuherstattungs-
+ * Höchstbetrag) - reine Verwaltungs-/Historien-Werkzeuge ohne eigene Entscheidungsfunktion
+ * mehr (die wurde aus ShoeRefunds.tsx entfernt). Nur im Bekleidung-/Genehmigungen-Kontext
+ * (GenehmigerLayout) als Zusatzpunkte einhängen, nicht in jedem Bereich - siehe
+ * GENEHMIGER_ITEMS. Ein eigener Link zu Ueberstunden.tsx gehört ebenfalls nicht hierher -
+ * die eigene Meldung erfassen kann jede/r, das ist keine Genehmiger-exklusive Funktion
+ * (siehe Portal.tsx, Kachel "Überstundenmeldung" unter "Mein Bereich"). */
+export const GENEHMIGER_BEKLEIDUNG_ITEMS: NavItem[] = [
   { to: '/budgets', label: 'Budgetverwaltung', icon: Wallet },
   { to: '/schuherstattungen', label: 'Schuherstattungen', icon: Footprints },
 ]
