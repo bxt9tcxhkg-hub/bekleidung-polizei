@@ -28,16 +28,16 @@ describe('werktageImMonat', () => {
 })
 
 describe('berechneSollstunden', () => {
-  it('rechnet Werktage × Stunden pro Werktag für Vollzeit (100%)', () => {
-    expect(berechneSollstunden('2026-02', 8.75, 100)).toBeCloseTo(20 * 8.75, 5)
+  it('rechnet Werktage × Stunden pro Werktag für Vollzeit (Beschäftigungsgrad 111)', () => {
+    expect(berechneSollstunden('2026-02', 8.75, 111)).toBeCloseTo(20 * 8.75, 5)
   })
 
-  it('skaliert linear mit dem Beschäftigungsgrad', () => {
-    expect(berechneSollstunden('2026-02', 8.75, 50)).toBeCloseTo((20 * 8.75) / 2, 5)
+  it('skaliert linear mit dem Beschäftigungsgrad (55.5 = halbe Vollzeit)', () => {
+    expect(berechneSollstunden('2026-02', 8.75, 55.5)).toBeCloseTo((20 * 8.75) / 2, 5)
   })
 
   it('akzeptiert sowohl YYYY-MM als auch YYYY-MM-DD', () => {
-    expect(berechneSollstunden('2026-02-01', 8.75, 100)).toBe(berechneSollstunden('2026-02', 8.75, 100))
+    expect(berechneSollstunden('2026-02-01', 8.75, 111)).toBe(berechneSollstunden('2026-02', 8.75, 111))
   })
 
   it('rundet auf Viertelstunden', () => {

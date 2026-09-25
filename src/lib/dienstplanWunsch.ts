@@ -1,16 +1,76 @@
-// Dienstwünsche der Beamten (siehe dienstplan_wuensche): pro Tag höchstens
-// ein Wunsch, nur bis zur konfigurierten Wunschfrist (dienstplan_regeln.
-// wunschfrist_tage) vor Monatsbeginn änderbar. Die Deadline-Logik ist hier
-// als reine Funktion nachgebildet (für die UI-Anzeige/Sperrung) - die
-// eigentliche, maßgebliche Prüfung erfolgt serverseitig in den RPCs
-// dienstplan_wunsch_setzen/dienstplan_wunsch_loeschen (siehe Migration
-// 20260925161058_dienstplan_wuensche.sql).
+// Dienstwünsche der Beamten (siehe dienstplan_wuensche): pro Person/Tag
+// können mehrere Wünsche nebeneinander stehen - ein ganzer freier Tag
+// braucht laut Kommandant ZWEI Freiplanungswünsche (Tag frei + Nacht
+// frei), "Urlaub" blockiert ebenfalls den ganzen Tag, kostet aber nur 1
+// Kontingenteinheit. Monatliches Kontingent: 18 Freiplanungswünsche bei
+// Vollzeit (Beschäftigungsgrad 111 auf der hausinternen Skala, siehe
+// lib/dienstplanSollstunden.ts), linear skaliert. Zusätzliche Regel:
+// höchstens 6 Tag/Nacht-Slots am Stück (chronologisch) dürfen als frei
+// gewünscht werden. Beides wird bewusst nur clientseitig berechnet (siehe
+// unten) - Dienstwünsche binden den Planer ohnehin nicht, nur die
+// Einreichfrist wird serverseitig durchgesetzt (siehe die RPCs
+// dienstplan_wunsch_setzen/dienstplan_wunsch_loeschen).
 import type { DienstplanWunschTyp } from './dienstplanSupabase'
+import { VOLLZEIT_BESCHAEFTIGUNGSGRAD } from './dienstplanSollstunden'
 
 export const WUNSCH_LABEL: Record<DienstplanWunschTyp, string> = {
-  frei: 'Frei wünschen',
+  frei_tag: 'Tag frei',
+  frei_nacht: 'Nacht frei',
+  urlaub: 'Urlaub (ganzer Tag)',
   tagdienst_bevorzugt: 'Tagdienst bevorzugt',
   nachtdienst_bevorzugt: 'Nachtdienst bevorzugt',
+}
+
+const VOLLZEIT_KONTINGENT = 18
+
+/** Wie viele Kontingenteinheiten ein Wunsch-Typ verbraucht - nur die drei konkreten Freiplanungswünsche verbrauchen Kontingent, die unverbindlichen Präferenzen nicht. */
+export function kontingentEinheiten(typ: DienstplanWunschTyp): number {
+  return typ === 'frei_tag' || typ === 'frei_nacht' || typ === 'urlaub' ? 1 : 0
+}
+
+/** Monatliches Freiplanungswunsch-Kontingent, linear nach Beschäftigungsgrad skaliert und gerundet. */
+export function monatsKontingent(beschaeftigungsgrad: number): number {
+  return Math.round(VOLLZEIT_KONTINGENT * (beschaeftigungsgrad / VOLLZEIT_BESCHAEFTIGUNGSGRAD))
+}
+
+export interface WunschEintragKurz { datum: string; wunsch: DienstplanWunschTyp }
+
+/** Summe der verbrauchten Kontingenteinheiten über eine Liste von Wünschen. */
+export function kontingentVerbrauch(eintraege: readonly WunschEintragKurz[]): number {
+  return eintraege.reduce((summe, eintrag) => summe + kontingentEinheiten(eintrag.wunsch), 0)
+}
+
+type Zeitabschnitt = 'tag' | 'nacht'
+
+/** Welche Tag/Nacht-Slots ein Wunsch belegt - Urlaub belegt beide Slots des Tages (ganztägig), kostet aber trotzdem nur 1 Kontingenteinheit (siehe kontingentEinheiten). Präferenzen belegen keinen Slot. */
+function belegteSlots(eintrag: WunschEintragKurz): { datum: string; abschnitt: Zeitabschnitt }[] {
+  if (eintrag.wunsch === 'frei_tag') return [{ datum: eintrag.datum, abschnitt: 'tag' }]
+  if (eintrag.wunsch === 'frei_nacht') return [{ datum: eintrag.datum, abschnitt: 'nacht' }]
+  if (eintrag.wunsch === 'urlaub') return [{ datum: eintrag.datum, abschnitt: 'tag' }, { datum: eintrag.datum, abschnitt: 'nacht' }]
+  return []
+}
+
+function slotIndex(datum: string, abschnitt: Zeitabschnitt): number {
+  const [jahr, monat, tag] = datum.split('-').map(Number)
+  const tageSeitEpoch = Math.floor(new Date(jahr, monat - 1, tag).getTime() / 86_400_000)
+  return tageSeitEpoch * 2 + (abschnitt === 'nacht' ? 1 : 0)
+}
+
+/** Längste Kette lückenlos aufeinanderfolgender belegter Tag/Nacht-Slots (siehe belegteSlots) - Grundlage für die "max. 6 am Stück"-Regel. */
+export function laengsteSlotFolge(eintraege: readonly WunschEintragKurz[]): number {
+  const indices = new Set<number>()
+  for (const eintrag of eintraege) for (const slot of belegteSlots(eintrag)) indices.add(slotIndex(slot.datum, slot.abschnitt))
+  const sortiert = Array.from(indices).sort((a, b) => a - b)
+
+  let laengste = 0
+  let aktuelle = 0
+  let vorheriger: number | null = null
+  for (const index of sortiert) {
+    aktuelle = vorheriger !== null && index === vorheriger + 1 ? aktuelle + 1 : 1
+    laengste = Math.max(laengste, aktuelle)
+    vorheriger = index
+  }
+  return laengste
 }
 
 /** Letzter Tag, an dem für den angegebenen Monat noch ein Wunsch eingereicht/geändert werden kann. */

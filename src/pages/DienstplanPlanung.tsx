@@ -84,7 +84,7 @@ export default function DienstplanPlanung() {
   const [mindestruhezeitStunden, setMindestruhezeitStunden] = useState(11)
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
   const [dienste, setDienste] = useState<DienstZeile[]>([])
-  const [wuensche, setWuensche] = useState<Map<string, WunschEintrag>>(new Map())
+  const [wuensche, setWuensche] = useState<Map<string, WunschEintrag[]>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -116,7 +116,14 @@ export default function DienstplanPlanung() {
     ])
     if (dienstResult.error || wunschResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     setDienste(dienstResult.data ?? [])
-    setWuensche(new Map((wunschResult.data ?? []).map(row => [`${row.beamter_id}|${row.datum}`, { wunsch: row.wunsch, notiz: row.notiz }])))
+    const wunschMap = new Map<string, WunschEintrag[]>()
+    for (const row of wunschResult.data ?? []) {
+      const schluessel = `${row.beamter_id}|${row.datum}`
+      const liste = wunschMap.get(schluessel) ?? []
+      liste.push({ wunsch: row.wunsch, notiz: row.notiz })
+      wunschMap.set(schluessel, liste)
+    }
+    setWuensche(wunschMap)
     setLoading(false)
   }, [monat])
   useEffect(() => { void load() }, [load])
@@ -240,16 +247,16 @@ export default function DienstplanPlanung() {
                 {tage.map(datum => {
                   const schluessel = `${person.id}|${datum}`
                   const zeilen = (dienstByKey.get(schluessel) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
-                  const wunsch = wuensche.get(schluessel)
+                  const wuenscheHeute = wuensche.get(schluessel) ?? []
                   const ruheVerletzung = ruheVerletzt.has(schluessel)
                   return <td key={datum}
                     onClick={() => oeffneZelle(person.id, person.name, datum)}
-                    title={wunsch ? `Wunsch: ${WUNSCH_LABEL[wunsch.wunsch]}${wunsch.notiz ? ` – ${wunsch.notiz}` : ''}` : undefined}
+                    title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
                     className={`min-w-14 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
                   >
                     <div className="flex flex-col items-center gap-0.5">
                       {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
-                      {wunsch ? <span className="text-amber-500">●</span> : null}
+                      {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
                     </div>
                   </td>
                 })}

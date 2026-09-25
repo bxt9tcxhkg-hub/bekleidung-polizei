@@ -8,6 +8,9 @@
 // später Meine Dienste/Planer-Grid).
 import { isAustrianHoliday } from './austrianHolidays'
 
+/** Beschäftigungsgrad wird auf der hausinternen Skala geführt, auf der Vollzeit 111 ist (nicht 100) - siehe dienstplan_person_einstellungen. Wird auch für das Freiplanungswunsch-Kontingent verwendet (siehe lib/dienstplanWunsch.ts). */
+export const VOLLZEIT_BESCHAEFTIGUNGSGRAD = 111
+
 /** Montag bis Freitag, kein gesetzlicher Feiertag - die für die Sollstunden-Formel maßgebliche "Werktag"-Definition. */
 export function istWerktag(date: Date): boolean {
   const wochentag = date.getDay()
@@ -31,12 +34,12 @@ export function rundeViertelstunde(wert: number): number { return Math.round(wer
  * Sollstunden für eine Person in einem Monat.
  * @param monat 'YYYY-MM' oder 'YYYY-MM-DD' (nur Jahr/Monat werden ausgewertet)
  * @param stundenProWerktag aus dienstplan_regeln.stunden_pro_werktag
- * @param beschaeftigungsgrad aus dienstplan_person_einstellungen.beschaeftigungsgrad (100 = Vollzeit)
+ * @param beschaeftigungsgrad aus dienstplan_person_einstellungen.beschaeftigungsgrad (111 = Vollzeit, siehe VOLLZEIT_BESCHAEFTIGUNGSGRAD)
  */
 export function berechneSollstunden(monat: string, stundenProWerktag: number, beschaeftigungsgrad: number): number {
   const [jahrText, monatText] = monat.split('-')
   const jahr = Number(jahrText)
   const monatNr = Number(monatText)
   const werktage = werktageImMonat(jahr, monatNr)
-  return rundeViertelstunde(werktage * stundenProWerktag * (beschaeftigungsgrad / 100))
+  return rundeViertelstunde(werktage * stundenProWerktag * (beschaeftigungsgrad / VOLLZEIT_BESCHAEFTIGUNGSGRAD))
 }
