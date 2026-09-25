@@ -11,11 +11,34 @@ import type {
 } from '../../lib/types'
 import { logAudit } from '../../lib/audit'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
-import { Empty, GenehmigungenBereichHeader, Table } from '../../components/genehmigungenShared'
+import { Empty, GenehmigungenBereichHeader } from '../../components/genehmigungenShared'
 
 type ProfileMini = { id: string; name: string | null; dienstnummer: string | null; username: string }
 type TrainingAssignmentWithOfficer = EinsatzTrainingAssignment & { officer?: ProfileMini | null }
 type SchulungAssignmentWithOfficer = SchulungAssignment & { officer?: ProfileMini | null }
+
+// Modul-Namen sind hier keine generischen Kategorien, sondern konkrete,
+// oft ähnlich benannte Termine ("Bundes-ET-Koblach 4. Quartal", "... 1.
+// Quartal", ...) - eine flache Liste aus lauter solchen Zeilen lässt sich
+// schwer überfliegen. Nach Modul gruppiert (je eine Karte, darunter die
+// Vorschläge dieses Moduls) macht auf einen Blick sichtbar, wie viele
+// Vorschläge zu welchem konkreten Termin gehören.
+function groupAssignmentsByModule<T extends { module_id: string; proposed_at: string }>(
+  items: T[],
+  modules: { id: string; name: string }[],
+) {
+  const order: string[] = []
+  const byModule = new Map<string, T[]>()
+  for (const item of items) {
+    if (!byModule.has(item.module_id)) { byModule.set(item.module_id, []); order.push(item.module_id) }
+    byModule.get(item.module_id)!.push(item)
+  }
+  return order.map(moduleId => ({
+    moduleId,
+    moduleName: modules.find(m => m.id === moduleId)?.name ?? moduleId,
+    items: byModule.get(moduleId)!,
+  }))
+}
 
 // Zwei Vorschlag-Zuteilungen (Einsatztraining/Schulungen) sind strukturell
 // identisch - eine Genehmigung braucht zwingend einen gewählten Termin,
@@ -164,6 +187,8 @@ export default function GenehmigungenAusbildung() {
   const assignmentModuleName = reviewingAssignment
     ? (reviewingAssignment.kind === 'training' ? trainingModules : schulungModules).find(m => m.id === reviewingAssignment.item.module_id)?.name ?? reviewingAssignment.item.module_id
     : ''
+  const trainingGroups = groupAssignmentsByModule(trainingAssignments, trainingModules)
+  const schulungGroups = groupAssignmentsByModule(schulungAssignments, schulungModules)
 
   return (
     <div>
@@ -183,35 +208,59 @@ export default function GenehmigungenAusbildung() {
               wie eine einzige gemeinsame Liste wirkt. */}
           <div className="space-y-3">
             <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><Target className="w-4 h-4 text-blue-700" /> Einsatztraining</h2>
-            {trainingAssignments.length === 0 ? (
+            {trainingGroups.length === 0 ? (
               <Empty icon={Target} title="Keine offenen Trainingsvorschläge" />
             ) : (
-              <Table
-                head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
-                rows={trainingAssignments.map(item => [
-                  trainingModules.find(m => m.id === item.module_id)?.name ?? item.module_id,
-                  officerDisplayName(item.officer),
-                  new Date(item.proposed_at).toLocaleDateString('de-AT'),
-                  <div key="ac" className="flex justify-end"><button type="button" onClick={() => openAssignmentReview('training', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
-                ])}
-              />
+              <div className="space-y-3">
+                {trainingGroups.map(group => (
+                  <div key={group.moduleId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+                      <p className="font-semibold text-gray-900">{group.moduleName}</p>
+                      <p className="text-xs text-gray-500">{group.items.length} Vorschlag{group.items.length === 1 ? '' : 'e'}</p>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {group.items.map(item => (
+                        <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{officerDisplayName(item.officer)}</p>
+                            <p className="text-xs text-gray-400">Vorgeschlagen am {new Date(item.proposed_at).toLocaleDateString('de-AT')}</p>
+                          </div>
+                          <button type="button" onClick={() => openAssignmentReview('training', item)} className="flex-shrink-0 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
           <div className="border-t border-gray-200 pt-8 space-y-3">
             <h2 className="text-base font-bold text-gray-900 flex items-center gap-2"><GraduationCap className="w-4 h-4 text-blue-700" /> Schulungen</h2>
-            {schulungAssignments.length === 0 ? (
+            {schulungGroups.length === 0 ? (
               <Empty icon={GraduationCap} title="Keine offenen Schulungsvorschläge" />
             ) : (
-              <Table
-                head={['Modul', 'Beamter/in', 'Vorgeschlagen', '']}
-                rows={schulungAssignments.map(item => [
-                  schulungModules.find(m => m.id === item.module_id)?.name ?? item.module_id,
-                  officerDisplayName(item.officer),
-                  new Date(item.proposed_at).toLocaleDateString('de-AT'),
-                  <div key="ac" className="flex justify-end"><button type="button" onClick={() => openAssignmentReview('schulung', item)} className="text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button></div>,
-                ])}
-              />
+              <div className="space-y-3">
+                {schulungGroups.map(group => (
+                  <div key={group.moduleId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+                      <p className="font-semibold text-gray-900">{group.moduleName}</p>
+                      <p className="text-xs text-gray-500">{group.items.length} Vorschlag{group.items.length === 1 ? '' : 'e'}</p>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {group.items.map(item => (
+                        <div key={item.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{officerDisplayName(item.officer)}</p>
+                            <p className="text-xs text-gray-400">Vorgeschlagen am {new Date(item.proposed_at).toLocaleDateString('de-AT')}</p>
+                          </div>
+                          <button type="button" onClick={() => openAssignmentReview('schulung', item)} className="flex-shrink-0 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-1.5 rounded-lg">Prüfen</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
