@@ -5,19 +5,21 @@ import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstpla
 import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
-import { GRUNDBESETZUNG_CODES, GRUNDBESETZUNG_TITEL, grundbesetzungCode, kuerzelKlartext, parseDienstCode, type GrundbesetzungCode } from '../lib/dienstplanImport'
+import { GRUNDBESETZUNG_CODES, grundbesetzungCode, parseDienstCode, type GrundbesetzungCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
-// tageweise die GRUNDBESETZUNG (Z/ID/JD - siehe GRUNDBESETZUNG_CODES) und
-// alle weiteren Dienste (Zusatzdienste wie VD/TD/ET/...) in derselben
-// Kachel-Darstellung, je Kachel Tag- und Nachtbesetzung zusammengefasst -
-// aus den importierten Dienstplan-Rohdaten (siehe
-// SystemeinstellungenDienstplanImport.tsx). Erst darunter Abwesenheiten
-// (krank/Urlaub/Sonderurlaub/Karenz). Für jede/n aktive/n Bediensteten
-// sichtbar (siehe Migration 20260925051510_dienstplan_dienststellenweit_lesen.sql),
-// keine eigene Bereichsberechtigung nötig - wer Dienst hat, ist
-// Basisinformation für die ganze Dienststelle. Rein lesend; Bearbeitung
-// passiert ausschließlich über den monatlichen Import.
+// tageweise Tagdienste und Nachtdienste getrennt voneinander, je Zeitraum in
+// Kacheln je Dienst-Kürzel (Grundbesetzung Z/ID/JD - siehe
+// GRUNDBESETZUNG_CODES - genauso wie alle Zusatzdienste VD/TD/ET/... in
+// derselben Kachel-Darstellung) - aus den importierten
+// Dienstplan-Rohdaten (siehe SystemeinstellungenDienstplanImport.tsx). Als
+// Kachel-Titel genügt laut Kommandant das Kürzel, keine ausgeschriebene
+// Bezeichnung. Erst darunter Abwesenheiten (krank/Urlaub/Sonderurlaub/
+// Karenz). Für jede/n aktive/n Bediensteten sichtbar (siehe Migration
+// 20260925051510_dienstplan_dienststellenweit_lesen.sql), keine eigene
+// Bereichsberechtigung nötig - wer Dienst hat, ist Basisinformation für die
+// ganze Dienststelle. Rein lesend; Bearbeitung passiert ausschließlich über
+// den monatlichen Import.
 
 interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
@@ -40,7 +42,7 @@ function formatDatum(iso: string): string {
   return `${WOCHENTAG_LABEL[datum.getDay()]} ${String(tag).padStart(2, '0')}.${String(monat).padStart(2, '0')}.${jahr}`
 }
 
-/** Tagdienst 08-19 Uhr, Nachtdienst 19-08 Uhr (siehe lib/dienstplanAuswertung.ts) - hier nur zur Gruppierung innerhalb einer Kachel, kein Ersatz für die genaue Stundenberechnung. */
+/** Tagdienst 08-19 Uhr, Nachtdienst 19-08 Uhr (siehe lib/dienstplanAuswertung.ts) - hier zur Einteilung Tagdienste/Nachtdienste. */
 function tagOderNacht(vonZeit: string | null): 'tag' | 'nacht' {
   if (!vonZeit) return 'nacht'
   const stunde = Number(vonZeit.split(':')[0])
@@ -48,19 +50,31 @@ function tagOderNacht(vonZeit: string | null): 'tag' | 'nacht' {
 }
 
 interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null }
-interface DienstKachelDaten { code: string; titel: string; eintraege: KachelEintrag[] }
+interface DienstKachelDaten { code: string; eintraege: KachelEintrag[] }
 interface AbwesenheitEintrag { beamterId: string; name: string; dienstnummer: string | null; texte: string[]; kategorie: DienstplanKategorieDb }
-interface TagesUebersicht { datum: string; grundbesetzung: Record<GrundbesetzungCode, KachelEintrag[]>; zusatzdienste: DienstKachelDaten[]; abwesenheiten: AbwesenheitEintrag[] }
+interface ZeitabschnittUebersicht { grundbesetzung: Record<GrundbesetzungCode, KachelEintrag[]>; zusatzdienste: DienstKachelDaten[] }
+interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht; abwesenheiten: AbwesenheitEintrag[] }
 
-/** Fasst Tag- und Nachtbesetzung derselben Kachel zusammen - eine Kachel (egal ob Grundbesetzung oder Zusatzdienst) sieht dadurch immer gleich aus. */
-function KachelInhalt({ eintraege }: { eintraege: KachelEintrag[] }) {
-  if (eintraege.length === 0) return <p className="mt-1 flex items-center gap-1 text-sm font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5 flex-none" /> nicht besetzt</p>
-  const tag = eintraege.filter(eintrag => tagOderNacht(eintrag.vonZeit) === 'tag')
-  const nacht = eintraege.filter(eintrag => tagOderNacht(eintrag.vonZeit) === 'nacht')
-  const zeile = (eintrag: KachelEintrag) => `${eintrag.name} (${eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`})`
-  return <div className="mt-1 space-y-0.5">
-    {tag.length > 0 ? <p className="text-sm text-gray-800"><span className="font-semibold">Tag:</span> {tag.map(zeile).join(', ')}</p> : null}
-    {nacht.length > 0 ? <p className="text-sm text-gray-800"><span className="font-semibold">Nacht:</span> {nacht.map(zeile).join(', ')}</p> : null}
+function Kachel({ code, eintraege }: { code: string; eintraege: KachelEintrag[] }) {
+  return <div className={`rounded-lg border p-2.5 ${eintraege.length === 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{code}</p>
+    {eintraege.length === 0 ? <p className="mt-1 flex items-center gap-1 text-sm font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5 flex-none" /> nicht besetzt</p>
+      : <div className="mt-1 space-y-0.5">
+        {eintraege.map(eintrag => <p key={eintrag.beamterId} className="text-sm font-medium text-gray-800">
+          {eintrag.name}
+          <span className="ml-1.5 font-mono text-xs font-normal text-gray-500">{eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`}</span>
+        </p>)}
+      </div>}
+  </div>
+}
+
+function Zeitabschnitt({ titel, daten }: { titel: string; daten: ZeitabschnittUebersicht }) {
+  return <div>
+    <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">{titel}</p>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      {GRUNDBESETZUNG_CODES.map(code => <Kachel key={code} code={code} eintraege={daten.grundbesetzung[code]} />)}
+      {daten.zusatzdienste.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} />)}
+    </div>
   </div>
 }
 
@@ -94,32 +108,37 @@ export default function DienststellenKalender() {
 
   const mitarbeiterById = useMemo(() => new Map(mitarbeiter.map(person => [person.id, person])), [mitarbeiter])
 
-  // Jede Rohzeile einzeln (nicht mehr je Person zusammengefasst) einer Kachel
+  function neuerZeitabschnitt(): { grund: Record<GrundbesetzungCode, KachelEintrag[]>; zusatzMap: Map<string, DienstKachelDaten> } {
+    return { grund: { Z: [], ID: [], JD: [] }, zusatzMap: new Map() }
+  }
+
+  // Jede Rohzeile einzeln (nicht mehr je Person zusammengefasst) zunächst
+  // nach Tagdienst/Nachtdienst (siehe tagOderNacht) und dann einer Kachel
   // zuordnen - Grundbesetzung (Z/ID/JD) oder ein Zusatzdienst-Kürzel (VD, TD,
-  // ET, ...) bekommt jeweils eine eigene Kachel, in der Tag- und
-  // Nachtbesetzung zusammen erscheinen (siehe KachelInhalt). Nur
+  // ET, ...) bekommt jeweils eine eigene Kachel je Zeitabschnitt. Nur
   // krank/Urlaub/Sonderurlaub/Karenz bleiben eine einfache Liste je Person.
   // Dieselbe Person mit zwei Rohzeilen an einem Tag (zeile 1/2, Bedeutung des
   // Zusammenspiels noch nicht abschließend geklärt, siehe lib/dienstplanImport.ts)
   // kann dadurch theoretisch in mehreren Kacheln auftauchen; in der Praxis
   // trägt an einem Tag pro Code eine andere Person die jeweilige Rohzeile.
   const tage = useMemo(() => {
-    const proTag = new Map<string, { grund: Record<GrundbesetzungCode, KachelEintrag[]>; zusatzMap: Map<string, DienstKachelDaten>; abwesenheitenMap: Map<string, AbwesenheitEintrag> }>()
+    const proTag = new Map<string, { tag: ReturnType<typeof neuerZeitabschnitt>; nacht: ReturnType<typeof neuerZeitabschnitt>; abwesenheitenMap: Map<string, AbwesenheitEintrag> }>()
     for (const zeile of dienste) {
       const person = mitarbeiterById.get(zeile.beamter_id)
       if (!person) continue
       let tagesEintrag = proTag.get(zeile.datum)
-      if (!tagesEintrag) { tagesEintrag = { grund: { Z: [], ID: [], JD: [] }, zusatzMap: new Map(), abwesenheitenMap: new Map() }; proTag.set(zeile.datum, tagesEintrag) }
+      if (!tagesEintrag) { tagesEintrag = { tag: neuerZeitabschnitt(), nacht: neuerZeitabschnitt(), abwesenheitenMap: new Map() }; proTag.set(zeile.datum, tagesEintrag) }
 
       if (zeile.kategorie === 'dienst') {
         const { code } = parseDienstCode(zeile.rohtext)
         const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit }
+        const abschnitt = tagOderNacht(zeile.von_zeit) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
         const grund = grundbesetzungCode(code)
-        if (grund) { tagesEintrag.grund[grund].push(kachelEintrag); continue }
+        if (grund) { abschnitt.grund[grund].push(kachelEintrag); continue }
 
         const schluessel = code.toUpperCase()
-        let kachel = tagesEintrag.zusatzMap.get(schluessel)
-        if (!kachel) { kachel = { code, titel: kuerzelKlartext(code), eintraege: [] }; tagesEintrag.zusatzMap.set(schluessel, kachel) }
+        let kachel = abschnitt.zusatzMap.get(schluessel)
+        if (!kachel) { kachel = { code, eintraege: [] }; abschnitt.zusatzMap.set(schluessel, kachel) }
         kachel.eintraege.push(kachelEintrag)
         continue
       }
@@ -131,19 +150,23 @@ export default function DienststellenKalender() {
       }
       abwesenheit.texte.push(zeile.rohtext)
     }
+    const zuUebersicht = (abschnitt: ReturnType<typeof neuerZeitabschnitt>): ZeitabschnittUebersicht => ({
+      grundbesetzung: abschnitt.grund,
+      zusatzdienste: Array.from(abschnitt.zusatzMap.values()).sort((a, b) => a.code.localeCompare(b.code, 'de-AT')),
+    })
     return Array.from(proTag.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([datum, { grund, zusatzMap, abwesenheitenMap }]): TagesUebersicht => ({
+      .map(([datum, { tag, nacht, abwesenheitenMap }]): TagesUebersicht => ({
         datum,
-        grundbesetzung: grund,
-        zusatzdienste: Array.from(zusatzMap.values()).sort((a, b) => a.titel.localeCompare(b.titel, 'de-AT')),
+        tag: zuUebersicht(tag),
+        nacht: zuUebersicht(nacht),
         abwesenheiten: Array.from(abwesenheitenMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'de-AT')),
       }))
   }, [dienste, mitarbeiterById])
 
   return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienststellenkalender</h1><p className="mt-1 text-sm text-gray-500">Grundbesetzung und Zusatzdienste je Tag, Tag-/Nachtbesetzung je Dienst zusammengefasst - aus dem importierten Dienstplan.</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienststellenkalender</h1><p className="mt-1 text-sm text-gray-500">Tagdienste und Nachtdienste je Tag getrennt, je Dienst-Kürzel eine Kachel - aus dem importierten Dienstplan.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -152,25 +175,16 @@ export default function DienststellenKalender() {
     {loading ? <div className="mt-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-800" /></div>
       : monatVeroeffentlicht === false ? <div className="mt-8 rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CalendarDays className="mx-auto mb-2 h-8 w-8 text-gray-300" /><p className="text-sm text-gray-500">Für diesen Monat wurde noch kein Dienstplan veröffentlicht.</p></div>
       : <div className="mt-6 space-y-3">
-        {tage.map(tag => <div key={tag.datum} className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="mb-3 text-sm font-bold text-gray-900">{formatDatum(tag.datum)}</p>
+        {tage.map(tagesUebersicht => <div key={tagesUebersicht.datum} className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="mb-3 text-sm font-bold text-gray-900">{formatDatum(tagesUebersicht.datum)}</p>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {GRUNDBESETZUNG_CODES.map(code => <div key={code} className={`rounded-lg border p-2.5 ${tag.grundbesetzung[code].length === 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{GRUNDBESETZUNG_TITEL[code]} ({code})</p>
-              <KachelInhalt eintraege={tag.grundbesetzung[code]} />
-            </div>)}
+          <div className="space-y-3">
+            <Zeitabschnitt titel="Tagdienste" daten={tagesUebersicht.tag} />
+            <Zeitabschnitt titel="Nachtdienste" daten={tagesUebersicht.nacht} />
           </div>
 
-          {tag.zusatzdienste.length > 0 ? <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {tag.zusatzdienste.map(kachel => <div key={kachel.code} className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{kachel.titel} ({kachel.code})</p>
-              <KachelInhalt eintraege={kachel.eintraege} />
-            </div>)}
-          </div> : null}
-
-          {tag.abwesenheiten.length > 0 ? <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
-            {tag.abwesenheiten.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
+          {tagesUebersicht.abwesenheiten.length > 0 ? <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
+            {tagesUebersicht.abwesenheiten.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
               {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
             </div>)}
