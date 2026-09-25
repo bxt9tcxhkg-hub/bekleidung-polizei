@@ -10,7 +10,7 @@ import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
 import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
-import { berechneSollstunden, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
+import { berechneSollstunden, istWerktag, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
 import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, kurznamen, sortiereNachDienstplanGruppe, type DienstplanGruppe } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
@@ -52,6 +52,12 @@ function vorherigerMonatLetzterTag(monatIso: string): string {
   const [jahr, monat] = monatIso.split('-').map(Number)
   const letzterTagVormonat = new Date(jahr, monat - 1, 0)
   return `${letzterTagVormonat.getFullYear()}-${String(letzterTagVormonat.getMonth() + 1).padStart(2, '0')}-${String(letzterTagVormonat.getDate()).padStart(2, '0')}`
+}
+
+/** 'YYYY-MM-DD' als lokales Datum (nicht UTC) - wie an mehreren Stellen in dieser Datei für Wochentags-/Feiertagsprüfungen gebraucht. */
+function datumAusIso(datumIso: string): Date {
+  const [jahr, monat, tag] = datumIso.split('-').map(Number)
+  return new Date(jahr, monat - 1, tag)
 }
 
 /** Ob ein Dienstwunsch den angegebenen Zeitabschnitt betrifft - Urlaub blockiert ganztägig, siehe lib/dienstplanWunsch.ts. */
@@ -254,10 +260,14 @@ export default function DienstplanPlanung() {
 
   // Verfügbare Stunden je Person für die Kopfzeile: Sollstunden (aus
   // Beschäftigungsgrad, siehe lib/dienstplanSollstunden.ts) abzüglich der
-  // bereits im Grid eingeplanten Stunden (lib/dienstplanAuswertung.ts,
-  // dieselbe Berechnung wie in "Meine Dienste") - Vorschläge (Phase 4)
-  // zählen erst nach dem Übernehmen, solange sie nur lokal vorgeschlagen
-  // sind.
+  // bereits im Grid eingeplanten Stunden. Echte Dienste zählen mit ihrer
+  // tatsächlichen Dauer (lib/dienstplanAuswertung.ts, dieselbe Berechnung
+  // wie in "Meine Dienste"); ganztägige Abwesenheiten (Urlaub/Krank/
+  // Sonderurlaub/Karenz/Stundenersatz) haben keine Uhrzeit und zählen
+  // stattdessen pauschal mit den Stunden pro Werktag - aber nur an
+  // Werktagen (Wochenenden/Feiertage werden laut Kommandant nicht
+  // mitgezählt, siehe istWerktag). Vorschläge (Phase 4) zählen erst nach
+  // dem Übernehmen, solange sie nur lokal vorgeschlagen sind.
   const verfuegbareStunden = useMemo(() => {
     const dienstePerPerson = new Map<string, DienstZeile[]>()
     for (const zeile of dienste) {
@@ -267,9 +277,11 @@ export default function DienstplanPlanung() {
     }
     const ergebnis = new Map<string, number>()
     for (const person of mitarbeiter) {
+      const zeilen = dienstePerPerson.get(person.id) ?? []
       const grad = beschaeftigungsgrade.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
       const soll = berechneSollstunden(monat, stundenProWerktag, grad)
-      const geplant = persoenlicheStundenUebersicht(dienstePerPerson.get(person.id) ?? []).gesamt
+      const abwesenheitsTage = new Set(zeilen.filter(zeile => zeile.kategorie !== 'dienst' && istWerktag(datumAusIso(zeile.datum))).map(zeile => zeile.datum))
+      const geplant = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsTage.size * stundenProWerktag
       ergebnis.set(person.id, soll - geplant)
     }
     return ergebnis
@@ -359,10 +371,15 @@ export default function DienstplanPlanung() {
     if (!monatRow || ziel.size === 0) return
     setMehrfachSpeichern(true); setError('')
     const kategorie = kategorisiereRohtext(code)
-    const eintraege = Array.from(ziel).map(schluessel => {
+    const alleEintraege = Array.from(ziel).map(schluessel => {
       const [beamterId, datum] = schluessel.split('|')
       return { beamterId, datum }
     })
+    // Abwesenheiten (Urlaub/Krank/...) werden laut Kommandant nur an
+    // Werktagen eingetragen - Wochenenden/Feiertage werden übersprungen
+    // (kein Eintrag, zählen auch bei den Sollstunden nicht mit).
+    const eintraege = alleEintraege.filter(({ datum }) => istWerktag(datumAusIso(datum)))
+    if (eintraege.length === 0) { setMehrfachSpeichern(false); setError('Der ausgewählte Zeitraum enthält keinen Werktag.'); return }
     const ergebnisse = await Promise.all(eintraege.map(({ beamterId, datum }) =>
       dienstplanSupabase.rpc('dienstplan_dienst_setzen', { p_monat_id: monatRow.id, p_beamter_id: beamterId, p_datum: datum, p_zeile: 1, p_rohtext: code, p_von_zeit: '', p_bis_zeit: '', p_kategorie: kategorie }),
     ))
@@ -374,7 +391,8 @@ export default function DienstplanPlanung() {
       const neu = eintraege.map(({ beamterId, datum }): DienstZeile => ({ beamter_id: beamterId, datum, zeile: 1, rohtext: code, von_zeit: null, bis_zeit: null, kategorie }))
       return [...rest, ...neu]
     })
-    setNotice(`${eintraege.length} Zellen auf "${code}" gesetzt.`)
+    const uebersprungen = alleEintraege.length - eintraege.length
+    setNotice(`${eintraege.length} Zellen auf "${code}" gesetzt.${uebersprungen > 0 ? ` ${uebersprungen} Wochenend-/Feiertagszelle${uebersprungen === 1 ? '' : 'n'} übersprungen.` : ''}`)
     setAuswahl(new Set())
   }
 
