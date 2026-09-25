@@ -218,7 +218,7 @@ export interface MonatsZeile {
   beamterId: string
   beamterName: string
   dienstnummer: string | null
-  verguetung: UeberstundenVerguetung
+  verguetung: UeberstundenVerguetung | null
   stunden: Record<UeberstundenKategorieKey, number>
   gesamt: number
 }
@@ -273,7 +273,23 @@ export function monatsUebersicht(meldungen: readonly UeberstundenMeldung[], ante
     for (const kat of KATEGORIEN) zeile.stunden[kat.key] += anteil[kat.key]
     zeile.gesamt += totalStunden(anteil)
   }
-  return Array.from(zeilenByKey.values()).sort((a, b) => a.beamterName.localeCompare(b.beamterName, 'de-AT') || a.verguetung.localeCompare(b.verguetung))
+  return Array.from(zeilenByKey.values()).sort((a, b) => a.beamterName.localeCompare(b.beamterName, 'de-AT') || (a.verguetung ?? '').localeCompare(b.verguetung ?? ''))
+}
+
+/**
+ * Ergänzt die Genehmiger-Übersicht (monatsUebersicht) um eine Nullzeile je
+ * aktivem Bediensteten ohne genehmigte Meldung in dem Monat - für den Druck
+ * der Sammelansicht, die (wie die bisher händisch geführte Excel-Liste des
+ * Kommandanten) alle Bediensteten auflisten soll, nicht nur jene mit
+ * Meldungen. verguetung ist bei einer Nullzeile null (es gab keine Meldung,
+ * die eine Vergütungsart festlegen könnte).
+ */
+export function vollstaendigeMonatsUebersicht(zeilen: readonly MonatsZeile[], alleBediensteten: readonly { id: string; name: string; dienstnummer: string | null }[]): MonatsZeile[] {
+  const vorhandeneIds = new Set(zeilen.map(zeile => zeile.beamterId))
+  const nullzeilen: MonatsZeile[] = alleBediensteten
+    .filter(person => !vorhandeneIds.has(person.id))
+    .map(person => ({ beamterId: person.id, beamterName: person.name, dienstnummer: person.dienstnummer, verguetung: null, stunden: { ...LEERE_AUFSCHLUESSELUNG }, gesamt: 0 }))
+  return [...zeilen, ...nullzeilen].sort((a, b) => a.beamterName.localeCompare(b.beamterName, 'de-AT') || (a.verguetung ?? '').localeCompare(b.verguetung ?? ''))
 }
 
 export function thisMonthLocal(): string { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}` }

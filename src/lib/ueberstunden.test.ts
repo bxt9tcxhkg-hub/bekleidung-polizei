@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, MAX_MELDUNG_DAUER_TAGE, monatsUebersicht } from './ueberstunden'
+import { bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, MAX_MELDUNG_DAUER_TAGE, monatsUebersicht, vollstaendigeMonatsUebersicht } from './ueberstunden'
 import type { UeberstundenKategorieKey } from './ueberstunden'
 import type { UeberstundenMeldung } from './types'
 
@@ -149,6 +149,28 @@ describe('monatsUebersicht', () => {
     expect(result).toHaveLength(1)
     expect(result[0].stunden.std_werktag_50).toBe(2)
     expect(result[0].gesamt).toBe(2)
+  })
+})
+
+describe('vollstaendigeMonatsUebersicht', () => {
+  it('ergänzt eine Nullzeile für Bedienstete ohne Meldung im Monat', () => {
+    const items = [meldung({ id: '1', beamter_id: 'b1', beamter: { id: 'b1', name: 'Anna Adler', dienstnummer: '1' } })]
+    const zeilen = monatsUebersicht(items, anteileVon(...items))
+    const alle = [{ id: 'b1', name: 'Anna Adler', dienstnummer: '1' }, { id: 'b2', name: 'Zora Zach', dienstnummer: '2' }]
+    const result = vollstaendigeMonatsUebersicht(zeilen, alle)
+    expect(result.map(z => z.beamterName)).toEqual(['Anna Adler', 'Zora Zach'])
+    const nullzeile = result.find(z => z.beamterId === 'b2')
+    expect(nullzeile?.verguetung).toBeNull()
+    expect(nullzeile?.gesamt).toBe(0)
+    expect(nullzeile?.stunden).toEqual({ std_werktag_50: 0, std_sonn_100: 0, std_19_22: 0, std_22_06: 0, std_sonn_200: 0 })
+  })
+
+  it('fügt für Bedienstete mit bereits vorhandener Zeile keine zusätzliche Nullzeile hinzu', () => {
+    const items = [meldung({ id: '1', beamter_id: 'b1', beamter: { id: 'b1', name: 'Anna Adler', dienstnummer: '1' } })]
+    const zeilen = monatsUebersicht(items, anteileVon(...items))
+    const result = vollstaendigeMonatsUebersicht(zeilen, [{ id: 'b1', name: 'Anna Adler', dienstnummer: '1' }])
+    expect(result).toHaveLength(1)
+    expect(result[0].verguetung).toBe('auszahlung')
   })
 })
 

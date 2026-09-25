@@ -7,7 +7,7 @@ import PortalChrome from '../components/PortalChrome'
 import { Actions, Area, ErrorMessage, Field, Modal, inputClass } from '../components/ZentraleEntryEditor'
 import { generateUeberstundenPdf, generateUeberstundenSammelPdf } from '../lib/ueberstundenPdf'
 import { officerPrintName } from '../lib/printDocs'
-import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsAnteileMap, monatsUebersicht, thisMonthLocal, totalStunden, type MeldungFormState, type MonatsAnteilRow, type UeberstundenKategorieKey } from '../lib/ueberstunden'
+import { EMPTY_MELDUNG_FORM, KATEGORIEN, MAX_MELDUNG_DAUER_TAGE, POOL_STATUS, STATUS_COLOR, STATUS_LABEL, VERGUETUNG_LABEL, bereitsVerwendeteFeiertagsstunden, berechneAufschluesselung, formToPayload, formatStunden, formatZeitraum, istUebersprungeneSommerzeitStunde, istViertelstundenRaster, meldungToForm, meldungZeitraum, monatsAnteileMap, monatsUebersicht, thisMonthLocal, totalStunden, vollstaendigeMonatsUebersicht, type MeldungFormState, type MonatsAnteilRow, type UeberstundenKategorieKey } from '../lib/ueberstunden'
 import type { UeberstundenMeldung, UeberstundenVerguetung } from '../lib/types'
 
 const OFFEN_STATUS: UeberstundenMeldung['status'][] = ['entwurf', 'rueckfrage']
@@ -72,6 +72,15 @@ export default function Ueberstunden() {
   const [genehmigerKette, setGenehmigerKette] = useState<{ id: string; name: string; rang: number }[]>([])
   useEffect(() => { void supabase.rpc('genehmiger_kette').then(({ data }) => setGenehmigerKette(data ?? [])) }, [])
   const kettenName = useCallback((id: string | null) => genehmigerKette.find(row => row.id === id)?.name ?? null, [genehmigerKette])
+
+  // Alle aktiven Bediensteten (für die Sammelansicht: die soll wie die
+  // bisher händisch geführte Excel-Liste des Kommandanten jeden auflisten,
+  // auch ohne Meldung im gewählten Monat - siehe vollstaendigeMonatsUebersicht.
+  const [alleBediensteten, setAlleBediensteten] = useState<{ id: string; name: string; dienstnummer: string | null }[]>([])
+  useEffect(() => {
+    if (!isGenehmiger) { setAlleBediensteten([]); return }
+    void supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name').then(({ data }) => setAlleBediensteten(data ?? []))
+  }, [isGenehmiger])
 
   // "Meine Meldungen" - explizit nach beamter_id gefiltert (nicht nur
   // clientseitig aus einer allgemeinen Liste herausgefiltert): die RLS-
@@ -261,7 +270,8 @@ export default function Ueberstunden() {
   function printSammelansicht() {
     const [jahr, monatNr] = monat.split('-').map(Number)
     const monatLabel = new Date(jahr, (monatNr || 1) - 1, 1).toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })
-    generateUeberstundenSammelPdf({ monatLabel, bearbeiterName: officerPrintName(profile), zeilen: uebersicht })
+    const zeilen = vollstaendigeMonatsUebersicht(uebersicht, alleBediensteten)
+    generateUeberstundenSammelPdf({ monatLabel, bearbeiterName: officerPrintName(profile), zeilen })
   }
 
   return <PortalChrome wide>
@@ -295,7 +305,7 @@ export default function Ueberstunden() {
           <h2 className="font-bold text-gray-900">Monatsübersicht – genehmigte Überstunden</h2>
           <div className="flex items-center gap-2">
             <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} w-auto`} />
-            <button type="button" onClick={printSammelansicht} disabled={uebersicht.length === 0} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"><FileOutput className="w-3.5 h-3.5" /> Sammelansicht drucken</button>
+            <button type="button" onClick={printSammelansicht} disabled={alleBediensteten.length === 0} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-200 px-3 py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"><FileOutput className="w-3.5 h-3.5" /> Sammelansicht drucken</button>
           </div>
         </div>
         {uebersicht.length === 0 ? <Empty text="Keine genehmigten Meldungen in diesem Monat." /> : <div className="rounded-lg border border-gray-200 overflow-x-auto">
@@ -308,7 +318,7 @@ export default function Ueberstunden() {
             </tr></thead>
             <tbody>{uebersicht.map(zeile => <tr key={`${zeile.beamterId}:${zeile.verguetung}`} className="border-b border-gray-100 last:border-0">
               <td className="px-3 py-2 font-medium text-gray-800">{zeile.beamterName}{zeile.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {zeile.dienstnummer})</span> : null}</td>
-              <td className="px-3 py-2 text-gray-600">{VERGUETUNG_LABEL[zeile.verguetung]}</td>
+              <td className="px-3 py-2 text-gray-600">{zeile.verguetung ? VERGUETUNG_LABEL[zeile.verguetung] : '–'}</td>
               {KATEGORIEN.map(kat => <td key={kat.key} className="px-3 py-2 text-right tabular-nums">{zeile.stunden[kat.key] ? formatStunden(zeile.stunden[kat.key]) : '–'}</td>)}
               <td className="px-3 py-2 text-right font-bold tabular-nums">{formatStunden(zeile.gesamt)}</td>
             </tr>)}</tbody>
