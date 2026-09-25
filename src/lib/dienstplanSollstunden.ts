@@ -27,8 +27,8 @@ export function werktageImMonat(jahr: number, monatNr: number): number {
   return anzahl
 }
 
-/** Rundet auf Viertelstunden - wie bei der Lohnverrechnung üblich (siehe lib/dienstplanAuswertung.ts). */
-export function rundeViertelstunde(wert: number): number { return Math.round(wert * 4) / 4 }
+/** Bei den Sollstunden zählt laut Kommandant nur die volle Stunde - es wird immer abgerundet, nie aufgerundet. */
+export function rundeAbVolleStunde(wert: number): number { return Math.floor(wert) }
 
 /**
  * Sollstunden für eine Person in einem Monat.
@@ -41,5 +41,5 @@ export function berechneSollstunden(monat: string, stundenProWerktag: number, be
   const jahr = Number(jahrText)
   const monatNr = Number(monatText)
   const werktage = werktageImMonat(jahr, monatNr)
-  return rundeViertelstunde(werktage * stundenProWerktag * (beschaeftigungsgrad / VOLLZEIT_BESCHAEFTIGUNGSGRAD))
+  return rundeAbVolleStunde(werktage * stundenProWerktag * (beschaeftigungsgrad / VOLLZEIT_BESCHAEFTIGUNGSGRAD))
 }
