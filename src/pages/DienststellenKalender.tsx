@@ -5,21 +5,25 @@ import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstpla
 import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
-import { GRUNDBESETZUNG_CODES, grundbesetzungCode, parseDienstCode, type GrundbesetzungCode } from '../lib/dienstplanImport'
+import { parseDienstCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
 // tageweise Tagdienste und Nachtdienste getrennt voneinander, je Zeitraum in
-// Kacheln je Dienst-Kürzel (Grundbesetzung Z/ID/JD - siehe
-// GRUNDBESETZUNG_CODES - genauso wie alle Zusatzdienste VD/TD/ET/... in
-// derselben Kachel-Darstellung) - aus den importierten
-// Dienstplan-Rohdaten (siehe SystemeinstellungenDienstplanImport.tsx). Als
-// Kachel-Titel genügt laut Kommandant das Kürzel, keine ausgeschriebene
-// Bezeichnung. Erst darunter Abwesenheiten (krank/Urlaub/Sonderurlaub/
-// Karenz). Für jede/n aktive/n Bediensteten sichtbar (siehe Migration
-// 20260925051510_dienstplan_dienststellenweit_lesen.sql), keine eigene
-// Bereichsberechtigung nötig - wer Dienst hat, ist Basisinformation für die
-// ganze Dienststelle. Rein lesend; Bearbeitung passiert ausschließlich über
-// den monatlichen Import.
+// Kacheln je Dienst-Kürzel (z. B. Z, ID, JD, VD/ZIV, Bhf, ... - jeder Roh-Code
+// bekommt seine eigene Kachel, kombinierte Codes wie "SVE/TD" werden nicht
+// aufgesplittet) - aus den importierten Dienstplan-Rohdaten (siehe
+// SystemeinstellungenDienstplanImport.tsx). Als Kachel-Titel genügt laut
+// Kommandant das Kürzel, keine ausgeschriebene Bezeichnung. Die
+// Grundbesetzung Z/ID/JD wird laut Kommandant fix vorne gereiht (siehe
+// KACHEL_REIHENFOLGE) und immer angezeigt (auch "nicht besetzt"), die
+// restlichen Kacheln alphabetisch danach. Das Kürzel "U" (Urlaub) sowie
+// bereits als krank/Urlaub/Sonderurlaub/Karenz kategorisierte Zeilen
+// bekommen laut Kommandant keine eigene Kachel, sondern bleiben eine
+// einfache Auflistung je Person. Für jede/n aktive/n Bediensteten sichtbar
+// (siehe Migration 20260925051510_dienstplan_dienststellenweit_lesen.sql),
+// keine eigene Bereichsberechtigung nötig - wer Dienst hat, ist
+// Basisinformation für die ganze Dienststelle. Rein lesend; Bearbeitung
+// passiert ausschließlich über den monatlichen Import.
 
 interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
@@ -52,8 +56,19 @@ function tagOderNacht(vonZeit: string | null): 'tag' | 'nacht' {
 interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null }
 interface DienstKachelDaten { code: string; eintraege: KachelEintrag[] }
 interface AbwesenheitEintrag { beamterId: string; name: string; dienstnummer: string | null; texte: string[]; kategorie: DienstplanKategorieDb }
-interface ZeitabschnittUebersicht { grundbesetzung: Record<GrundbesetzungCode, KachelEintrag[]>; zusatzdienste: DienstKachelDaten[] }
+interface ZeitabschnittUebersicht { kacheln: DienstKachelDaten[] }
 interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht; abwesenheiten: AbwesenheitEintrag[] }
+
+/** Grundbesetzung wird laut Kommandant fix vorne gereiht, danach VD/ZIV und Bhf, der Rest alphabetisch (siehe kachelRang). Z/ID/JD werden immer angezeigt (auch "nicht besetzt"), siehe neuerZeitabschnitt. */
+const KACHEL_REIHENFOLGE = ['Z', 'ID', 'JD', 'VD/ZIV', 'BHF']
+const KACHEL_IMMER_SICHTBAR = ['Z', 'ID', 'JD']
+function kachelRang(code: string): number {
+  const index = KACHEL_REIHENFOLGE.indexOf(code.toUpperCase())
+  return index === -1 ? KACHEL_REIHENFOLGE.length : index
+}
+
+/** Das Kürzel "U" (Urlaub) bekommt laut Kommandant keine eigene Dienst-Kachel, sondern reiht sich wie krank/Urlaub/Sonderurlaub/Karenz in die einfache Auflistung ein. */
+function istUrlaubsKuerzel(code: string): boolean { return code.toUpperCase() === 'U' }
 
 function Kachel({ code, eintraege }: { code: string; eintraege: KachelEintrag[] }) {
   return <div className={`rounded-lg border p-2.5 ${eintraege.length === 0 ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
@@ -72,8 +87,7 @@ function Zeitabschnitt({ titel, daten }: { titel: string; daten: ZeitabschnittUe
   return <div>
     <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">{titel}</p>
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-      {GRUNDBESETZUNG_CODES.map(code => <Kachel key={code} code={code} eintraege={daten.grundbesetzung[code]} />)}
-      {daten.zusatzdienste.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} />)}
+      {daten.kacheln.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} />)}
     </div>
   </div>
 }
@@ -108,19 +122,19 @@ export default function DienststellenKalender() {
 
   const mitarbeiterById = useMemo(() => new Map(mitarbeiter.map(person => [person.id, person])), [mitarbeiter])
 
-  function neuerZeitabschnitt(): { grund: Record<GrundbesetzungCode, KachelEintrag[]>; zusatzMap: Map<string, DienstKachelDaten> } {
-    return { grund: { Z: [], ID: [], JD: [] }, zusatzMap: new Map() }
+  function neuerZeitabschnitt(): Map<string, DienstKachelDaten> {
+    return new Map(KACHEL_IMMER_SICHTBAR.map(code => [code, { code, eintraege: [] }]))
   }
 
   // Jede Rohzeile einzeln (nicht mehr je Person zusammengefasst) zunächst
-  // nach Tagdienst/Nachtdienst (siehe tagOderNacht) und dann einer Kachel
-  // zuordnen - Grundbesetzung (Z/ID/JD) oder ein Zusatzdienst-Kürzel (VD, TD,
-  // ET, ...) bekommt jeweils eine eigene Kachel je Zeitabschnitt. Nur
-  // krank/Urlaub/Sonderurlaub/Karenz bleiben eine einfache Liste je Person.
-  // Dieselbe Person mit zwei Rohzeilen an einem Tag (zeile 1/2, Bedeutung des
-  // Zusammenspiels noch nicht abschließend geklärt, siehe lib/dienstplanImport.ts)
-  // kann dadurch theoretisch in mehreren Kacheln auftauchen; in der Praxis
-  // trägt an einem Tag pro Code eine andere Person die jeweilige Rohzeile.
+  // nach Tagdienst/Nachtdienst (siehe tagOderNacht) und dann einer Kachel je
+  // Dienst-Kürzel zuordnen (kombinierte Codes wie "SVE/TD" bleiben eine
+  // Kachel). Das Kürzel "U" sowie krank/Urlaub/Sonderurlaub/Karenz bleiben
+  // eine einfache Liste je Person. Dieselbe Person mit zwei Rohzeilen an
+  // einem Tag (zeile 1/2, Bedeutung des Zusammenspiels noch nicht
+  // abschließend geklärt, siehe lib/dienstplanImport.ts) kann dadurch
+  // theoretisch in mehreren Kacheln auftauchen; in der Praxis trägt an einem
+  // Tag pro Code eine andere Person die jeweilige Rohzeile.
   const tage = useMemo(() => {
     const proTag = new Map<string, { tag: ReturnType<typeof neuerZeitabschnitt>; nacht: ReturnType<typeof neuerZeitabschnitt>; abwesenheitenMap: Map<string, AbwesenheitEintrag> }>()
     for (const zeile of dienste) {
@@ -131,28 +145,26 @@ export default function DienststellenKalender() {
 
       if (zeile.kategorie === 'dienst') {
         const { code } = parseDienstCode(zeile.rohtext)
-        const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit }
-        const abschnitt = tagOderNacht(zeile.von_zeit) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
-        const grund = grundbesetzungCode(code)
-        if (grund) { abschnitt.grund[grund].push(kachelEintrag); continue }
-
-        const schluessel = code.toUpperCase()
-        let kachel = abschnitt.zusatzMap.get(schluessel)
-        if (!kachel) { kachel = { code, eintraege: [] }; abschnitt.zusatzMap.set(schluessel, kachel) }
-        kachel.eintraege.push(kachelEintrag)
-        continue
+        if (!istUrlaubsKuerzel(code)) {
+          const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit }
+          const abschnitt = tagOderNacht(zeile.von_zeit) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
+          const schluessel = code.toUpperCase()
+          let kachel = abschnitt.get(schluessel)
+          if (!kachel) { kachel = { code, eintraege: [] }; abschnitt.set(schluessel, kachel) }
+          kachel.eintraege.push(kachelEintrag)
+          continue
+        }
       }
 
       let abwesenheit = tagesEintrag.abwesenheitenMap.get(zeile.beamter_id)
       if (!abwesenheit) {
-        abwesenheit = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, texte: [], kategorie: zeile.kategorie }
+        abwesenheit = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, texte: [], kategorie: zeile.kategorie === 'dienst' ? 'urlaub' : zeile.kategorie }
         tagesEintrag.abwesenheitenMap.set(zeile.beamter_id, abwesenheit)
       }
       abwesenheit.texte.push(zeile.rohtext)
     }
     const zuUebersicht = (abschnitt: ReturnType<typeof neuerZeitabschnitt>): ZeitabschnittUebersicht => ({
-      grundbesetzung: abschnitt.grund,
-      zusatzdienste: Array.from(abschnitt.zusatzMap.values()).sort((a, b) => a.code.localeCompare(b.code, 'de-AT')),
+      kacheln: Array.from(abschnitt.values()).sort((a, b) => kachelRang(a.code) - kachelRang(b.code) || a.code.localeCompare(b.code, 'de-AT')),
     })
     return Array.from(proTag.entries())
       .sort(([a], [b]) => a.localeCompare(b))
