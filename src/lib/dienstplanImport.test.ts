@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, grundbesetzungCode, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
 
 describe('parseDienstCode', () => {
   it('trennt Code und Uhrzeit bei einem einfachen Dienst', () => {
@@ -220,5 +220,20 @@ describe('sollstundenFuerMonat', () => {
   })
   it('kein Treffer für einen nicht enthaltenen Monat', () => {
     expect(sollstundenFuerMonat(extrahiereSollstundenEintraege(beispielDrawingXml()), '2026-03')).toBeNull()
+  })
+})
+
+describe('grundbesetzungCode', () => {
+  it('erkennt die drei Grundbesetzungs-Kürzel, unabhängig von Groß-/Kleinschreibung', () => {
+    expect(grundbesetzungCode('Z')).toBe('Z')
+    expect(grundbesetzungCode('id')).toBe('ID')
+    expect(grundbesetzungCode('Jd')).toBe('JD')
+  })
+  it('erkennt ein Grundbesetzungs-Kürzel auch als Teil eines kombinierten Codes', () => {
+    expect(grundbesetzungCode('Sch/JD')).toBe('JD')
+  })
+  it('andere Dienst-Kürzel gehören zu keiner Grundbesetzung', () => {
+    expect(grundbesetzungCode('VD')).toBeNull()
+    expect(grundbesetzungCode('TD')).toBeNull()
   })
 })

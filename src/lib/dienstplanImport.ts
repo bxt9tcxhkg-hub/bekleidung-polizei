@@ -102,6 +102,17 @@ export function kuerzelKlartext(code: string): string {
   return code.split('/').map(teil => DIENST_KUERZEL_LABEL[teil.trim().toUpperCase()] ?? teil.trim()).filter(Boolean).join(' / ')
 }
 
+/** Grundbesetzung laut Kommandant: jeder Tag soll je eine Person auf Zentrale, Innendienst und Journaldienst haben (siehe DienststellenKalender.tsx). */
+export const GRUNDBESETZUNG_CODES = ['Z', 'ID', 'JD'] as const
+export type GrundbesetzungCode = (typeof GRUNDBESETZUNG_CODES)[number]
+export const GRUNDBESETZUNG_TITEL: Record<GrundbesetzungCode, string> = { Z: 'Zentrale', ID: 'Innendienst', JD: 'Journaldienst' }
+
+/** Ordnet einen (evtl. kombinierten, z. B. "Sch/VD") Dienst-Code einem Grundbesetzungs-Kürzel zu, falls einer der Teile exakt passt. */
+export function grundbesetzungCode(code: string): GrundbesetzungCode | null {
+  const teile = code.split('/').map(teil => teil.trim().toUpperCase())
+  return GRUNDBESETZUNG_CODES.find(g => teile.includes(g)) ?? null
+}
+
 function zuDatumString(wert: DienstplanZelle): string | null {
   if (!(wert instanceof Date) || Number.isNaN(wert.getTime())) return null
   return `${wert.getFullYear()}-${pad2(wert.getMonth() + 1)}-${pad2(wert.getDate())}`
