@@ -6,7 +6,7 @@ import { Modal, Actions, ErrorMessage, inputClass } from '../components/Zentrale
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
-import { fehlendeGrundbesetzung } from '../lib/dienstplanBesetzung'
+import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
@@ -31,11 +31,18 @@ interface MitarbeiterOption { id: string; name: string; dienstnummer: string | n
 interface WunschEintrag { wunsch: DienstplanWunschTyp; notiz: string | null }
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
+const ABSCHNITT_LABEL = { tag: 'Tag', nacht: 'Nacht' } as const
 
 function tageImMonat(monatIso: string): string[] {
   const [jahr, monat] = monatIso.split('-').map(Number)
   const letzterTag = new Date(jahr, monat, 0).getDate()
   return Array.from({ length: letzterTag }, (_, index) => `${monatIso}-${String(index + 1).padStart(2, '0')}`)
+}
+
+/** Ob ein Dienstwunsch den angegebenen Zeitabschnitt betrifft - Urlaub blockiert ganztägig, siehe lib/dienstplanWunsch.ts. */
+function wunschBetrifftAbschnitt(wunsch: DienstplanWunschTyp, abschnitt: 'tag' | 'nacht'): boolean {
+  if (wunsch === 'urlaub') return true
+  return wunsch === (abschnitt === 'tag' ? 'frei_tag' : 'frei_nacht')
 }
 
 const QUICK_KUERZEL = ['Z', 'ID', 'JD', 'VD', 'TD', 'ET', 'SVE', 'RA', 'BHF', 'KFZ', 'MOT', 'PV', 'SCH', 'ZIV']
@@ -141,6 +148,20 @@ export default function DienstplanPlanung() {
     return map
   }, [dienste])
 
+  // Für die Tag-/Nacht-Zweizeilenansicht (siehe unten): jede Rohzeile nach
+  // tagOderNacht(von_zeit) einsortiert - dieselbe Logik wie im
+  // Dienststellenkalender, damit beide Ansichten konsistent sind.
+  const dienstByKeyAbschnitt = useMemo(() => {
+    const map = new Map<string, DienstZeile[]>()
+    for (const zeile of dienste) {
+      const schluessel = `${zeile.beamter_id}|${zeile.datum}|${tagOderNacht(zeile.von_zeit)}`
+      const liste = map.get(schluessel) ?? []
+      liste.push(zeile)
+      map.set(schluessel, liste)
+    }
+    return map
+  }, [dienste])
+
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
   const ruheVerletzt = useMemo(
     () => ruhezeitVerletzungen(dienste.map(zeile => ({ beamterId: zeile.beamter_id, datum: zeile.datum, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie })), mindestruhezeitStunden),
@@ -215,7 +236,7 @@ export default function DienstplanPlanung() {
 
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Personen × Tage - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Tagesspalte) bzw. zu kurze Ruhezeit (Zelle).</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Personen × Tage, je Person eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Tagesspalte) bzw. zu kurze Ruhezeit (Zelle).</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -252,13 +273,15 @@ export default function DienstplanPlanung() {
               </tr>
             </thead>
             <tbody>
-              {mitarbeiter.map(person => <tr key={person.id} className="odd:bg-white even:bg-gray-50/50">
-                <td className="sticky left-0 z-10 min-w-40 border-r border-gray-200 bg-inherit px-3 py-1.5 font-medium text-gray-800">{person.name}</td>
+              {mitarbeiter.map(person => (['tag', 'nacht'] as const).map(abschnitt => <tr key={`${person.id}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
+                <td className="sticky left-0 z-10 min-w-40 border-r border-gray-200 bg-inherit px-3 py-1.5">
+                  {abschnitt === 'tag' ? <span className="font-medium text-gray-800">{person.name}</span> : null}
+                  <span className={`ml-1.5 text-[0.65rem] uppercase tracking-wide ${abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
+                </td>
                 {tage.map(datum => {
-                  const schluessel = `${person.id}|${datum}`
-                  const zeilen = (dienstByKey.get(schluessel) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
-                  const wuenscheHeute = wuensche.get(schluessel) ?? []
-                  const ruheVerletzung = ruheVerletzt.has(schluessel)
+                  const zeilen = (dienstByKeyAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
+                  const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
+                  const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
                   return <td key={datum}
                     onClick={() => oeffneZelle(person.id, person.name, datum)}
                     title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
@@ -270,7 +293,7 @@ export default function DienstplanPlanung() {
                     </div>
                   </td>
                 })}
-              </tr>)}
+              </tr>))}
             </tbody>
           </table>
         </div>
