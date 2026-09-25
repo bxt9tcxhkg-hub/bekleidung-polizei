@@ -54,6 +54,7 @@ const Ueberstunden = lazy(() => import('./pages/Ueberstunden'))
 const DienststellenKalender = lazy(() => import('./pages/DienststellenKalender'))
 const MeineDienste = lazy(() => import('./pages/MeineDienste'))
 const DienstplanEinstellungen = lazy(() => import('./pages/DienstplanEinstellungen'))
+const MeineDienstwuensche = lazy(() => import('./pages/MeineDienstwuensche'))
 const Fleet = lazy(() => import('./pages/Fleet'))
 const FleetVehicle = lazy(() => import('./pages/FleetVehicle'))
 const FleetOpenItems = lazy(() => import('./pages/FleetOpenItems'))
@@ -267,6 +268,7 @@ export default function App() {
           <Route path="/dienststellenkalender" element={<ProtectedRoute><PortalChrome wide><DienststellenKalender /></PortalChrome></ProtectedRoute>} />
           <Route path="/meine-dienste" element={<ProtectedRoute><PortalChrome wide><MeineDienste /></PortalChrome></ProtectedRoute>} />
           <Route path="/dienstplan/einstellungen" element={<ProtectedRoute genehmigerOnly><PortalChrome wide><DienstplanEinstellungen /></PortalChrome></ProtectedRoute>} />
+          <Route path="/meine-dienstwuensche" element={<ProtectedRoute><PortalChrome wide><MeineDienstwuensche /></PortalChrome></ProtectedRoute>} />
           <Route
             path="/profil"
             element={
