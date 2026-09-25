@@ -350,12 +350,12 @@ export default function DienstplanPlanung() {
           <table className="text-xs">
             <thead>
               <tr>
-                <th rowSpan={2} className="sticky left-0 z-20 w-24 border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
-                <th rowSpan={2} className="sticky left-24 z-20 w-14 border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold text-gray-600"></th>
+                <th rowSpan={2} className="sticky left-0 z-20 w-24 whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
+                <th rowSpan={2} className="sticky left-24 z-20 w-20 whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold text-gray-600"></th>
                 {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
               </tr>
               <tr>
-                {mitarbeiter.map(person => <th key={person.id} title={person.name} className="min-w-16 border-b border-gray-200 px-1 py-2 text-center font-semibold text-gray-600">{kurznamenMap.get(person.id) ?? person.name}</th>)}
+                {mitarbeiter.map(person => <th key={person.id} title={person.name} className="min-w-20 whitespace-nowrap border-b border-gray-200 px-1.5 py-2 text-center font-semibold text-gray-600">{kurznamenMap.get(person.id) ?? person.name}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -366,11 +366,11 @@ export default function DienstplanPlanung() {
                   const fehlend = (fehlendeGrund.get(datum) ?? []).filter(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
                   return <tr key={`${datum}|${abschnitt}`} className={`odd:bg-white even:bg-gray-50/50 ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
                     {abschnitt === 'tag' ? (
-                      <td rowSpan={2} className="sticky left-0 z-10 w-24 border-r border-gray-200 bg-inherit px-3 py-1.5 align-top">
+                      <td rowSpan={2} className="sticky left-0 z-10 w-24 whitespace-nowrap border-r border-gray-200 bg-white px-3 py-1.5 align-top">
                         <span className="font-medium text-gray-800">{WOCHENTAG_LABEL[wochentag]} {tagText}.</span>
                       </td>
                     ) : null}
-                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-24 z-10 w-14 border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : 'bg-inherit'}`}>
+                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-24 z-10 w-20 whitespace-nowrap border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50'}`}>
                       <span className={`text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-gray-400' : 'text-gray-500'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
                       {fehlend.length > 0 ? <AlertTriangle className="ml-1 inline h-3 w-3 text-red-600" /> : null}
                     </td>
@@ -382,7 +382,7 @@ export default function DienstplanPlanung() {
                       return <td key={person.id}
                         onClick={() => oeffneZelle(person.id, person.name, datum)}
                         title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
-                        className={`min-w-16 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
+                        className={`min-w-20 cursor-pointer border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ruheVerletzung ? 'bg-red-50' : ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
