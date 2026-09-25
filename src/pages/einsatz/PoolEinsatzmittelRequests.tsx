@@ -47,8 +47,6 @@ export default function PoolEinsatzmittelRequestsPanel({ canManage }: { canManag
   const [anzahl, setAnzahl] = useState('')
   const [begruendung, setBegruendung] = useState('')
   const [saving, setSaving] = useState(false)
-  const [reviewing, setReviewing] = useState<RequestWithProfile | null>(null)
-  const [reviewNote, setReviewNote] = useState('')
 
   const load = useCallback(async () => {
     if (!profile?.id) return
@@ -131,33 +129,6 @@ export default function PoolEinsatzmittelRequestsPanel({ canManage }: { canManag
     await load()
   }
 
-  async function review(approve: boolean) {
-    if (!reviewing) return
-    if (!approve && !reviewNote.trim()) {
-      setError('Bitte einen Ablehnungsgrund eintragen.')
-      return
-    }
-    setSaving(true)
-    const { error: rpcError } = await supabase.rpc('decide_pool_einsatzmittel_request', {
-      p_request_id: reviewing.id,
-      p_approve: approve,
-      p_note: reviewNote.trim() || null,
-    })
-    setSaving(false)
-    if (rpcError) {
-      setError(rpcError.message || 'Entscheidung fehlgeschlagen.')
-      return
-    }
-    logAudit(
-      approve ? 'Beschaffungsantrag genehmigt' : 'Beschaffungsantrag abgelehnt',
-      `${POOL_EM_CATEGORY_LABELS[reviewing.category]} · ${reviewing.anzahl} · ${requesterLabel(reviewing)}`,
-    )
-    setReviewing(null)
-    setReviewNote('')
-    setNotice(approve ? 'Antrag genehmigt und im Pool-Bestand angelegt.' : 'Antrag wurde abgelehnt.')
-    await load()
-  }
-
   const visible = canManage ? requests : requests.filter(row => row.requested_by === profile?.id)
 
   return (
@@ -167,7 +138,7 @@ export default function PoolEinsatzmittelRequestsPanel({ canManage }: { canManag
           <h2 className="text-lg font-semibold text-gray-900">Beschaffung</h2>
           <p className="text-sm text-gray-500 mt-1">
             {canPurchase
-              ? 'Anträge auf neue Pool-Einsatzmittel prüfen und entscheiden.'
+              ? 'Übersicht der Anträge auf neue Pool-Einsatzmittel - Entscheidung erfolgt auf der Seite Genehmigungen.'
               : 'Bedarf an neuen Pool-Einsatzmitteln melden; der Genehmiger entscheidet.'}
           </p>
         </div>
@@ -179,7 +150,7 @@ export default function PoolEinsatzmittelRequestsPanel({ canManage }: { canManag
         )}
       </div>
 
-      {error && !showForm && !reviewing ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
+      {error && !showForm ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
       {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
 
       {loading ? (
@@ -212,14 +183,13 @@ export default function PoolEinsatzmittelRequestsPanel({ canManage }: { canManag
                   ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
-                  {canPurchase && row.status === 'pending' ? (
-                    <button type="button" onClick={() => { setReviewing(row); setReviewNote(''); setError('') }} className="flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg">
-                      <Check className="w-4 h-4" /> Prüfen
-                    </button>
-                  ) : row.status === 'pending' && row.requested_by === profile?.id ? (
+                  {row.status === 'pending' && row.requested_by === profile?.id ? (
                     <button type="button" onClick={() => { void withdraw(row) }} className="text-sm font-medium text-red-700 px-3 py-2 rounded-lg hover:bg-red-50">
                       Zurückziehen
                     </button>
+                  ) : row.status === 'pending' ? (
+                    // Entscheidung erfolgt zentral auf der Seite "Genehmigungen" (Freigaben).
+                    <span className="text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full">Wartet auf Genehmiger (Freigaben)</span>
                   ) : null}
                 </div>
               </div>
@@ -272,36 +242,6 @@ export default function PoolEinsatzmittelRequestsPanel({ canManage }: { canManag
         </div>
       ) : null}
 
-      {reviewing ? (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <div><h2 className="font-bold text-gray-900">Beschaffungsantrag prüfen</h2><p className="text-sm text-gray-500 mt-0.5">{requesterLabel(reviewing)}</p></div>
-              <button type="button" onClick={() => setReviewing(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><XCircle className="w-4 h-4" /></button>
-            </div>
-            <div className="px-6 py-4 space-y-4">
-              <div className="bg-gray-50 rounded-xl px-4 py-3">
-                <p className="font-semibold text-gray-900">{POOL_EM_CATEGORY_LABELS[reviewing.category]} · {reviewing.anzahl}</p>
-                <p className="text-sm text-gray-600 mt-1">{VERWAHRUNGSORT_LABELS[reviewing.verwahrungsort]}</p>
-                <p className="text-sm text-gray-600 mt-1">{reviewing.begruendung}</p>
-              </div>
-              <label className="block text-xs font-medium text-gray-600">
-                Bemerkung / Ablehnungsgrund
-                <textarea className={`${inputClass} mt-1 min-h-24 resize-y`} maxLength={500} value={reviewNote} onChange={event => setReviewNote(event.target.value)} />
-              </label>
-              {error ? <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p> : null}
-            </div>
-            <div className="flex flex-col-reverse sm:flex-row gap-3 px-6 py-4 border-t">
-              <button type="button" disabled={saving} onClick={() => { void review(false) }} className="flex-1 flex items-center justify-center gap-2 border border-red-200 text-red-700 font-medium py-2.5 rounded-lg text-sm hover:bg-red-50">
-                <XCircle className="w-4 h-4" /> Ablehnen
-              </button>
-              <button type="button" disabled={saving} onClick={() => { void review(true) }} className="flex-1 flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800 text-white font-medium py-2.5 rounded-lg text-sm">
-                <Check className="w-4 h-4" /> Genehmigen
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

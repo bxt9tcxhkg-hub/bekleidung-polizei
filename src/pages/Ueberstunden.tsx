@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, FileOutput, HelpCircle, Pencil, Plus, RotateCcw, Send, ThumbsDown, ThumbsUp, Trash2, X } from 'lucide-react'
+import { CheckCircle2, FileOutput, Pencil, Plus, RotateCcw, Send, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { fetchAllPages, supabase } from '../lib/supabase'
@@ -56,12 +56,9 @@ export default function Ueberstunden() {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<UeberstundenMeldung | null>(null)
   const [form, setForm] = useState<MeldungFormState>(EMPTY_MELDUNG_FORM)
-  const [deciding, setDeciding] = useState<{ item: UeberstundenMeldung; status: 'abgelehnt' | 'rueckfrage' } | null>(null)
-  const [decideNote, setDecideNote] = useState('')
   const [monat, setMonat] = useState(thisMonthLocal())
   const [uebersichtMeldungen, setUebersichtMeldungen] = useState<UeberstundenMeldung[]>([])
   const [uebersichtAnteile, setUebersichtAnteile] = useState<Map<string, Record<UeberstundenKategorieKey, number>>>(new Map())
-  const [zuEntscheiden, setZuEntscheiden] = useState<UeberstundenMeldung[]>([])
   // Feste, vom Kommandanten vorgegebene Genehmiger-Kette (Rang 1 = primär,
   // Rang 2/3 = Stellvertreter, falls der/die Vorherige nicht da ist) - beim
   // Anlegen einer Meldung wählt der Ersteller daraus, wer sie vorgelegt
@@ -96,30 +93,6 @@ export default function Ueberstunden() {
     setLoading(false)
   }, [profileId])
   useEffect(() => { void load() }, [load])
-
-  const loadZuEntscheiden = useCallback(async () => {
-    if (!isGenehmiger) { setZuEntscheiden([]); return }
-    // Eigene Meldungen sind aus der Entscheidungsliste ausgeblendet ("kein
-    // Selbst-Genehmigen") - AUSSER es gibt gar keinen zweiten Genehmiger/
-    // Admin/Approver, der sie stattdessen entscheiden könnte. Sonst bliebe
-    // die Meldung eines alleinigen Genehmigers für immer auf "eingereicht"
-    // stehen, ohne dass irgendjemand sie je zu sehen bekäme.
-    const [result, otherApproversResult] = await Promise.all([
-      // fetchAllPages statt einer einzelnen Abfrage - sonst würde eine
-      // ältere eingereichte Meldung bei einer sehr großen Tabelle aus der
-      // von PostgREST gedeckelten Standard-Seite fallen und für den
-      // Genehmiger unsichtbar bleiben.
-      fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
-        .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
-        .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true }).order('id', { ascending: true })
-        .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>),
-      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('active', true).neq('id', profile?.id ?? '').overlaps('roles', ['admin', 'genehmiger', 'approver']),
-    ])
-    if (result.error) { setError('Die zu entscheidenden Meldungen konnten nicht geladen werden.'); return }
-    const selbstEinzigerGenehmiger = !otherApproversResult.error && (otherApproversResult.count ?? 0) === 0
-    setZuEntscheiden(selbstEinzigerGenehmiger ? result.data : result.data.filter(item => item.beamter_id !== profile?.id))
-  }, [isGenehmiger, profile?.id])
-  useEffect(() => { void loadZuEntscheiden() }, [loadZuEntscheiden])
 
   // Eigene, gezielt auf den gewählten Monat gefilterte Abfrage (alle
   // Beamten, nicht nur der aktuelle) für die Genehmiger-Monatsübersicht.
@@ -216,33 +189,24 @@ export default function Ueberstunden() {
       : await supabase.from('ueberstunden_meldungen').insert({ ...payload, beamter_id: profile.id, created_by: profile.id })
     setSaving(false)
     if (response.error) { setError('Die Meldung konnte nicht gespeichert werden.'); return }
-    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
+    setShowForm(false); setNotice('Entwurf wurde gespeichert.'); await Promise.all([load(), loadUebersicht()])
   }
   async function submitMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'eingereicht', eingereicht_at: new Date().toISOString() }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht eingereicht werden.'); return }
     logAudit('Überstundenmeldung eingereicht', `${formatZeitraum(item)} · ${formatStunden(totalStunden(item))} Std.`)
-    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
+    setNotice('Meldung wurde eingereicht und wartet auf Genehmigung.'); await Promise.all([load(), loadUebersicht()])
   }
   async function withdrawMeldung(item: UeberstundenMeldung) {
     const result = await supabase.from('ueberstunden_meldungen').update({ status: 'entwurf' }).eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht zurückgezogen werden.'); return }
-    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
+    setNotice('Meldung wurde zurückgezogen und ist wieder als Entwurf bearbeitbar.'); await Promise.all([load(), loadUebersicht()])
   }
   async function deleteMeldung(item: UeberstundenMeldung) {
     if (!window.confirm('Diesen Entwurf endgültig löschen?')) return
     const result = await supabase.from('ueberstunden_meldungen').delete().eq('id', item.id)
     if (result.error) { setError('Die Meldung konnte nicht gelöscht werden.'); return }
     setNotice('Entwurf wurde gelöscht.'); await load()
-  }
-  async function decide(item: UeberstundenMeldung, status: 'genehmigt' | 'abgelehnt' | 'rueckfrage', note: string) {
-    if (!profile?.id) return
-    const result = await supabase.from('ueberstunden_meldungen').update({ status, genehmiger_id: profile.id, genehmigt_at: new Date().toISOString(), genehmiger_note: note.trim() || null }).eq('id', item.id)
-    if (result.error) { setError('Die Entscheidung konnte nicht gespeichert werden.'); return }
-    logAudit(`Überstundenmeldung ${STATUS_LABEL[status].toLowerCase()}`, `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`)
-    setDeciding(null); setDecideNote('')
-    setNotice(status === 'genehmigt' ? 'Meldung wurde genehmigt.' : status === 'abgelehnt' ? 'Meldung wurde abgelehnt.' : 'Meldung wurde zur Rückfrage zurückgelegt.')
-    await Promise.all([load(), loadZuEntscheiden(), loadUebersicht()])
   }
 
   function printMeldung(item: UeberstundenMeldung) {
@@ -269,26 +233,6 @@ export default function Ueberstunden() {
     {error ? <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div> : null}
     {notice ? <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl">{notice}</div> : null}
     {loading ? <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div> : <div className="space-y-8">
-
-      {isGenehmiger ? <section>
-        <h2 className="font-bold text-gray-900 mb-3">Zu entscheiden</h2>
-        {zuEntscheiden.length === 0 ? <Empty text="Keine eingereichten Meldungen zu entscheiden." /> : <div className="space-y-3">{zuEntscheiden.map(item => <article key={item.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><span className="font-bold text-gray-900">{item.beamter?.name ?? '–'}</span>{item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}<span className="text-xs text-gray-400">{formatZeitraum(item)}</span>{item.beamter_id === profile?.id ? <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">Eigene Meldung – kein weiterer Genehmiger vorhanden</span> : null}</div>
-              <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
-              <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
-              <StundenBreakdown item={item} />
-            </div>
-            <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
-              <button type="button" onClick={() => printMeldung(item)} className="p-2 text-blue-700 hover:bg-white rounded-lg" aria-label="Als PDF ausgeben"><FileOutput className="w-4 h-4" /></button>
-              <button type="button" onClick={() => void decide(item, 'genehmigt', '')} className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 border border-green-300 bg-white px-3 py-2 rounded-lg"><ThumbsUp className="w-3.5 h-3.5" /> Genehmigen</button>
-              <button type="button" onClick={() => { setDeciding({ item, status: 'rueckfrage' }); setDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-300 bg-white px-3 py-2 rounded-lg"><HelpCircle className="w-3.5 h-3.5" /> Rückfrage</button>
-              <button type="button" onClick={() => { setDeciding({ item, status: 'abgelehnt' }); setDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-300 bg-white px-3 py-2 rounded-lg"><ThumbsDown className="w-3.5 h-3.5" /> Ablehnen</button>
-            </div>
-          </div>
-        </article>)}</div>}
-      </section> : null}
 
       {isGenehmiger ? <section>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -380,10 +324,5 @@ export default function Ueberstunden() {
       {error ? <ErrorMessage text={error} /> : null}
       <Actions saving={saving} close={() => setShowForm(false)} save={saveDraft} />
     </Modal> : null}
-
-    {deciding ? <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-3 sm:p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-md"><div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b"><h2 className="font-bold text-gray-900">{deciding.status === 'abgelehnt' ? 'Meldung ablehnen' : 'Zur Rückfrage zurücklegen'}</h2><button type="button" onClick={() => setDeciding(null)} className="p-2 hover:bg-gray-100 rounded-lg" aria-label="Schließen"><X className="w-4 h-4" /></button></div><div className="px-5 sm:px-6 py-4 space-y-4">
-      <label className="block text-xs font-medium text-gray-600">{deciding.status === 'abgelehnt' ? 'Begründung (optional)' : 'Was soll geklärt/ergänzt werden? (optional)'}<textarea className={`${inputClass} min-h-24 resize-y`} value={decideNote} onChange={event => setDecideNote(event.target.value)} /></label>
-      <div className="flex justify-end gap-3 pt-2"><button type="button" onClick={() => setDeciding(null)} className="border border-gray-300 text-sm px-4 py-2.5 rounded-lg">Abbrechen</button><button type="button" onClick={() => void decide(deciding.item, deciding.status, decideNote)} className={`${deciding.status === 'abgelehnt' ? 'bg-red-700 hover:bg-red-800' : 'bg-blue-700 hover:bg-blue-800'} text-white text-sm font-medium px-4 py-2.5 rounded-lg`}>{deciding.status === 'abgelehnt' ? 'Ablehnen' : 'Zur Rückfrage zurücklegen'}</button></div>
-    </div></div></div> : null}
   </PortalChrome>
 }

@@ -112,15 +112,16 @@ export default function Portal() {
   const rawCanManageEinsatzmittel = canManagePersonalEinsatzmittel({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const rawCanManageSchulungen = canManageSchulungen({ isStrictAdmin, isGenehmiger: isGenehmigerEntitlement, rows: areaRoles })
   const canManageDuties = isStrictAdmin || isGenehmiger || zentraleManagerRole
-  const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number; ueberstunden?: number }>({})
+  const [openCounts, setOpenCounts] = useState<{ zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number }>({})
 
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number; ueberstunden?: number } = {}
+      const next: { zentrale?: number; fuhrpark?: number; einsatz_mt?: number; schulungen?: number; genehmigungen?: number } = {}
       await Promise.all([
         // Zählt bewusst nur die Fälle, die sonst nirgendwo auf dieser Seite auftauchen
-        // (Budgetüberschreitungen, Lagerbestellungen, Schuherstattungen) - Einsatzmittel-
+        // (Budgetüberschreitungen, Lagerbestellungen, Schuherstattungen, Überstunden-
+        // meldungen - alle vier werden auf /genehmigungen entschieden) - Einsatzmittel-
         // und Schulungs-Anfragen laufen bereits über die einsatz_mt-/schulungen-Zähler
         // unten, eine Doppelzählung würde denselben offenen Fall zweimal ausweisen.
         isGenehmiger
@@ -128,12 +129,8 @@ export default function Portal() {
               supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
               supabase.from('stock_orders').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
               supabase.from('shoe_refunds').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-            ]).then(([orders, stock, refunds]) => { next.genehmigungen = (orders.count ?? 0) + (stock.count ?? 0) + (refunds.count ?? 0) })
-          : Promise.resolve(),
-        // Läuft über eine eigene Seite (Ueberstunden.tsx), nicht über Approvals.tsx -
-        // eigener Zähler, sonst fehlt diese Antragsart in der "offene Aufgaben"-Übersicht.
-        isGenehmiger
-          ? supabase.from('ueberstunden_meldungen').select('id', { count: 'exact', head: true }).eq('status', 'eingereicht').then(({ count }) => { next.ueberstunden = count ?? 0 })
+              supabase.from('ueberstunden_meldungen').select('id', { count: 'exact', head: true }).eq('status', 'eingereicht'),
+            ]).then(([orders, stock, refunds, ueberstunden]) => { next.genehmigungen = (orders.count ?? 0) + (stock.count ?? 0) + (refunds.count ?? 0) + (ueberstunden.count ?? 0) })
           : Promise.resolve(),
         rawCanManageZentrale
           ? Promise.all([
@@ -161,8 +158,7 @@ export default function Portal() {
 
   const totalOpenTasks = Object.values(openCounts).reduce((sum: number, value) => sum + (value ?? 0), 0)
   const openTaskLinks: { key: string; label: string; count: number; to: string }[] = [
-    { key: 'genehmigungen', label: 'Genehmigungen · offene Bestellungen und Erstattungen', count: openCounts.genehmigungen ?? 0, to: '/genehmigungen' },
-    { key: 'ueberstunden', label: 'Überstundenmeldungen · zur Entscheidung eingereicht', count: openCounts.ueberstunden ?? 0, to: '/ueberstunden' },
+    { key: 'genehmigungen', label: 'Genehmigungen · offene Bestellungen, Erstattungen und Überstundenmeldungen', count: openCounts.genehmigungen ?? 0, to: '/genehmigungen' },
     { key: 'zentrale', label: 'Zentrale · kritische offene Einträge', count: openCounts.zentrale ?? 0, to: '/zentrale' },
     { key: 'fuhrpark', label: 'Fuhrpark · unvollständig ausgestattete Fahrzeuge', count: openCounts.fuhrpark ?? 0, to: '/fuhrpark' },
     { key: 'einsatz_mt', label: 'Einsatzmittel · offene Anfragen', count: openCounts.einsatz_mt ?? 0, to: '/einsatz' },

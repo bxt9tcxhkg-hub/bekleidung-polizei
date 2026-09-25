@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap, Footprints, Clock3, ArrowRight } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { CheckCircle, XCircle, AlertTriangle, User, Package, Shield, ShoppingBag, GraduationCap, Footprints, Clock3, ThumbsUp, ThumbsDown, HelpCircle, FileOutput } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import { fetchAllPages, supabase } from '../lib/supabase'
 import type {
   EinsatzTrainingAssignment,
   EinsatzTrainingModule,
@@ -14,6 +14,7 @@ import type {
   SchulungSession,
   ShoeRefund,
   StockOrder,
+  UeberstundenMeldung,
 } from '../lib/types'
 import { ORDER_STATUS_COLORS, ORDER_STATUS_LABELS, STOCK_ORDER_STATUS_COLORS, STOCK_ORDER_STATUS_LABELS } from '../lib/types'
 import { getCurrentBudget, getUsedBudget, getCurrentShoeRefundCapResult } from '../lib/budget'
@@ -22,6 +23,9 @@ import { fmtEUR } from '../lib/format'
 import { PERSONAL_EM_CATEGORY_LABELS, officerDisplayName, personalEmDetailText } from '../lib/personalEinsatzmittel'
 import { POOL_EM_CATEGORY_LABELS } from '../lib/poolEinsatzmittel'
 import { VERWAHRUNGSORT_LABELS } from '../lib/verwahrungsort'
+import { formatStunden, formatZeitraum, totalStunden } from '../lib/ueberstunden'
+import { generateUeberstundenPdf } from '../lib/ueberstundenPdf'
+import { officerPrintName } from '../lib/printDocs'
 
 const CURRENT_YEAR = new Date().getFullYear()
 
@@ -43,6 +47,7 @@ type SchulungAssignmentWithOfficer = SchulungAssignment & { officer?: ProfileMin
 type AssignmentKind = 'training' | 'schulung'
 
 export default function Approvals() {
+  const { profile } = useAuth()
   const [orders, setOrders] = useState<PendingOrder[]>([])
   const [stockOrders, setStockOrders] = useState<StockOrder[]>([])
   const [budgets, setBudgets] = useState<Record<string, { total: number; used: number }>>({})
@@ -60,12 +65,17 @@ export default function Approvals() {
   const [schulungAssignments, setSchulungAssignments] = useState<SchulungAssignmentWithOfficer[]>([])
   const [shoeRefunds, setShoeRefunds] = useState<ShoeRefund[]>([])
   const [shoeRefundCap, setShoeRefundCap] = useState<number | null>(null)
-  // Überstundenmeldungen laufen über eine eigene Seite (Ueberstunden.tsx, mit
-  // eigener Genehmigerketten-/Selbst-Genehmigen-Logik) statt über diese - hier
-  // nur ein Zähler + Link, damit "alles, was auf eine Entscheidung wartet"
-  // nicht stillschweigend eine ganze Antragsart auslässt. null = (noch) nicht
-  // geladen bzw. fehlgeschlagen, dann keine (ggf. falsche) Zahl zeigen.
-  const [ueberstundenCount, setUeberstundenCount] = useState<number | null>(null)
+  // Überstundenmeldungen jetzt direkt hier entschieden (nicht mehr nur verlinkt) -
+  // "kein Selbst-Genehmigen": eigene Meldungen sind ausgeblendet, AUSSER es gibt
+  // gar keinen zweiten Genehmiger/Admin/Approver (sonst bliebe die Meldung eines
+  // alleinigen Genehmigers für immer auf "eingereicht" stehen). Dieselbe Logik wie
+  // zuvor in Ueberstunden.tsx (dort blieb nur noch "Meine Meldungen" + Monatsübersicht).
+  const [ueberstundenItems, setUeberstundenItems] = useState<UeberstundenMeldung[]>([])
+  // Feste, vom Kommandanten vorgegebene Genehmiger-Kette - nur für den PDF-Ausdruck
+  // (voraussichtlicher Genehmiger, bevor entschieden ist), siehe Ueberstunden.tsx.
+  const [genehmigerKette, setGenehmigerKette] = useState<{ id: string; name: string; rang: number }[]>([])
+  const [ueberstundenDeciding, setUeberstundenDeciding] = useState<{ item: UeberstundenMeldung; status: 'abgelehnt' | 'rueckfrage' } | null>(null)
+  const [ueberstundenDecideNote, setUeberstundenDecideNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
   const [cancelReason, setCancelReason] = useState<{ id: string; reason: string; type: 'order' | 'stock' } | null>(null)
@@ -88,7 +98,7 @@ export default function Approvals() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tRegRes, tAssignRes, sModRes, sSessRes, sRegRes, sAssignRes, refundRes, capRes, ueberstundenRes] = await Promise.all([
+    const [ordersRes, stockRes, personalRes, poolRes, tModRes, tSessRes, tRegRes, tAssignRes, sModRes, sSessRes, sRegRes, sAssignRes, refundRes, capRes, ueberstundenRes, otherApproversRes] = await Promise.all([
       supabase
         .from('orders')
         .select('*, products(name,category,price,size_mode), quarters(name), profiles(name,dienstnummer,username)')
@@ -135,7 +145,14 @@ export default function Approvals() {
         .eq('status', 'pending')
         .order('created_at', { ascending: true }),
       getCurrentShoeRefundCapResult(),
-      supabase.from('ueberstunden_meldungen').select('id', { count: 'exact', head: true }).eq('status', 'eingereicht'),
+      // fetchAllPages statt einer einzelnen Abfrage - sonst würde eine ältere
+      // eingereichte Meldung bei einer sehr großen Tabelle aus der von PostgREST
+      // gedeckelten Standardseite fallen und für den Genehmiger unsichtbar bleiben.
+      fetchAllPages<UeberstundenMeldung>((from, to) => supabase.from('ueberstunden_meldungen')
+        .select('*, beamter:profiles!ueberstunden_meldungen_beamter_id_fkey(id,name,dienstnummer)')
+        .eq('status', 'eingereicht').order('von_datum', { ascending: true }).order('von_zeit', { ascending: true }).order('id', { ascending: true })
+        .range(from, to) as unknown as PromiseLike<{ data: UeberstundenMeldung[] | null; error: { message: string } | null }>),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('active', true).neq('id', profile?.id ?? '').overlaps('roles', ['admin', 'genehmiger', 'approver']),
     ])
     // Ein fehlgeschlagener Query darf nicht als "keine offenen Fälle" durchgehen -
     // das würde dem Genehmiger echte, noch unentschiedene Fälle verstecken. Bei
@@ -189,8 +206,14 @@ export default function Approvals() {
     else setSchulungAssignments((sAssignRes.data ?? []) as SchulungAssignmentWithOfficer[])
     if (refundRes.error) failed.push('Schuherstattungen')
     else setShoeRefunds((refundRes.data ?? []) as ShoeRefund[])
-    if (ueberstundenRes.error) { failed.push('Überstundenmeldungen'); setUeberstundenCount(null) }
-    else setUeberstundenCount(ueberstundenRes.count ?? 0)
+    if (ueberstundenRes.error) { failed.push('Überstundenmeldungen'); setUeberstundenItems([]) }
+    else {
+      // "kein Selbst-Genehmigen": eigene Meldungen ausblenden, AUSSER es gibt
+      // gar keinen zweiten Genehmiger/Admin/Approver, der sie stattdessen
+      // entscheiden könnte (siehe Kommentar oben bei ueberstundenItems).
+      const selbstEinzigerGenehmiger = !otherApproversRes.error && (otherApproversRes.count ?? 0) === 0
+      setUeberstundenItems(selbstEinzigerGenehmiger ? ueberstundenRes.data : ueberstundenRes.data.filter(item => item.beamter_id !== profile?.id))
+    }
     // getCurrentShoeRefundCapResult() (anders als getCurrentShoeRefundCap()) meldet einen
     // fehlgeschlagenen Lookup statt ihn als DEFAULT_SHOE_CAP zu verschleiern - sonst würde
     // die Tabelle einen falschen Höchstbetrag als echt ausgeben, während die Genehmigung
@@ -209,9 +232,11 @@ export default function Approvals() {
     }))
     setBudgets(Object.fromEntries(budgetEntries))
     setLoading(false)
-  }, [])
+  }, [profile?.id])
 
   useEffect(() => { load().catch(() => setLoadError('Freigaben konnten nicht geladen werden.')) }, [load])
+  useEffect(() => { void supabase.rpc('genehmiger_kette').then(({ data }) => setGenehmigerKette(data ?? [])) }, [])
+  const kettenName = useCallback((id: string | null) => genehmigerKette.find(row => row.id === id)?.name ?? null, [genehmigerKette])
 
   // Ein direkter Ein-Klick-Fehler (Freigeben/Bestätigen ohne Dialog, z. B. bei
   // Schuherstattungen oder Einsatzmittel-Meldungen) landet nur im Banner ganz oben -
@@ -220,10 +245,10 @@ export default function Approvals() {
   // Ist dagegen gerade ein Dialog offen, zeigt der die Fehlermeldung bereits selbst an.
   const topErrorRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (error && !cancelReason && !reviewingAssignment && !reviewingEm) {
+    if (error && !cancelReason && !reviewingAssignment && !reviewingEm && !ueberstundenDeciding) {
       topErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }
-  }, [error, cancelReason, reviewingAssignment, reviewingEm])
+  }, [error, cancelReason, reviewingAssignment, reviewingEm, ueberstundenDeciding])
 
   async function approve(order: PendingOrder) {
     if (processing) return
@@ -389,6 +414,35 @@ export default function Approvals() {
     load()
   }
 
+  async function decideUeberstunden(item: UeberstundenMeldung, status: 'genehmigt' | 'abgelehnt' | 'rueckfrage', note: string) {
+    if (!profile?.id || processing) return
+    setProcessing(item.id)
+    setError('')
+    const result = await supabase.from('ueberstunden_meldungen')
+      .update({ status, genehmiger_id: profile.id, genehmigt_at: new Date().toISOString(), genehmiger_note: note.trim() || null })
+      .eq('id', item.id)
+    setProcessing(null)
+    if (result.error) { setError('Die Entscheidung konnte nicht gespeichert werden.'); return }
+    logAudit(
+      `Überstundenmeldung ${status === 'genehmigt' ? 'genehmigt' : status === 'abgelehnt' ? 'abgelehnt' : 'zur Rückfrage zurückgelegt'}`,
+      `${item.beamter?.name ?? '–'} · ${formatZeitraum(item)}`,
+    )
+    setUeberstundenDeciding(null); setUeberstundenDecideNote('')
+    load()
+  }
+
+  function printUeberstundenMeldung(item: UeberstundenMeldung) {
+    // Vor der Entscheidung gibt es noch keinen genehmiger-Eintrag - solange wird
+    // stattdessen der vom Ersteller gewählte, voraussichtliche Genehmiger gezeigt.
+    const genehmigerName = kettenName(item.genehmiger_wahl_id) ? officerPrintName({ name: kettenName(item.genehmiger_wahl_id) }) : null
+    generateUeberstundenPdf({
+      beamterName: item.beamter?.name ?? '–', bearbeiterName: officerPrintName(profile), genehmigerName,
+      vonDatum: item.von_datum, vonZeit: item.von_zeit.slice(0, 5), bisDatum: item.bis_datum, bisZeit: item.bis_zeit.slice(0, 5), grund: item.grund,
+      verguetung: item.verguetung,
+      stunden: { std_werktag_50: item.std_werktag_50, std_sonn_100: item.std_sonn_100, std_19_22: item.std_19_22, std_22_06: item.std_22_06, std_sonn_200: item.std_sonn_200 },
+    })
+  }
+
   function openCancelReason(id: string, type: 'order' | 'stock') {
     setError('')
     setCancelReason({ id, reason: '', type })
@@ -503,21 +557,39 @@ export default function Approvals() {
         <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800" /></div>
       ) : (
         <>
-          {/* ── Überstundenmeldungen ── läuft über eine eigene Seite (Genehmigerketten-
-              Logik, Rückfrage-Dialog) statt hier eingebettet zu sein - nur Link + Zähler,
-              damit diese Antragsart auf der Übersicht nicht schlicht fehlt. */}
+          {/* ── Überstundenmeldungen ── direkt hier entscheidbar (nicht mehr nur
+              verlinkt) - Ueberstunden.tsx bleibt für "Meine Meldungen" (jede/r
+              erfasst dort die eigenen) und die Monatsübersicht/Sammel-PDF für die
+              Lohnverrechnung, aber die Entscheidung selbst gehört hierher. */}
           <div>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><Clock3 className="w-4 h-4" /> Überstundenmeldungen</h2>
-            <Link to="/ueberstunden" className="flex items-center gap-4 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-sm transition-all px-5 py-4">
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">{ueberstundenCount === null ? 'Anzahl nicht bekannt' : ueberstundenCount === 0 ? 'Keine offenen Überstundenmeldungen' : `${ueberstundenCount} zur Entscheidung eingereicht`}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Entscheidung (genehmigen/ablehnen/Rückfrage) erfolgt auf der Seite Überstundenmeldungen</p>
+            {ueberstundenItems.length === 0 ? (
+              <Empty icon={Clock3} title="Keine offenen Überstundenmeldungen" />
+            ) : (
+              <div className="space-y-3">
+                {ueberstundenItems.map(item => (
+                  <div key={item.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-gray-900">{item.beamter?.name ?? '–'}</span>
+                          {item.beamter?.dienstnummer ? <span className="text-xs text-gray-500">DNr. {item.beamter.dienstnummer}</span> : null}
+                          <span className="text-xs text-gray-400">{formatZeitraum(item)}</span>
+                        </div>
+                        <p className="text-sm text-gray-700 mt-1">{item.grund}</p>
+                        <p className="text-sm font-semibold text-gray-900 mt-1">{formatStunden(totalStunden(item))} Std. gesamt</p>
+                      </div>
+                      <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                        <button type="button" onClick={() => printUeberstundenMeldung(item)} className="p-2 text-blue-700 hover:bg-blue-50 rounded-lg" aria-label="Als PDF ausgeben"><FileOutput className="w-4 h-4" /></button>
+                        <button type="button" disabled={processing === item.id} onClick={() => void decideUeberstunden(item, 'genehmigt', '')} className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 border border-green-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><ThumbsUp className="w-3.5 h-3.5" /> Genehmigen</button>
+                        <button type="button" disabled={processing === item.id} onClick={() => { setUeberstundenDeciding({ item, status: 'rueckfrage' }); setUeberstundenDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 border border-blue-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><HelpCircle className="w-3.5 h-3.5" /> Rückfrage</button>
+                        <button type="button" disabled={processing === item.id} onClick={() => { setUeberstundenDeciding({ item, status: 'abgelehnt' }); setUeberstundenDecideNote('') }} className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 border border-red-300 bg-white px-3 py-2 rounded-lg disabled:opacity-60"><ThumbsDown className="w-3.5 h-3.5" /> Ablehnen</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              {ueberstundenCount != null && ueberstundenCount > 0 && (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 whitespace-nowrap">{ueberstundenCount} offen</span>
-              )}
-              <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            </Link>
+            )}
           </div>
 
           {/* ── Budgetüberschreitungen ── */}
@@ -802,6 +874,32 @@ export default function Approvals() {
               <button onClick={() => setReviewingAssignment(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={() => void reviewAssignment(false)} disabled={processing === reviewingAssignment.item.id} className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Ablehnen</button>
               <button onClick={() => void reviewAssignment(true)} disabled={processing === reviewingAssignment.item.id || !reviewSessionValid} className="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">Genehmigen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ueberstundenDeciding && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">{ueberstundenDeciding.status === 'abgelehnt' ? 'Überstundenmeldung ablehnen' : 'Zur Rückfrage zurücklegen'}</h2>
+              <p className="text-sm text-gray-500 mt-0.5">{ueberstundenDeciding.item.beamter?.name ?? '–'} · {formatZeitraum(ueberstundenDeciding.item)}</p>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <label className="block text-xs font-medium text-gray-600">{ueberstundenDeciding.status === 'abgelehnt' ? 'Begründung (optional)' : 'Was soll geklärt/ergänzt werden? (optional)'}
+                <textarea rows={3} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" value={ueberstundenDecideNote} onChange={e => setUeberstundenDecideNote(e.target.value)} autoFocus />
+              </label>
+              {error && <p className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setUeberstundenDeciding(null)} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button
+                onClick={() => void decideUeberstunden(ueberstundenDeciding.item, ueberstundenDeciding.status, ueberstundenDecideNote)}
+                disabled={processing === ueberstundenDeciding.item.id}
+                className={`flex-1 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60 ${ueberstundenDeciding.status === 'abgelehnt' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-700 hover:bg-blue-800'}`}>
+                {ueberstundenDeciding.status === 'abgelehnt' ? 'Ablehnen' : 'Zur Rückfrage zurücklegen'}
+              </button>
             </div>
           </div>
         </div>

@@ -38,7 +38,6 @@ export default function ShoeRefunds() {
   const [userSearch, setUserSearch] = useState('')
   const [userDropdown, setUserDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [reviewing, setReviewing] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState<ShoeRefundStatus | 'all'>('all')
 
@@ -107,31 +106,6 @@ export default function ShoeRefunds() {
       load()
     }
     setSaving(false)
-  }
-
-  async function review(id: string, status: 'approved' | 'rejected') {
-    setReviewing(id)
-    const payload: { status: ShoeRefundStatus; reviewed_by: string; reviewed_at: string; approved_amount?: number } = {
-      status,
-      reviewed_by: profile!.id,
-      reviewed_at: new Date().toISOString(),
-    }
-    if (status === 'approved') {
-      // Genehmigten Betrag zum Zeitpunkt der GENEHMIGUNG anhand des aktuellen Caps berechnen
-      const refund = refunds.find(r => r.id === id)
-      const cap = await getCurrentShoeRefundCap()
-      setMaxRefund(cap)
-      if (refund) payload.approved_amount = Math.min(Number(refund.amount), cap)
-    }
-    const { error } = await supabase.from('shoe_refunds').update(payload).eq('id', id)
-    if (error) setError(`Aktion fehlgeschlagen: ${error.message}`)
-    else {
-      const benutzername = refunds.find(r => r.id === id)?.profiles?.name ?? '?'
-      logAudit(status === 'approved' ? 'Schuherstattung genehmigt' : 'Schuherstattung abgelehnt', benutzername)
-      setError('')
-    }
-    setReviewing(null)
-    load()
   }
 
   const visibleRefunds = statusFilter === 'all' ? refunds : refunds.filter(r => r.status === statusFilter)
@@ -238,30 +212,11 @@ export default function ShoeRefunds() {
                     {canManage && <td className="px-4 py-3 text-gray-500 text-xs hidden md:table-cell">{r.note ?? '–'}</td>}
                     {canManage && (
                       <td className="px-4 py-3">
-                        {r.status === 'pending' && (
-                          <div className="flex items-center gap-1.5 justify-end">
-                            <button
-                              onClick={() => review(r.id, 'approved')}
-                              disabled={reviewing === r.id}
-                              title="Genehmigen"
-                              className="p-1.5 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 disabled:opacity-50 transition-colors"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => review(r.id, 'rejected')}
-                              disabled={reviewing === r.id}
-                              title="Ablehnen"
-                              className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 disabled:opacity-50 transition-colors"
-                            >
-                              <Ban className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
-                        {r.status !== 'pending' && (
-                          <p className="text-xs text-gray-400 text-right whitespace-nowrap">
-                            {r.reviewer?.name ?? '–'}
-                          </p>
+                        {/* Entscheidung erfolgt zentral auf der Seite "Genehmigungen" (Freigaben), nicht mehr hier. */}
+                        {r.status === 'pending' ? (
+                          <p className="text-xs text-amber-700 text-right whitespace-nowrap">→ Freigaben</p>
+                        ) : (
+                          <p className="text-xs text-gray-400 text-right whitespace-nowrap">{r.reviewer?.name ?? '–'}</p>
                         )}
                       </td>
                     )}
