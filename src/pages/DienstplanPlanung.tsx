@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarDays, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, CalendarDays, CheckCircle2, Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
@@ -8,6 +8,7 @@ import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
 import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
+import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
@@ -22,7 +23,11 @@ import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 // siehe lib/dienstplanBesetzung.ts - dieselbe Logik wie im
 // Dienststellenkalender) und rote Zellenmarkierung bei zu kurzer Ruhezeit
 // (lib/dienstplanRegelpruefung.ts). Eingereichte Dienstwünsche (Phase 2)
-// werden als kleines Symbol angezeigt, binden den Planer aber nicht. Nur
+// werden als kleines Symbol angezeigt, binden den Planer aber nicht.
+// "Vorschlag generieren" (Phase 4) füllt unbesetzte Grundbesetzungs-Slots
+// heuristisch vor (lib/dienstplanVorschlag.ts) - die Vorschläge werden NUR
+// im Browser gehalten (gestrichelt dargestellt), bis der Planer sie über
+// "Vorschläge übernehmen" bewusst speichert oder verwirft. Nur
 // Admin/Genehmiger erreichen diese Seite (siehe ProtectedRoute
 // genehmigerOnly in App.tsx).
 
@@ -97,6 +102,8 @@ export default function DienstplanPlanung() {
   const [notice, setNotice] = useState('')
   const [anlegen, setAnlegen] = useState(false)
   const [veroeffentlichen, setVeroeffentlichen] = useState(false)
+  const [vorschlaege, setVorschlaege] = useState<Map<string, VorschlagEintrag>>(new Map())
+  const [vorschlagUebernehmen, setVorschlagUebernehmen] = useState(false)
 
   const [bearbeitung, setBearbeitung] = useState<{ beamterId: string; name: string; datum: string } | null>(null)
   const [zeile1, setZeile1] = useState<ZeileForm>(LEERE_ZEILE)
@@ -105,7 +112,7 @@ export default function DienstplanPlanung() {
   const [modalError, setModalError] = useState('')
 
   const load = useCallback(async () => {
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setVorschlaege(new Map())
     const [regelnResult, mitarbeiterResult, monatResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('mindestruhezeit_stunden').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
@@ -234,6 +241,58 @@ export default function DienstplanPlanung() {
     setBearbeitung(null)
   }
 
+  // Vorschlag generieren (Phase 4) - reine, lokale Berechnung über
+  // lib/dienstplanVorschlag.ts, keine DB-Schreibzugriffe. Ersetzt
+  // bestehende Vorschläge komplett (kein Zusammenführen über mehrere
+  // Läufe hinweg, um Altdaten nicht unbemerkt stehen zu lassen).
+  function vorschlagGenerieren() {
+    const eingabeDienste = dienste.map(zeile => ({ beamterId: zeile.beamter_id, datum: zeile.datum, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie, code: parseDienstCode(zeile.rohtext).code }))
+    const eingabeWuensche = Array.from(wuensche.entries()).flatMap(([schluessel, liste]) => {
+      const [beamterId, datum] = schluessel.split('|')
+      return liste.map(eintrag => ({ beamterId, datum, wunsch: eintrag.wunsch }))
+    })
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter, tage, bestehendeDienste: eingabeDienste, wuensche: eingabeWuensche, mindestruhezeitStunden })
+    setVorschlaege(new Map(ergebnis.map(eintrag => [`${eintrag.beamterId}|${eintrag.datum}|${eintrag.abschnitt}`, eintrag])))
+    setNotice(ergebnis.length > 0 ? `${ergebnis.length} Vorschläge generiert - bitte prüfen und übernehmen.` : 'Es gibt aktuell nichts vorzuschlagen (alles besetzt oder niemand verfügbar).')
+    setError('')
+  }
+
+  function vorschlaegeVerwerfen() {
+    setVorschlaege(new Map())
+  }
+
+  async function vorschlaegeUebernehmen() {
+    if (!monatRow || vorschlaege.size === 0) return
+    setVorschlagUebernehmen(true); setError('')
+    const belegteZeilen = new Map<string, Set<1 | 2>>()
+    function naechsteFreieZeile(beamterId: string, datum: string): 1 | 2 | null {
+      const schluessel = `${beamterId}|${datum}`
+      if (!belegteZeilen.has(schluessel)) belegteZeilen.set(schluessel, new Set((dienstByKey.get(schluessel) ?? []).map(zeile => zeile.zeile)))
+      const belegt = belegteZeilen.get(schluessel)!
+      const nummer = !belegt.has(1) ? 1 : !belegt.has(2) ? 2 : null
+      if (nummer !== null) belegt.add(nummer)
+      return nummer
+    }
+
+    const aufgaben: PromiseLike<{ error: unknown }>[] = []
+    const neueZeilen: DienstZeile[] = []
+    for (const vorschlag of vorschlaege.values()) {
+      const nummer = naechsteFreieZeile(vorschlag.beamterId, vorschlag.datum)
+      if (nummer === null) continue // sollte durch den Algorithmus schon ausgeschlossen sein, sicherheitshalber übersprungen statt überschrieben
+      aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_setzen', {
+        p_monat_id: monatRow.id, p_beamter_id: vorschlag.beamterId, p_datum: vorschlag.datum, p_zeile: nummer,
+        p_rohtext: vorschlag.code, p_von_zeit: vorschlag.vonZeit ?? '', p_bis_zeit: vorschlag.bisZeit ?? '', p_kategorie: 'dienst',
+      }))
+      neueZeilen.push({ beamter_id: vorschlag.beamterId, datum: vorschlag.datum, zeile: nummer, rohtext: vorschlag.code, von_zeit: vorschlag.vonZeit, bis_zeit: vorschlag.bisZeit, kategorie: 'dienst' })
+    }
+    const ergebnisse = await Promise.all(aufgaben)
+    setVorschlagUebernehmen(false)
+    if (ergebnisse.some(ergebnis => ergebnis.error)) { setError('Nicht alle Vorschläge konnten gespeichert werden.'); return }
+    setDienste(current => [...current, ...neueZeilen])
+    setVorschlaege(new Map())
+    setNotice(`${neueZeilen.length} Vorschläge übernommen.`)
+  }
+
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Personen × Tage, je Person eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Tagesspalte) bzw. zu kurze Ruhezeit (Zelle).</p></div>
@@ -252,7 +311,14 @@ export default function DienstplanPlanung() {
       : <>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-gray-500">Status: <span className="font-medium text-gray-800">{monatRow.status === 'veroeffentlicht' ? 'Veröffentlicht' : 'Entwurf'}</span></p>
-          {monatRow.status !== 'veroeffentlicht' ? <button type="button" disabled={veroeffentlichen} onClick={() => void monatVeroeffentlichen()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {veroeffentlichen ? 'Wird veröffentlicht…' : 'Veröffentlichen'}</button> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {vorschlaege.size > 0 ? <>
+              <span className="text-xs text-gray-500">{vorschlaege.size} Vorschläge (gestrichelt im Grid)</span>
+              <button type="button" onClick={vorschlaegeVerwerfen} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"><X className="h-3.5 w-3.5" /> Verwerfen</button>
+              <button type="button" disabled={vorschlagUebernehmen} onClick={() => void vorschlaegeUebernehmen()} className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {vorschlagUebernehmen ? 'Wird übernommen…' : 'Vorschläge übernehmen'}</button>
+            </> : <button type="button" onClick={vorschlagGenerieren} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><Sparkles className="h-3.5 w-3.5" /> Vorschlag generieren</button>}
+            {monatRow.status !== 'veroeffentlicht' ? <button type="button" disabled={veroeffentlichen} onClick={() => void monatVeroeffentlichen()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {veroeffentlichen ? 'Wird veröffentlicht…' : 'Veröffentlichen'}</button> : null}
+          </div>
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -282,6 +348,7 @@ export default function DienstplanPlanung() {
                   const zeilen = (dienstByKeyAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
                   const wuenscheHeute = (wuensche.get(`${person.id}|${datum}`) ?? []).filter(eintrag => wunschBetrifftAbschnitt(eintrag.wunsch, abschnitt))
                   const ruheVerletzung = ruheVerletzt.has(`${person.id}|${datum}`)
+                  const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
                   return <td key={datum}
                     onClick={() => oeffneZelle(person.id, person.name, datum)}
                     title={wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : undefined}
@@ -289,6 +356,7 @@ export default function DienstplanPlanung() {
                   >
                     <div className="flex flex-col items-center gap-0.5">
                       {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung ? 'text-red-700' : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                      {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}
                       {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
                     </div>
                   </td>
