@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Pencil, Plus, X, Footprints, Check, Ban, Clock } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentShoeRefundCap, DEFAULT_SHOE_CAP } from '../lib/budget'
+import { DEFAULT_SHOE_CAP, existingCapIdForDate } from '../lib/budget'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
-import type { ShoeRefund, ShoeRefundStatus, Profile } from '../lib/types'
+import type { ShoeRefund, ShoeRefundCap, ShoeRefundStatus, Profile } from '../lib/types'
+
+const today = () => new Date().toISOString().split('T')[0]
 
 const STATUS_LABEL: Record<ShoeRefundStatus, string> = {
   pending: 'Ausstehend',
@@ -33,13 +35,20 @@ export default function ShoeRefunds() {
   const [users, setUsers] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [maxRefund, setMaxRefund] = useState(DEFAULT_SHOE_CAP)
   const [form, setForm] = useState({ user_id: '', amount: '', refund_date: new Date().toISOString().split('T')[0], note: '' })
   const [userSearch, setUserSearch] = useState('')
   const [userDropdown, setUserDropdown] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [statusFilter, setStatusFilter] = useState<ShoeRefundStatus | 'all'>('all')
+
+  // Maximalbetrag - vormals auf Budgets.tsx ("Budgetverwaltung"), jetzt direkt
+  // hier auf der Schuherstattungen-Verwaltung, da er ausschließlich diesen
+  // Bereich betrifft.
+  const [caps, setCaps] = useState<ShoeRefundCap[]>([])
+  const [showCapForm, setShowCapForm] = useState(false)
+  const [capForm, setCapForm] = useState({ amount: '', valid_from: today(), note: '' })
+  const [capSaving, setCapSaving] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -55,15 +64,51 @@ export default function ShoeRefunds() {
 
   useEffect(() => {
     async function init() {
-      const [cap] = await Promise.all([getCurrentShoeRefundCap(), load().catch(() => setError('Schuherstattungen konnten nicht geladen werden.'))])
-      setMaxRefund(cap)
+      const tasks: PromiseLike<unknown>[] = [load().catch(() => setError('Schuherstattungen konnten nicht geladen werden.'))]
       if (canManage) {
-        const { data } = await supabase.from('profiles').select('*').eq('active', true).order('name')
-        setUsers(data ?? [])
+        tasks.push(
+          supabase.from('profiles').select('*').eq('active', true).order('name').then(({ data }) => setUsers(data ?? [])),
+          supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }).order('created_at', { ascending: false })
+            .then(({ data }) => setCaps((data ?? []) as ShoeRefundCap[])),
+        )
       }
+      await Promise.all(tasks)
     }
     if (profile) init()
-  }, [profile, isAdmin, isGenehmiger])
+  }, [profile, isAdmin, isGenehmiger, canManage])
+
+  // caps ist valid_from absteigend sortiert: erster Eintrag <= heute ist der aktuelle,
+  // der LETZTE Eintrag > heute ist die nächste anstehende Änderung.
+  const currentCap = caps.find(c => c.valid_from <= today())
+  const futureCaps = caps.filter(c => c.valid_from > today())
+  const scheduledCap = futureCaps.length > 0 ? futureCaps[futureCaps.length - 1] : undefined
+  const maxRefund = Number(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP)
+
+  async function saveCap() {
+    const val = parseFloat(capForm.amount.replace(',', '.'))
+    if (isNaN(val) || val < 0) return
+    setCapSaving(true)
+    const existingId = existingCapIdForDate(caps, capForm.valid_from)
+    const { error } = existingId
+      ? await supabase.from('shoe_refund_caps').update({
+          cap_amount: val,
+          note: capForm.note || null,
+        }).eq('id', existingId)
+      : await supabase.from('shoe_refund_caps').insert({
+          cap_amount: val,
+          valid_from: capForm.valid_from,
+          note: capForm.note || null,
+          created_by: profile!.id,
+        })
+    setCapSaving(false)
+    if (error) { setError(`Maximalbetrag konnte nicht gespeichert werden: ${error.message}`); return }
+    logAudit('Schuherstattungs-Deckel geändert', `${fmtEUR(val)} ab ${capForm.valid_from}`)
+    setError('')
+    setShowCapForm(false)
+    setCapForm({ amount: '', valid_from: today(), note: '' })
+    const { data } = await supabase.from('shoe_refund_caps').select('*').order('valid_from', { ascending: false }).order('created_at', { ascending: false })
+    setCaps((data ?? []) as ShoeRefundCap[])
+  }
 
   function selectUser(u: Profile) {
     setForm(f => ({ ...f, user_id: u.id }))
@@ -136,13 +181,6 @@ export default function ShoeRefunds() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Schuherstattungen</h1>
           <p className="text-gray-500 text-sm mt-1">{canManage ? 'Alle Schuhkostenerstattungen' : 'Meine Schuhkostenerstattungen'}</p>
-          {canManage && (
-            <p className="text-sm text-gray-500 mt-1">
-              Maximalbetrag {fmtEUR(maxRefund)}
-              {' · '}
-              <Link to="/budgets" className="text-blue-700 hover:underline font-medium">unter Budgetverwaltung anpassen</Link>
-            </p>
-          )}
         </div>
         <button
           onClick={() => { resetForm(); setShowForm(true) }}
@@ -153,6 +191,44 @@ export default function ShoeRefunds() {
           <span className="hidden sm:inline">Neue Erstattung</span>
         </button>
       </div>
+
+      {/* Maximalbetrag - gleiche Karten-Gestaltung wie die Gesamtanpassung auf
+          der Budgetverwaltung (Icon+Titel links, "Anpassen"-Button rechts). */}
+      {canManage && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-teal-100 p-2 rounded-lg"><Footprints className="w-4 h-4 text-teal-700" /></div>
+              <div>
+                <p className="font-semibold text-gray-900">Schuherstattung Maximalbetrag</p>
+                <p className="text-xs text-gray-500">Globale Obergrenze für alle Benutzer</p>
+              </div>
+            </div>
+            <button onClick={() => { setShowCapForm(true); setCapForm({ amount: String(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP), valid_from: today(), note: currentCap?.note ?? '' }) }}
+              className="flex items-center gap-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
+              <Pencil className="w-4 h-4" /> Anpassen
+            </button>
+          </div>
+          <div className="flex items-center gap-6 flex-wrap">
+            <div>
+              <p className="text-3xl font-bold text-gray-900">{fmtEUR(Number(currentCap?.cap_amount ?? DEFAULT_SHOE_CAP))}</p>
+              {currentCap
+                ? <p className="text-xs text-gray-400 mt-0.5">gültig seit {new Date(currentCap.valid_from).toLocaleDateString('de-AT')}</p>
+                : <p className="text-xs text-gray-400 mt-0.5">kein Eintrag — Standard {fmtEUR(DEFAULT_SHOE_CAP)}</p>}
+            </div>
+            {scheduledCap && (
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <CalendarClock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-800">Geplante Änderung</p>
+                  <p className="text-xs text-amber-700">{fmtEUR(Number(scheduledCap.cap_amount))} ab {new Date(scheduledCap.valid_from).toLocaleDateString('de-AT')}</p>
+                  {scheduledCap.note && <p className="text-xs text-amber-600 italic mt-0.5">{scheduledCap.note}</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Status filter tabs */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
@@ -298,6 +374,46 @@ export default function ShoeRefunds() {
               <button onClick={resetForm} className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
               <button onClick={create} disabled={saving} className="flex-1 bg-blue-800 hover:bg-blue-900 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
                 {saving ? 'Speichern...' : 'Speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCapForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="px-6 py-4 border-b">
+              <h2 className="font-bold text-gray-900">Schuherstattung anpassen</h2>
+              <p className="text-xs text-gray-500 mt-1">Neuer Maximalbetrag mit Gültigkeitsdatum</p>
+            </div>
+            <div className="px-6 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Maximalbetrag (€)</label>
+                <input type="number" step="0.01" min="0" autoFocus
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={capForm.amount} onChange={e => setCapForm(f => ({ ...f, amount: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Gültig ab</label>
+                <input type="date"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={capForm.valid_from} onChange={e => setCapForm(f => ({ ...f, valid_from: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Notiz (optional)</label>
+                <input type="text"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={capForm.note} onChange={e => setCapForm(f => ({ ...f, note: e.target.value }))}
+                  placeholder="z. B. Anpassung laut Beschluss 2027" />
+              </div>
+            </div>
+            <div className="flex gap-3 px-6 py-4 border-t">
+              <button onClick={() => setShowCapForm(false)}
+                className="flex-1 border border-gray-300 text-gray-700 font-medium py-2.5 rounded-lg text-sm hover:bg-gray-50">Abbrechen</button>
+              <button onClick={saveCap} disabled={!capForm.amount || capSaving}
+                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-medium py-2.5 rounded-lg text-sm disabled:opacity-60">
+                {capSaving ? 'Wird gespeichert...' : 'Speichern'}
               </button>
             </div>
           </div>
