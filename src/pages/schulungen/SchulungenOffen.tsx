@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
-import type { SchulungAssignment, SchulungCompletion, SchulungModule, SchulungSession } from '../../lib/types'
+import type { SchulungAssignment, SchulungCompletion, SchulungModule } from '../../lib/types'
 import { formatCompletedOn, officersCompletedForModule, officersOpenForModule } from '../../lib/schulungen'
 import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList, type PortalAdminProfile } from '../../lib/portalAdmin'
 import { loadErrorMessage, withTimeout } from '../../lib/loadTimeout'
 import type { Profile } from '../../lib/types'
-
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'> & PortalAdminProfile
 
@@ -18,7 +15,6 @@ export default function SchulungenOffenPanel({ canManage }: { canManage: boolean
   const [modules, setModules] = useState<SchulungModule[]>([])
   const [completions, setCompletions] = useState<SchulungCompletion[]>([])
   const [officers, setOfficers] = useState<OfficerOption[]>([])
-  const [sessions, setSessions] = useState<SchulungSession[]>([])
   const [assignments, setAssignments] = useState<SchulungAssignment[]>([])
   const [moduleId, setModuleId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -30,11 +26,10 @@ export default function SchulungenOffenPanel({ canManage }: { canManage: boolean
   async function load() {
     setLoading(true)
     try {
-      const [modRes, compRes, profRes, sessRes, assignRes] = await withTimeout(Promise.all([
+      const [modRes, compRes, profRes, assignRes] = await withTimeout(Promise.all([
         supabase.from('schulungen_module').select('*').eq('active', true).order('name'),
         supabase.from('schulungen_completions').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`),
         canManage ? supabase.from('profiles').select(OFFICER_LIST_PROFILE_SELECT).order('name') : Promise.resolve({ data: [] as OfficerOption[], error: null }),
-        supabase.from('schulungen_sessions').select('*').eq('announced', true).order('session_date', { ascending: true }),
         canManage
           ? supabase.from('schulungen_assignments').select(`*, officer:profiles!officer_id(${OFFICER_LIST_PROFILE_SELECT})`).eq('status', 'vorschlag').is('session_id', null)
           : Promise.resolve({ data: [] as SchulungAssignment[], error: null }),
@@ -43,20 +38,17 @@ export default function SchulungenOffenPanel({ canManage }: { canManage: boolean
       if (modRes.error) failures.push('Module')
       if (compRes.error) failures.push('Abschlüsse')
       if (profRes.error) failures.push('Personen')
-      if (sessRes.error) failures.push('Termine')
       if (assignRes.error) failures.push('Vorschläge')
       setError(failures.length > 0 ? `Nicht alles konnte geladen werden (${failures.join(', ')}).` : '')
       setModules(modRes.error ? [] : ((modRes.data ?? []) as SchulungModule[]))
       setCompletions(compRes.error ? [] : ((compRes.data ?? []) as SchulungCompletion[]))
       setOfficers(profRes.error ? [] : excludeAdminsFromOfficerList((profRes.data ?? []) as OfficerOption[]))
-      setSessions(sessRes.error ? [] : ((sessRes.data ?? []) as SchulungSession[]))
       setAssignments(assignRes.error ? [] : ((assignRes.data ?? []) as SchulungAssignment[]))
     } catch (err) {
       setError(loadErrorMessage(err, 'Offene Liste konnte nicht geladen werden.'))
       setModules([])
       setCompletions([])
       setOfficers([])
-      setSessions([])
       setAssignments([])
     } finally {
       setLoading(false)
@@ -76,7 +68,6 @@ export default function SchulungenOffenPanel({ canManage }: { canManage: boolean
 
   const open = useMemo(() => officersOpenForModule({ moduleId: effectiveId, officers, completions }), [effectiveId, officers, completions])
   const done = useMemo(() => officersCompletedForModule({ moduleId: effectiveId, officers, completions }), [effectiveId, officers, completions])
-  const offerings = useMemo(() => sessions.filter(s => s.module_id === effectiveId), [sessions, effectiveId])
   const moduleAssignments = useMemo(() => assignments.filter(a => a.module_id === effectiveId), [assignments, effectiveId])
 
   async function proposeForModule(officerId: string) {

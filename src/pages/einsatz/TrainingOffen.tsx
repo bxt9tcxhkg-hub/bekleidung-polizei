@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, XCircle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -28,8 +27,6 @@ import { officerDisplayName } from '../../lib/personalEinsatzmittel'
 import { OFFICER_LIST_PROFILE_SELECT, excludeAdminsFromOfficerList, isPortalAdminProfile } from '../../lib/portalAdmin'
 import { generateOffenAnmeldungenPdf } from '../../lib/einsatzPdf'
 import PdfExportButton from './PdfExportButton'
-
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
 type OfficerOption = Pick<Profile, 'id' | 'name' | 'dienstnummer' | 'username' | 'active' | 'organisation' | 'roles'> & Pick<Partial<Profile>, 'admin'>
 
