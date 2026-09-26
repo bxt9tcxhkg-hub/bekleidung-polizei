@@ -72,7 +72,7 @@ function wunschBetrifftAbschnitt(wunsch: DienstplanWunschTyp, abschnitt: 'tag' |
 
 const QUICK_KUERZEL = ['Z', 'ID', 'JD', 'VD', 'TD', 'ET', 'SVE', 'RA', 'BHF', 'KFZ', 'MOT', 'PV', 'SCH', 'ZIV']
 const ABWESENHEIT_KUERZEL: { label: string; code: string }[] = [
-  { label: 'Urlaub', code: 'U' },
+  { label: 'Urlaub', code: 'Urlaub' },
   { label: 'Krank', code: 'Krank' },
   { label: 'Sonderurlaub', code: 'SoUrl' },
   { label: 'Stundenersatz', code: 'StdErsatz' },
