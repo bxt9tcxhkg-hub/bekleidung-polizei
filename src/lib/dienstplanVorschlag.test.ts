@@ -92,6 +92,14 @@ describe('generiereGrundbesetzungsVorschlag', () => {
     expect(ergebnis.some(e => e.abschnitt === 'nacht')).toBe(false)
   })
 
+  it('vergibt keinen Tagdienst am 1., wenn ein Nachtdienst am letzten Tag des Vormonats (nicht Teil von "tage") die Ruhezeit verletzen würde', () => {
+    const einePerson: VorschlagPerson[] = [{ id: 'a', name: 'Anna' }]
+    // Nachtdienst 19-08 Uhr am 30.9. (Vormonat, kein Teil von "tage") - bis 08:00 am 1.10., direkt im Anschluss ein Tagdienst 08-19 hätte 0 Stunden Ruhezeit.
+    const bestehendeDienste: VorschlagBestehenderDienst[] = [{ beamterId: 'a', datum: '2026-09-30', vonZeit: '19:00', bisZeit: '08:00', kategorie: 'dienst', code: 'JD' }]
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einePerson, tage: ['2026-10-01'], bestehendeDienste, wuensche: [], mindestruhezeitStunden: 11 })
+    expect(ergebnis.some(e => e.abschnitt === 'tag')).toBe(false)
+  })
+
   it('liefert ein leeres Ergebnis ohne Mitarbeiter oder Tage', () => {
     expect(generiereGrundbesetzungsVorschlag({ mitarbeiter: [], tage: ['2026-10-05'], bestehendeDienste: [], wuensche: [], mindestruhezeitStunden: 11 })).toEqual([])
     expect(generiereGrundbesetzungsVorschlag({ mitarbeiter: MITARBEITER, tage: [], bestehendeDienste: [], wuensche: [], mindestruhezeitStunden: 11 })).toEqual([])
