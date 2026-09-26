@@ -25,7 +25,7 @@
 import { isAustrianHoliday } from './austrianHolidays'
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
 import { formatStunden } from './ueberstunden'
-import { persoenlicheStundenUebersicht, zaehleDienstarten } from './dienstplanAuswertung'
+import { abwesenheitsStunden, persoenlicheStundenUebersicht, zaehleDienstarten } from './dienstplanAuswertung'
 import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung } from './dienstplanBesetzung'
 import { formatDienstAnzeige } from './dienstplanImport'
 import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
@@ -43,6 +43,8 @@ export interface DienstplanDruckInput {
   tage: readonly string[]
   dienste: readonly DienstplanDruckZeile[]
   markierungen: readonly DienstplanDruckMarkierung[]
+  /** Für die "Stunden"-Zeile der Auswertung - siehe abwesenheitsStunden in lib/dienstplanAuswertung.ts. */
+  stundenProWerktag: number
 }
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
@@ -68,7 +70,7 @@ function datumAusIso(datumIso: string): Date {
 }
 
 export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
-  const { personen, tage, dienste, markierungen } = input
+  const { personen, tage, dienste, markierungen, stundenProWerktag } = input
 
   // Dicke Trennlinie zwischen Personen-Gruppen (Kommando/Dienstführung/
   // Beamte, personen ist bereits danach sortiert), dünne zwischen
@@ -155,7 +157,8 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
     const ueberstundenMarkierungId = markierungen.find(markierung => markierung.kategorie === 'ueberstunden')?.id ?? null
     const auswertungByPersonId = new Map(personen.map(person => {
       const zeilen = dienstePerPerson.get(person.id) ?? []
-      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen, ueberstundenMarkierungId) }] as const
+      const stunden = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsStunden(zeilen, stundenProWerktag)
+      return [person.id, { stunden, arten: zaehleDienstarten(zeilen, ueberstundenMarkierungId) }] as const
     }))
     const zeilenDefinition = [
       { label: 'Stunden', wert: (personId: string) => formatStunden(auswertungByPersonId.get(personId)?.stunden ?? 0) },
