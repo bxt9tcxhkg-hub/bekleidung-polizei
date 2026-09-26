@@ -1,13 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, X } from 'lucide-react'
+import { Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { dienstplanSupabase, type DienstplanPersonEinstellungenRow, type DienstplanRegelRow } from '../lib/dienstplanSupabase'
+import { dienstplanSupabase, type DienstplanMarkierungRow, type DienstplanPersonEinstellungenRow, type DienstplanRegelRow } from '../lib/dienstplanSupabase'
 import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { berechneSollstunden, naechsterPlanbarerMonat, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { monatsKontingent } from '../lib/dienstplanWunsch'
 import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
+import { markierungFarbKlassen, MARKIERUNG_FARBEN, MARKIERUNG_FARBE_LABEL, type DienstplanMarkierungFarbe } from '../lib/dienstplanMarkierungen'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planungsregeln für die Dienstplan-Planung im Portal (siehe
@@ -42,15 +43,28 @@ export default function DienstplanEinstellungen() {
   const [editGrad, setEditGrad] = useState('')
   const [personSpeichern, setPersonSpeichern] = useState(false)
 
+  // Freie, vom Planer selbst definierbare Farbmarkierungen für einzelne
+  // Diensteinträge (z. B. "Überstunden" blau) - werden im Planer-Grid
+  // (Dienstplan-Planung) je Zeile ausgewählt und färben die Zelle
+  // durchgehend über Tag/Nacht ein (siehe lib/dienstplanMarkierungen.ts).
+  const [markierungen, setMarkierungen] = useState<DienstplanMarkierungRow[]>([])
+  const [neueMarkierungName, setNeueMarkierungName] = useState('')
+  const [neueMarkierungFarbe, setNeueMarkierungFarbe] = useState<DienstplanMarkierungFarbe>('blau')
+  const [editMarkierungId, setEditMarkierungId] = useState<string | null>(null)
+  const [editMarkierungName, setEditMarkierungName] = useState('')
+  const [editMarkierungFarbe, setEditMarkierungFarbe] = useState<DienstplanMarkierungFarbe>('blau')
+  const [markierungSpeichern, setMarkierungSpeichern] = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true); setError('')
-    const [regelnResult, mitarbeiterResult, einstellungenResult, monateResult] = await Promise.all([
+    const [regelnResult, mitarbeiterResult, einstellungenResult, monateResult, markierungenResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('id,stunden_pro_werktag,mindestruhezeit_stunden,wunschfrist_tage,offener_wunsch_monat,aktueller_planungsmonat,updated_by,updated_at').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('monat'),
+      dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,reihenfolge,updated_by,updated_at').order('reihenfolge').order('name'),
     ])
-    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monateResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monateResult.error || markierungenResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) {
       setRegeln(regelnResult.data)
       setRegelForm({
@@ -65,9 +79,44 @@ export default function DienstplanEinstellungen() {
     setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setEinstellungen(new Map((einstellungenResult.data as PersonEinstellungRow[] ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
     setVorhandeneMonate((monateResult.data ?? []).map(row => row.monat))
+    setMarkierungen(markierungenResult.data ?? [])
     setLoading(false)
   }, [])
   useEffect(() => { void load() }, [load])
+
+  async function markierungAnlegen() {
+    const name = neueMarkierungName.trim()
+    if (!name) { setError('Bitte einen Namen für die Markierung eingeben.'); return }
+    setMarkierungSpeichern(true); setError('')
+    const result = await dienstplanSupabase.from('dienstplan_markierungen').insert({ name, farbe: neueMarkierungFarbe, updated_by: profile?.id ?? null })
+    setMarkierungSpeichern(false)
+    if (result.error) { setError('Die Markierung konnte nicht angelegt werden (Name eventuell schon vergeben).'); return }
+    setNeueMarkierungName(''); setNeueMarkierungFarbe('blau')
+    await load()
+  }
+
+  function beginneMarkierungBearbeitung(markierung: DienstplanMarkierungRow) {
+    setEditMarkierungId(markierung.id); setEditMarkierungName(markierung.name); setEditMarkierungFarbe(markierung.farbe as DienstplanMarkierungFarbe); setError('')
+  }
+
+  async function markierungSpeichernAendern(id: string) {
+    const name = editMarkierungName.trim()
+    if (!name) { setError('Bitte einen Namen für die Markierung eingeben.'); return }
+    setMarkierungSpeichern(true); setError('')
+    const result = await dienstplanSupabase.from('dienstplan_markierungen').update({ name, farbe: editMarkierungFarbe, updated_by: profile?.id ?? null }).eq('id', id)
+    setMarkierungSpeichern(false)
+    if (result.error) { setError('Die Markierung konnte nicht gespeichert werden (Name eventuell schon vergeben).'); return }
+    setEditMarkierungId(null)
+    await load()
+  }
+
+  async function markierungLoeschen(id: string) {
+    setMarkierungSpeichern(true); setError('')
+    const result = await dienstplanSupabase.from('dienstplan_markierungen').delete().eq('id', id)
+    setMarkierungSpeichern(false)
+    if (result.error) { setError('Die Markierung konnte nicht gelöscht werden.'); return }
+    await load()
+  }
 
   async function speichereRegeln() {
     const stundenProWerktag = Number(regelForm.stundenProWerktag.replace(',', '.'))
@@ -196,6 +245,49 @@ export default function DienstplanEinstellungen() {
               })}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
+        <h2 className="font-semibold text-gray-900">Farbmarkierungen</h2>
+        <p className="mt-1 text-xs text-gray-500">Frei definierbare Markierungen für einzelne Diensteinträge im Planer-Grid (Dienstplan-Planung), z. B. "Überstunden" blau - rein visuell, unabhängig vom Dienst-Kürzel.</p>
+        <div className="mt-3 space-y-2">
+          {markierungen.map(markierung => {
+            const editing = editMarkierungId === markierung.id
+            const farben = markierungFarbKlassen(editing ? editMarkierungFarbe : markierung.farbe)
+            return <div key={markierung.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2">
+              {editing ? <>
+                <input type="text" autoFocus className="w-40 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={editMarkierungName} onChange={event => setEditMarkierungName(event.target.value)}
+                  onKeyDown={event => { if (event.key === 'Enter') void markierungSpeichernAendern(markierung.id); if (event.key === 'Escape') setEditMarkierungId(null) }} />
+                <select className="rounded-lg border border-gray-300 px-2 py-1 text-sm" value={editMarkierungFarbe} onChange={event => setEditMarkierungFarbe(event.target.value as DienstplanMarkierungFarbe)}>
+                  {MARKIERUNG_FARBEN.map(farbe => <option key={farbe} value={farbe}>{MARKIERUNG_FARBE_LABEL[farbe]}</option>)}
+                </select>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${farben.bg} ${farben.text}`}>Vorschau</span>
+                <div className="ml-auto flex gap-1">
+                  <button type="button" disabled={markierungSpeichern} onClick={() => void markierungSpeichernAendern(markierung.id)} className="rounded p-1 text-green-600 hover:bg-green-50"><Check className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setEditMarkierungId(null)} className="rounded p-1 text-gray-500 hover:bg-gray-100"><X className="h-4 w-4" /></button>
+                </div>
+              </> : <>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${farben.bg} ${farben.text}`}>{markierung.name}</span>
+                <span className="text-xs text-gray-400">{MARKIERUNG_FARBE_LABEL[markierung.farbe as DienstplanMarkierungFarbe] ?? markierung.farbe}</span>
+                <div className="ml-auto flex gap-1">
+                  <button type="button" onClick={() => beginneMarkierungBearbeitung(markierung)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"><Pencil className="h-4 w-4" /></button>
+                  <button type="button" disabled={markierungSpeichern} onClick={() => void markierungLoeschen(markierung.id)} className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-700"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              </>}
+            </div>
+          })}
+          {markierungen.length === 0 ? <p className="text-sm text-gray-400">Noch keine Farbmarkierungen angelegt.</p> : null}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+          <input type="text" placeholder="Name, z. B. Überstunden" className="w-40 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={neueMarkierungName} onChange={event => setNeueMarkierungName(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter') void markierungAnlegen() }} />
+          <select className="rounded-lg border border-gray-300 px-2 py-1 text-sm" value={neueMarkierungFarbe} onChange={event => setNeueMarkierungFarbe(event.target.value as DienstplanMarkierungFarbe)}>
+            {MARKIERUNG_FARBEN.map(farbe => <option key={farbe} value={farbe}>{MARKIERUNG_FARBE_LABEL[farbe]}</option>)}
+          </select>
+          <button type="button" disabled={markierungSpeichern} onClick={() => void markierungAnlegen()} className="inline-flex items-center gap-1.5 rounded-lg bg-blue-800 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"><Plus className="h-4 w-4" /> Anlegen</button>
         </div>
       </section>
     </>}
