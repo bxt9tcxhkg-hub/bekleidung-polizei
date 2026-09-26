@@ -6,7 +6,7 @@ import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal, todayLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { parseDienstCode } from '../lib/dienstplanImport'
-import { KACHEL_IMMER_SICHTBAR, abschnittFuerAnzeige, fehlendeGrundbesetzung, kachelRang } from '../lib/dienstplanBesetzung'
+import { KACHEL_IMMER_SICHTBAR, fehlendeGrundbesetzung, kachelRang, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { kategorieFarbenMap, kategorieFarbKlassen, type DienstplanAbsenzKategorie } from '../lib/dienstplanMarkierungen'
 import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImport'
 
@@ -20,10 +20,12 @@ import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImpo
 // Grundbesetzung Z/ID/JD wird laut Kommandant fix vorne gereiht (siehe
 // KACHEL_REIHENFOLGE) und immer angezeigt (auch "nicht besetzt"), die
 // restlichen Kacheln alphabetisch danach. Urlaub/Krank/Sonderurlaub/Karenz/
-// Stundenersatz bekommen laut Kommandant ebenfalls eine eigene Kachel (wie
-// jeder andere Dienst-Code) statt einer separaten Liste, landen aber wegen
-// fehlender Uhrzeit immer in der Tag-Zeile (siehe abschnittFuerAnzeige) und
-// werden farblich markiert wie im Planer-Grid (siehe absenzFarbe). Für
+// Stundenersatz landen NICHT unter den Tagdiensten, sondern in einem
+// eigenen Abschnitt "Abwesenheiten" - dort außerdem je Kategorie
+// zusammengefasst statt je Rohcode, damit z. B. "U" und "Urlaub" (beides
+// Kategorie "urlaub", siehe kategorieAusRohtext in dienstplanImport.ts) in
+// einer gemeinsamen Kachel landen. Farblich markiert wie im Planer-Grid
+// (siehe kategorieFarbKlassen). Für
 // jede/n aktive/n Bediensteten sichtbar (siehe Migration
 // 20260925051510_dienstplan_dienststellenweit_lesen.sql), keine eigene
 // Bereichsberechtigung nötig - wer Dienst hat, ist Basisinformation für die
@@ -67,9 +69,10 @@ function kalenderWochen(monatIso: string): (string | null)[][] {
 interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null; kategorie: DienstplanKategorieDb }
 interface DienstKachelDaten { code: string; eintraege: KachelEintrag[] }
 interface ZeitabschnittUebersicht { kacheln: DienstKachelDaten[] }
-interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht }
+interface AbwesenheitKachelDaten { kategorie: DienstplanAbsenzKategorie; eintraege: KachelEintrag[] }
+interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht; abwesenheiten: AbwesenheitKachelDaten[] }
 
-function Kachel({ code, eintraege, erforderlich, kategorieFarben }: { code: string; eintraege: KachelEintrag[]; erforderlich: number; kategorieFarben: ReadonlyMap<DienstplanAbsenzKategorie, string> }) {
+function Kachel({ code, eintraege, erforderlich, kategorieFarben, zeigeKategorieLabel = true }: { code: string; eintraege: KachelEintrag[]; erforderlich: number; kategorieFarben: ReadonlyMap<DienstplanAbsenzKategorie, string>; zeigeKategorieLabel?: boolean }) {
   const unterbesetzt = eintraege.length < erforderlich
   const farbe = eintraege[0] ? kategorieFarbKlassen(eintraege[0].kategorie, kategorieFarben) : null
   return <div className={`rounded-lg border p-2.5 ${farbe ? `border-transparent ${farbe.bg}` : unterbesetzt ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
@@ -78,9 +81,9 @@ function Kachel({ code, eintraege, erforderlich, kategorieFarben }: { code: stri
     {eintraege.length > 0 ? <div className="mt-1 space-y-0.5">
       {eintraege.map(eintrag => <p key={eintrag.beamterId} className={`text-sm font-medium ${farbe ? farbe.text : 'text-gray-800'}`}>
         {eintrag.name}
-        <span className={`ml-1.5 font-mono text-xs font-normal ${farbe ? farbe.text : 'text-gray-500'}`}>
+        {zeigeKategorieLabel ? <span className={`ml-1.5 font-mono text-xs font-normal ${farbe ? farbe.text : 'text-gray-500'}`}>
           {eintrag.kategorie !== 'dienst' ? (KATEGORIE_LABEL[eintrag.kategorie] ?? '') : eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`}
-        </span>
+        </span> : null}
       </p>)}
     </div> : null}
   </div>
@@ -91,6 +94,17 @@ function Zeitabschnitt({ titel, daten, kategorieFarben }: { titel: string; daten
     <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">{titel}</p>
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
       {daten.kacheln.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} erforderlich={MINDESTBESETZUNG[kachel.code as GrundbesetzungCode] ?? 1} kategorieFarben={kategorieFarben} />)}
+    </div>
+  </div>
+}
+
+/** Eigener Abschnitt für Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz, getrennt von den Tag-/Nachtdienst-Kacheln - je Kategorie eine Kachel (kein "erforderlich", keine "nicht besetzt"-Warnung, kein Uhrzeit-Suffix, da der Kachel-Titel die Kategorie schon nennt). */
+function AbwesenheitenAbschnitt({ daten, kategorieFarben }: { daten: AbwesenheitKachelDaten[]; kategorieFarben: ReadonlyMap<DienstplanAbsenzKategorie, string> }) {
+  if (daten.length === 0) return null
+  return <div>
+    <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">Abwesenheiten</p>
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      {daten.map(kachel => <Kachel key={kachel.kategorie} code={KATEGORIE_LABEL[kachel.kategorie] ?? kachel.kategorie} eintraege={kachel.eintraege} erforderlich={0} kategorieFarben={kategorieFarben} zeigeKategorieLabel={false} />)}
     </div>
   </div>
 }
@@ -157,26 +171,42 @@ export default function DienststellenKalender() {
   }
 
   // Jede Rohzeile einzeln (nicht mehr je Person zusammengefasst) zunächst
-  // nach Tagdienst/Nachtdienst (siehe abschnittFuerAnzeige) und dann einer
-  // Kachel je Dienst-Kürzel zuordnen (kombinierte Codes wie "SVE/TD" bleiben
-  // eine Kachel) - Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz bekommen
-  // dabei ganz genauso eine eigene Kachel wie jeder andere Dienst-Code.
-  // Dieselbe Person mit zwei Rohzeilen an einem Tag (zeile 1/2, Bedeutung
-  // des Zusammenspiels noch nicht abschließend geklärt, siehe
+  // nach Tagdienst/Nachtdienst (siehe tagOderNacht) und dann einer Kachel
+  // je Dienst-Kürzel zuordnen (kombinierte Codes wie "SVE/TD" bleiben eine
+  // Kachel). Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz haben weder
+  // Uhrzeit noch gehören sie zu Tag- oder Nachtdienst - sie landen separat
+  // in tagesEintrag.abwesenheiten, je Kategorie eine Kachel (nicht je
+  // Rohcode, damit z. B. "U" und "Urlaub" zusammen erscheinen). Dieselbe
+  // Person mit zwei Rohzeilen an einem Tag (zeile 1/2, Bedeutung des
+  // Zusammenspiels noch nicht abschließend geklärt, siehe
   // lib/dienstplanImport.ts) kann dadurch theoretisch in mehreren Kacheln
   // auftauchen; in der Praxis trägt an einem Tag pro Code eine andere
   // Person die jeweilige Rohzeile.
   const tage = useMemo(() => {
-    const proTag = new Map<string, { tag: ReturnType<typeof neuerZeitabschnitt>; nacht: ReturnType<typeof neuerZeitabschnitt> }>()
+    const proTag = new Map<string, { tag: ReturnType<typeof neuerZeitabschnitt>; nacht: ReturnType<typeof neuerZeitabschnitt>; abwesenheiten: Map<DienstplanAbsenzKategorie, AbwesenheitKachelDaten> }>()
     for (const zeile of dienste) {
       const person = mitarbeiterById.get(zeile.beamter_id)
       if (!person) continue
       let tagesEintrag = proTag.get(zeile.datum)
-      if (!tagesEintrag) { tagesEintrag = { tag: neuerZeitabschnitt(), nacht: neuerZeitabschnitt() }; proTag.set(zeile.datum, tagesEintrag) }
+      if (!tagesEintrag) { tagesEintrag = { tag: neuerZeitabschnitt(), nacht: neuerZeitabschnitt(), abwesenheiten: new Map() }; proTag.set(zeile.datum, tagesEintrag) }
+
+      // "sonstiges" ist keine echte Abwesenheit, sondern eine rein farbliche
+      // Markierung auf einer sonst leeren Zelle (kein Kürzel, siehe
+      // DienstplanPlanung.tsx) - bekommt daher weder eine Dienst- noch eine
+      // Abwesenheits-Kachel.
+      if (zeile.kategorie === 'sonstiges') continue
+
+      const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie }
+
+      if (zeile.kategorie !== 'dienst') {
+        let abwesenheitKachel = tagesEintrag.abwesenheiten.get(zeile.kategorie)
+        if (!abwesenheitKachel) { abwesenheitKachel = { kategorie: zeile.kategorie, eintraege: [] }; tagesEintrag.abwesenheiten.set(zeile.kategorie, abwesenheitKachel) }
+        abwesenheitKachel.eintraege.push(kachelEintrag)
+        continue
+      }
 
       const { code } = parseDienstCode(zeile.rohtext)
-      const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie }
-      const abschnitt = abschnittFuerAnzeige(zeile) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
+      const abschnitt = tagOderNacht(zeile.von_zeit) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
       const schluessel = code.toUpperCase()
       let kachel = abschnitt.get(schluessel)
       if (!kachel) { kachel = { code, eintraege: [] }; abschnitt.set(schluessel, kachel) }
@@ -187,7 +217,10 @@ export default function DienststellenKalender() {
     })
     return Array.from(proTag.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([datum, { tag, nacht }]): TagesUebersicht => ({ datum, tag: zuUebersicht(tag), nacht: zuUebersicht(nacht) }))
+      .map(([datum, { tag, nacht, abwesenheiten }]): TagesUebersicht => ({
+        datum, tag: zuUebersicht(tag), nacht: zuUebersicht(nacht),
+        abwesenheiten: Array.from(abwesenheiten.values()).sort((a, b) => (KATEGORIE_LABEL[a.kategorie] ?? '').localeCompare(KATEGORIE_LABEL[b.kategorie] ?? '', 'de-AT')),
+      }))
   }, [dienste, mitarbeiterById])
 
   const kategorieFarben = useMemo(() => kategorieFarbenMap(markierungen), [markierungen])
@@ -201,7 +234,7 @@ export default function DienststellenKalender() {
   const abwesenheitenAnzahlProTag = useMemo(() => {
     const proTag = new Map<string, Set<string>>()
     for (const zeile of dienste) {
-      if (zeile.kategorie === 'dienst') continue
+      if (zeile.kategorie === 'dienst' || zeile.kategorie === 'sonstiges') continue
       let personen = proTag.get(zeile.datum)
       if (!personen) { personen = new Set(); proTag.set(zeile.datum, personen) }
       personen.add(zeile.beamter_id)
@@ -258,6 +291,7 @@ export default function DienststellenKalender() {
               <div className="space-y-3">
                 <Zeitabschnitt titel="Tagdienste" daten={ausgewaehlteUebersicht.tag} kategorieFarben={kategorieFarben} />
                 <Zeitabschnitt titel="Nachtdienste" daten={ausgewaehlteUebersicht.nacht} kategorieFarben={kategorieFarben} />
+                <AbwesenheitenAbschnitt daten={ausgewaehlteUebersicht.abwesenheiten} kategorieFarben={kategorieFarben} />
               </div>
             </div>}
         </div>
