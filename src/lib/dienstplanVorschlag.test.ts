@@ -70,6 +70,13 @@ describe('generiereGrundbesetzungsVorschlag', () => {
     expect(ergebnis.some(e => e.abschnitt === 'nacht' && e.beamterId === 'a')).toBe(true)
   })
 
+  it('eine Gerichtsverhandlung/Schulverkehrserziehung/Personalvertretung erzeugt keinen Widerspruch (Planer bleibt frei, im Gegensatz zu frei_tag)', () => {
+    const fuenfPersonen: VorschlagPerson[] = [...MITARBEITER, { id: 'd', name: 'Doris' }, { id: 'e', name: 'Erik' }]
+    const wuensche: VorschlagWunsch[] = [{ beamterId: 'a', datum: '2026-10-05', wunsch: 'gerichtsverhandlung' }]
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: fuenfPersonen, tage: ['2026-10-05'], bestehendeDienste: [], wuensche, mindestruhezeitStunden: 11 })
+    expect(ergebnis.some(e => e.abschnitt === 'tag' && e.beamterId === 'a')).toBe(true)
+  })
+
   it('weicht vom Wunsch ab, wenn sonst niemand verfügbar ist', () => {
     const einePerson: VorschlagPerson[] = [{ id: 'a', name: 'Anna' }]
     const wuensche: VorschlagWunsch[] = [{ beamterId: 'a', datum: '2026-10-05', wunsch: 'frei_tag' }]

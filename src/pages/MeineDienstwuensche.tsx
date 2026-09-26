@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { dienstplanSupabase, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
-import { kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAblaufdatum, wunschfristAbgelaufen, type WunschEintragKurz } from '../lib/dienstplanWunsch'
+import { WUNSCH_LABEL, kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAblaufdatum, wunschfristAbgelaufen, type WunschEintragKurz } from '../lib/dienstplanWunsch'
 
 // "Meine Dienstwünsche": Freiplanungswünsche nach der Regelung des
 // Kommandanten - ein ganzer freier Tag braucht ZWEI Wünsche (Tag frei +
@@ -16,6 +16,19 @@ import { kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAb
 // Planer sieht die Wünsche, ist aber nicht daran gebunden. Nur bis zur
 // konfigurierten Wunschfrist änderbar (serverseitig durchgesetzt in den
 // RPCs dienstplan_wunsch_setzen/dienstplan_wunsch_loeschen).
+//
+// Daneben können dienstliche Termine hinterlegt werden (Gerichtsverhandlung,
+// Schulverkehrserziehung-Termin, Personalvertretung-Sitzung) - das sind
+// keine Freiplanungswünsche, sondern Informationen für den Planer, der den
+// tatsächlichen Dienst weiterhin frei gestaltet. Sie zählen laut Kommandant
+// NICHT gegen das Kontingent/die Slot-Folge-Regel (siehe TERMIN_TYPEN unten
+// und die Filterung in lib/dienstplanWunsch.ts) und können optional mit
+// einer Von-/Bis-Uhrzeit versehen werden.
+
+const TERMIN_TYPEN: readonly DienstplanWunschTyp[] = ['gerichtsverhandlung', 'schulverkehrserziehung', 'personalvertretung']
+const TERMIN_KURZLABEL: Partial<Record<DienstplanWunschTyp, string>> = {
+  gerichtsverhandlung: 'Gericht', schulverkehrserziehung: 'SVE-Termin', personalvertretung: 'PV-Sitzung',
+}
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
 
@@ -35,6 +48,12 @@ const TOGGLE_STIL: Record<'aktiv' | 'inaktiv', string> = {
   aktiv: 'border-blue-700 bg-blue-700 text-white',
   inaktiv: 'border-gray-300 text-gray-700 hover:bg-gray-50',
 }
+const TERMIN_TOGGLE_STIL: Record<'aktiv' | 'inaktiv', string> = {
+  aktiv: 'border-purple-700 bg-purple-700 text-white',
+  inaktiv: 'border-gray-300 text-gray-700 hover:bg-gray-50',
+}
+
+interface TerminZeit { vonZeit: string | null; bisZeit: string | null }
 
 export default function MeineDienstwuensche() {
   const { profile } = useAuth()
@@ -47,6 +66,7 @@ export default function MeineDienstwuensche() {
   const [wunschfristTage, setWunschfristTage] = useState(14)
   const [beschaeftigungsgrad, setBeschaeftigungsgrad] = useState(VOLLZEIT_BESCHAEFTIGUNGSGRAD)
   const [wuensche, setWuensche] = useState<Map<string, Set<DienstplanWunschTyp>>>(new Map())
+  const [terminZeiten, setTerminZeiten] = useState<Map<string, Map<DienstplanWunschTyp, TerminZeit>>>(new Map())
   const [speichernSchluessel, setSpeichernSchluessel] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -64,15 +84,20 @@ export default function MeineDienstwuensche() {
     const monat = regelnResult.data?.offener_wunsch_monat?.slice(0, 7) ?? null
     setOffenerMonat(monat)
     if (!monat) { setWuensche(new Map()); setLoading(false); return }
-    const wuenscheResult = await dienstplanSupabase.from('dienstplan_wuensche').select('datum,wunsch').eq('beamter_id', profileId).eq('monat', `${monat}-01`)
+    const wuenscheResult = await dienstplanSupabase.from('dienstplan_wuensche').select('datum,wunsch,von_zeit,bis_zeit').eq('beamter_id', profileId).eq('monat', `${monat}-01`)
     if (wuenscheResult.error) { setError('Die Dienstwünsche konnten nicht geladen werden.'); setLoading(false); return }
     const geladen = new Map<string, Set<DienstplanWunschTyp>>()
+    const geladeneZeiten = new Map<string, Map<DienstplanWunschTyp, TerminZeit>>()
     for (const row of wuenscheResult.data ?? []) {
       const menge = geladen.get(row.datum) ?? new Set<DienstplanWunschTyp>()
       menge.add(row.wunsch)
       geladen.set(row.datum, menge)
+      const zeitenProTag = geladeneZeiten.get(row.datum) ?? new Map<DienstplanWunschTyp, TerminZeit>()
+      zeitenProTag.set(row.wunsch, { vonZeit: row.von_zeit, bisZeit: row.bis_zeit })
+      geladeneZeiten.set(row.datum, zeitenProTag)
     }
     setWuensche(geladen)
+    setTerminZeiten(geladeneZeiten)
     setLoading(false)
   }, [profileId])
   useEffect(() => { void load() }, [load])
@@ -114,6 +139,13 @@ export default function MeineDienstwuensche() {
         if (menge.size === 0) naechste.delete(datum); else naechste.set(datum, menge)
         return naechste
       })
+      setTerminZeiten(current => {
+        const naechste = new Map(current)
+        const zeitenProTag = new Map(naechste.get(datum) ?? [])
+        zeitenProTag.delete(wunsch)
+        if (zeitenProTag.size === 0) naechste.delete(datum); else naechste.set(datum, zeitenProTag)
+        return naechste
+      })
     } else {
       for (const zuLoeschen of loeschenZusaetzlich) {
         if (wuensche.get(datum)?.has(zuLoeschen)) await dienstplanSupabase.rpc('dienstplan_wunsch_loeschen', { p_monat: `${monat}-01`, p_datum: datum, p_wunsch: zuLoeschen })
@@ -130,6 +162,21 @@ export default function MeineDienstwuensche() {
       })
     }
     setSpeichernSchluessel(null)
+  }
+
+  /** Optionale Von-/Bis-Uhrzeit zu einem bereits gesetzten Termin (Gerichtsverhandlung/Schulverkehrserziehung/Personalvertretung) speichern - der Termin selbst muss bereits per toggleWunsch angelegt sein. */
+  async function setzeTerminZeit(datum: string, wunsch: DienstplanWunschTyp, feld: keyof TerminZeit, wert: string) {
+    const bisher = terminZeiten.get(datum)?.get(wunsch) ?? { vonZeit: null, bisZeit: null }
+    const naechsteZeit: TerminZeit = { ...bisher, [feld]: wert || null }
+    setTerminZeiten(current => {
+      const naechste = new Map(current)
+      const zeitenProTag = new Map(naechste.get(datum) ?? [])
+      zeitenProTag.set(wunsch, naechsteZeit)
+      naechste.set(datum, zeitenProTag)
+      return naechste
+    })
+    const result = await dienstplanSupabase.rpc('dienstplan_wunsch_setzen', { p_monat: `${monat}-01`, p_datum: datum, p_wunsch: wunsch, p_von_zeit: naechsteZeit.vonZeit, p_bis_zeit: naechsteZeit.bisZeit })
+    if (result.error) setError('Die Uhrzeit konnte nicht gespeichert werden.')
   }
 
   return <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
@@ -155,19 +202,34 @@ export default function MeineDienstwuensche() {
         {gesperrt ? <AlertTriangle className="h-4 w-4 flex-none" /> : <CalendarDays className="h-4 w-4 flex-none" />}
         {gesperrt
           ? `Die Frist für Dienstwünsche in diesem Monat ist abgelaufen (war bis ${ablaufdatum.toLocaleDateString('de-AT')}) - nur noch lesbar.`
-          : `Einreichbar bis ${ablaufdatum.toLocaleDateString('de-AT')}. Ein ganzer freier Tag = Tag frei + Nacht frei (2 Einheiten), Urlaub kostet nur 1.`}
+          : `Einreichbar bis ${ablaufdatum.toLocaleDateString('de-AT')}. Ein ganzer freier Tag = Tag frei + Nacht frei (2 Einheiten), Urlaub kostet nur 1. Gerichtsverhandlung/Schulverkehrserziehung-Termin/Personalvertretung-Sitzung sind reine Hinweise für den Planer und zählen nicht zum Kontingent.`}
       </p>
 
       <div className="mt-4 space-y-1.5">
         {tage.map(datum => {
           const menge = wuensche.get(datum) ?? new Set<DienstplanWunschTyp>()
           const deaktiviert = (wunsch: DienstplanWunschTyp) => gesperrt || speichernSchluessel === `${datum}|${wunsch}`
+          const zeitenHeute = terminZeiten.get(datum)
           return <div key={datum} className="rounded-lg border border-gray-200 bg-white px-3 py-2">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="w-16 flex-none text-sm font-medium text-gray-800">{formatDatum(datum)}</span>
               <button type="button" disabled={deaktiviert('frei_tag')} onClick={() => void toggleWunsch(datum, 'frei_tag', ['urlaub'])} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TOGGLE_STIL[menge.has('frei_tag') ? 'aktiv' : 'inaktiv']}`}>Tag frei</button>
               <button type="button" disabled={deaktiviert('frei_nacht')} onClick={() => void toggleWunsch(datum, 'frei_nacht', ['urlaub'])} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TOGGLE_STIL[menge.has('frei_nacht') ? 'aktiv' : 'inaktiv']}`}>Nacht frei</button>
               <button type="button" disabled={deaktiviert('urlaub')} onClick={() => void toggleWunsch(datum, 'urlaub', ['frei_tag', 'frei_nacht'])} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TOGGLE_STIL[menge.has('urlaub') ? 'aktiv' : 'inaktiv']}`}>Urlaub</button>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {TERMIN_TYPEN.map(wunsch => {
+                const aktiv = menge.has(wunsch)
+                const zeit = zeitenHeute?.get(wunsch)
+                return <span key={wunsch} className="flex flex-wrap items-center gap-1">
+                  <button type="button" disabled={deaktiviert(wunsch)} title={WUNSCH_LABEL[wunsch]} onClick={() => void toggleWunsch(datum, wunsch)} className={`rounded-full border px-2.5 py-1 text-xs font-medium disabled:opacity-50 ${TERMIN_TOGGLE_STIL[aktiv ? 'aktiv' : 'inaktiv']}`}>{TERMIN_KURZLABEL[wunsch]}</button>
+                  {aktiv ? <>
+                    <input type="time" disabled={gesperrt} value={zeit?.vonZeit?.slice(0, 5) ?? ''} onChange={event => void setzeTerminZeit(datum, wunsch, 'vonZeit', event.target.value)} className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs disabled:opacity-50" />
+                    <span className="text-xs text-gray-400">–</span>
+                    <input type="time" disabled={gesperrt} value={zeit?.bisZeit?.slice(0, 5) ?? ''} onChange={event => void setzeTerminZeit(datum, wunsch, 'bisZeit', event.target.value)} className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs disabled:opacity-50" />
+                  </> : null}
+                </span>
+              })}
             </div>
           </div>
         })}

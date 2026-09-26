@@ -21,6 +21,15 @@ describe('kontingentVerbrauch', () => {
   it('ein Urlaubstag kostet nur 1 Einheit, obwohl er ganztägig blockiert', () => {
     expect(kontingentVerbrauch([{ datum: '2026-10-05', wunsch: 'urlaub' as const }])).toBe(1)
   })
+
+  it('Gerichtsverhandlung/Schulverkehrserziehung-Termin/Personalvertretung-Sitzung zählen nicht gegen das Kontingent', () => {
+    const eintraege = [
+      { datum: '2026-10-05', wunsch: 'gerichtsverhandlung' as const },
+      { datum: '2026-10-06', wunsch: 'schulverkehrserziehung' as const },
+      { datum: '2026-10-07', wunsch: 'personalvertretung' as const },
+    ]
+    expect(kontingentVerbrauch(eintraege)).toBe(0)
+  })
 })
 
 describe('laengsteSlotFolge', () => {
@@ -52,6 +61,11 @@ describe('laengsteSlotFolge', () => {
       { datum: '2026-10-08', wunsch: 'frei_tag' as const },
     ]
     expect(laengsteSlotFolge(eintraege)).toBe(2)
+  })
+
+  it('Gerichtsverhandlung/Schulverkehrserziehung-Termin/Personalvertretung-Sitzung zählen nicht in die "max. 6 am Stück"-Regel', () => {
+    const eintraege = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08'].map(datum => ({ datum, wunsch: 'gerichtsverhandlung' as const }))
+    expect(laengsteSlotFolge(eintraege)).toBe(0)
   })
 })
 

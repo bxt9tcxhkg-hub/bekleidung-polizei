@@ -39,7 +39,7 @@ import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
-interface WunschEintrag { wunsch: DienstplanWunschTyp; notiz: string | null }
+interface WunschEintrag { wunsch: DienstplanWunschTyp; notiz: string | null; vonZeit: string | null; bisZeit: string | null }
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
 const ABSCHNITT_LABEL = { tag: 'Tag', nacht: 'Nacht' } as const
@@ -63,9 +63,9 @@ function datumAusIso(datumIso: string): Date {
   return new Date(jahr, monat - 1, tag)
 }
 
-/** Ob ein Dienstwunsch den angegebenen Zeitabschnitt betrifft - Urlaub blockiert ganztägig, siehe lib/dienstplanWunsch.ts. */
+/** Ob ein Dienstwunsch den angegebenen Zeitabschnitt betrifft - Urlaub sowie die dienstlichen Termine (Gerichtsverhandlung/Schulverkehrserziehung/Personalvertretung, siehe lib/dienstplanWunsch.ts) sind ganztägig relevant, unabhängig von einer evtl. angegebenen Uhrzeit. */
 function wunschBetrifftAbschnitt(wunsch: DienstplanWunschTyp, abschnitt: 'tag' | 'nacht'): boolean {
-  if (wunsch === 'urlaub') return true
+  if (wunsch === 'urlaub' || wunsch === 'gerichtsverhandlung' || wunsch === 'schulverkehrserziehung' || wunsch === 'personalvertretung') return true
   return wunsch === (abschnitt === 'tag' ? 'frei_tag' : 'frei_nacht')
 }
 
@@ -198,7 +198,7 @@ export default function DienstplanPlanung() {
     if (!monatResult.data) { setDienste([]); setWuensche(new Map()); setLoading(false); return }
     const [dienstResult, wunschResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,datum,zeile,rohtext,von_zeit,bis_zeit,kategorie').eq('dienstplan_monat_id', monatResult.data.id).order('datum').order('zeile'),
-      dienstplanSupabase.from('dienstplan_wuensche').select('beamter_id,datum,wunsch,notiz').eq('monat', `${monat}-01`),
+      dienstplanSupabase.from('dienstplan_wuensche').select('beamter_id,datum,wunsch,notiz,von_zeit,bis_zeit').eq('monat', `${monat}-01`),
     ])
     if (dienstResult.error || wunschResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     setDienste(dienstResult.data ?? [])
@@ -206,7 +206,7 @@ export default function DienstplanPlanung() {
     for (const row of wunschResult.data ?? []) {
       const schluessel = `${row.beamter_id}|${row.datum}`
       const liste = wunschMap.get(schluessel) ?? []
-      liste.push({ wunsch: row.wunsch, notiz: row.notiz })
+      liste.push({ wunsch: row.wunsch, notiz: row.notiz, vonZeit: row.von_zeit, bisZeit: row.bis_zeit })
       wunschMap.set(schluessel, liste)
     }
     setWuensche(wunschMap)
@@ -650,7 +650,7 @@ export default function DienstplanPlanung() {
                       const absenz = zeilen.find(zeile => zeile.kategorie !== 'dienst')
                       const absenzFarben = absenz ? absenzFarbe(absenz.kategorie) : null
                       const titel = [
-                        wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : null,
+                        wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.vonZeit && eintrag.bisZeit ? ` ${eintrag.vonZeit.slice(0, 5)}–${eintrag.bisZeit.slice(0, 5)}` : ''}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : null,
                         uebertragWarnung ? 'Nachtdienst am letzten Tag des Vormonats - heute laut Ruhezeit (24 Std.) kein Tagdienst möglich' : null,
                       ].filter(Boolean).join(' · ') || undefined
                       return <td key={person.id}

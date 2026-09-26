@@ -17,7 +17,20 @@ export const WUNSCH_LABEL: Record<DienstplanWunschTyp, string> = {
   frei_tag: 'Tag frei',
   frei_nacht: 'Nacht frei',
   urlaub: 'Urlaub (ganzer Tag)',
+  gerichtsverhandlung: 'Gerichtsverhandlung',
+  schulverkehrserziehung: 'Schulverkehrserziehung-Termin',
+  personalvertretung: 'Personalvertretung-Sitzung',
 }
+
+/**
+ * Gerichtsverhandlung/Schulverkehrserziehung-Termin/Personalvertretung-
+ * Sitzung sind dienstliche Termine, keine Freiplanungswünsche - sie zählen
+ * laut Kommandant NICHT gegen das monatliche Kontingent und nicht in die
+ * "max. 6 am Stück"-Regel (siehe kontingentVerbrauch/laengsteSlotFolge
+ * unten), werden dem Planer aber trotzdem am jeweiligen Tag angezeigt
+ * (siehe wunschBetrifftAbschnitt in DienstplanPlanung.tsx).
+ */
+const KONTINGENT_TYPEN: readonly DienstplanWunschTyp[] = ['frei_tag', 'frei_nacht', 'urlaub']
 
 const VOLLZEIT_KONTINGENT = 18
 
@@ -28,9 +41,9 @@ export function monatsKontingent(beschaeftigungsgrad: number): number {
 
 export interface WunschEintragKurz { datum: string; wunsch: DienstplanWunschTyp }
 
-/** Summe der verbrauchten Kontingenteinheiten über eine Liste von Wünschen - jeder Wunsch-Typ (frei_tag/frei_nacht/urlaub) kostet 1 Einheit. */
+/** Summe der verbrauchten Kontingenteinheiten über eine Liste von Wünschen - jeder Wunsch-Typ (frei_tag/frei_nacht/urlaub) kostet 1 Einheit, dienstliche Termine (siehe KONTINGENT_TYPEN) zählen nicht mit. */
 export function kontingentVerbrauch(eintraege: readonly WunschEintragKurz[]): number {
-  return eintraege.length
+  return eintraege.filter(eintrag => KONTINGENT_TYPEN.includes(eintrag.wunsch)).length
 }
 
 type Zeitabschnitt = 'tag' | 'nacht'
@@ -51,7 +64,10 @@ function slotIndex(datum: string, abschnitt: Zeitabschnitt): number {
 /** Längste Kette lückenlos aufeinanderfolgender belegter Tag/Nacht-Slots (siehe belegteSlots) - Grundlage für die "max. 6 am Stück"-Regel. */
 export function laengsteSlotFolge(eintraege: readonly WunschEintragKurz[]): number {
   const indices = new Set<number>()
-  for (const eintrag of eintraege) for (const slot of belegteSlots(eintrag)) indices.add(slotIndex(slot.datum, slot.abschnitt))
+  for (const eintrag of eintraege) {
+    if (!KONTINGENT_TYPEN.includes(eintrag.wunsch)) continue
+    for (const slot of belegteSlots(eintrag)) indices.add(slotIndex(slot.datum, slot.abschnitt))
+  }
   const sortiert = Array.from(indices).sort((a, b) => a - b)
 
   let laengste = 0
