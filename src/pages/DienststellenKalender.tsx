@@ -106,6 +106,19 @@ export default function DienststellenKalender() {
   }, [monat])
   useEffect(() => { void load() }, [load])
 
+  // Beim ersten Laden auf den vom Genehmiger hinterlegten "aktuellen
+  // Dienstplan" springen (dienstplan_regeln.aktueller_planungsmonat) - die
+  // Monatsnavigation bleibt danach frei.
+  useEffect(() => {
+    let aktiv = true
+    void dienstplanSupabase.from('dienstplan_regeln').select('aktueller_planungsmonat').eq('id', 1).maybeSingle().then(result => {
+      if (!aktiv) return
+      const standard = result.data?.aktueller_planungsmonat?.slice(0, 7)
+      if (standard) setMonat(standard)
+    })
+    return () => { aktiv = false }
+  }, [])
+
   const mitarbeiterById = useMemo(() => new Map(mitarbeiter.map(person => [person.id, person])), [mitarbeiter])
 
   function neuerZeitabschnitt(): Map<string, DienstKachelDaten> {

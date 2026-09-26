@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { dienstplanSupabase, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
-import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { kontingentVerbrauch, laengsteSlotFolge, monatsKontingent, wunschfristAblaufdatum, wunschfristAbgelaufen, type WunschEintragKurz } from '../lib/dienstplanWunsch'
@@ -40,7 +39,11 @@ const TOGGLE_STIL: Record<'aktiv' | 'inaktiv', string> = {
 export default function MeineDienstwuensche() {
   const { profile } = useAuth()
   const profileId = profile?.id
-  const [monat, setMonat] = useState(thisMonthLocal())
+  // Kein freier Monatswähler mehr - Beamte sehen nur den vom Genehmiger
+  // freigegebenen Monat (dienstplan_regeln.offener_wunsch_monat), auch
+  // serverseitig in den RPCs durchgesetzt (siehe Migration
+  // 20260926065317_dienstplan_offener_monat.sql).
+  const [offenerMonat, setOffenerMonat] = useState<string | null>(null)
   const [wunschfristTage, setWunschfristTage] = useState(14)
   const [beschaeftigungsgrad, setBeschaeftigungsgrad] = useState(VOLLZEIT_BESCHAEFTIGUNGSGRAD)
   const [wuensche, setWuensche] = useState<Map<string, Set<DienstplanWunschTyp>>>(new Map())
@@ -51,14 +54,18 @@ export default function MeineDienstwuensche() {
   const load = useCallback(async () => {
     if (!profileId) return
     setLoading(true); setError('')
-    const [regelnResult, einstellungResult, wuenscheResult] = await Promise.all([
-      dienstplanSupabase.from('dienstplan_regeln').select('wunschfrist_tage').eq('id', 1).maybeSingle(),
+    const [regelnResult, einstellungResult] = await Promise.all([
+      dienstplanSupabase.from('dienstplan_regeln').select('wunschfrist_tage,offener_wunsch_monat').eq('id', 1).maybeSingle(),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beschaeftigungsgrad').eq('beamter_id', profileId).maybeSingle(),
-      dienstplanSupabase.from('dienstplan_wuensche').select('datum,wunsch').eq('beamter_id', profileId).eq('monat', `${monat}-01`),
     ])
-    if (regelnResult.error || einstellungResult.error || wuenscheResult.error) { setError('Die Dienstwünsche konnten nicht geladen werden.'); setLoading(false); return }
+    if (regelnResult.error || einstellungResult.error) { setError('Die Dienstwünsche konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) setWunschfristTage(regelnResult.data.wunschfrist_tage)
     setBeschaeftigungsgrad(einstellungResult.data?.beschaeftigungsgrad ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD)
+    const monat = regelnResult.data?.offener_wunsch_monat?.slice(0, 7) ?? null
+    setOffenerMonat(monat)
+    if (!monat) { setWuensche(new Map()); setLoading(false); return }
+    const wuenscheResult = await dienstplanSupabase.from('dienstplan_wuensche').select('datum,wunsch').eq('beamter_id', profileId).eq('monat', `${monat}-01`)
+    if (wuenscheResult.error) { setError('Die Dienstwünsche konnten nicht geladen werden.'); setLoading(false); return }
     const geladen = new Map<string, Set<DienstplanWunschTyp>>()
     for (const row of wuenscheResult.data ?? []) {
       const menge = geladen.get(row.datum) ?? new Set<DienstplanWunschTyp>()
@@ -67,8 +74,10 @@ export default function MeineDienstwuensche() {
     }
     setWuensche(geladen)
     setLoading(false)
-  }, [monat, profileId])
+  }, [profileId])
   useEffect(() => { void load() }, [load])
+
+  const monat = offenerMonat ?? thisMonthLocal()
 
   const gesperrt = useMemo(() => wunschfristAbgelaufen(monat, wunschfristTage), [monat, wunschfristTage])
   const ablaufdatum = useMemo(() => wunschfristAblaufdatum(monat, wunschfristTage), [monat, wunschfristTage])
@@ -125,13 +134,18 @@ export default function MeineDienstwuensche() {
 
   return <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Meine Dienstwünsche</h1><p className="mt-1 text-sm text-gray-500">Freiplanungswünsche für einen Monat vormerken - der Planer sieht das, ist aber nicht daran gebunden.</p></div>
-      <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
+      <div><h1 className="text-2xl font-bold text-gray-900">Meine Dienstwünsche</h1><p className="mt-1 text-sm text-gray-500">Freiplanungswünsche für den vom Genehmiger freigegebenen Monat vormerken - der Planer sieht das, ist aber nicht daran gebunden.</p></div>
+      {offenerMonat ? <span className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700">{monat}</span> : null}
     </div>
 
     {error ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
 
-    {loading ? <div className="mt-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-800" /></div> : <>
+    {loading ? <div className="mt-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-800" /></div>
+      : !offenerMonat ? <div className="mt-8 rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center">
+        <CalendarDays className="mx-auto mb-2 h-8 w-8 text-gray-300" />
+        <p className="text-sm text-gray-500">Aktuell ist kein Monat für Freiplanungswünsche freigegeben. Bitte beim Genehmiger nachfragen.</p>
+      </div>
+      : <>
       <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
         <span className={verbraucht > kontingent ? 'font-semibold text-red-700' : 'font-semibold text-gray-800'}>{verbraucht} / {kontingent} Freiplanungswünsche verwendet</span>
         <span className="text-gray-400">·</span>
