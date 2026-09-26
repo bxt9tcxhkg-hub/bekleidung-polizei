@@ -259,7 +259,7 @@ export default function DienstplanEinstellungen() {
 
       <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="font-semibold text-gray-900">Farbmarkierungen</h2>
-        <p className="mt-1 text-xs text-gray-500">Frei definierbare Markierungen für einzelne Diensteinträge im Planer-Grid (Dienstplan-Planung), z. B. "Überstunden" blau - rein visuell, unabhängig vom Dienst-Kürzel, auch auf sonst leere Zellen anwendbar. Die fünf System-Markierungen (Urlaub, Sonderurlaub, Stundenersatz, Krank, Karenz) sind die Farben, mit denen diese Abwesenheiten überall im Portal dargestellt werden - nur die Farbe ist dort änderbar.</p>
+        <p className="mt-1 text-xs text-gray-500">Frei definierbare Markierungen für einzelne Diensteinträge im Planer-Grid (Dienstplan-Planung), z. B. "Überstunden" blau - rein visuell, unabhängig vom Dienst-Kürzel, auch auf sonst leere Zellen anwendbar. Die sechs System-Markierungen (Urlaub, Sonderurlaub, Stundenersatz, Krank, Karenz, Wochenende/Feiertag) sind die Farben, mit denen diese Abwesenheiten bzw. Wochenende/Feiertag überall im Portal dargestellt werden - nur die Farbe ist dort änderbar.</p>
         <div className="mt-3 space-y-2">
           {markierungen.map(markierung => {
             const editing = editMarkierungId === markierung.id

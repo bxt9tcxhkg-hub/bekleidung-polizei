@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
+import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanMarkierungKategorie } from '../lib/dienstplanSupabase'
 import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal, todayLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
@@ -100,7 +100,7 @@ export default function DienststellenKalender() {
   const [monatVeroeffentlicht, setMonatVeroeffentlicht] = useState<boolean | null>(null)
   const [dienste, setDienste] = useState<DienstZeile[]>([])
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
-  const [markierungen, setMarkierungen] = useState<{ kategorie: DienstplanKategorieDb | null; farbe: string }[]>([])
+  const [markierungen, setMarkierungen] = useState<{ kategorie: DienstplanMarkierungKategorie | null; farbe: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 

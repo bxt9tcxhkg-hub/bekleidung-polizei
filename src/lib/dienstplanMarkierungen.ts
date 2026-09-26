@@ -70,3 +70,33 @@ export function kategorieFarbKlassen(kategorie: string, kategorieFarben: Readonl
   const farbe = kategorieFarben.get(kategorie) ?? STANDARD_KATEGORIE_FARBE[kategorie]
   return markierungFarbKlassen(farbe)
 }
+
+/** Fallback, falls die System-Markierung 'wochenende_feiertag' ausnahmsweise fehlt - ursprünglich hart codiertes Amber, farblich am nächsten an 'orange'. */
+const STANDARD_BESONDERER_TAG_FARBE: DienstplanMarkierungFarbe = 'orange'
+
+/** Konfigurierte Farbe für die Wochenende/Feiertag-Hervorhebung (System-Markierung mit kategorie 'wochenende_feiertag') - im Gegensatz zu den Abwesenheitskategorien keine Diensteintrag-Kategorie, sondern eine reine Tageseigenschaft. */
+export function besondererTagFarbe(markierungen: readonly { kategorie: string | null; farbe: string }[]): string {
+  return markierungen.find(markierung => markierung.kategorie === 'wochenende_feiertag')?.farbe ?? STANDARD_BESONDERER_TAG_FARBE
+}
+
+/** Helle Hintergrundtönung für die komplette Wochenende/Feiertag-Zeile (heller als die kräftigeren Absenz-/Markierungsfarben auf einzelnen Zellen, da über die ganze Zeile gelegt). */
+export function besondererTagFarbKlassen(farbe: string): { bg: string; bgNacht: string; textTag: string; textAbschnitt: string } {
+  switch (farbe as DienstplanMarkierungFarbe) {
+    case 'blau':
+      return { bg: 'bg-blue-50', bgNacht: 'bg-blue-100', textTag: 'text-blue-800', textAbschnitt: 'text-blue-700' }
+    case 'lila':
+      return { bg: 'bg-purple-50', bgNacht: 'bg-purple-100', textTag: 'text-purple-800', textAbschnitt: 'text-purple-700' }
+    case 'orange':
+      return { bg: 'bg-orange-50', bgNacht: 'bg-orange-100', textTag: 'text-orange-800', textAbschnitt: 'text-orange-700' }
+    case 'tuerkis':
+      return { bg: 'bg-teal-50', bgNacht: 'bg-teal-100', textTag: 'text-teal-800', textAbschnitt: 'text-teal-700' }
+    case 'gelb':
+      return { bg: 'bg-yellow-50', bgNacht: 'bg-yellow-100', textTag: 'text-yellow-800', textAbschnitt: 'text-yellow-700' }
+    case 'gruen':
+      return { bg: 'bg-green-50', bgNacht: 'bg-green-100', textTag: 'text-green-800', textAbschnitt: 'text-green-700' }
+    case 'rosa':
+      return { bg: 'bg-pink-50', bgNacht: 'bg-pink-100', textTag: 'text-pink-800', textAbschnitt: 'text-pink-700' }
+    default:
+      return { bg: 'bg-gray-50', bgNacht: 'bg-gray-100', textTag: 'text-gray-800', textAbschnitt: 'text-gray-700' }
+  }
+}
