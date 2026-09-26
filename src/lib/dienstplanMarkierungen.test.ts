@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
+import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
 
 describe('markierungFarbKlassen', () => {
   it('liefert je definierter Farbe eine kräftigere Nacht-Nuance derselben Farbe', () => {
@@ -44,5 +44,24 @@ describe('kategorieFarbKlassen', () => {
     const leer = kategorieFarbenMap([])
     expect(kategorieFarbKlassen('dienst', leer)).toBeNull()
     expect(kategorieFarbKlassen('sonstiges', leer)).toBeNull()
+  })
+})
+
+describe('besondererTagFarbe', () => {
+  it('nutzt die vom Planer eingestellte Farbe der System-Markierung "wochenende_feiertag"', () => {
+    expect(besondererTagFarbe([{ kategorie: 'wochenende_feiertag', farbe: 'blau' }])).toBe('blau')
+  })
+  it('fällt ohne eingestellte Zeile auf Orange zurück (ursprünglich hart codiertes Amber)', () => {
+    expect(besondererTagFarbe([])).toBe('orange')
+    expect(besondererTagFarbe([{ kategorie: 'krank', farbe: 'gruen' }])).toBe('orange')
+  })
+})
+
+describe('besondererTagFarbKlassen', () => {
+  it('liefert eine hellere Tönung als markierungFarbKlassen (eigene Klassen, über die ganze Zeile gelegt)', () => {
+    expect(besondererTagFarbKlassen('orange')).toEqual({ bg: 'bg-orange-50', bgNacht: 'bg-orange-100', textTag: 'text-orange-800', textAbschnitt: 'text-orange-700' })
+  })
+  it('fällt bei unbekannter Farbe auf Grau zurück', () => {
+    expect(besondererTagFarbKlassen('irgendwas').bg).toBe('bg-gray-50')
   })
 })

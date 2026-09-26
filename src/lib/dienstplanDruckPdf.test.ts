@@ -99,6 +99,30 @@ describe('buildDienstplanDruckHtml', () => {
     expect(html).toContain('background:#f3e8ff')
   })
 
+  it('färbt Wochenende/Feiertag in der vom Planer eingestellten Farbe (System-Markierung "wochenende_feiertag") statt hart codiertem Amber', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      // 2026-10-03 = Samstag.
+      tage: ['2026-10-03'],
+      dienste: [],
+      markierungen: [{ id: 'sys-wochenende', name: 'Wochenende/Feiertag', farbe: 'tuerkis', kategorie: 'wochenende_feiertag' }],
+    })
+    expect(html).toContain('background:#f0fdfa') // bg-teal-50 (Tag)
+    expect(html).toContain('background:#ccfbf1') // bg-teal-100 (Nacht)
+  })
+
+  it('unterscheidet Tag- und Nachtzeile farblich auch an gewöhnlichen Werktagen (leichte Hintergrundtönung der Nachtzeile, wie im Planer-Grid)', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      tage: ['2026-10-01'],
+      dienste: [],
+    })
+    expect(html).toContain('<td style="background:#fff;color:#000;">')
+    expect(html).toContain('<td style="background:#f9fafb;color:#000;">')
+  })
+
   it('zeigt die Auswertung (Stunden, Grund-/Zusatzdienste) je Person in der Fußzeile', () => {
     const html = buildDienstplanDruckHtml({
       ...BASIS,

@@ -6,7 +6,7 @@ import { isAustrianHoliday } from '../lib/austrianHolidays'
 import { officerPrintName } from '../lib/printDocs'
 import { generateDienstplanDruckPdf } from '../lib/dienstplanDruckPdf'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanMarkierungRow, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
-import { kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
+import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
@@ -269,6 +269,12 @@ export default function DienstplanPlanung() {
   // lib/dienstplanMarkierungen.ts) - der Planer kann sie in den
   // Dienstplan-Einstellungen umfärben.
   const kategorieFarben = useMemo(() => kategorieFarbenMap(markierungen), [markierungen])
+
+  // Farbe für die Wochenende/Feiertag-Hervorhebung kommt ebenso aus einer
+  // "System"-Markierung (kategorie 'wochenende_feiertag') - der Planer kann
+  // sie in den Dienstplan-Einstellungen umfärben (Standard Orange, siehe
+  // lib/dienstplanMarkierungen.ts).
+  const besondererTagFarben = useMemo(() => besondererTagFarbKlassen(besondererTagFarbe(markierungen)), [markierungen])
 
   // Für die Kopfzeile: Kommando/Dienstführung/Beamte-Blöcke als
   // zusammenhängende Spaltengruppen (mitarbeiter ist bereits per
@@ -655,7 +661,7 @@ export default function DienstplanPlanung() {
 
   return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile), zu kurze Ruhezeit bzw. Nachtdienst am Vortag des Vormonats (Zelle). Amber: Wochenende/Feiertag. Sonne/Mond: Tag-/Nachtzeile. Gelb: Urlaub/Sonderurlaub/Stundenersatz. Grün: krank. Rosa: Karenz.</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienstplan-Planung</h1><p className="mt-1 text-sm text-gray-500">Tage × Personen, je Tag eine Tag- und eine Nachtzeile - Zelle anklicken, um den Dienst einzutragen. Rot markiert: fehlende Grundbesetzung (Zeile), zu kurze Ruhezeit bzw. Nachtdienst am Vortag des Vormonats (Zelle). Wochenende/Feiertag hervorgehoben (Farbe unter Dienstplan-Einstellungen änderbar, Standard Orange). Sonne/Mond: Tag-/Nachtzeile. Gelb: Urlaub/Sonderurlaub/Stundenersatz. Grün: krank. Rosa: Karenz.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -715,21 +721,22 @@ export default function DienstplanPlanung() {
                 const [, , tagText] = datum.split('-')
                 const datumObjekt = new Date(Number(datum.slice(0, 4)), Number(datum.slice(5, 7)) - 1, Number(tagText))
                 const wochentag = datumObjekt.getDay()
-                // Wochenenden und Feiertage sollen optisch hervorstechen (amber),
-                // Tag/Nacht bekommt zusätzlich zur Hintergrundfarbe je ein eigenes
-                // Icon (Sonne/Mond), damit beides auch unabhängig voneinander
-                // erkennbar bleibt.
+                // Wochenenden und Feiertage sollen optisch hervorstechen (Farbe
+                // aus der System-Markierung 'wochenende_feiertag', siehe
+                // besondererTagFarben oben), Tag/Nacht bekommt zusätzlich zur
+                // Hintergrundfarbe je ein eigenes Icon (Sonne/Mond), damit
+                // beides auch unabhängig voneinander erkennbar bleibt.
                 const besondererTag = wochentag === 0 || wochentag === 6 || isAustrianHoliday(datumObjekt)
                 return (['tag', 'nacht'] as const).map(abschnitt => {
                   const fehlend = (fehlendeGrund.get(datum) ?? []).filter(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
-                  const zeilenHintergrund = besondererTag ? (abschnitt === 'tag' ? 'bg-amber-50' : 'bg-amber-100/70') : (abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50/50')
+                  const zeilenHintergrund = besondererTag ? (abschnitt === 'tag' ? besondererTagFarben.bg : besondererTagFarben.bgNacht) : (abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50/50')
                   return <tr key={`${datum}|${abschnitt}`} className={`${zeilenHintergrund} ${abschnitt === 'tag' ? 'border-t border-gray-200' : ''}`}>
                     {abschnitt === 'tag' ? (
-                      <td rowSpan={2} className={`sticky left-0 z-10 w-[6rem] min-w-[6rem] max-w-[6rem] whitespace-nowrap border-r border-gray-200 px-3 py-1.5 align-top ${besondererTag ? 'bg-amber-50' : 'bg-white'}`}>
-                        <span className={`font-medium ${besondererTag ? 'text-amber-800' : 'text-gray-800'}`}>{WOCHENTAG_LABEL[wochentag]} {tagText}.</span>
+                      <td rowSpan={2} className={`sticky left-0 z-10 w-[6rem] min-w-[6rem] max-w-[6rem] whitespace-nowrap border-r border-gray-200 px-3 py-1.5 align-top ${besondererTag ? besondererTagFarben.bg : 'bg-white'}`}>
+                        <span className={`font-medium ${besondererTag ? besondererTagFarben.textTag : 'text-gray-800'}`}>{WOCHENTAG_LABEL[wochentag]} {tagText}.</span>
                       </td>
                     ) : null}
-                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-[6rem] z-10 w-[5.75rem] min-w-[5.75rem] max-w-[5.75rem] whitespace-nowrap border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : besondererTag ? (abschnitt === 'tag' ? 'bg-amber-50' : 'bg-amber-100/70') : abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50'}`}>
+                    <td title={fehlend.length > 0 ? fehlend.join(', ') : undefined} className={`sticky left-[6rem] z-10 w-[5.75rem] min-w-[5.75rem] max-w-[5.75rem] whitespace-nowrap border-r border-gray-200 px-2 py-1.5 ${fehlend.length > 0 ? 'bg-red-50' : besondererTag ? (abschnitt === 'tag' ? besondererTagFarben.bg : besondererTagFarben.bgNacht) : abschnitt === 'tag' ? 'bg-white' : 'bg-gray-50'}`}>
                       {abschnitt === 'tag' ? <Sun className="mr-0.5 inline h-3 w-3 text-amber-500" /> : <Moon className="mr-0.5 inline h-3 w-3 text-indigo-500" />}
                       <span className={`text-[0.65rem] uppercase tracking-wide ${fehlend.length > 0 ? 'text-red-600' : abschnitt === 'tag' ? 'text-amber-700' : 'text-indigo-700'}`}>{ABSCHNITT_LABEL[abschnitt]}</span>
                       {fehlend.length > 0 ? <AlertTriangle className="ml-1 inline h-3 w-3 text-red-600" /> : null}

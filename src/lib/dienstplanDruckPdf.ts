@@ -4,7 +4,8 @@
  * (DienstplanPlanung.tsx): Personen als Spalten (gruppiert nach
  * Kommando/Dienstführung/Beamte, dicke Trennlinie zwischen Gruppen, dünne
  * zwischen einzelnen Beamten), Tage als Zeilen mit je einer Tag- und
- * einer Nachtzeile. Farblich: Wochenende/Feiertag amber, Urlaub/Krank/
+ * einer Nachtzeile. Farblich: Wochenende/Feiertag in der eingestellten
+ * System-Markierungsfarbe (Standard Orange), Urlaub/Krank/
  * Sonderurlaub/Karenz/Stundenersatz durchgehend über Tag+Nacht (auch über
  * ein durchgehend abwesenes Wochenende hinweg, siehe
  * effektiveAbwesenheitJeTag) mit kräftigerer Nacht-Nuance, fehlende
@@ -27,13 +28,13 @@ import { formatStunden } from './ueberstunden'
 import { persoenlicheStundenUebersicht, zaehleDienstarten } from './dienstplanAuswertung'
 import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung } from './dienstplanBesetzung'
 import { parseDienstCode } from './dienstplanImport'
-import { kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
+import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
 import { DIENSTPLAN_GRUPPE_LABEL, type DienstplanGruppe } from './dienstplanRoster'
-import type { DienstplanKategorieDb } from './dienstplanSupabase'
+import type { DienstplanKategorieDb, DienstplanMarkierungKategorie } from './dienstplanSupabase'
 
 export interface DienstplanDruckPerson { id: string; name: string; kurzname: string; dienstnummer: string | null; gruppe: DienstplanGruppe }
 export interface DienstplanDruckZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb; markierung_id: string | null }
-export interface DienstplanDruckMarkierung { id: string; name: string; farbe: string; kategorie: DienstplanKategorieDb | null }
+export interface DienstplanDruckMarkierung { id: string; name: string; farbe: string; kategorie: DienstplanMarkierungKategorie | null }
 
 export interface DienstplanDruckInput {
   monatLabel: string
@@ -49,14 +50,14 @@ const ABSCHNITT_LABEL = { tag: 'T', nacht: 'N' } as const
 
 /** Wie kategorieFarbKlassen()/markierungFarbKlassen() (Tailwind-Klassennamen der Live-Ansicht) als konkrete Hex-Werte fürs eigenständige Druck-HTML (kein Tailwind dort verfügbar). */
 const FARBE_HEX: Record<string, string> = {
-  'bg-yellow-100': '#fef9c3', 'bg-yellow-200': '#fef08a', 'text-yellow-900': '#713f12',
-  'bg-green-100': '#dcfce7', 'bg-green-200': '#bbf7d0', 'text-green-900': '#14532d',
-  'bg-pink-100': '#fce7f3', 'bg-pink-200': '#fbcfe8', 'text-pink-900': '#831843',
-  'bg-blue-100': '#dbeafe', 'bg-blue-200': '#bfdbfe', 'text-blue-900': '#1e3a8a',
-  'bg-purple-100': '#f3e8ff', 'bg-purple-200': '#e9d5ff', 'text-purple-900': '#581c87',
-  'bg-orange-100': '#ffedd5', 'bg-orange-200': '#fed7aa', 'text-orange-900': '#7c2d12',
-  'bg-teal-100': '#ccfbf1', 'bg-teal-200': '#99f6e4', 'text-teal-900': '#134e4a',
-  'bg-gray-200': '#e5e7eb', 'bg-gray-300': '#d1d5db', 'text-gray-900': '#111827',
+  'bg-yellow-50': '#fefce8', 'bg-yellow-100': '#fef9c3', 'bg-yellow-200': '#fef08a', 'text-yellow-700': '#a16207', 'text-yellow-800': '#854d0e', 'text-yellow-900': '#713f12',
+  'bg-green-50': '#f0fdf4', 'bg-green-100': '#dcfce7', 'bg-green-200': '#bbf7d0', 'text-green-700': '#15803d', 'text-green-800': '#166534', 'text-green-900': '#14532d',
+  'bg-pink-50': '#fdf2f8', 'bg-pink-100': '#fce7f3', 'bg-pink-200': '#fbcfe8', 'text-pink-700': '#be185d', 'text-pink-800': '#9d174d', 'text-pink-900': '#831843',
+  'bg-blue-50': '#eff6ff', 'bg-blue-100': '#dbeafe', 'bg-blue-200': '#bfdbfe', 'text-blue-700': '#1d4ed8', 'text-blue-800': '#1e40af', 'text-blue-900': '#1e3a8a',
+  'bg-purple-50': '#faf5ff', 'bg-purple-100': '#f3e8ff', 'bg-purple-200': '#e9d5ff', 'text-purple-700': '#7e22ce', 'text-purple-800': '#6b21a8', 'text-purple-900': '#581c87',
+  'bg-orange-50': '#fff7ed', 'bg-orange-100': '#ffedd5', 'bg-orange-200': '#fed7aa', 'text-orange-700': '#c2410c', 'text-orange-800': '#9a3412', 'text-orange-900': '#7c2d12',
+  'bg-teal-50': '#f0fdfa', 'bg-teal-100': '#ccfbf1', 'bg-teal-200': '#99f6e4', 'text-teal-700': '#0f766e', 'text-teal-800': '#115e59', 'text-teal-900': '#134e4a',
+  'bg-gray-50': '#f9fafb', 'bg-gray-100': '#f3f4f6', 'bg-gray-200': '#e5e7eb', 'bg-gray-300': '#d1d5db', 'text-gray-700': '#374151', 'text-gray-800': '#1f2937', 'text-gray-900': '#111827',
 }
 function hex(klasse: string): string { return FARBE_HEX[klasse] ?? '#e5e7eb' }
 
@@ -101,8 +102,13 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
   }
   const markierungenById = new Map(markierungen.map(markierung => [markierung.id, markierung]))
   const kategorieFarben = kategorieFarbenMap(markierungen)
+  const besondererTagFarben = besondererTagFarbKlassen(besondererTagFarbe(markierungen))
   const effektiveAbwesenheit = effektiveAbwesenheitJeTag(dienste, personen.map(person => person.id), tage)
   const fehlendeGrund = fehlendeGrundbesetzung(dienste, tage)
+  // Tag/Nacht optisch unterscheidbar wie im Planer-Grid (Sonne amber/Mond
+  // indigo, siehe DienstplanPlanung.tsx) - hier als Textfarbe des T/N-Kürzels
+  // plus leichter Hintergrundtönung der Nachtzeile.
+  const ABSCHNITT_FARBE = { tag: { text: '#b45309', bg: '#fff' }, nacht: { text: '#4338ca', bg: '#f9fafb' } } as const
 
   const gruppenKopfZellen = gruppenSpans.map(({ gruppe, span }, index) => {
     const letzteGruppe = index === gruppenSpans.length - 1
@@ -117,9 +123,9 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
     const besondererTag = wochentag === 0 || wochentag === 6 || isAustrianHoliday(datumObjekt)
     return (['tag', 'nacht'] as const).map(abschnitt => {
       const fehlend = (fehlendeGrund.get(datum) ?? []).some(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
-      const zeilenHintergrund = besondererTag ? (abschnitt === 'tag' ? '#fef3c7' : '#fde68a') : '#fff'
+      const zeilenHintergrund = besondererTag ? hex(abschnitt === 'tag' ? besondererTagFarben.bg : besondererTagFarben.bgNacht) : ABSCHNITT_FARBE[abschnitt].bg
       const datumZelle = abschnitt === 'tag' ? `<td rowspan="2" class="datum">${WOCHENTAG_LABEL[wochentag]} ${tagText}.</td>` : ''
-      const abschnittZelle = `<td class="abschnitt" style="${fehlend ? 'background:#fecaca;color:#991b1b;' : ''}">${ABSCHNITT_LABEL[abschnitt]}</td>`
+      const abschnittZelle = `<td class="abschnitt" style="${fehlend ? 'background:#fecaca;color:#991b1b;' : `color:${ABSCHNITT_FARBE[abschnitt].text};`}">${ABSCHNITT_LABEL[abschnitt]}</td>`
       const personenZellen = personen.map(person => {
         const zeilen = (zeilenProPersonUndAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
         const absenzKategorie = (zeilenProPersonUndTag.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst')?.kategorie
