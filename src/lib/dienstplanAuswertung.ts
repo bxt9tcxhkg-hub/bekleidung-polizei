@@ -22,6 +22,8 @@
  * Genehmigungsworkflows in Ueberstunden.tsx.
  */
 import { isSonnOderFeiertag } from './austrianHolidays'
+import { tagOderNacht } from './dienstplanBesetzung'
+import { grundbesetzungCode, parseDienstCode } from './dienstplanImport'
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
 
 export interface DienstplanDienstZeile {
@@ -109,4 +111,30 @@ export function persoenlicheStundenUebersicht(dienste: readonly DienstplanDienst
     }
   }
   return { gesamt: rundeViertelstunde(gesamt), sonnFeiertag: rundeViertelstunde(sonnFeiertag), tag: rundeViertelstunde(tag), nacht: rundeViertelstunde(nacht) }
+}
+
+export interface DienstartenZaehlung { grundTag: number; grundNacht: number; zusatzTag: number; zusatzNacht: number }
+
+/**
+ * Zählt Diensteinträge (kategorie "dienst") für die Dienstplan-Auswertung
+ * (unterhalb des Planer-Grids) nach zwei Achsen: Grundbesetzung (Z/ID/JD,
+ * siehe grundbesetzungCode) vs. Zusatzdienst, sowie Tag- vs. Nachtdienst
+ * (nach der Uhrzeit klassifiziert, siehe tagOderNacht - dieselbe
+ * Zuordnung wie im Planer-Grid und Dienststellenkalender). Anders als
+ * persoenlicheStundenUebersicht() geht es hier NICHT um Stunden, sondern
+ * um die Anzahl der Diensteinheiten je Art.
+ */
+export function zaehleDienstarten(dienste: readonly { rohtext: string; von_zeit: string | null; kategorie: DienstplanKategorieDb }[]): DienstartenZaehlung {
+  const ergebnis: DienstartenZaehlung = { grundTag: 0, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0 }
+  for (const zeile of dienste) {
+    if (zeile.kategorie !== 'dienst') continue
+    const { code } = parseDienstCode(zeile.rohtext)
+    const istGrunddienst = grundbesetzungCode(code) !== null
+    const abschnitt = tagOderNacht(zeile.von_zeit)
+    if (istGrunddienst && abschnitt === 'tag') ergebnis.grundTag++
+    else if (istGrunddienst) ergebnis.grundNacht++
+    else if (abschnitt === 'tag') ergebnis.zusatzTag++
+    else ergebnis.zusatzNacht++
+  }
+  return ergebnis
 }

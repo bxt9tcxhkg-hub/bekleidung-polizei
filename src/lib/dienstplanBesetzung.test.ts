@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abschnittFuerAnzeige, absenzFarbe, fehlendeGrundbesetzung, kachelRang, tagOderNacht } from './dienstplanBesetzung'
+import { abschnittFuerAnzeige, absenzFarbe, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, kachelRang, tagOderNacht } from './dienstplanBesetzung'
 
 describe('tagOderNacht', () => {
   it('ordnet eine Zeile ohne Uhrzeit der Nacht zu', () => {
@@ -90,5 +90,39 @@ describe('fehlendeGrundbesetzung', () => {
       { datum: '2026-10-05', rohtext: 'VD', von_zeit: '08:00', kategorie: 'dienst' as const },
     ]
     expect(fehlendeGrundbesetzung(dienste, ['2026-10-05']).get('2026-10-05')).toHaveLength(6)
+  })
+})
+
+describe('effektiveAbwesenheitJeTag', () => {
+  // 2026-10-02 = Freitag, 03/04 = Sa/So, 05 = Montag, 06 = Dienstag.
+  const woche = ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06']
+
+  it('füllt das Wochenende, wenn Freitag UND der folgende Montag dieselbe Abwesenheit haben', () => {
+    const dienste = [
+      { beamter_id: 'a', datum: '2026-10-02', kategorie: 'krank' as const },
+      { beamter_id: 'a', datum: '2026-10-05', kategorie: 'krank' as const },
+    ]
+    const ergebnis = effektiveAbwesenheitJeTag(dienste, ['a'], woche)
+    expect(ergebnis.get('a|2026-10-03')).toBe('krank')
+    expect(ergebnis.get('a|2026-10-04')).toBe('krank')
+    expect(ergebnis.has('a|2026-10-02')).toBe(false)
+    expect(ergebnis.has('a|2026-10-05')).toBe(false)
+  })
+
+  it('füllt das Wochenende NICHT, wenn die Person am Montag wieder im Dienst ist (kein Eintrag am Werktag = Kette unterbrochen)', () => {
+    const dienste = [{ beamter_id: 'a', datum: '2026-10-02', kategorie: 'krank' as const }]
+    const ergebnis = effektiveAbwesenheitJeTag(dienste, ['a'], woche)
+    expect(ergebnis.has('a|2026-10-03')).toBe(false)
+    expect(ergebnis.has('a|2026-10-04')).toBe(false)
+  })
+
+  it('füllt das Wochenende NICHT, wenn Freitag und Montag unterschiedliche Kategorien haben', () => {
+    const dienste = [
+      { beamter_id: 'a', datum: '2026-10-02', kategorie: 'krank' as const },
+      { beamter_id: 'a', datum: '2026-10-05', kategorie: 'urlaub' as const },
+    ]
+    const ergebnis = effektiveAbwesenheitJeTag(dienste, ['a'], woche)
+    expect(ergebnis.has('a|2026-10-03')).toBe(false)
+    expect(ergebnis.has('a|2026-10-04')).toBe(false)
   })
 })

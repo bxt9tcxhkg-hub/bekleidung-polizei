@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dienstZeitraum, dienstZeitraumMitNachtdienstDefault, persoenlicheStundenUebersicht, type DienstplanDienstZeile } from './dienstplanAuswertung'
+import { dienstZeitraum, dienstZeitraumMitNachtdienstDefault, persoenlicheStundenUebersicht, zaehleDienstarten, type DienstplanDienstZeile } from './dienstplanAuswertung'
 
 describe('dienstZeitraum', () => {
   it('baut einen normalen Tageszeitraum', () => {
@@ -69,5 +69,25 @@ describe('persoenlicheStundenUebersicht', () => {
 
   it('leere Liste ergibt lauter Nullen', () => {
     expect(persoenlicheStundenUebersicht([])).toEqual({ gesamt: 0, sonnFeiertag: 0, tag: 0, nacht: 0 })
+  })
+})
+
+describe('zaehleDienstarten', () => {
+  it('zählt Z/ID/JD als Grunddienst, alles andere als Zusatzdienst, je nach Uhrzeit Tag oder Nacht', () => {
+    const ergebnis = zaehleDienstarten([
+      { rohtext: 'Z', von_zeit: '08:00', kategorie: 'dienst' },
+      { rohtext: 'JD', von_zeit: null, kategorie: 'dienst' },
+      { rohtext: 'VD', von_zeit: '08:00', kategorie: 'dienst' },
+      { rohtext: 'SVE', von_zeit: null, kategorie: 'dienst' },
+    ])
+    expect(ergebnis).toEqual({ grundTag: 1, grundNacht: 1, zusatzTag: 1, zusatzNacht: 1 })
+  })
+
+  it('ignoriert Abwesenheiten (kategorie != dienst)', () => {
+    expect(zaehleDienstarten([{ rohtext: 'U', von_zeit: null, kategorie: 'urlaub' }])).toEqual({ grundTag: 0, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0 })
+  })
+
+  it('erkennt Grunddienst auch in kombinierten Codes (z. B. "SVE/JD")', () => {
+    expect(zaehleDienstarten([{ rohtext: 'SVE/JD', von_zeit: '08:00', kategorie: 'dienst' }])).toEqual({ grundTag: 1, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0 })
   })
 })
