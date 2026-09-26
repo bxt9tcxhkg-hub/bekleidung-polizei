@@ -755,8 +755,16 @@ export default function DienstplanPlanung() {
                       // unabhängig von der Kategorie. Bewusst als eigene, explizite
                       // Hintergrundfarbe gesetzt (nicht nur über die Zeile vererbt),
                       // damit sie auch an Wochenenden (die sonst per Zeilen-Hintergrund
-                      // eingefärbt sind) sichtbar bleibt.
+                      // eingefärbt sind) sichtbar bleibt. Eine Markierung auf einem
+                      // echten (zeitgebundenen) Dienst bleibt auf dessen Abschnitt
+                      // beschränkt (zeilen); eine Markierung auf einer sonst leeren
+                      // Zelle (kategorie "sonstiges", keine Uhrzeit, siehe
+                      // abschnittFuerAnzeige) gilt wie eine Abwesenheit ganztägig und
+                      // muss deshalb - wie absenz oben - über dienstByKey (unabhängig
+                      // vom Abschnitt) nachgeschlagen werden, sonst erscheint sie nur
+                      // in der Tag-Zeile.
                       const markierterZeile = zeilen.find(zeile => zeile.markierung_id)
+                        ?? (dienstByKey.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst' && zeile.markierung_id)
                       const markierung = markierterZeile?.markierung_id ? markierungenById.get(markierterZeile.markierung_id) : undefined
                       const markierungFarben = markierung ? markierungFarbKlassen(markierung.farbe) : null
                       const markierungHintergrund = markierungFarben ? (abschnitt === 'tag' ? markierungFarben.bg : markierungFarben.bgNacht) : null

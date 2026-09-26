@@ -76,6 +76,18 @@ describe('buildDienstplanDruckHtml', () => {
     expect(html).toContain('background:#dbeafe')
   })
 
+  it('färbt eine Markierung auf einer sonst leeren Zelle (kategorie "sonstiges") durchgehend über Tag- UND Nachtzeile, mit kräftigerer Nacht-Nuance', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      tage: ['2026-10-01'],
+      dienste: [{ beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: '', von_zeit: null, bis_zeit: null, kategorie: 'sonstiges', markierung_id: 'm1' }],
+      markierungen: [{ id: 'm1', name: 'Überstunden', farbe: 'blau', kategorie: null }],
+    })
+    expect(html).toContain('background:#dbeafe') // Tag
+    expect(html).toContain('background:#bfdbfe') // Nacht (kräftigere Nuance)
+  })
+
   it('nutzt die vom Planer für Krank eingestellte Farbe (System-Markierung) statt der ursprünglichen Standardfarbe', () => {
     const html = buildDienstplanDruckHtml({
       ...BASIS,
