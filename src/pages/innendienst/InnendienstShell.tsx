@@ -6,7 +6,7 @@ import { logAudit } from '../../lib/audit'
 import { PersonPicker } from '../../components/RegisterPickers'
 import { personDisplayName, usePersons } from '../../lib/register'
 import { supabase } from '../../lib/supabase'
-import type { CashDenominations, InnendienstGebuehrensatz, InnendienstGebuehrensatzPosition, InnendienstPersonEntscheidung, InnendienstPersonEntscheidungStatus, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, ZentraleEntry } from '../../lib/types'
+import type { CashDenominations, InnendienstGebuehrensatz, InnendienstGebuehrensatzPosition, InnendienstPersonEntscheidung, InnendienstPersonEntscheidungStatus, InnendienstRecord, InnendienstRecordKind, InnendienstShiftTask, Profile, ZentraleEntry } from '../../lib/types'
 import { EntryModal } from '../../components/ZentraleEntryEditor'
 import { EMPTY_ENTRY_FORM, entryToForm, type EntryFormState } from '../../lib/zentraleEntries'
 import { generateBescheidPdf, type BescheidKind } from '../../lib/innendienstBescheidPdf'
@@ -20,10 +20,14 @@ import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
 // gemeinsamen Daten/Handler (ein Laden für alle Seiten), rendert Kopfzeile
 // und alle Modals, und reicht den Rest über den Outlet-Context durch.
 
+export type InnendienstShiftTaskWithProfile = InnendienstShiftTask & { profile: Pick<Profile, 'id' | 'name'> | null }
+
 export interface InnendienstContext {
   loading: boolean
   shift: 'tag' | 'nacht'
   ownTask: InnendienstShiftTask | null
+  /** Bereits von anderen Personen für dieselbe Schicht bestätigte Kassenabrechnungen (Schichtübernahme). */
+  otherConfirmedTasks: InnendienstShiftTaskWithProfile[]
   bescheide: InnendienstRecord[]
   violationsByBescheid: Map<string, InnendienstRecord[]>
   violationCountByPerson: Map<string, number>
@@ -50,6 +54,7 @@ export default function InnendienstShell() {
   const canDecideBescheide = isStrictAdmin || isGenehmiger
   const [shift, setShift] = useState<'tag' | 'nacht'>('tag')
   const [ownTask, setOwnTask] = useState<InnendienstShiftTask | null>(null)
+  const [shiftTasksToday, setShiftTasksToday] = useState<InnendienstShiftTaskWithProfile[]>([])
   const [records, setRecords] = useState<InnendienstRecord[]>([])
   const [personEntscheidungenRows, setPersonEntscheidungenRows] = useState<InnendienstPersonEntscheidung[]>([])
   const [entries, setEntries] = useState<ZentraleEntry[]>([])
@@ -81,10 +86,16 @@ export default function InnendienstShell() {
       supabase.from('innendienst_gebuehrensatz_positionen').select('*, position:innendienst_gebuehrenpositionen(id,name,betrag,active)'),
       supabase.from('innendienst_person_entscheidungen').select('*'),
     ])
-    const taskResult = userId ? await supabase.from('innendienst_shift_tasks').select('*').eq('user_id', userId).eq('duty_date', today).eq('shift', shift).maybeSingle() : null
+    // Ohne user_id-Filter, damit bei einer Schichtübernahme sichtbar ist, dass
+    // die Kasse bereits von der/dem Vorgängerin/Vorgänger abgerechnet wurde
+    // (RLS erlaubt das Lesen aller Zeilen der eigenen Tagesfunktion, siehe
+    // Migration 20260926120000).
+    const taskResult = await supabase.from('innendienst_shift_tasks').select('*, profile:profiles!innendienst_shift_tasks_user_id_fkey(id,name)').eq('duty_date', today).eq('shift', shift)
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
-    setOwnTask((taskResult?.data ?? null) as InnendienstShiftTask | null)
+    const tasksToday = (taskResult.data ?? []) as unknown as InnendienstShiftTaskWithProfile[]
+    setShiftTasksToday(tasksToday)
+    setOwnTask((tasksToday.find(item => item.user_id === userId) ?? null) as InnendienstShiftTask | null)
     setRecords((recordResult.data ?? []) as unknown as InnendienstRecord[])
     setEntries((entryResult.data ?? []) as ZentraleEntry[])
     setGebuehrensaetze(gebuehrensatzResult.error ? [] : (gebuehrensatzResult.data ?? []) as InnendienstGebuehrensatz[])
@@ -117,6 +128,7 @@ export default function InnendienstShell() {
   const personEntscheidungen = useMemo(() => new Map(personEntscheidungenRows.map(item => [item.person_id, item])), [personEntscheidungenRows])
   const todaysBescheide = useMemo(() => bescheide.filter(item => item.issued_date === today), [bescheide, today])
   const handovers = useMemo(() => entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt'), [entries])
+  const otherConfirmedTasks = useMemo(() => shiftTasksToday.filter(item => item.user_id !== userId && item.kasse_confirmed_at), [shiftTasksToday, userId])
 
   function openKasseWizard() {
     setExpectedRevenueInput(ownTask?.expected_revenue != null ? String(ownTask.expected_revenue) : '')
@@ -241,7 +253,7 @@ export default function InnendienstShell() {
   if (!hasAreaAccess('zentrale') && !isStrictAdmin && !eigeneBereicheHeute.has('innendienst')) return <Navigate to="/" replace />
 
   const ctx: InnendienstContext = {
-    loading, shift, ownTask, bescheide, violationsByBescheid, violationCountByPerson, personEntscheidungen, todaysBescheide, handovers, canManageZentrale, canDecideBescheide, gebuehrensaetze,
+    loading, shift, ownTask, otherConfirmedTasks, bescheide, violationsByBescheid, violationCountByPerson, personEntscheidungen, todaysBescheide, handovers, canManageZentrale, canDecideBescheide, gebuehrensaetze,
     openKasseWizard, openNewBescheid, openEditBescheid, setPersonEntscheidung, printBescheid, openNewHandover, openEditHandover,
   }
 
