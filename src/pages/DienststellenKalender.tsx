@@ -3,10 +3,10 @@ import { AlertTriangle, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
 import { inputClass } from '../components/ZentraleEntryEditor'
-import { thisMonthLocal } from '../lib/ueberstunden'
+import { thisMonthLocal, todayLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { parseDienstCode } from '../lib/dienstplanImport'
-import { KACHEL_IMMER_SICHTBAR, istUrlaubsKuerzel, kachelRang, tagOderNacht } from '../lib/dienstplanBesetzung'
+import { KACHEL_IMMER_SICHTBAR, fehlendeGrundbesetzung, istUrlaubsKuerzel, kachelRang, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
@@ -47,6 +47,25 @@ function formatDatum(iso: string): string {
   const [jahr, monat, tag] = iso.split('-').map(Number)
   const datum = new Date(jahr, monat - 1, tag)
   return `${WOCHENTAG_LABEL[datum.getDay()]} ${String(tag).padStart(2, '0')}.${String(monat).padStart(2, '0')}.${jahr}`
+}
+
+function tageImMonat(monatIso: string): string[] {
+  const [jahr, monat] = monatIso.split('-').map(Number)
+  const letzterTag = new Date(jahr, monat, 0).getDate()
+  return Array.from({ length: letzterTag }, (_, index) => `${monatIso}-${String(index + 1).padStart(2, '0')}`)
+}
+
+/** Wochen für die Monatsansicht - Montag bis Sonntag, mit null als Platzhalter für Tage außerhalb des Monats (damit jede Woche vollständige 7 Spalten hat). */
+function kalenderWochen(monatIso: string): (string | null)[][] {
+  const alleTage = tageImMonat(monatIso)
+  const [jahr, monatNr] = monatIso.split('-').map(Number)
+  const ersterWochentag = new Date(jahr, monatNr - 1, 1).getDay()
+  const fuehrendeLuecken = (ersterWochentag + 6) % 7 // Montag = 0 statt Sonntag = 0
+  const zellen: (string | null)[] = [...Array<null>(fuehrendeLuecken).fill(null), ...alleTage]
+  while (zellen.length % 7 !== 0) zellen.push(null)
+  const wochen: (string | null)[][] = []
+  for (let index = 0; index < zellen.length; index += 7) wochen.push(zellen.slice(index, index + 7))
+  return wochen
 }
 
 interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null }
@@ -119,6 +138,17 @@ export default function DienststellenKalender() {
     return () => { aktiv = false }
   }, [])
 
+  // Monatsansicht: ausgewählter Tag für die Detailanzeige unterhalb des
+  // Kalenderrasters - Standard ist der heutige Tag, wenn er im angezeigten
+  // Monat liegt, sonst keine Auswahl. Wechselt der Monat, wird neu
+  // ausgewählt (siehe Abhängigkeit [monat]) - innerhalb desselben Monats
+  // bleibt eine manuelle Auswahl bestehen.
+  const [ausgewaehlterTag, setAusgewaehlterTag] = useState<string | null>(null)
+  useEffect(() => {
+    const heute = todayLocal()
+    setAusgewaehlterTag(heute.startsWith(monat) ? heute : null)
+  }, [monat])
+
   const mitarbeiterById = useMemo(() => new Map(mitarbeiter.map(person => [person.id, person])), [mitarbeiter])
 
   function neuerZeitabschnitt(): Map<string, DienstKachelDaten> {
@@ -175,9 +205,16 @@ export default function DienststellenKalender() {
       }))
   }, [dienste, mitarbeiterById])
 
+  const tageMap = useMemo(() => new Map(tage.map(eintrag => [eintrag.datum, eintrag])), [tage])
+  const alleTage = useMemo(() => tageImMonat(monat), [monat])
+  const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, alleTage), [dienste, alleTage])
+  const wochen = useMemo(() => kalenderWochen(monat), [monat])
+  const heute = todayLocal()
+  const ausgewaehlteUebersicht = ausgewaehlterTag ? tageMap.get(ausgewaehlterTag) : undefined
+
   return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Dienststellenkalender</h1><p className="mt-1 text-sm text-gray-500">Tagdienste und Nachtdienste je Tag getrennt, je Dienst-Kürzel eine Kachel - aus dem importierten Dienstplan.</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Dienststellenkalender</h1><p className="mt-1 text-sm text-gray-500">Monatsansicht, heutiger Tag blau hervorgehoben - Tag antippen für Tag-/Nachtdienste je Dienst-Kürzel und Abwesenheiten. Rotes Warnsymbol: fehlende Grundbesetzung, Zahl: Anzahl Abwesenheiten.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
     </div>
 
@@ -185,23 +222,49 @@ export default function DienststellenKalender() {
 
     {loading ? <div className="mt-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-800" /></div>
       : monatVeroeffentlicht === false ? <div className="mt-8 rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CalendarDays className="mx-auto mb-2 h-8 w-8 text-gray-300" /><p className="text-sm text-gray-500">Für diesen Monat wurde noch kein Dienstplan veröffentlicht.</p></div>
-      : <div className="mt-6 space-y-3">
-        {tage.map(tagesUebersicht => <div key={tagesUebersicht.datum} className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="mb-3 text-sm font-bold text-gray-900">{formatDatum(tagesUebersicht.datum)}</p>
+      : <div className="mt-6">
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-wide text-gray-400 sm:gap-1.5">
+          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(label => <div key={label} className="pb-1">{label}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+          {wochen.flatMap((woche, wocheIndex) => woche.map((datum, tagIndex) => {
+            if (!datum) return <div key={`${wocheIndex}-${tagIndex}`} />
+            const tagText = datum.slice(-2)
+            const fehlend = fehlendeGrund.get(datum)
+            const abwesenheitenAnzahl = tageMap.get(datum)?.abwesenheiten.length ?? 0
+            const istHeute = datum === heute
+            const istAusgewaehlt = datum === ausgewaehlterTag
+            return <button key={datum} type="button" onClick={() => setAusgewaehlterTag(datum)}
+              className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg border p-1 text-sm transition-colors ${
+                istAusgewaehlt ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-200' : istHeute ? 'border-blue-400 bg-blue-50/60' : 'border-gray-200 bg-white hover:bg-gray-50'
+              }`}
+            >
+              <span className={`font-semibold ${istHeute ? 'text-blue-800' : 'text-gray-800'}`}>{tagText}</span>
+              <div className="flex h-3 items-center gap-1">
+                {fehlend && fehlend.length > 0 ? <AlertTriangle className="h-3 w-3 flex-none text-red-600" /> : null}
+                {abwesenheitenAnzahl > 0 ? <span className="text-[0.65rem] leading-none text-amber-700">{abwesenheitenAnzahl}</span> : null}
+              </div>
+            </button>
+          }))}
+        </div>
 
-          <div className="space-y-3">
-            <Zeitabschnitt titel="Tagdienste" daten={tagesUebersicht.tag} />
-            <Zeitabschnitt titel="Nachtdienste" daten={tagesUebersicht.nacht} />
-          </div>
-
-          {tagesUebersicht.abwesenheiten.length > 0 ? <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
-            {tagesUebersicht.abwesenheiten.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
-              {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
-            </div>)}
-          </div> : null}
-        </div>)}
-        {tage.length === 0 ? <p className="text-sm text-gray-500">Für diesen Monat sind keine Diensteinträge vorhanden.</p> : null}
+        <div className="mt-6">
+          {!ausgewaehlterTag ? <p className="text-sm text-gray-500">Tag im Kalender auswählen, um Details zu sehen.</p>
+            : !ausgewaehlteUebersicht ? <div className="rounded-xl border border-gray-200 bg-white p-4 text-center text-sm text-gray-500">{formatDatum(ausgewaehlterTag)} – keine Diensteinträge vorhanden.</div>
+            : <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="mb-3 text-sm font-bold text-gray-900">{formatDatum(ausgewaehlterTag)}</p>
+              <div className="space-y-3">
+                <Zeitabschnitt titel="Tagdienste" daten={ausgewaehlteUebersicht.tag} />
+                <Zeitabschnitt titel="Nachtdienste" daten={ausgewaehlteUebersicht.nacht} />
+              </div>
+              {ausgewaehlteUebersicht.abwesenheiten.length > 0 ? <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
+                {ausgewaehlteUebersicht.abwesenheiten.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
+                  {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
+                </div>)}
+              </div> : null}
+            </div>}
+        </div>
       </div>}
   </div>
 }
