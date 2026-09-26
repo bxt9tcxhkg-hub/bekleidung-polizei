@@ -13,6 +13,7 @@ import { generateBescheidPdf, type BescheidKind } from '../../lib/innendienstBes
 import { officerPrintName } from '../../lib/printDocs'
 import { BESCHEID_KINDS, DENOMINATIONS, EMPTY_BESCHEID_FORM, countedTotalCents, formatEuro, inputClass, todayLocal, type BescheidFormState } from './innendienstShared'
 import { useOwnOperativBereicheToday } from '../../lib/dutyAccess'
+import { operationalToday } from '../../lib/zentraleShared'
 
 // Innendienst ist in eigenständige Sidebar-Seiten aufgeteilt (Übersicht,
 // Bescheide & Verstöße, Schichtübergabe, Gebührenordnung - kein Tab-Streifen
@@ -78,7 +79,12 @@ export default function InnendienstShell() {
   const userId = profile?.id
   const load = useCallback(async () => {
     setLoading(true)
-    const today = todayLocal()
+    // operationalToday() statt todayLocal(): ein Nachtdienst, der z. B. um
+    // 19:00 mit duty_date=gestern begonnen hat, läuft bis 8 Uhr unter dem
+    // Vortag (siehe Migration 20260919000000/20260925052718) - sonst würde
+    // eine Schichtübernahme kurz vor Dienstende die Kassenzeile der
+    // laufenden Nacht unter dem falschen Kalendertag suchen.
+    const dutyDate = operationalToday()
     const [recordResult, entryResult, gebuehrensatzResult, gebuehrensatzPositionResult, entscheidungResult] = await Promise.all([
       supabase.from('innendienst_records').select('*, person:operational_persons(id,vorname,nachname,birth_date), gebuehrensatz:innendienst_gebuehrensaetze(id,name)').order('issued_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('zentrale_entries').select('*').order('updated_at', { ascending: false }),
@@ -90,7 +96,7 @@ export default function InnendienstShell() {
     // die Kasse bereits von der/dem Vorgängerin/Vorgänger abgerechnet wurde
     // (RLS erlaubt das Lesen aller Zeilen der eigenen Tagesfunktion, siehe
     // Migration 20260926120000).
-    const taskResult = await supabase.from('innendienst_shift_tasks').select('*, profile:profiles!innendienst_shift_tasks_user_id_fkey(id,name)').eq('duty_date', today).eq('shift', shift)
+    const taskResult = await supabase.from('innendienst_shift_tasks').select('*, profile:profiles!innendienst_shift_tasks_user_id_fkey(id,name)').eq('duty_date', dutyDate).eq('shift', shift)
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
     const tasksToday = (taskResult.data ?? []) as unknown as InnendienstShiftTaskWithProfile[]
@@ -128,7 +134,11 @@ export default function InnendienstShell() {
   const personEntscheidungen = useMemo(() => new Map(personEntscheidungenRows.map(item => [item.person_id, item])), [personEntscheidungenRows])
   const todaysBescheide = useMemo(() => bescheide.filter(item => item.issued_date === today), [bescheide, today])
   const handovers = useMemo(() => entries.filter(item => item.category === 'uebergabe' && item.status !== 'erledigt'), [entries])
-  const otherConfirmedTasks = useMemo(() => shiftTasksToday.filter(item => item.user_id !== userId && item.kasse_confirmed_at), [shiftTasksToday, userId])
+  // expected_revenue != null wie im eigenen Zweig (Zeile mit
+  // kasse_confirmed_at, aber ohne Kassensturz erfasst, gilt dort ebenfalls
+  // als unvollständig) - sonst würde eine fremde unvollständige Zeile
+  // fälschlich als "bereits abgerechnet" angezeigt.
+  const otherConfirmedTasks = useMemo(() => shiftTasksToday.filter(item => item.user_id !== userId && item.kasse_confirmed_at && item.expected_revenue != null), [shiftTasksToday, userId])
 
   function openKasseWizard() {
     setExpectedRevenueInput(ownTask?.expected_revenue != null ? String(ownTask.expected_revenue) : '')
@@ -155,7 +165,7 @@ export default function InnendienstShell() {
     setSaving(true)
     const { error: upsertError } = await supabase.from('innendienst_shift_tasks').upsert(
       {
-        user_id: profile.id, duty_date: today, shift, kasse_confirmed_at: new Date().toISOString(),
+        user_id: profile.id, duty_date: operationalToday(), shift, kasse_confirmed_at: new Date().toISOString(),
         expected_revenue: expectedRevenueParsed, cash_denominations: denomCountsParsed, counted_total: countedCents / 100,
       },
       { onConflict: 'user_id,duty_date,shift' },
