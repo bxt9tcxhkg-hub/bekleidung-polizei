@@ -24,6 +24,7 @@
 import { isSonnOderFeiertag } from './austrianHolidays'
 import { tagOderNacht } from './dienstplanBesetzung'
 import { grundbesetzungCode, parseDienstCode } from './dienstplanImport'
+import { istWerktag } from './dienstplanSollstunden'
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
 
 export interface DienstplanDienstZeile {
@@ -111,6 +112,40 @@ export function persoenlicheStundenUebersicht(dienste: readonly DienstplanDienst
     }
   }
   return { gesamt: rundeViertelstunde(gesamt), sonnFeiertag: rundeViertelstunde(sonnFeiertag), tag: rundeViertelstunde(tag), nacht: rundeViertelstunde(nacht) }
+}
+
+/** 'YYYY-MM-DD' als lokales Datum (nicht UTC). */
+function datumAusIso(datumIso: string): Date {
+  const [jahr, monat, tag] = datumIso.split('-').map(Number)
+  return new Date(jahr, monat - 1, tag)
+}
+
+/**
+ * Stunden aus Abwesenheiten (Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz)
+ * an Werktagen - der Kommandant zählt diese in "Gesamtstunden" mit (siehe
+ * Std Urlaub/Std Stundenersatz im Excel-Dienstplan), anders als
+ * persoenlicheStundenUebersicht() oben, die bewusst nur echte Diensteinträge
+ * auswertet. Mit angegebener Uhrzeit (z. B. ein Urlaubs-Halbtag "U 14-19")
+ * zählt die tatsächliche Dauer, ohne Uhrzeit der volle Tageswert
+ * (stundenProWerktag) - dieselbe Regel wie bei verfuegbareStunden im
+ * Planer-Grid (DienstplanPlanung.tsx), hier zusätzlich für die
+ * "Stunden"-Zeile der Auswertung (Planer-Grid und Druckansicht).
+ * Ganztägige Abwesenheiten desselben Tages (Zeile 1+2) werden über ein Set
+ * dedupliziert, damit sie nicht doppelt den vollen Tageswert zählen.
+ */
+export function abwesenheitsStunden(dienste: readonly DienstplanDienstZeile[], stundenProWerktag: number): number {
+  const ganztaegigeAbwesenheitsTage = new Set<string>()
+  let stunden = 0
+  for (const zeile of dienste) {
+    if (zeile.kategorie === 'dienst' || zeile.kategorie === 'sonstiges' || !istWerktag(datumAusIso(zeile.datum))) continue
+    if (zeile.von_zeit && zeile.bis_zeit) {
+      const zeitraum = dienstZeitraum(zeile)
+      if (zeitraum) stunden += (zeitraum.bis.getTime() - zeitraum.von.getTime()) / 3_600_000
+    } else {
+      ganztaegigeAbwesenheitsTage.add(zeile.datum)
+    }
+  }
+  return rundeViertelstunde(stunden + ganztaegigeAbwesenheitsTage.size * stundenProWerktag)
 }
 
 export interface DienstartenZaehlung { grundTag: number; grundNacht: number; zusatzTag: number; zusatzNacht: number; ueberstunden: number }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildDienstplanDruckHtml } from './dienstplanDruckPdf'
 
-const BASIS = { monatLabel: 'Oktober 2026', bearbeiterName: 'Max Mustermann', markierungen: [] }
+const BASIS = { monatLabel: 'Oktober 2026', bearbeiterName: 'Max Mustermann', markierungen: [], stundenProWerktag: 8.75 }
 
 describe('buildDienstplanDruckHtml', () => {
   it('zeigt Personen als Spaltenköpfe (Kurzname) und die Kürzel in der passenden Tag-/Nachtzeile', () => {
@@ -134,6 +134,21 @@ describe('buildDienstplanDruckHtml', () => {
     expect(html).toContain('<tfoot>')
     expect(html).toContain('Grund Tag')
     expect(html).toContain('<td colspan="2" class="auswertung-label">Stunden</td><td style="">11</td>')
+  })
+
+  it('zählt einen ganztägigen Urlaubstag in der "Stunden"-Zeile mit dem vollen Tageswert (stundenProWerktag) mit - wie im Kommandanten-Dienstplan', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      // 2026-10-01 = Donnerstag (Werktag), 2026-10-02 = Freitag (Werktag).
+      tage: ['2026-10-01', '2026-10-02'],
+      dienste: [
+        { beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'Z', von_zeit: '08:00', bis_zeit: '19:00', kategorie: 'dienst', markierung_id: null },
+        { beamter_id: 'a', datum: '2026-10-02', zeile: 1, rohtext: 'Urlaub', von_zeit: null, bis_zeit: null, kategorie: 'urlaub', markierung_id: null },
+      ],
+    })
+    // 11 Std. Dienst + 8,75 Std. Urlaub (stundenProWerktag) = 19,75 (de-AT-Format, siehe formatStunden).
+    expect(html).toContain('<td colspan="2" class="auswertung-label">Stunden</td><td style="">19,75</td>')
   })
 
   it('zeigt eine angegebene Uhrzeit auch bei einer Abwesenheit (z. B. ein Urlaubs-Halbtag)', () => {

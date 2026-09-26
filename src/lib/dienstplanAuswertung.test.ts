@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dienstZeitraum, dienstZeitraumMitNachtdienstDefault, persoenlicheStundenUebersicht, zaehleDienstarten, type DienstplanDienstZeile } from './dienstplanAuswertung'
+import { abwesenheitsStunden, dienstZeitraum, dienstZeitraumMitNachtdienstDefault, persoenlicheStundenUebersicht, zaehleDienstarten, type DienstplanDienstZeile } from './dienstplanAuswertung'
 
 describe('dienstZeitraum', () => {
   it('baut einen normalen Tageszeitraum', () => {
@@ -101,5 +101,50 @@ describe('zaehleDienstarten', () => {
 
   it('zählt ohne übergebene ueberstundenMarkierungId keine Überstunden', () => {
     expect(zaehleDienstarten([{ rohtext: 'Z', von_zeit: '08:00', kategorie: 'dienst', markierung_id: 'irgendeine-id' }]).ueberstunden).toBe(0)
+  })
+})
+
+describe('abwesenheitsStunden', () => {
+  it('zählt eine ganztägige Abwesenheit (keine Uhrzeit) mit dem vollen Tageswert (stundenProWerktag)', () => {
+    // 2026-02-03 = Dienstag (Werktag).
+    const dienste: DienstplanDienstZeile[] = [{ datum: '2026-02-03', von_zeit: null, bis_zeit: null, kategorie: 'urlaub' }]
+    expect(abwesenheitsStunden(dienste, 8.75)).toBe(8.75)
+  })
+
+  it('zählt eine Abwesenheit mit Uhrzeit (z. B. ein Urlaubs-Halbtag) mit der tatsächlichen Dauer statt dem vollen Tageswert', () => {
+    const dienste: DienstplanDienstZeile[] = [{ datum: '2026-02-03', von_zeit: '14:00', bis_zeit: '19:00', kategorie: 'urlaub' }]
+    expect(abwesenheitsStunden(dienste, 8.75)).toBe(5)
+  })
+
+  it('zählt Krank, Karenz, Sonderurlaub und Stundenersatz genauso wie Urlaub', () => {
+    const dienste: DienstplanDienstZeile[] = [
+      { datum: '2026-02-02', von_zeit: null, bis_zeit: null, kategorie: 'krank' },
+      { datum: '2026-02-03', von_zeit: null, bis_zeit: null, kategorie: 'karenz' },
+      { datum: '2026-02-04', von_zeit: null, bis_zeit: null, kategorie: 'sonderurlaub' },
+      { datum: '2026-02-05', von_zeit: null, bis_zeit: null, kategorie: 'stundenersatz' },
+    ]
+    expect(abwesenheitsStunden(dienste, 8.75)).toBe(4 * 8.75)
+  })
+
+  it('ignoriert echte Diensteinträge (kategorie "dienst") und rein farblich markierte Zellen (kategorie "sonstiges")', () => {
+    const dienste: DienstplanDienstZeile[] = [
+      { datum: '2026-02-03', von_zeit: '08:00', bis_zeit: '19:00', kategorie: 'dienst' },
+      { datum: '2026-02-04', von_zeit: null, bis_zeit: null, kategorie: 'sonstiges' },
+    ]
+    expect(abwesenheitsStunden(dienste, 8.75)).toBe(0)
+  })
+
+  it('ignoriert eine Abwesenheit am Wochenende (wird laut Kommandant nicht eingetragen, aber sicherheitshalber ausgeschlossen)', () => {
+    // 2026-02-07 = Samstag.
+    const dienste: DienstplanDienstZeile[] = [{ datum: '2026-02-07', von_zeit: null, bis_zeit: null, kategorie: 'urlaub' }]
+    expect(abwesenheitsStunden(dienste, 8.75)).toBe(0)
+  })
+
+  it('zählt zwei Zeilen (Zeile 1+2) desselben ganztägigen Abwesenheitstages nur einmal', () => {
+    const dienste: DienstplanDienstZeile[] = [
+      { datum: '2026-02-03', von_zeit: null, bis_zeit: null, kategorie: 'urlaub' },
+      { datum: '2026-02-03', von_zeit: null, bis_zeit: null, kategorie: 'krank' },
+    ]
+    expect(abwesenheitsStunden(dienste, 8.75)).toBe(8.75)
   })
 })

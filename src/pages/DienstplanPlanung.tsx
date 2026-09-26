@@ -9,7 +9,7 @@ import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanMarkieru
 import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
-import { dienstZeitraum, NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
+import { abwesenheitsStunden, NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
 import { formatDienstAnzeige, kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
 import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
@@ -350,22 +350,8 @@ export default function DienstplanPlanung() {
       // Eine Abwesenheit (Urlaub/Krank/...) an einem Werktag zieht Sollstunden
       // ab - mit angegebener Uhrzeit (z. B. ein Urlaubs-Halbtag "U 14-19")
       // nur die tatsächliche Dauer, ohne Uhrzeit weiterhin den vollen
-      // Tageswert (stundenProWerktag). Ganztägige Abwesenheiten desselben
-      // Tages werden über ein Set dedupliziert (zeile 1+2 desselben Tages
-      // sollen nicht doppelt den vollen Tageswert abziehen).
-      const ganztaegigeAbwesenheitsTage = new Set<string>()
-      let abwesenheitsStunden = 0
-      for (const zeile of zeilen) {
-        if (zeile.kategorie === 'dienst' || zeile.kategorie === 'sonstiges' || !istWerktag(datumAusIso(zeile.datum))) continue
-        if (zeile.von_zeit && zeile.bis_zeit) {
-          const zeitraum = dienstZeitraum({ datum: zeile.datum, von_zeit: zeile.von_zeit, bis_zeit: zeile.bis_zeit })
-          if (zeitraum) abwesenheitsStunden += (zeitraum.bis.getTime() - zeitraum.von.getTime()) / 3_600_000
-        } else {
-          ganztaegigeAbwesenheitsTage.add(zeile.datum)
-        }
-      }
-      abwesenheitsStunden += ganztaegigeAbwesenheitsTage.size * stundenProWerktag
-      const geplant = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsStunden
+      // Tageswert (siehe abwesenheitsStunden in lib/dienstplanAuswertung.ts).
+      const geplant = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsStunden(zeilen, stundenProWerktag)
       ergebnis.set(person.id, soll - geplant)
     }
     return ergebnis
@@ -387,9 +373,15 @@ export default function DienstplanPlanung() {
     }
     return new Map(mitarbeiter.map(person => {
       const zeilen = dienstePerPerson.get(person.id) ?? []
-      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen, ueberstundenMarkierungId) }] as const
+      // "Stunden" zählt neben echten Diensteinträgen auch Abwesenheiten
+      // (Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz) mit ihrem
+      // Stundenwert mit - wie im Kommandanten-Dienstplan ("Gesamtstunden"
+      // dort schließt Std Urlaub/Std Stundenersatz mit ein), siehe
+      // abwesenheitsStunden in lib/dienstplanAuswertung.ts.
+      const stunden = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsStunden(zeilen, stundenProWerktag)
+      return [person.id, { stunden, arten: zaehleDienstarten(zeilen, ueberstundenMarkierungId) }] as const
     }))
-  }, [dienste, mitarbeiter, ueberstundenMarkierungId])
+  }, [dienste, mitarbeiter, ueberstundenMarkierungId, stundenProWerktag])
 
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
   const ruheVerletzt = useMemo(
@@ -425,6 +417,7 @@ export default function DienstplanPlanung() {
       tage,
       dienste,
       markierungen,
+      stundenProWerktag,
     })
   }
 
