@@ -5,7 +5,8 @@ import { supabase } from '../lib/supabase'
 import { isAustrianHoliday } from '../lib/austrianHolidays'
 import { officerPrintName } from '../lib/printDocs'
 import { generateDienstplanDruckPdf } from '../lib/dienstplanDruckPdf'
-import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
+import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanMarkierungRow, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
+import { markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
@@ -37,7 +38,7 @@ import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 // Admin/Genehmiger erreichen diese Seite (siehe ProtectedRoute
 // genehmigerOnly in App.tsx).
 
-interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
+interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb; markierung_id: string | null }
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
 interface WunschEintrag { wunsch: DienstplanWunschTyp; notiz: string | null; vonZeit: string | null; bisZeit: string | null }
 
@@ -78,10 +79,10 @@ const ABWESENHEIT_KUERZEL: { label: string; code: string }[] = [
   { label: 'Karenz', code: 'Karenz' },
 ]
 
-interface ZeileForm { code: string; vonZeit: string; bisZeit: string }
-const LEERE_ZEILE: ZeileForm = { code: '', vonZeit: '', bisZeit: '' }
+interface ZeileForm { code: string; vonZeit: string; bisZeit: string; markierungId: string }
+const LEERE_ZEILE: ZeileForm = { code: '', vonZeit: '', bisZeit: '', markierungId: '' }
 
-function ZeileEditor({ titel, form, setForm, entfernen }: { titel: string; form: ZeileForm; setForm: (form: ZeileForm) => void; entfernen?: () => void }) {
+function ZeileEditor({ titel, form, setForm, entfernen, markierungen }: { titel: string; form: ZeileForm; setForm: (form: ZeileForm) => void; entfernen?: () => void; markierungen: readonly DienstplanMarkierungRow[] }) {
   const kategorie = form.code ? kategorisiereRohtext(form.code) : null
   const zeitRelevant = kategorie === null || kategorie === 'dienst'
   return <div className="rounded-lg border border-gray-200 p-3">
@@ -91,7 +92,7 @@ function ZeileEditor({ titel, form, setForm, entfernen }: { titel: string; form:
     </div>
     <div className="mt-2 flex flex-wrap gap-1.5">
       {QUICK_KUERZEL.map(code => <button key={code} type="button" onClick={() => setForm({ ...form, code })} className={`rounded-full border px-2.5 py-1 text-xs font-medium ${form.code.toUpperCase() === code ? 'border-blue-700 bg-blue-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{code}</button>)}
-      {ABWESENHEIT_KUERZEL.map(({ label, code }) => <button key={code} type="button" onClick={() => setForm({ code, vonZeit: '', bisZeit: '' })} className={`rounded-full border px-2.5 py-1 text-xs font-medium ${form.code.toUpperCase() === code.toUpperCase() ? 'border-amber-700 bg-amber-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{label}</button>)}
+      {ABWESENHEIT_KUERZEL.map(({ label, code }) => <button key={code} type="button" onClick={() => setForm({ ...form, code, vonZeit: '', bisZeit: '' })} className={`rounded-full border px-2.5 py-1 text-xs font-medium ${form.code.toUpperCase() === code.toUpperCase() ? 'border-amber-700 bg-amber-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{label}</button>)}
     </div>
     <label className="mt-2 block text-xs font-medium text-gray-600">Kürzel (frei, z. B. "SVE/TD")
       <input type="text" className={inputClass} value={form.code} onChange={event => setForm({ ...form, code: event.target.value })} />
@@ -107,6 +108,12 @@ function ZeileEditor({ titel, form, setForm, entfernen }: { titel: string; form:
         <input type="time" className={`${inputClass} mt-0 w-auto`} value={form.bisZeit} onChange={event => setForm({ ...form, bisZeit: event.target.value })} />
       </div>
     </div> : null}
+    {markierungen.length > 0 ? <label className="mt-2 block text-xs font-medium text-gray-600">Farbmarkierung (rein visuell, z. B. Überstunden)
+      <select className={inputClass} value={form.markierungId} onChange={event => setForm({ ...form, markierungId: event.target.value })}>
+        <option value="">Keine</option>
+        {markierungen.map(markierung => <option key={markierung.id} value={markierung.id}>{markierung.name}</option>)}
+      </select>
+    </label> : null}
   </div>
 }
 
@@ -126,6 +133,7 @@ export default function DienstplanPlanung() {
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
   const [dienste, setDienste] = useState<DienstZeile[]>([])
   const [wuensche, setWuensche] = useState<Map<string, WunschEintrag[]>>(new Map())
+  const [markierungen, setMarkierungen] = useState<DienstplanMarkierungRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -172,14 +180,16 @@ export default function DienstplanPlanung() {
 
   const load = useCallback(async () => {
     setLoading(true); setError(''); setVorschlaege(new Map())
-    const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult, vorMonatNachtResult] = await Promise.all([
+    const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult, vorMonatNachtResult, markierungenResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('stunden_pro_werktag,mindestruhezeit_stunden,aktueller_planungsmonat').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
       dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,von_zeit').eq('datum', vorherigerMonatLetzterTag(monat)).eq('kategorie', 'dienst'),
+      dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,reihenfolge,updated_by,updated_at').order('reihenfolge').order('name'),
     ])
-    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error || vorMonatNachtResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error || vorMonatNachtResult.error || markierungenResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    setMarkierungen(markierungenResult.data ?? [])
     if (!standardMonatAngewandt.current) {
       standardMonatAngewandt.current = true
       const standard = regelnResult.data?.aktueller_planungsmonat?.slice(0, 7)
@@ -197,7 +207,7 @@ export default function DienstplanPlanung() {
 
     if (!monatResult.data) { setDienste([]); setWuensche(new Map()); setLoading(false); return }
     const [dienstResult, wunschResult] = await Promise.all([
-      dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,datum,zeile,rohtext,von_zeit,bis_zeit,kategorie').eq('dienstplan_monat_id', monatResult.data.id).order('datum').order('zeile'),
+      dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,datum,zeile,rohtext,von_zeit,bis_zeit,kategorie,markierung_id').eq('dienstplan_monat_id', monatResult.data.id).order('datum').order('zeile'),
       dienstplanSupabase.from('dienstplan_wuensche').select('beamter_id,datum,wunsch,notiz,von_zeit,bis_zeit').eq('monat', `${monat}-01`),
     ])
     if (dienstResult.error || wunschResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
@@ -240,6 +250,8 @@ export default function DienstplanPlanung() {
     }
     return map
   }, [dienste])
+
+  const markierungenById = useMemo(() => new Map(markierungen.map(markierung => [markierung.id, markierung])), [markierungen])
 
   // Für die Kopfzeile: Kommando/Dienstführung/Beamte-Blöcke als
   // zusammenhängende Spaltengruppen (mitarbeiter ist bereits per
@@ -343,7 +355,7 @@ export default function DienstplanPlanung() {
 
   function zeileZuForm(zeile: DienstZeile | undefined): ZeileForm {
     if (!zeile) return LEERE_ZEILE
-    return { code: parseDienstCode(zeile.rohtext).code, vonZeit: zeile.von_zeit ?? '', bisZeit: zeile.bis_zeit ?? '' }
+    return { code: parseDienstCode(zeile.rohtext).code, vonZeit: zeile.von_zeit ?? '', bisZeit: zeile.bis_zeit ?? '', markierungId: zeile.markierung_id ?? '' }
   }
 
   function oeffneZelle(beamterId: string, name: string, datum: string) {
@@ -371,11 +383,12 @@ export default function DienstplanPlanung() {
       const kategorie = kategorisiereRohtext(code)
       const vonZeit = kategorie === 'dienst' ? form.vonZeit : ''
       const bisZeit = kategorie === 'dienst' ? form.bisZeit : ''
+      const markierungId = form.markierungId || null
       aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_setzen', {
         p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer,
-        p_rohtext: code, p_von_zeit: vonZeit, p_bis_zeit: bisZeit, p_kategorie: kategorie,
+        p_rohtext: code, p_von_zeit: vonZeit, p_bis_zeit: bisZeit, p_kategorie: kategorie, p_markierung_id: markierungId,
       }))
-      neueZeilen.set(nummer, { beamter_id: bearbeitung.beamterId, datum: bearbeitung.datum, zeile: nummer, rohtext: code, von_zeit: vonZeit || null, bis_zeit: bisZeit || null, kategorie })
+      neueZeilen.set(nummer, { beamter_id: bearbeitung.beamterId, datum: bearbeitung.datum, zeile: nummer, rohtext: code, von_zeit: vonZeit || null, bis_zeit: bisZeit || null, kategorie, markierung_id: markierungId })
     }
     const ergebnisse = await Promise.all(aufgaben)
     setSpeichern(false)
@@ -418,7 +431,7 @@ export default function DienstplanPlanung() {
     setDienste(current => {
       const betroffen = new Set(eintraege.map(({ beamterId, datum }) => `${beamterId}|${datum}|1`))
       const rest = current.filter(zeile => !betroffen.has(`${zeile.beamter_id}|${zeile.datum}|${zeile.zeile}`))
-      const neu = eintraege.map(({ beamterId, datum }): DienstZeile => ({ beamter_id: beamterId, datum, zeile: 1, rohtext: code, von_zeit: null, bis_zeit: null, kategorie }))
+      const neu = eintraege.map(({ beamterId, datum }): DienstZeile => ({ beamter_id: beamterId, datum, zeile: 1, rohtext: code, von_zeit: null, bis_zeit: null, kategorie, markierung_id: null }))
       return [...rest, ...neu]
     })
     const uebersprungen = alleEintraege.length - eintraege.length
@@ -568,7 +581,7 @@ export default function DienstplanPlanung() {
         p_monat_id: monatRow.id, p_beamter_id: vorschlag.beamterId, p_datum: vorschlag.datum, p_zeile: nummer,
         p_rohtext: vorschlag.code, p_von_zeit: vorschlag.vonZeit ?? '', p_bis_zeit: vorschlag.bisZeit ?? '', p_kategorie: 'dienst',
       }))
-      neueZeilen.push({ beamter_id: vorschlag.beamterId, datum: vorschlag.datum, zeile: nummer, rohtext: vorschlag.code, von_zeit: vorschlag.vonZeit, bis_zeit: vorschlag.bisZeit, kategorie: 'dienst' })
+      neueZeilen.push({ beamter_id: vorschlag.beamterId, datum: vorschlag.datum, zeile: nummer, rohtext: vorschlag.code, von_zeit: vorschlag.vonZeit, bis_zeit: vorschlag.bisZeit, kategorie: 'dienst', markierung_id: null })
     }
     const ergebnisse = await Promise.all(aufgaben)
     setVorschlagUebernehmen(false)
@@ -674,19 +687,30 @@ export default function DienstplanPlanung() {
                       const absenz = (dienstByKey.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst')
                       const absenzFarben = absenz ? absenzFarbe(absenz.kategorie) : null
                       const absenzHintergrund = absenzFarben ? (abschnitt === 'tag' ? absenzFarben.bg : absenzFarben.bgNacht) : null
+                      // Vom Planer frei definierte Farbmarkierung (z. B. "Überstunden"
+                      // blau, siehe lib/dienstplanMarkierungen.ts) - rein visuell,
+                      // unabhängig von der Kategorie. Bewusst als eigene, explizite
+                      // Hintergrundfarbe gesetzt (nicht nur über die Zeile vererbt),
+                      // damit sie auch an Wochenenden (die sonst per Zeilen-Hintergrund
+                      // eingefärbt sind) sichtbar bleibt.
+                      const markierterZeile = zeilen.find(zeile => zeile.markierung_id)
+                      const markierung = markierterZeile?.markierung_id ? markierungenById.get(markierterZeile.markierung_id) : undefined
+                      const markierungFarben = markierung ? markierungFarbKlassen(markierung.farbe) : null
+                      const markierungHintergrund = markierungFarben ? (abschnitt === 'tag' ? markierungFarben.bg : markierungFarben.bgNacht) : null
                       const titel = [
                         wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.vonZeit && eintrag.bisZeit ? ` ${eintrag.vonZeit.slice(0, 5)}–${eintrag.bisZeit.slice(0, 5)}` : ''}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : null,
                         uebertragWarnung ? 'Nachtdienst am letzten Tag des Vormonats - heute laut Ruhezeit (24 Std.) kein Tagdienst möglich' : null,
+                        markierung ? `Markierung: ${markierung.name}` : null,
                       ].filter(Boolean).join(' · ') || undefined
                       return <td key={person.id}
                         onClick={istTouchGeraet ? () => oeffneZelle(person.id, person.name, datum) : undefined}
                         onMouseDown={!istTouchGeraet ? () => dragStarten(person.id, datum) : undefined}
                         onMouseEnter={!istTouchGeraet ? () => dragBewegen(person.id, datum) : undefined}
                         title={titel}
-                        className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${spaltenBorderKlasse.get(person.id) ?? ''} ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzHintergrund ?? ''}`}
+                        className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${spaltenBorderKlasse.get(person.id) ?? ''} ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzHintergrund ?? markierungHintergrund ?? ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
-                          {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                          {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : markierungFarben ? markierungFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
                           {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}
                           {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
                           {uebertragWarnung ? <AlertTriangle className="h-3 w-3 text-red-600" /> : null}
@@ -702,8 +726,8 @@ export default function DienstplanPlanung() {
       </>}
 
     {bearbeitung ? <Modal title={`${bearbeitung.name} – ${bearbeitung.datum.split('-').reverse().join('.')}`} close={() => setBearbeitung(null)}>
-      <ZeileEditor titel="Zeile 1" form={zeile1} setForm={setZeile1} entfernen={zeile1.code ? () => setZeile1(LEERE_ZEILE) : undefined} />
-      {zeile2 ? <ZeileEditor titel="Zeile 2" form={zeile2} setForm={setZeile2} entfernen={() => setZeile2(null)} />
+      <ZeileEditor titel="Zeile 1" form={zeile1} setForm={setZeile1} entfernen={zeile1.code ? () => setZeile1(LEERE_ZEILE) : undefined} markierungen={markierungen} />
+      {zeile2 ? <ZeileEditor titel="Zeile 2" form={zeile2} setForm={setZeile2} entfernen={() => setZeile2(null)} markierungen={markierungen} />
         : <button type="button" onClick={() => setZeile2(LEERE_ZEILE)} className="text-xs text-blue-700 hover:underline">+ Zweiter Eintrag</button>}
       {modalError ? <ErrorMessage text={modalError} /> : null}
       <Actions saving={speichern} close={() => setBearbeitung(null)} save={speichereZelle} />

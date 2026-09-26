@@ -52,7 +52,18 @@ export type DienstplanDienstRow = {
   von_zeit: string | null
   bis_zeit: string | null
   kategorie: DienstplanKategorieDb
+  /** Freie, vom Planer definierte Farbmarkierung (siehe dienstplan_markierungen) - rein visuell, unabhängig von kategorie. */
+  markierung_id: string | null
   created_at: string
+}
+
+export type DienstplanMarkierungRow = {
+  id: string
+  name: string
+  farbe: string
+  reihenfolge: number
+  updated_by: string | null
+  updated_at: string
 }
 
 export type DienstplanRegelRow = {
@@ -155,6 +166,12 @@ type DienstplanDatabase = {
         Update: Partial<Omit<DienstplanTauschantragRow, 'id'>>
         Relationships: []
       }
+      dienstplan_markierungen: {
+        Row: DienstplanMarkierungRow
+        Insert: Pick<DienstplanMarkierungRow, 'name' | 'farbe'> & Partial<Omit<DienstplanMarkierungRow, 'id' | 'name' | 'farbe' | 'updated_at'>>
+        Update: Partial<Omit<DienstplanMarkierungRow, 'id'>>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -171,6 +188,7 @@ type DienstplanDatabase = {
           p_von_zeit: string
           p_bis_zeit: string
           p_kategorie: DienstplanKategorieDb
+          p_markierung_id?: string | null
         }
         Returns: undefined
       }
