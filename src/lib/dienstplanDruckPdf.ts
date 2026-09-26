@@ -27,7 +27,7 @@ import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineB
 import { formatStunden } from './ueberstunden'
 import { persoenlicheStundenUebersicht, zaehleDienstarten } from './dienstplanAuswertung'
 import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung } from './dienstplanBesetzung'
-import { parseDienstCode } from './dienstplanImport'
+import { formatDienstAnzeige } from './dienstplanImport'
 import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
 import { DIENSTPLAN_GRUPPE_LABEL, type DienstplanGruppe } from './dienstplanRoster'
 import type { DienstplanKategorieDb, DienstplanMarkierungKategorie } from './dienstplanSupabase'
@@ -138,7 +138,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
         const farben = absenzFarben ?? markierungFarben
         const hintergrund = farben ? hex(abschnitt === 'tag' ? farben.bg : farben.bgNacht) : zeilenHintergrund
         const textfarbe = farben ? hex(farben.text) : '#000'
-        const text = zeilen.map(zeile => escHtml(parseDienstCode(zeile.rohtext).code)).join('<br>')
+        const text = zeilen.map(zeile => escHtml(formatDienstAnzeige(zeile))).join('<br>')
         return `<td style="background:${hintergrund};color:${textfarbe};${spaltenRand.get(person.id)}">${text}</td>`
       }).join('')
       return `<tr>${datumZelle}${abschnittZelle}${personenZellen}</tr>`

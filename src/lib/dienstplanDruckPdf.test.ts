@@ -13,7 +13,8 @@ describe('buildDienstplanDruckHtml', () => {
     })
     expect(html).toContain('Dienstplan Oktober 2026')
     expect(html).toContain('>Beispiel<')
-    expect(html).toContain('>Z<')
+    // Uhrzeit wurde angegeben (von_zeit/bis_zeit) - erscheint neben dem Kürzel.
+    expect(html).toContain('>Z 08-19<')
   })
 
   it('zeigt beide Zeilen desselben Tages/Abschnitts übereinander, wenn eine Person zwei Einträge hat', () => {
@@ -26,7 +27,7 @@ describe('buildDienstplanDruckHtml', () => {
         { beamter_id: 'a', datum: '2026-10-01', zeile: 2, rohtext: 'VD', von_zeit: '08:00', bis_zeit: '19:00', kategorie: 'dienst', markierung_id: null },
       ],
     })
-    expect(html).toContain('Z<br>VD')
+    expect(html).toContain('Z 08-19<br>VD 08-19')
   })
 
   it('meldet fehlende Diensteinträge, wenn keine vorhanden sind', () => {
@@ -133,6 +134,16 @@ describe('buildDienstplanDruckHtml', () => {
     expect(html).toContain('<tfoot>')
     expect(html).toContain('Grund Tag')
     expect(html).toContain('<td colspan="2" class="auswertung-label">Stunden</td><td style="">11</td>')
+  })
+
+  it('zeigt eine angegebene Uhrzeit auch bei einer Abwesenheit (z. B. ein Urlaubs-Halbtag)', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      tage: ['2026-10-01'],
+      dienste: [{ beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'U', von_zeit: '08:00', bis_zeit: '13:00', kategorie: 'urlaub', markierung_id: null }],
+    })
+    expect(html).toContain('>U 08-13<')
   })
 
   it('zeigt die Anzahl der mit der System-Markierung "Überstunden" versehenen Diensteinträge in der Auswertung', () => {
