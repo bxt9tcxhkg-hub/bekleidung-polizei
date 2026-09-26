@@ -60,9 +60,9 @@ describe('buildDienstplanDruckHtml', () => {
       tage: ['2026-10-01'],
       dienste: [],
     })
-    expect(html).toContain('<th style="border-right:1.5pt solid #333;">Beispiel A</th>')
-    expect(html).toContain('<th style="border-right:0.5pt solid #bbb;">Beispiel B</th>')
-    expect(html).toContain('<th style="">Beispiel C</th>')
+    expect(html).toContain('<th class="person-kopf" style="border-right:1.5pt solid #333;">Beispiel A</th>')
+    expect(html).toContain('<th class="person-kopf" style="border-right:0.5pt solid #bbb;">Beispiel B</th>')
+    expect(html).toContain('<th class="person-kopf" style="">Beispiel C</th>')
   })
 
   it('färbt eine zugewiesene Markierung in ihrer definierten Farbe', () => {

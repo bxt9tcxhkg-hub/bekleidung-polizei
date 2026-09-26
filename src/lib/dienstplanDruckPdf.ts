@@ -105,9 +105,9 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
 
   const gruppenKopfZellen = gruppenSpans.map(({ gruppe, span }, index) => {
     const letzteGruppe = index === gruppenSpans.length - 1
-    return `<th colspan="${span}" style="${letzteGruppe ? '' : 'border-right:1.5pt solid #333;'}">${escHtml(DIENSTPLAN_GRUPPE_LABEL[gruppe])}</th>`
+    return `<th colspan="${span}" class="person-kopf" style="${letzteGruppe ? '' : 'border-right:1.5pt solid #333;'}">${escHtml(DIENSTPLAN_GRUPPE_LABEL[gruppe])}</th>`
   }).join('')
-  const personenKopfZellen = personen.map(person => `<th style="${spaltenRand.get(person.id)}">${escHtml(person.kurzname)}</th>`).join('')
+  const personenKopfZellen = personen.map(person => `<th class="person-kopf" style="${spaltenRand.get(person.id)}">${escHtml(person.kurzname)}</th>`).join('')
 
   const tageZeilen = tage.map(datum => {
     const [, , tagText] = datum.split('-')
@@ -177,6 +177,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
   table.plan { width: 100%; border-collapse: collapse; table-layout: fixed; }
   table.plan th, table.plan td { border: 0.5pt solid #ccc; padding: 0.6mm 0.4mm; text-align: center; overflow: hidden; white-space: nowrap; }
   table.plan th { background: #f2f2f2; font-weight: bold; }
+  table.plan th.person-kopf { white-space: normal; word-break: break-word; overflow: visible; line-height: 1.05; vertical-align: bottom; font-size: 5.5pt; }
   table.plan td.datum { width: 13mm; text-align: left; font-weight: bold; white-space: nowrap; }
   table.plan td.abschnitt { width: 5mm; font-weight: bold; color: #78716c; }
   table.plan td.auswertung-label { text-align: left; font-weight: bold; background: #f2f2f2; }
