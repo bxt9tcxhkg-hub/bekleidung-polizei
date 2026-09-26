@@ -113,7 +113,7 @@ function ZeileEditor({ titel, form, setForm, entfernen, markierungen }: { titel:
         <option value="">Keine</option>
         {markierungen.map(markierung => <option key={markierung.id} value={markierung.id}>{markierung.name}</option>)}
       </select>
-    </label> : null}
+    </label> : <p className="mt-2 text-xs text-gray-400">Noch keine Farbmarkierungen definiert - unter Dienstplan-Einstellungen anlegen, danach hier auswählbar.</p>}
   </div>
 }
 
@@ -581,6 +581,15 @@ export default function DienstplanPlanung() {
       const [beamterId, datum] = schluessel.split('|')
       return { beamterId, datum, vonZeit: null, bisZeit: null, kategorie, code: '' }
     })
+    // Wer am letzten Tag des Vormonats Nachtdienst hatte, ist laut
+    // Mindestruhezeit (24 Std. nach einem Nachtdienst) am 1. dieses Monats
+    // für den Tagdienst gesperrt (siehe naechtlicherUebertrag/uebertragWarnung
+    // oben) - dieser vorangegangene Dienst wird dem Algorithmus als
+    // synthetischer Diensteintrag am Vortag übergeben, sonst kennt die
+    // Ruhezeit-Prüfung (die nur die Diensteinträge DIESES Monats sieht)
+    // diesen Übertrag nicht und schlägt die Person fälschlich vor.
+    const vortag = vorherigerMonatLetzterTag(monat)
+    const uebertragEintraege = Array.from(naechtlicherUebertrag).map(beamterId => ({ beamterId, datum: vortag, vonZeit: null, bisZeit: null, kategorie: 'dienst' as const, code: '' }))
     const eingabeWuensche = Array.from(wuensche.entries()).flatMap(([schluessel, liste]) => {
       const [beamterId, datum] = schluessel.split('|')
       return liste.map(eintrag => ({ beamterId, datum, wunsch: eintrag.wunsch }))
@@ -589,7 +598,7 @@ export default function DienstplanPlanung() {
     // (siehe lib/dienstplanRoster.ts) - kann aber weiterhin manuell über die
     // Zelle im Grid eingeteilt werden.
     const einteilbareMitarbeiter = mitarbeiter.filter(person => istAutomatischEinteilbar(person.dienstnummer))
-    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einteilbareMitarbeiter, tage, bestehendeDienste: [...eingabeDienste, ...luecken], wuensche: eingabeWuensche, mindestruhezeitStunden })
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einteilbareMitarbeiter, tage, bestehendeDienste: [...eingabeDienste, ...luecken, ...uebertragEintraege], wuensche: eingabeWuensche, mindestruhezeitStunden })
     setVorschlaege(new Map(ergebnis.map(eintrag => [`${eintrag.beamterId}|${eintrag.datum}|${eintrag.abschnitt}`, eintrag])))
     setNotice(ergebnis.length > 0 ? `${ergebnis.length} Vorschläge generiert - bitte prüfen und übernehmen.` : 'Es gibt aktuell nichts vorzuschlagen (alles besetzt oder niemand verfügbar).')
     setError('')
