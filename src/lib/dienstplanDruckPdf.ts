@@ -1,18 +1,39 @@
 /**
- * Dienstplan-Planung, Phase 6: Druck-/Exportansicht für einen
- * veröffentlichten Monat - Personen × Tage, wie die ursprüngliche
- * Excel-Vorlage (siehe lib/dienstplanImport.ts), aber als eigenständiges
- * A4-Querformat-Dokument über openPrintHtml() (Drucken oder als PDF
- * speichern über den Systemdialog des Browsers) statt eines echten
- * PDF-Exports - dasselbe Muster wie
- * lib/ueberstundenPdf.ts::generateUeberstundenSammelPdf.
+ * Dienstplan-Planung, Druck-/Exportansicht für einen veröffentlichten
+ * Monat - bewusst dieselbe Darstellung wie das Planer-Grid
+ * (DienstplanPlanung.tsx): Personen als Spalten (gruppiert nach
+ * Kommando/Dienstführung/Beamte, dicke Trennlinie zwischen Gruppen, dünne
+ * zwischen einzelnen Beamten), Tage als Zeilen mit je einer Tag- und
+ * einer Nachtzeile. Farblich: Wochenende/Feiertag amber, Urlaub/Krank/
+ * Sonderurlaub/Karenz/Stundenersatz durchgehend über Tag+Nacht (auch über
+ * ein durchgehend abwesenes Wochenende hinweg, siehe
+ * effektiveAbwesenheitJeTag) mit kräftigerer Nacht-Nuance, fehlende
+ * Grundbesetzung (Z/ID/JD) rot, freie Markierungen (lib/
+ * dienstplanMarkierungen.ts) in ihrer definierten Farbe. Darunter dieselbe
+ * Auswertung wie im Planer-Grid (Stunden, Grund-/Zusatzdienste Tag/Nacht
+ * je Person). Als eigenständiges A4-Querformat-Dokument über
+ * openPrintHtml() (Drucken oder als PDF speichern über den
+ * Systemdialog des Browsers) statt eines echten PDF-Exports - dasselbe
+ * Muster wie lib/ueberstundenPdf.ts::generateUeberstundenSammelPdf.
+ *
+ * Live-Editing-Hinweise, die im Planer-Grid nur beim Bearbeiten Sinn
+ * ergeben (Dienstwunsch-Punkt, Ruheverletzung, Auswahl/Vorschlag), sind
+ * hier bewusst NICHT enthalten - das ist die Druckansicht des fertigen,
+ * veröffentlichten Standes, kein Planungswerkzeug.
  */
+import { isAustrianHoliday } from './austrianHolidays'
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
+import { formatStunden } from './ueberstunden'
+import { persoenlicheStundenUebersicht, zaehleDienstarten } from './dienstplanAuswertung'
+import { abschnittFuerAnzeige, absenzFarbe, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung } from './dienstplanBesetzung'
 import { parseDienstCode } from './dienstplanImport'
+import { markierungFarbKlassen } from './dienstplanMarkierungen'
+import { DIENSTPLAN_GRUPPE_LABEL, type DienstplanGruppe } from './dienstplanRoster'
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
 
-export interface DienstplanDruckPerson { id: string; name: string; dienstnummer: string | null; gruppe: string }
-export interface DienstplanDruckZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; kategorie: DienstplanKategorieDb }
+export interface DienstplanDruckPerson { id: string; name: string; kurzname: string; dienstnummer: string | null; gruppe: DienstplanGruppe }
+export interface DienstplanDruckZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb; markierung_id: string | null }
+export interface DienstplanDruckMarkierung { id: string; name: string; farbe: string }
 
 export interface DienstplanDruckInput {
   monatLabel: string
@@ -20,54 +41,145 @@ export interface DienstplanDruckInput {
   personen: readonly DienstplanDruckPerson[]
   tage: readonly string[]
   dienste: readonly DienstplanDruckZeile[]
+  markierungen: readonly DienstplanDruckMarkierung[]
 }
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
+const ABSCHNITT_LABEL = { tag: 'T', nacht: 'N' } as const
+
+/** Wie absenzFarbe()/markierungFarbKlassen() (Tailwind-Klassennamen der Live-Ansicht) als konkrete Hex-Werte fürs eigenständige Druck-HTML (kein Tailwind dort verfügbar). */
+const FARBE_HEX: Record<string, string> = {
+  'bg-yellow-100': '#fef9c3', 'bg-yellow-200': '#fef08a', 'text-yellow-900': '#713f12',
+  'bg-green-100': '#dcfce7', 'bg-green-200': '#bbf7d0', 'text-green-900': '#14532d',
+  'bg-pink-100': '#fce7f3', 'bg-pink-200': '#fbcfe8', 'text-pink-900': '#831843',
+  'bg-blue-100': '#dbeafe', 'bg-blue-200': '#bfdbfe', 'text-blue-900': '#1e3a8a',
+  'bg-purple-100': '#f3e8ff', 'bg-purple-200': '#e9d5ff', 'text-purple-900': '#581c87',
+  'bg-orange-100': '#ffedd5', 'bg-orange-200': '#fed7aa', 'text-orange-900': '#7c2d12',
+  'bg-teal-100': '#ccfbf1', 'bg-teal-200': '#99f6e4', 'text-teal-900': '#134e4a',
+  'bg-gray-200': '#e5e7eb', 'bg-gray-300': '#d1d5db', 'text-gray-900': '#111827',
+}
+function hex(klasse: string): string { return FARBE_HEX[klasse] ?? '#e5e7eb' }
+
+/** 'YYYY-MM-DD' als lokales Datum (nicht UTC). */
+function datumAusIso(datumIso: string): Date {
+  const [jahr, monat, tag] = datumIso.split('-').map(Number)
+  return new Date(jahr, monat - 1, tag)
+}
 
 export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
-  const zellenProPersonUndTag = new Map<string, DienstplanDruckZeile[]>()
-  for (const zeile of input.dienste) {
-    const key = `${zeile.beamter_id}|${zeile.datum}`
-    const liste = zellenProPersonUndTag.get(key) ?? []
-    liste.push(zeile)
-    zellenProPersonUndTag.set(key, liste)
-  }
-
-  const kopfZellen = input.tage.map(datum => {
-    const [, , tagText] = datum.split('-')
-    const wochentag = new Date(Number(datum.slice(0, 4)), Number(datum.slice(5, 7)) - 1, Number(tagText)).getDay()
-    const wochenende = wochentag === 0 || wochentag === 6
-    return `<th class="${wochenende ? 'we' : ''}">${WOCHENTAG_LABEL[wochentag]}<br>${tagText}</th>`
-  }).join('')
+  const { personen, tage, dienste, markierungen } = input
 
   // Dicke Trennlinie zwischen Personen-Gruppen (Kommando/Dienstführung/
-  // Beamte, siehe lib/dienstplanRoster.ts - personen ist bereits danach
-  // sortiert), dünne zwischen einzelnen Beamten-Zeilen (Standard-Rahmen von
-  // table.plan td/th greift dafür bereits).
-  const zeilen = input.personen.map((person, index) => {
-    const zellen = input.tage.map(datum => {
-      const eintraege = (zellenProPersonUndTag.get(`${person.id}|${datum}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
-      const text = eintraege.map(zeile => escHtml(parseDienstCode(zeile.rohtext).code)).join('<br>')
-      return `<td>${text}</td>`
-    }).join('')
-    const gruppenende = index < input.personen.length - 1 && input.personen[index + 1].gruppe !== person.gruppe
-    return `<tr${gruppenende ? ' class="gruppenende"' : ''}><td class="name">${escHtml(person.name)}${person.dienstnummer ? ` <span class="klein">(${escHtml(person.dienstnummer)})</span>` : ''}</td>${zellen}</tr>`
+  // Beamte, personen ist bereits danach sortiert), dünne zwischen
+  // einzelnen Beamten-Spalten - wie spaltenBorderKlasse in
+  // DienstplanPlanung.tsx, hier als CSS-Fragment je Person.
+  const spaltenRand = new Map<string, string>()
+  personen.forEach((person, index) => {
+    const istLetzte = index === personen.length - 1
+    const istGruppenEnde = !istLetzte && personen[index + 1].gruppe !== person.gruppe
+    spaltenRand.set(person.id, istLetzte ? '' : istGruppenEnde ? 'border-right:1.5pt solid #333;' : 'border-right:0.5pt solid #bbb;')
+  })
+  const gruppenSpans: { gruppe: DienstplanGruppe; span: number }[] = []
+  for (const person of personen) {
+    const letzter = gruppenSpans[gruppenSpans.length - 1]
+    if (letzter && letzter.gruppe === person.gruppe) letzter.span++
+    else gruppenSpans.push({ gruppe: person.gruppe, span: 1 })
+  }
+
+  const zeilenProPersonUndAbschnitt = new Map<string, DienstplanDruckZeile[]>()
+  const zeilenProPersonUndTag = new Map<string, DienstplanDruckZeile[]>()
+  for (const zeile of dienste) {
+    const schluesselAbschnitt = `${zeile.beamter_id}|${zeile.datum}|${abschnittFuerAnzeige(zeile)}`
+    const listeAbschnitt = zeilenProPersonUndAbschnitt.get(schluesselAbschnitt) ?? []
+    listeAbschnitt.push(zeile)
+    zeilenProPersonUndAbschnitt.set(schluesselAbschnitt, listeAbschnitt)
+
+    const schluesselTag = `${zeile.beamter_id}|${zeile.datum}`
+    const listeTag = zeilenProPersonUndTag.get(schluesselTag) ?? []
+    listeTag.push(zeile)
+    zeilenProPersonUndTag.set(schluesselTag, listeTag)
+  }
+  const markierungenById = new Map(markierungen.map(markierung => [markierung.id, markierung]))
+  const effektiveAbwesenheit = effektiveAbwesenheitJeTag(dienste, personen.map(person => person.id), tage)
+  const fehlendeGrund = fehlendeGrundbesetzung(dienste, tage)
+
+  const gruppenKopfZellen = gruppenSpans.map(({ gruppe, span }, index) => {
+    const letzteGruppe = index === gruppenSpans.length - 1
+    return `<th colspan="${span}" style="${letzteGruppe ? '' : 'border-right:1.5pt solid #333;'}">${escHtml(DIENSTPLAN_GRUPPE_LABEL[gruppe])}</th>`
   }).join('')
+  const personenKopfZellen = personen.map(person => `<th style="${spaltenRand.get(person.id)}">${escHtml(person.kurzname)}</th>`).join('')
+
+  const tageZeilen = tage.map(datum => {
+    const [, , tagText] = datum.split('-')
+    const datumObjekt = datumAusIso(datum)
+    const wochentag = datumObjekt.getDay()
+    const besondererTag = wochentag === 0 || wochentag === 6 || isAustrianHoliday(datumObjekt)
+    return (['tag', 'nacht'] as const).map(abschnitt => {
+      const fehlend = (fehlendeGrund.get(datum) ?? []).some(text => text.endsWith(abschnitt === 'tag' ? '(Tag)' : '(Nacht)'))
+      const zeilenHintergrund = besondererTag ? (abschnitt === 'tag' ? '#fef3c7' : '#fde68a') : '#fff'
+      const datumZelle = abschnitt === 'tag' ? `<td rowspan="2" class="datum">${WOCHENTAG_LABEL[wochentag]} ${tagText}.</td>` : ''
+      const abschnittZelle = `<td class="abschnitt" style="${fehlend ? 'background:#fecaca;color:#991b1b;' : ''}">${ABSCHNITT_LABEL[abschnitt]}</td>`
+      const personenZellen = personen.map(person => {
+        const zeilen = (zeilenProPersonUndAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
+        const absenzKategorie = (zeilenProPersonUndTag.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst')?.kategorie
+          ?? effektiveAbwesenheit.get(`${person.id}|${datum}`)
+        const absenzFarben = absenzKategorie ? absenzFarbe(absenzKategorie) : null
+        const markierterZeile = zeilen.find(zeile => zeile.markierung_id)
+        const markierung = markierterZeile?.markierung_id ? markierungenById.get(markierterZeile.markierung_id) : undefined
+        const markierungFarben = markierung ? markierungFarbKlassen(markierung.farbe) : null
+        const farben = absenzFarben ?? markierungFarben
+        const hintergrund = farben ? hex(abschnitt === 'tag' ? farben.bg : farben.bgNacht) : zeilenHintergrund
+        const textfarbe = farben ? hex(farben.text) : '#000'
+        const text = zeilen.map(zeile => escHtml(parseDienstCode(zeile.rohtext).code)).join('<br>')
+        return `<td style="background:${hintergrund};color:${textfarbe};${spaltenRand.get(person.id)}">${text}</td>`
+      }).join('')
+      return `<tr>${datumZelle}${abschnittZelle}${personenZellen}</tr>`
+    }).join('')
+  }).join('')
+
+  const auswertungZeilen = (() => {
+    const dienstePerPerson = new Map<string, DienstplanDruckZeile[]>()
+    for (const zeile of dienste) {
+      const liste = dienstePerPerson.get(zeile.beamter_id) ?? []
+      liste.push(zeile)
+      dienstePerPerson.set(zeile.beamter_id, liste)
+    }
+    const auswertungByPersonId = new Map(personen.map(person => {
+      const zeilen = dienstePerPerson.get(person.id) ?? []
+      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen) }] as const
+    }))
+    const zeilenDefinition = [
+      { label: 'Stunden', wert: (personId: string) => formatStunden(auswertungByPersonId.get(personId)?.stunden ?? 0) },
+      { label: 'Grund Tag', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.grundTag ?? 0) },
+      { label: 'Grund Nacht', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.grundNacht ?? 0) },
+      { label: 'Zusatz Tag', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.zusatzTag ?? 0) },
+      { label: 'Zusatz Nacht', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.zusatzNacht ?? 0) },
+      {
+        label: 'Gesamt', wert: (personId: string) => {
+          const arten = auswertungByPersonId.get(personId)?.arten
+          return String(arten ? arten.grundTag + arten.grundNacht + arten.zusatzTag + arten.zusatzNacht : 0)
+        },
+      },
+    ]
+    return zeilenDefinition.map(({ label, wert }, index) => {
+      const zellen = personen.map(person => `<td style="${spaltenRand.get(person.id)}">${wert(person.id)}</td>`).join('')
+      return `<tr${index === 0 ? ' style="border-top:1.5pt solid #333;"' : ''}><td colspan="2" class="auswertung-label">${label}</td>${zellen}</tr>`
+    }).join('')
+  })()
 
   return `<!DOCTYPE html>
 <html lang="de"><head><meta charset="UTF-8"><title>Dienstplan ${escHtml(input.monatLabel)}</title><style>
-  @page { size: A4 landscape; margin: 12mm; }
+  @page { size: A4 landscape; margin: 10mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, Calibri, sans-serif; font-size: 7pt; color: #000; line-height: 1.25; }
+  body { font-family: Arial, Calibri, sans-serif; font-size: 6pt; color: #000; line-height: 1.2; }
   ${LETTERHEAD_CSS}
   .kt { font-size: 14pt; font-weight: bold; margin-bottom: 4mm; }
   table.plan { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  table.plan th, table.plan td { border: 1px solid #999; padding: 0.8mm 0.5mm; text-align: center; overflow: hidden; }
+  table.plan th, table.plan td { border: 0.5pt solid #ccc; padding: 0.6mm 0.4mm; text-align: center; overflow: hidden; white-space: nowrap; }
   table.plan th { background: #f2f2f2; font-weight: bold; }
-  table.plan th.we, table.plan td.we { background: #fdf3e0; }
-  table.plan tr.gruppenende td { border-bottom: 1.5pt solid #333; }
-  table.plan td.name { text-align: left; font-weight: bold; white-space: nowrap; width: 32mm; }
-  .klein { font-weight: normal; font-size: 6pt; color: #555; }
+  table.plan td.datum { width: 13mm; text-align: left; font-weight: bold; white-space: nowrap; }
+  table.plan td.abschnitt { width: 5mm; font-weight: bold; color: #78716c; }
+  table.plan td.auswertung-label { text-align: left; font-weight: bold; background: #f2f2f2; }
   .foot { margin-top: 6mm; font-size: 7pt; color: #444; display: flex; justify-content: space-between; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
@@ -75,8 +187,12 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
   ${referenceLineBlock()}
   <div class="kt">Dienstplan ${escHtml(input.monatLabel)}</div>
   <table class="plan">
-    <thead><tr><th>Person</th>${kopfZellen}</tr></thead>
-    <tbody>${zeilen || `<tr><td colspan="${input.tage.length + 1}">Keine Diensteinträge in diesem Monat.</td></tr>`}</tbody>
+    <thead>
+      <tr><th colspan="2"></th>${gruppenKopfZellen}</tr>
+      <tr><th colspan="2">Datum</th>${personenKopfZellen}</tr>
+    </thead>
+    <tbody>${personen.length === 0 ? `<tr><td colspan="2">Keine Diensteinträge in diesem Monat.</td></tr>` : tageZeilen}</tbody>
+    ${personen.length > 0 ? `<tfoot>${auswertungZeilen}</tfoot>` : ''}
   </table>
   <div class="foot"><span>Dienstplan · Ausdruck</span><span>DVR 0036030</span></div>
 </body></html>`
