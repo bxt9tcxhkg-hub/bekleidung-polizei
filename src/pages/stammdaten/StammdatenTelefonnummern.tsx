@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Pencil, Phone, Plus, Trash2 } from 'lucide-react'
-import { Link, Navigate } from 'react-router-dom'
+import { Pencil, Phone, Plus, Trash2 } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
+import BackLink from '../../components/BackLink'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
@@ -58,7 +59,7 @@ export default function StammdatenTelefonnummernPage({ context }: { context?: Co
   }
 
   return <div>
-    <Link to={context?.backTo ?? '/stammdaten'} className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> {context?.backLabel ?? 'Zu Stammdaten'}</Link>
+    <BackLink to={context?.backTo ?? '/stammdaten'} label={context?.backLabel ?? 'Zu Stammdaten'} className="mb-4" />
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{context ? `${context.areaLabel} · Nachschlagewerk` : 'Stammdaten & Nachschlagewerke'}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Wichtige Telefonnummern</h1><p className="text-sm text-gray-500 mt-1">Intern (Dienststelle) und extern (andere Dienststellen/Behörden), erscheinen als Kachel auf der Zentrale- und Innendienst-Hauptseite.</p></div>
     {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur Nachschlageansicht. Änderungen erfolgen ausschließlich im Bereich Stammdaten.</div> : null}
     {(error || loadError) && !showForm ? <ErrorMessage text={error || 'Die Telefonnummern konnten nicht geladen werden.'} /> : null}

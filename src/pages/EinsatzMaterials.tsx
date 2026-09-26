@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ChevronRight, Download, Ellipsis, FileText, Folder, FolderInput, Link as LinkIcon, Plus, Trash2, Upload, X } from 'lucide-react'
-import { Link, Navigate } from 'react-router-dom'
+import { ChevronRight, Download, Ellipsis, FileText, Folder, FolderInput, Link as LinkIcon, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
+import BackLink from '../components/BackLink'
 import { useAuth } from '../contexts/AuthContext'
 import { logAudit } from '../lib/audit'
 import { canManagePersonalEinsatzmittel } from '../lib/personalEinsatzmittel'
@@ -338,7 +339,7 @@ export default function EinsatzMaterials({ fixedArea }: { fixedArea?: EinsatzMat
 
   return (
     <div>
-      {fixedArea === 'schulungen' ? <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-5"><ArrowLeft className="w-4 h-4" /> Zurück zum Portal</Link> : null}
+      {fixedArea === 'schulungen' ? <BackLink to="/" label="Zurück zum Portal" className="mb-5" /> : null}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{fixedArea === 'schulungen' ? 'Schulungen' : 'Unterlagen'}</h1>

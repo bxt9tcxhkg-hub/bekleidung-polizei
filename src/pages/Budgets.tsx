@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Pencil, Check, X, RefreshCw, CalendarClock, Search, ChevronRight } from 'lucide-react'
+import { Pencil, Check, X, RefreshCw, CalendarClock, Search, ChevronRight } from 'lucide-react'
+import BackLink from '../components/BackLink'
 import { supabase } from '../lib/supabase'
 import { logAudit } from '../lib/audit'
 import { fmtEUR } from '../lib/format'
@@ -186,9 +186,7 @@ export default function Budgets() {
 
   return (
     <div className="space-y-6">
-      <Link to="/genehmigungen/bekleidung" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline">
-        <ArrowLeft className="w-4 h-4" /> Zu Bekleidung
-      </Link>
+      <BackLink to="/genehmigungen/bekleidung" label="Zu Bekleidung" />
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Budgetverwaltung {CURRENT_YEAR}</h1>

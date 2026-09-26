@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
+import BackLink from '../../components/BackLink'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
@@ -120,7 +120,7 @@ export default function StammdatenBaustellen() {
   }
 
   return <div>
-    <Link to="/stammdaten" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zu Stammdaten</Link>
+    <BackLink to="/stammdaten" label="Zu Stammdaten" className="mb-4" />
     <div className="flex items-center justify-between gap-3 mb-5">
       <div><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Baustellen</h1><p className="text-sm text-gray-500 mt-1">Für die Streife: Streckenkenntnis, falls ein Einsatzort über eine gesperrte Straße nicht erreichbar ist.</p></div>
       {canOperate ? <button type="button" onClick={openNew} className="inline-flex items-center gap-2 bg-blue-800 hover:bg-blue-900 text-white text-sm font-medium px-3 py-2 rounded-lg flex-shrink-0">+ Baustelle melden</button> : null}

@@ -1,5 +1,6 @@
-import { ArrowLeft, Building2, Construction, Contact, KeyRound, Phone, Search, Users, type LucideIcon } from 'lucide-react'
+import { Building2, Construction, Contact, KeyRound, Phone, Search, Users, type LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import BackLink from '../../components/BackLink'
 
 const REGISTER_TILES: { to: string; label: string; description: string; icon: LucideIcon }[] = [
   { to: '/stammdaten/schluessel', label: 'Schlüssel', description: 'Hinterlegte Schlüssel und Zutrittshinweise.', icon: KeyRound },
@@ -14,9 +15,7 @@ const REGISTER_TILES: { to: string; label: string; description: string; icon: Lu
 export default function StammdatenUebersicht() {
   return (
     <div>
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4">
-        <ArrowLeft className="w-4 h-4" /> Zum Portal
-      </Link>
+      <BackLink to="/" label="Zum Portal" className="mb-4" />
       <div className="mb-6">
         <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Stammdaten &amp; Nachschlagewerke</p>
         <h1 className="text-2xl font-bold text-gray-900 mt-1">Register</h1>

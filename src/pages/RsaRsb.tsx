@@ -1,5 +1,5 @@
-import { ArrowLeft } from 'lucide-react'
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
+import BackLink from '../components/BackLink'
 import MailDeliveries from '../components/MailDeliveries'
 import { useAuth } from '../contexts/AuthContext'
 import type { ContextualReference } from '../lib/contextualReference'
@@ -19,9 +19,7 @@ export default function RsaRsb({ context }: { context?: ContextualReference }) {
   if (!loading && !profile) return <Navigate to="/" replace />
 
   return <div>
-    <Link to={context?.backTo ?? '/'} className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4">
-      <ArrowLeft className="w-4 h-4" /> {context?.backLabel ?? 'Zum Portal'}
-    </Link>
+    <BackLink to={context?.backTo ?? '/'} label={context?.backLabel ?? 'Zum Portal'} className="mb-4" />
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich</p><h1 className="text-2xl font-bold text-gray-900 mt-1">RSa/RSb & Vernehmungen</h1><p className="text-sm text-gray-500 mt-1">Schwer erreichbare Personen – unabhängig vom heutigen Dienst erfassbar.</p></div>
     <MailDeliveries />
   </div>

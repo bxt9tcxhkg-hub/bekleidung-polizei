@@ -1,5 +1,5 @@
-import { ArrowLeft, CheckCircle2, Construction } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { CheckCircle2, Construction } from 'lucide-react'
+import BackLink from '../components/BackLink'
 import PortalChrome from '../components/PortalChrome'
 
 export type PlannedAreaId = 'zentrale' | 'schulungen'
@@ -23,9 +23,7 @@ export default function PlannedArea({ area }: { area: PlannedAreaId }) {
   const content = AREA_CONTENT[area]
   return (
     <PortalChrome wide>
-      <Link to="/" className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 mb-6">
-        <ArrowLeft className="w-4 h-4" /> Zurück zum Portal
-      </Link>
+      <BackLink to="/" label="Zurück zum Portal" className="mb-6" />
 
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 flex items-start gap-4">
         <div className="bg-amber-100 text-amber-700 p-2.5 rounded-xl"><Construction className="w-5 h-5" /></div>
