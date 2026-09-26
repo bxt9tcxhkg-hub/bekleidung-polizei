@@ -120,6 +120,7 @@ export function IncidentModal({ editing, incident, setIncident, persons, onPerso
               void lookupParcel(suggestion.lat, suggestion.lng).then(parcel => { if (parcel?.label) patch({ location: `${composed} · ${parcel.label}` }) })
               if (houseNumber.trim() && !suggestion.houseNumber) void locate(composed)
             }}
+            onSearch={() => { if (incident.houseNumberUnknown) void locate() }}
           />
           <div>
             <Field label="Hausnummer" value={incident.houseNumber} disabled={incident.houseNumberUnknown} onChange={value => patch({ houseNumber: value, location: composeIncidentLocation(incident.street, value, incident.houseNumberUnknown), lat: null, lng: null, coordsPrecise: false })} onBlur={() => { if (incident.street.trim() && incident.houseNumber.trim()) void locate() }} onKeyDown={event => { if (event.key === 'Enter' && incident.street.trim()) { event.preventDefault(); void locate() } }} />
