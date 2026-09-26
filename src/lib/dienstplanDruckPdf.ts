@@ -126,6 +126,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
           ?? effektiveAbwesenheit.get(`${person.id}|${datum}`)
         const absenzFarben = absenzKategorie ? kategorieFarbKlassen(absenzKategorie, kategorieFarben) : null
         const markierterZeile = zeilen.find(zeile => zeile.markierung_id)
+          ?? (zeilenProPersonUndTag.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst' && zeile.markierung_id)
         const markierung = markierterZeile?.markierung_id ? markierungenById.get(markierterZeile.markierung_id) : undefined
         const markierungFarben = markierung ? markierungFarbKlassen(markierung.farbe) : null
         const farben = absenzFarben ?? markierungFarben
