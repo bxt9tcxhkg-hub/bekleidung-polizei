@@ -276,6 +276,10 @@ export default function DienstplanPlanung() {
   // lib/dienstplanMarkierungen.ts).
   const besondererTagFarben = useMemo(() => besondererTagFarbKlassen(besondererTagFarbe(markierungen)), [markierungen])
 
+  // id der System-Markierung "Überstunden" (kategorie 'ueberstunden') - für
+  // die Überstunden-Zeile in der Auswertung (siehe zaehleDienstarten).
+  const ueberstundenMarkierungId = useMemo(() => markierungen.find(markierung => markierung.kategorie === 'ueberstunden')?.id ?? null, [markierungen])
+
   // Für die Kopfzeile: Kommando/Dienstführung/Beamte-Blöcke als
   // zusammenhängende Spaltengruppen (mitarbeiter ist bereits per
   // sortiereNachDienstplanGruppe geordnet, siehe load()).
@@ -356,9 +360,9 @@ export default function DienstplanPlanung() {
     }
     return new Map(mitarbeiter.map(person => {
       const zeilen = dienstePerPerson.get(person.id) ?? []
-      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen) }] as const
+      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen, ueberstundenMarkierungId) }] as const
     }))
-  }, [dienste, mitarbeiter])
+  }, [dienste, mitarbeiter, ueberstundenMarkierungId])
 
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
   const ruheVerletzt = useMemo(
@@ -788,10 +792,13 @@ export default function DienstplanPlanung() {
                         className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${spaltenBorderKlasse.get(person.id) ?? ''} ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzHintergrund ?? markierungHintergrund ?? ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
-                          {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : markierungFarben ? markierungFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                          {/* uebertragWarnung-Icon bewusst in derselben Zeile wie das Kürzel (nicht als eigener Flex-Block darunter) - sonst wird nur die Tagzeile des 1. eines Monats durch die zusätzliche Zeile höher als alle anderen Tage. */}
+                          <div className="flex items-center gap-0.5">
+                            {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : markierungFarben ? markierungFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                            {uebertragWarnung ? <AlertTriangle className="h-3 w-3 shrink-0 text-red-600" /> : null}
+                          </div>
                           {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}
                           {wuenscheHeute.length > 0 ? <span className="text-amber-500">●</span> : null}
-                          {uebertragWarnung ? <AlertTriangle className="h-3 w-3 text-red-600" /> : null}
                         </div>
                       </td>
                     })}
@@ -809,6 +816,7 @@ export default function DienstplanPlanung() {
                 { label: 'Grunddienste Nacht', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.grundNacht ?? 0 },
                 { label: 'Zusatzdienste Tag', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.zusatzTag ?? 0 },
                 { label: 'Zusatzdienste Nacht', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.zusatzNacht ?? 0 },
+                { label: 'Überstunden', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.ueberstunden ?? 0 },
                 {
                   label: 'Gesamt Dienste', wert: (personId: string) => {
                     const arten = auswertungByPersonId.get(personId)?.arten

@@ -18,8 +18,8 @@ import { supabase } from './supabase'
 
 export type DienstplanMonatStatus = 'entwurf' | 'veroeffentlicht'
 export type DienstplanKategorieDb = 'dienst' | 'krank' | 'urlaub' | 'sonderurlaub' | 'karenz' | 'stundenersatz' | 'sonstiges'
-/** Kategorien einer dienstplan_markierungen-Zeile: die fünf Abwesenheitskategorien (siehe DienstplanKategorieDb) plus 'wochenende_feiertag' (Wochenende/Feiertag-Hintergrundfarbe, keine Diensteintrag-Kategorie). */
-export type DienstplanMarkierungKategorie = DienstplanKategorieDb | 'wochenende_feiertag'
+/** Kategorien einer dienstplan_markierungen-Zeile: die fünf Abwesenheitskategorien (siehe DienstplanKategorieDb) plus 'wochenende_feiertag' (Wochenende/Feiertag-Hintergrundfarbe, keine Diensteintrag-Kategorie) und 'ueberstunden' (Überstunden-Markierung auf einem echten Diensteintrag, kategorie 'dienst' - keine eigene Diensteintrag-Kategorie, sondern eine per markierung_id zugewiesene Zusatzinfo). */
+export type DienstplanMarkierungKategorie = DienstplanKategorieDb | 'wochenende_feiertag' | 'ueberstunden'
 
 export type DienstplanSpalteRow = {
   id: string

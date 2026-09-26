@@ -36,7 +36,7 @@ export function istAutomatischEinteilbar(dienstnummer: string | null): boolean {
 
 const GRUPPEN_RANG: Record<DienstplanGruppe, number> = { kommando: 0, dienstfuehrung: 1, einsatz: 2 }
 
-/** Sortiert eine Personenliste so, dass Kommando und Dienstführung jeweils als eigener Block zusammenstehen (Rang). Innerhalb des Kommando-Blocks in der vom Kommandanten vorgegebenen festen Reihenfolge (KOMMANDO_DIENSTNUMMERN: Hans-Peter, Andreas, Martin), innerhalb der anderen Blöcke alphabetisch nach Name. */
+/** Sortiert eine Personenliste so, dass Kommando und Dienstführung jeweils als eigener Block zusammenstehen (Rang). Innerhalb des Kommando-Blocks in der vom Kommandanten vorgegebenen festen Reihenfolge (KOMMANDO_DIENSTNUMMERN: Hans-Peter, Andreas, Martin), innerhalb der anderen Blöcke alphabetisch nach Nachname. */
 export function sortiereNachDienstplanGruppe<T extends { name: string; dienstnummer: string | null }>(personen: readonly T[]): T[] {
   return [...personen].sort((a, b) => {
     const gruppeA = dienstplanGruppe(a.dienstnummer)
@@ -44,7 +44,7 @@ export function sortiereNachDienstplanGruppe<T extends { name: string; dienstnum
     const rang = GRUPPEN_RANG[gruppeA] - GRUPPEN_RANG[gruppeB]
     if (rang !== 0) return rang
     if (gruppeA === 'kommando') return KOMMANDO_DIENSTNUMMERN.indexOf(a.dienstnummer ?? '') - KOMMANDO_DIENSTNUMMERN.indexOf(b.dienstnummer ?? '')
-    return a.name.localeCompare(b.name, 'de-AT')
+    return nachnameVon(a.name).localeCompare(nachnameVon(b.name), 'de-AT')
   })
 }
 

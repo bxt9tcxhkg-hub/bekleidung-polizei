@@ -134,4 +134,15 @@ describe('buildDienstplanDruckHtml', () => {
     expect(html).toContain('Grund Tag')
     expect(html).toContain('<td colspan="2" class="auswertung-label">Stunden</td><td style="">11</td>')
   })
+
+  it('zeigt die Anzahl der mit der System-Markierung "Überstunden" versehenen Diensteinträge in der Auswertung', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      tage: ['2026-10-01'],
+      dienste: [{ beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'Z', von_zeit: '08:00', bis_zeit: '19:00', kategorie: 'dienst', markierung_id: 'sys-ueberstunden' }],
+      markierungen: [{ id: 'sys-ueberstunden', name: 'Überstunden', farbe: 'blau', kategorie: 'ueberstunden' }],
+    })
+    expect(html).toContain('<td colspan="2" class="auswertung-label">Überstunden</td><td style="">1</td>')
+  })
 })

@@ -152,9 +152,10 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
       liste.push(zeile)
       dienstePerPerson.set(zeile.beamter_id, liste)
     }
+    const ueberstundenMarkierungId = markierungen.find(markierung => markierung.kategorie === 'ueberstunden')?.id ?? null
     const auswertungByPersonId = new Map(personen.map(person => {
       const zeilen = dienstePerPerson.get(person.id) ?? []
-      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen) }] as const
+      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen, ueberstundenMarkierungId) }] as const
     }))
     const zeilenDefinition = [
       { label: 'Stunden', wert: (personId: string) => formatStunden(auswertungByPersonId.get(personId)?.stunden ?? 0) },
@@ -162,6 +163,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
       { label: 'Grund Nacht', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.grundNacht ?? 0) },
       { label: 'Zusatz Tag', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.zusatzTag ?? 0) },
       { label: 'Zusatz Nacht', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.zusatzNacht ?? 0) },
+      { label: 'Überstunden', wert: (personId: string) => String(auswertungByPersonId.get(personId)?.arten.ueberstunden ?? 0) },
       {
         label: 'Gesamt', wert: (personId: string) => {
           const arten = auswertungByPersonId.get(personId)?.arten
