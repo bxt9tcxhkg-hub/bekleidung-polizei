@@ -75,19 +75,31 @@ describe('persoenlicheStundenUebersicht', () => {
 describe('zaehleDienstarten', () => {
   it('zählt Z/ID/JD als Grunddienst, alles andere als Zusatzdienst, je nach Uhrzeit Tag oder Nacht', () => {
     const ergebnis = zaehleDienstarten([
-      { rohtext: 'Z', von_zeit: '08:00', kategorie: 'dienst' },
-      { rohtext: 'JD', von_zeit: null, kategorie: 'dienst' },
-      { rohtext: 'VD', von_zeit: '08:00', kategorie: 'dienst' },
-      { rohtext: 'SVE', von_zeit: null, kategorie: 'dienst' },
+      { rohtext: 'Z', von_zeit: '08:00', kategorie: 'dienst', markierung_id: null },
+      { rohtext: 'JD', von_zeit: null, kategorie: 'dienst', markierung_id: null },
+      { rohtext: 'VD', von_zeit: '08:00', kategorie: 'dienst', markierung_id: null },
+      { rohtext: 'SVE', von_zeit: null, kategorie: 'dienst', markierung_id: null },
     ])
-    expect(ergebnis).toEqual({ grundTag: 1, grundNacht: 1, zusatzTag: 1, zusatzNacht: 1 })
+    expect(ergebnis).toEqual({ grundTag: 1, grundNacht: 1, zusatzTag: 1, zusatzNacht: 1, ueberstunden: 0 })
   })
 
   it('ignoriert Abwesenheiten (kategorie != dienst)', () => {
-    expect(zaehleDienstarten([{ rohtext: 'U', von_zeit: null, kategorie: 'urlaub' }])).toEqual({ grundTag: 0, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0 })
+    expect(zaehleDienstarten([{ rohtext: 'U', von_zeit: null, kategorie: 'urlaub', markierung_id: null }])).toEqual({ grundTag: 0, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0, ueberstunden: 0 })
   })
 
   it('erkennt Grunddienst auch in kombinierten Codes (z. B. "SVE/JD")', () => {
-    expect(zaehleDienstarten([{ rohtext: 'SVE/JD', von_zeit: '08:00', kategorie: 'dienst' }])).toEqual({ grundTag: 1, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0 })
+    expect(zaehleDienstarten([{ rohtext: 'SVE/JD', von_zeit: '08:00', kategorie: 'dienst', markierung_id: null }])).toEqual({ grundTag: 1, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0, ueberstunden: 0 })
+  })
+
+  it('zählt Diensteinträge mit der System-Markierung "Überstunden" zusätzlich in ueberstunden, ohne die Grund-/Zusatzdienst-Zählung zu beeinflussen', () => {
+    const ergebnis = zaehleDienstarten([
+      { rohtext: 'Z', von_zeit: '08:00', kategorie: 'dienst', markierung_id: 'ueberstunden-id' },
+      { rohtext: 'VD', von_zeit: '08:00', kategorie: 'dienst', markierung_id: null },
+    ], 'ueberstunden-id')
+    expect(ergebnis).toEqual({ grundTag: 1, grundNacht: 0, zusatzTag: 1, zusatzNacht: 0, ueberstunden: 1 })
+  })
+
+  it('zählt ohne übergebene ueberstundenMarkierungId keine Überstunden', () => {
+    expect(zaehleDienstarten([{ rohtext: 'Z', von_zeit: '08:00', kategorie: 'dienst', markierung_id: 'irgendeine-id' }]).ueberstunden).toBe(0)
   })
 })

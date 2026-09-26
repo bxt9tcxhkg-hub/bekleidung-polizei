@@ -56,6 +56,17 @@ describe('sortiereNachDienstplanGruppe', () => {
     expect(sortiert).toEqual(['Schwendinger Hans-Peter', 'Feurstein Martin'])
   })
 
+  it('sortiert Dienstführung/Beamte nach Nachname (letztes Wort), nicht nach Vorname - profiles.name ist "Vorname Nachname"', () => {
+    const personen = [
+      { name: 'Silvano Aukenthaler', dienstnummer: '25' }, // Dienstführung, Nachname Aukenthaler
+      { name: 'Anna Zerbst', dienstnummer: '99' }, // Beamte, Nachname Zerbst
+      { name: 'Bernhard Nenning', dienstnummer: '35' }, // Dienstführung, Nachname Nenning
+    ]
+    const sortiert = sortiereNachDienstplanGruppe(personen).map(person => person.name)
+    // Vorname-Sortierung wäre Anna, Bernhard, Silvano - nach Nachname (Aukenthaler, Nenning, innerhalb der Gruppe) ist Aukenthaler vor Nenning.
+    expect(sortiert).toEqual(['Silvano Aukenthaler', 'Bernhard Nenning', 'Anna Zerbst'])
+  })
+
   it('verändert die übergebene Liste nicht', () => {
     const personen = [{ name: 'B', dienstnummer: null }, { name: 'A', dienstnummer: null }]
     const original = [...personen]

@@ -113,7 +113,7 @@ export function persoenlicheStundenUebersicht(dienste: readonly DienstplanDienst
   return { gesamt: rundeViertelstunde(gesamt), sonnFeiertag: rundeViertelstunde(sonnFeiertag), tag: rundeViertelstunde(tag), nacht: rundeViertelstunde(nacht) }
 }
 
-export interface DienstartenZaehlung { grundTag: number; grundNacht: number; zusatzTag: number; zusatzNacht: number }
+export interface DienstartenZaehlung { grundTag: number; grundNacht: number; zusatzTag: number; zusatzNacht: number; ueberstunden: number }
 
 /**
  * Zählt Diensteinträge (kategorie "dienst") für die Dienstplan-Auswertung
@@ -122,12 +122,20 @@ export interface DienstartenZaehlung { grundTag: number; grundNacht: number; zus
  * (nach der Uhrzeit klassifiziert, siehe tagOderNacht - dieselbe
  * Zuordnung wie im Planer-Grid und Dienststellenkalender). Anders als
  * persoenlicheStundenUebersicht() geht es hier NICHT um Stunden, sondern
- * um die Anzahl der Diensteinheiten je Art.
+ * um die Anzahl der Diensteinheiten je Art. Zusätzlich: Anzahl der Dienste,
+ * die mit der System-Markierung "Überstunden" (kategorie 'ueberstunden' in
+ * dienstplan_markierungen, siehe lib/dienstplanMarkierungen.ts) versehen
+ * wurden - ueberstundenMarkierungId ist deren id (null, falls diese
+ * System-Markierung ausnahmsweise fehlt, dann wird nichts gezählt).
  */
-export function zaehleDienstarten(dienste: readonly { rohtext: string; von_zeit: string | null; kategorie: DienstplanKategorieDb }[]): DienstartenZaehlung {
-  const ergebnis: DienstartenZaehlung = { grundTag: 0, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0 }
+export function zaehleDienstarten(
+  dienste: readonly { rohtext: string; von_zeit: string | null; kategorie: DienstplanKategorieDb; markierung_id: string | null }[],
+  ueberstundenMarkierungId: string | null = null,
+): DienstartenZaehlung {
+  const ergebnis: DienstartenZaehlung = { grundTag: 0, grundNacht: 0, zusatzTag: 0, zusatzNacht: 0, ueberstunden: 0 }
   for (const zeile of dienste) {
     if (zeile.kategorie !== 'dienst') continue
+    if (ueberstundenMarkierungId && zeile.markierung_id === ueberstundenMarkierungId) ergebnis.ueberstunden++
     const { code } = parseDienstCode(zeile.rohtext)
     const istGrunddienst = grundbesetzungCode(code) !== null
     const abschnitt = tagOderNacht(zeile.von_zeit)
