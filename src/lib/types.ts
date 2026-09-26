@@ -715,6 +715,20 @@ export interface WichtigeTelefonnummer {
   updated_at: string
 }
 
+export type NotizBereich = 'zentrale' | 'innendienst'
+export type NotizSichtbarkeit = 'privat' | 'geteilt'
+
+export interface ZentraleNotiz {
+  id: string
+  bereich: NotizBereich
+  sichtbarkeit: NotizSichtbarkeit
+  text: string
+  erledigt: boolean
+  autor_id: string
+  created_at: string
+  updated_at: string
+}
+
 export type KontaktTelefonArt = 'buero' | 'diensthandy' | 'privathandy' | 'weitere'
 export type FunktionskontaktGruppe = 'stadtfuehrung' | 'einsatzorganisation' | 'fachabteilung'
 export interface PortalFunktionskontakt {
@@ -1640,6 +1654,7 @@ type ZentraleFahndungRow = Omit<ZentraleFahndung, 'person' | 'object'>
 type ZentraleSchluesselRow = Omit<ZentraleSchluessel, 'object' | 'held_by_profile'>
 type ZentraleKontaktRow = Omit<ZentraleKontakt, 'object'>
 type WichtigeTelefonnummerRow = Omit<WichtigeTelefonnummer, never>
+type ZentraleNotizRow = Omit<ZentraleNotiz, never>
 type ZentraleAlarmierungRow = Omit<ZentraleAlarmierung, 'lage'>
 type ZentraleBaustelleRow = Omit<ZentraleBaustelle, never>
 type ZentraleUnterlageRow = Omit<ZentraleUnterlage, never>
@@ -1980,6 +1995,9 @@ export type Database = {
       ] }
       wichtige_telefonnummern: { Row: WichtigeTelefonnummerRow; Insert: Pick<WichtigeTelefonnummerRow, 'kategorie' | 'bezeichnung' | 'nummer' | 'created_by'> & Partial<Omit<WichtigeTelefonnummerRow, 'id' | 'created_at' | 'updated_at' | 'kategorie' | 'bezeichnung' | 'nummer' | 'created_by'>>; Update: Partial<Omit<WichtigeTelefonnummerRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'wichtige_telefonnummern_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
+      ] }
+      zentrale_notizen: { Row: ZentraleNotizRow; Insert: Pick<ZentraleNotizRow, 'bereich' | 'text' | 'autor_id'> & Partial<Omit<ZentraleNotizRow, 'id' | 'created_at' | 'updated_at' | 'bereich' | 'text' | 'autor_id'>>; Update: Partial<Omit<ZentraleNotizRow, 'id' | 'created_at' | 'autor_id'>>; Relationships: [
+        { foreignKeyName: 'zentrale_notizen_autor_id_fkey'; columns: ['autor_id']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
       ] }
       zentrale_alarmierung: { Row: ZentraleAlarmierungRow; Insert: Pick<ZentraleAlarmierungRow, 'anlass' | 'created_by'> & Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'updated_at' | 'anlass' | 'created_by'>>; Update: Partial<Omit<ZentraleAlarmierungRow, 'id' | 'created_at' | 'created_by'>>; Relationships: [
         { foreignKeyName: 'zentrale_alarmierung_created_by_fkey'; columns: ['created_by']; isOneToOne: false; referencedRelation: 'profiles'; referencedColumns: ['id'] },
