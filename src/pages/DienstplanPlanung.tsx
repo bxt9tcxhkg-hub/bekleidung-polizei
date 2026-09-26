@@ -446,12 +446,16 @@ export default function DienstplanPlanung() {
       // bekommt keine Uhrzeit.
       const vonZeit = code ? form.vonZeit : ''
       const bisZeit = code ? form.bisZeit : ''
+      // Ein Urlaubs-Halbtag mit Uhrzeit wird als "U" (statt ausgeschrieben
+      // "Urlaub") gespeichert, z. B. "U 14-19" - kürzer für die schmale
+      // Spalte, ganztägiger Urlaub (keine Uhrzeit) bleibt "Urlaub".
+      const gespeicherterCode = kategorie === 'urlaub' && vonZeit && bisZeit ? 'U' : code
       const markierungId = markierungIdOhneCode
       aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_setzen', {
         p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer,
-        p_rohtext: code, p_von_zeit: vonZeit, p_bis_zeit: bisZeit, p_kategorie: kategorie, p_markierung_id: markierungId,
+        p_rohtext: gespeicherterCode, p_von_zeit: vonZeit, p_bis_zeit: bisZeit, p_kategorie: kategorie, p_markierung_id: markierungId,
       }))
-      neueZeilen.set(nummer, { beamter_id: bearbeitung.beamterId, datum: bearbeitung.datum, zeile: nummer, rohtext: code, von_zeit: vonZeit || null, bis_zeit: bisZeit || null, kategorie, markierung_id: markierungId })
+      neueZeilen.set(nummer, { beamter_id: bearbeitung.beamterId, datum: bearbeitung.datum, zeile: nummer, rohtext: gespeicherterCode, von_zeit: vonZeit || null, bis_zeit: bisZeit || null, kategorie, markierung_id: markierungId })
     }
     const ergebnisse = await Promise.all(aufgaben)
     setSpeichern(false)
