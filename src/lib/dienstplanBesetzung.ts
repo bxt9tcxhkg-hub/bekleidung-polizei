@@ -27,30 +27,6 @@ export function abschnittFuerAnzeige(zeile: { kategorie: DienstplanKategorieDb; 
   return tagOderNacht(zeile.von_zeit)
 }
 
-/**
- * Farbe je Abwesenheits-Kategorie (vom Kommandanten vorgegeben) -
- * "dienst"/"sonstiges" bekommen keine eigene Farbe. Da eine Abwesenheit
- * ganztägig gilt (siehe abschnittFuerAnzeige), aber nur als EINE Rohzeile
- * in der Tag-Zeile gespeichert ist, braucht die Nacht-Zeile eine eigene,
- * etwas kräftigere Nuance derselben Farbe (bgNacht), damit die
- * Farbmarkierung im Planer-Grid durchgehend über Tag+Nacht sichtbar bleibt,
- * der Tag-/Nacht-Unterschied aber trotzdem erkennbar ist.
- */
-export function absenzFarbe(kategorie: DienstplanKategorieDb): { bg: string; bgNacht: string; text: string } | null {
-  switch (kategorie) {
-    case 'urlaub':
-    case 'sonderurlaub':
-    case 'stundenersatz':
-      return { bg: 'bg-yellow-100', bgNacht: 'bg-yellow-200', text: 'text-yellow-900' }
-    case 'krank':
-      return { bg: 'bg-green-100', bgNacht: 'bg-green-200', text: 'text-green-900' }
-    case 'karenz':
-      return { bg: 'bg-pink-100', bgNacht: 'bg-pink-200', text: 'text-pink-900' }
-    default:
-      return null
-  }
-}
-
 /** 'YYYY-MM-DD' als lokales Datum (nicht UTC). */
 function datumAusIso(datumIso: string): Date {
   const [jahr, monat, tag] = datumIso.split('-').map(Number)

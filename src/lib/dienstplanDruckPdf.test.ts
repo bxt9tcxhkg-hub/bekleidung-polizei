@@ -71,9 +71,20 @@ describe('buildDienstplanDruckHtml', () => {
       personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
       tage: ['2026-10-01'],
       dienste: [{ beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'Z', von_zeit: '08:00', bis_zeit: '19:00', kategorie: 'dienst', markierung_id: 'm1' }],
-      markierungen: [{ id: 'm1', name: 'Überstunden', farbe: 'blau' }],
+      markierungen: [{ id: 'm1', name: 'Überstunden', farbe: 'blau', kategorie: null }],
     })
     expect(html).toContain('background:#dbeafe')
+  })
+
+  it('nutzt die vom Planer für Krank eingestellte Farbe (System-Markierung) statt der ursprünglichen Standardfarbe', () => {
+    const html = buildDienstplanDruckHtml({
+      ...BASIS,
+      personen: [{ id: 'a', name: 'Anna Beispiel', kurzname: 'Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
+      tage: ['2026-10-01'],
+      dienste: [{ beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'Krank', von_zeit: null, bis_zeit: null, kategorie: 'krank', markierung_id: null }],
+      markierungen: [{ id: 'sys-krank', name: 'Krank', farbe: 'lila', kategorie: 'krank' }],
+    })
+    expect(html).toContain('background:#f3e8ff')
   })
 
   it('zeigt die Auswertung (Stunden, Grund-/Zusatzdienste) je Person in der Fußzeile', () => {

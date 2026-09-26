@@ -6,7 +6,8 @@ import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal, todayLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { parseDienstCode } from '../lib/dienstplanImport'
-import { KACHEL_IMMER_SICHTBAR, abschnittFuerAnzeige, absenzFarbe, fehlendeGrundbesetzung, kachelRang } from '../lib/dienstplanBesetzung'
+import { KACHEL_IMMER_SICHTBAR, abschnittFuerAnzeige, fehlendeGrundbesetzung, kachelRang } from '../lib/dienstplanBesetzung'
+import { kategorieFarbenMap, kategorieFarbKlassen, type DienstplanAbsenzKategorie } from '../lib/dienstplanMarkierungen'
 import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
@@ -68,9 +69,9 @@ interface DienstKachelDaten { code: string; eintraege: KachelEintrag[] }
 interface ZeitabschnittUebersicht { kacheln: DienstKachelDaten[] }
 interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht }
 
-function Kachel({ code, eintraege, erforderlich }: { code: string; eintraege: KachelEintrag[]; erforderlich: number }) {
+function Kachel({ code, eintraege, erforderlich, kategorieFarben }: { code: string; eintraege: KachelEintrag[]; erforderlich: number; kategorieFarben: ReadonlyMap<DienstplanAbsenzKategorie, string> }) {
   const unterbesetzt = eintraege.length < erforderlich
-  const farbe = eintraege[0] ? absenzFarbe(eintraege[0].kategorie) : null
+  const farbe = eintraege[0] ? kategorieFarbKlassen(eintraege[0].kategorie, kategorieFarben) : null
   return <div className={`rounded-lg border p-2.5 ${farbe ? `border-transparent ${farbe.bg}` : unterbesetzt ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
     <p className={`text-xs font-semibold uppercase tracking-wide ${farbe ? farbe.text : 'text-gray-500'}`}>{code}{erforderlich > 1 ? ` (${eintraege.length}/${erforderlich})` : ''}</p>
     {unterbesetzt ? <p className="mt-1 flex items-center gap-1 text-sm font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5 flex-none" /> {eintraege.length === 0 ? 'nicht besetzt' : 'unterbesetzt'}</p> : null}
@@ -85,11 +86,11 @@ function Kachel({ code, eintraege, erforderlich }: { code: string; eintraege: Ka
   </div>
 }
 
-function Zeitabschnitt({ titel, daten }: { titel: string; daten: ZeitabschnittUebersicht }) {
+function Zeitabschnitt({ titel, daten, kategorieFarben }: { titel: string; daten: ZeitabschnittUebersicht; kategorieFarben: ReadonlyMap<DienstplanAbsenzKategorie, string> }) {
   return <div>
     <p className="mb-1.5 text-xs font-bold uppercase tracking-wide text-gray-400">{titel}</p>
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-      {daten.kacheln.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} erforderlich={MINDESTBESETZUNG[kachel.code as GrundbesetzungCode] ?? 1} />)}
+      {daten.kacheln.map(kachel => <Kachel key={kachel.code} code={kachel.code} eintraege={kachel.eintraege} erforderlich={MINDESTBESETZUNG[kachel.code as GrundbesetzungCode] ?? 1} kategorieFarben={kategorieFarben} />)}
     </div>
   </div>
 }
@@ -99,6 +100,7 @@ export default function DienststellenKalender() {
   const [monatVeroeffentlicht, setMonatVeroeffentlicht] = useState<boolean | null>(null)
   const [dienste, setDienste] = useState<DienstZeile[]>([])
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
+  const [markierungen, setMarkierungen] = useState<{ kategorie: DienstplanKategorieDb | null; farbe: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -111,13 +113,15 @@ export default function DienststellenKalender() {
       setMonatVeroeffentlicht(false); setDienste([]); setMitarbeiter([]); setLoading(false); return
     }
     setMonatVeroeffentlicht(true)
-    const [dienstResult, mitarbeiterResult] = await Promise.all([
+    const [dienstResult, mitarbeiterResult, markierungenResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,datum,zeile,rohtext,von_zeit,bis_zeit,kategorie').eq('dienstplan_monat_id', monatRow.id).order('datum').order('zeile'),
       supabase.from('profiles').select('id,name,dienstnummer').eq('active', true).order('name'),
+      dienstplanSupabase.from('dienstplan_markierungen').select('kategorie,farbe'),
     ])
-    if (dienstResult.error || mitarbeiterResult.error) { setError('Der Dienstplan konnte nicht geladen werden.'); setLoading(false); return }
+    if (dienstResult.error || mitarbeiterResult.error || markierungenResult.error) { setError('Der Dienstplan konnte nicht geladen werden.'); setLoading(false); return }
     setDienste(dienstResult.data ?? [])
     setMitarbeiter(mitarbeiterResult.data ?? [])
+    setMarkierungen(markierungenResult.data ?? [])
     setLoading(false)
   }, [monat])
   useEffect(() => { void load() }, [load])
@@ -186,6 +190,8 @@ export default function DienststellenKalender() {
       .map(([datum, { tag, nacht }]): TagesUebersicht => ({ datum, tag: zuUebersicht(tag), nacht: zuUebersicht(nacht) }))
   }, [dienste, mitarbeiterById])
 
+  const kategorieFarben = useMemo(() => kategorieFarbenMap(markierungen), [markierungen])
+
   const tageMap = useMemo(() => new Map(tage.map(eintrag => [eintrag.datum, eintrag])), [tage])
   const alleTage = useMemo(() => tageImMonat(monat), [monat])
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, alleTage), [dienste, alleTage])
@@ -250,8 +256,8 @@ export default function DienststellenKalender() {
             : <div className="rounded-xl border border-gray-200 bg-white p-4">
               <p className="mb-3 text-sm font-bold text-gray-900">{formatDatum(ausgewaehlterTag)}</p>
               <div className="space-y-3">
-                <Zeitabschnitt titel="Tagdienste" daten={ausgewaehlteUebersicht.tag} />
-                <Zeitabschnitt titel="Nachtdienste" daten={ausgewaehlteUebersicht.nacht} />
+                <Zeitabschnitt titel="Tagdienste" daten={ausgewaehlteUebersicht.tag} kategorieFarben={kategorieFarben} />
+                <Zeitabschnitt titel="Nachtdienste" daten={ausgewaehlteUebersicht.nacht} kategorieFarben={kategorieFarben} />
               </div>
             </div>}
         </div>

@@ -61,6 +61,8 @@ export type DienstplanMarkierungRow = {
   id: string
   name: string
   farbe: string
+  /** Bindet diese Markierung als "System"-Eintrag an eine Abwesenheitskategorie (Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz) - Name/Bedeutung bleiben dann fix, nur die Farbe ist änderbar. null = frei definierte Markierung (z. B. "Überstunden"). */
+  kategorie: DienstplanKategorieDb | null
   reihenfolge: number
   updated_by: string | null
   updated_at: string

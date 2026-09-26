@@ -25,15 +25,15 @@ import { isAustrianHoliday } from './austrianHolidays'
 import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineBlock } from './printDocs'
 import { formatStunden } from './ueberstunden'
 import { persoenlicheStundenUebersicht, zaehleDienstarten } from './dienstplanAuswertung'
-import { abschnittFuerAnzeige, absenzFarbe, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung } from './dienstplanBesetzung'
+import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung } from './dienstplanBesetzung'
 import { parseDienstCode } from './dienstplanImport'
-import { markierungFarbKlassen } from './dienstplanMarkierungen'
+import { kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from './dienstplanMarkierungen'
 import { DIENSTPLAN_GRUPPE_LABEL, type DienstplanGruppe } from './dienstplanRoster'
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
 
 export interface DienstplanDruckPerson { id: string; name: string; kurzname: string; dienstnummer: string | null; gruppe: DienstplanGruppe }
 export interface DienstplanDruckZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb; markierung_id: string | null }
-export interface DienstplanDruckMarkierung { id: string; name: string; farbe: string }
+export interface DienstplanDruckMarkierung { id: string; name: string; farbe: string; kategorie: DienstplanKategorieDb | null }
 
 export interface DienstplanDruckInput {
   monatLabel: string
@@ -47,7 +47,7 @@ export interface DienstplanDruckInput {
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
 const ABSCHNITT_LABEL = { tag: 'T', nacht: 'N' } as const
 
-/** Wie absenzFarbe()/markierungFarbKlassen() (Tailwind-Klassennamen der Live-Ansicht) als konkrete Hex-Werte fürs eigenständige Druck-HTML (kein Tailwind dort verfügbar). */
+/** Wie kategorieFarbKlassen()/markierungFarbKlassen() (Tailwind-Klassennamen der Live-Ansicht) als konkrete Hex-Werte fürs eigenständige Druck-HTML (kein Tailwind dort verfügbar). */
 const FARBE_HEX: Record<string, string> = {
   'bg-yellow-100': '#fef9c3', 'bg-yellow-200': '#fef08a', 'text-yellow-900': '#713f12',
   'bg-green-100': '#dcfce7', 'bg-green-200': '#bbf7d0', 'text-green-900': '#14532d',
@@ -100,6 +100,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
     zeilenProPersonUndTag.set(schluesselTag, listeTag)
   }
   const markierungenById = new Map(markierungen.map(markierung => [markierung.id, markierung]))
+  const kategorieFarben = kategorieFarbenMap(markierungen)
   const effektiveAbwesenheit = effektiveAbwesenheitJeTag(dienste, personen.map(person => person.id), tage)
   const fehlendeGrund = fehlendeGrundbesetzung(dienste, tage)
 
@@ -123,7 +124,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
         const zeilen = (zeilenProPersonUndAbschnitt.get(`${person.id}|${datum}|${abschnitt}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
         const absenzKategorie = (zeilenProPersonUndTag.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst')?.kategorie
           ?? effektiveAbwesenheit.get(`${person.id}|${datum}`)
-        const absenzFarben = absenzKategorie ? absenzFarbe(absenzKategorie) : null
+        const absenzFarben = absenzKategorie ? kategorieFarbKlassen(absenzKategorie, kategorieFarben) : null
         const markierterZeile = zeilen.find(zeile => zeile.markierung_id)
         const markierung = markierterZeile?.markierung_id ? markierungenById.get(markierterZeile.markierung_id) : undefined
         const markierungFarben = markierung ? markierungFarbKlassen(markierung.farbe) : null

@@ -6,12 +6,12 @@ import { isAustrianHoliday } from '../lib/austrianHolidays'
 import { officerPrintName } from '../lib/printDocs'
 import { generateDienstplanDruckPdf } from '../lib/dienstplanDruckPdf'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanMarkierungRow, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
-import { markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
+import { kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
 import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
-import { abschnittFuerAnzeige, absenzFarbe, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
+import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { berechneSollstunden, istWerktag, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
@@ -84,7 +84,7 @@ const LEERE_ZEILE: ZeileForm = { code: '', vonZeit: '', bisZeit: '', markierungI
 
 function ZeileEditor({ titel, form, setForm, entfernen, markierungen }: { titel: string; form: ZeileForm; setForm: (form: ZeileForm) => void; entfernen?: () => void; markierungen: readonly DienstplanMarkierungRow[] }) {
   const kategorie = form.code ? kategorisiereRohtext(form.code) : null
-  const zeitRelevant = kategorie === null || kategorie === 'dienst'
+  const zeitRelevant = kategorie === 'dienst'
   return <div className="rounded-lg border border-gray-200 p-3">
     <div className="flex items-center justify-between">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{titel}</p>
@@ -108,7 +108,7 @@ function ZeileEditor({ titel, form, setForm, entfernen, markierungen }: { titel:
         <input type="time" className={`${inputClass} mt-0 w-auto`} value={form.bisZeit} onChange={event => setForm({ ...form, bisZeit: event.target.value })} />
       </div>
     </div> : null}
-    {markierungen.length > 0 ? <label className="mt-2 block text-xs font-medium text-gray-600">Farbmarkierung (rein visuell, z. B. Überstunden)
+    {markierungen.length > 0 ? <label className="mt-2 block text-xs font-medium text-gray-600">Farbmarkierung (rein visuell, z. B. Überstunden - auch ohne Kürzel setzbar, z. B. um ein übersehenes Wochenende bei Krank/Urlaub nachträglich einzufärben)
       <select className={inputClass} value={form.markierungId} onChange={event => setForm({ ...form, markierungId: event.target.value })}>
         <option value="">Keine</option>
         {markierungen.map(markierung => <option key={markierung.id} value={markierung.id}>{markierung.name}</option>)}
@@ -186,7 +186,7 @@ export default function DienstplanPlanung() {
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
       dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,von_zeit').eq('datum', vorherigerMonatLetzterTag(monat)).eq('kategorie', 'dienst'),
-      dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,reihenfolge,updated_by,updated_at').order('reihenfolge').order('name'),
+      dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,kategorie,reihenfolge,updated_by,updated_at').order('reihenfolge').order('name'),
     ])
     if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error || vorMonatNachtResult.error || markierungenResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     setMarkierungen(markierungenResult.data ?? [])
@@ -264,6 +264,12 @@ export default function DienstplanPlanung() {
     [dienste, mitarbeiter, tage],
   )
 
+  // Farbe je Abwesenheitskategorie (Urlaub/Krank/Sonderurlaub/Karenz/
+  // Stundenersatz) kommt aus den gleichnamigen "System"-Markierungen (siehe
+  // lib/dienstplanMarkierungen.ts) - der Planer kann sie in den
+  // Dienstplan-Einstellungen umfärben.
+  const kategorieFarben = useMemo(() => kategorieFarbenMap(markierungen), [markierungen])
+
   // Für die Kopfzeile: Kommando/Dienstführung/Beamte-Blöcke als
   // zusammenhängende Spaltengruppen (mitarbeiter ist bereits per
   // sortiereNachDienstplanGruppe geordnet, siehe load()).
@@ -321,7 +327,7 @@ export default function DienstplanPlanung() {
       const zeilen = dienstePerPerson.get(person.id) ?? []
       const grad = beschaeftigungsgrade.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
       const soll = berechneSollstunden(monat, stundenProWerktag, grad)
-      const abwesenheitsTage = new Set(zeilen.filter(zeile => zeile.kategorie !== 'dienst' && istWerktag(datumAusIso(zeile.datum))).map(zeile => zeile.datum))
+      const abwesenheitsTage = new Set(zeilen.filter(zeile => zeile.kategorie !== 'dienst' && zeile.kategorie !== 'sonstiges' && istWerktag(datumAusIso(zeile.datum))).map(zeile => zeile.datum))
       const geplant = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsTage.size * stundenProWerktag
       ergebnis.set(person.id, soll - geplant)
     }
@@ -406,16 +412,23 @@ export default function DienstplanPlanung() {
     const neueZeilen = new Map<1 | 2, DienstZeile | null>()
     for (const [nummer, form] of [[1, zeile1], [2, zeile2]] as const) {
       const bestandVorher = (dienstByKey.get(`${bearbeitung.beamterId}|${bearbeitung.datum}`) ?? []).some(zeile => zeile.zeile === nummer)
-      if (!form || !form.code.trim()) {
+      const markierungIdOhneCode = form?.markierungId || null
+      if (!form || (!form.code.trim() && !markierungIdOhneCode)) {
         if (bestandVorher) aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_loeschen', { p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer }))
         neueZeilen.set(nummer, null)
         continue
       }
       const code = form.code.trim()
-      const kategorie = kategorisiereRohtext(code)
+      // Eine Farbmarkierung soll sich auch auf eine sonst leere Zelle setzen
+      // lassen (z. B. um ein bei einem Krankenstand übersehenes Wochenende
+      // nachträglich einzufärben) - ohne Kürzel bekommt die Zeile die
+      // neutrale Kategorie "sonstiges" (zählt nirgends als Dienst oder
+      // Abwesenheitstag, siehe zaehleDienstarten/persoenlicheStundenUebersicht/
+      // verfuegbareStunden).
+      const kategorie = code ? kategorisiereRohtext(code) : 'sonstiges'
       const vonZeit = kategorie === 'dienst' ? form.vonZeit : ''
       const bisZeit = kategorie === 'dienst' ? form.bisZeit : ''
-      const markierungId = form.markierungId || null
+      const markierungId = markierungIdOhneCode
       aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_setzen', {
         p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer,
         p_rohtext: code, p_von_zeit: vonZeit, p_bis_zeit: bisZeit, p_kategorie: kategorie, p_markierung_id: markierungId,
@@ -735,7 +748,7 @@ export default function DienstplanPlanung() {
                       // Nacht sichtbar ist, mit einer kräftigeren Nuance für die Nacht.
                       const absenz = (dienstByKey.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst')
                       const absenzKategorie = absenz?.kategorie ?? effektiveAbwesenheit.get(`${person.id}|${datum}`)
-                      const absenzFarben = absenzKategorie ? absenzFarbe(absenzKategorie) : null
+                      const absenzFarben = absenzKategorie ? kategorieFarbKlassen(absenzKategorie, kategorieFarben) : null
                       const absenzHintergrund = absenzFarben ? (abschnitt === 'tag' ? absenzFarben.bg : absenzFarben.bgNacht) : null
                       // Vom Planer frei definierte Farbmarkierung (z. B. "Überstunden"
                       // blau, siehe lib/dienstplanMarkierungen.ts) - rein visuell,
