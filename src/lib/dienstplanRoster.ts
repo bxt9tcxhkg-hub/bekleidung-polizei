@@ -17,7 +17,26 @@ export const DIENSTFUEHRUNG_DIENSTNUMMERN = ['25', '27', '28', '35']
 
 export type DienstplanGruppe = 'kommando' | 'dienstfuehrung' | 'einsatz'
 
-export function dienstplanGruppe(dienstnummer: string | null): DienstplanGruppe {
+/**
+ * Manuelle Zusatz-Einstellungen je Person (dienstplan_person_einstellungen.zusatz,
+ * ein jsonb-Freifeld ohne eigene Spalten/Migration - siehe DienstplanEinstellungen.tsx):
+ * - `gruppe`: verschiebt die Person abweichend von der Dienstnummer-Regel in eine
+ *   andere Gruppe (Kommando/Dienstführung/Beamte), z. B. wenn jemand die Dienstnummer
+ *   wechselt oder eine Sonderrolle bekommt.
+ * - `dienstplanAusgeblendet`: nimmt die Person aus der Dienstplan-Planung (Grid,
+ *   Druckansicht, automatische Vorschläge) heraus, ohne das Profil zu löschen oder
+ *   zu deaktivieren - sie bleibt im restlichen Portal (Meine Dienste, Login, ...)
+ *   unverändert nutzbar, nur eben nicht mehr Teil des zu planenden Personenkreises.
+ */
+export interface DienstplanPersonZusatz {
+  gruppe?: DienstplanGruppe
+  dienstplanAusgeblendet?: boolean
+  /** Index-Signatur, damit sich das Objekt direkt in die jsonb-Spalte zusatz (Record<string, unknown>) speichern lässt. */
+  [key: string]: unknown
+}
+
+export function dienstplanGruppe(dienstnummer: string | null, override?: DienstplanGruppe | null): DienstplanGruppe {
+  if (override) return override
   if (dienstnummer && KOMMANDO_DIENSTNUMMERN.includes(dienstnummer)) return 'kommando'
   if (dienstnummer && DIENSTFUEHRUNG_DIENSTNUMMERN.includes(dienstnummer)) return 'dienstfuehrung'
   return 'einsatz'
@@ -30,20 +49,20 @@ export const DIENSTPLAN_GRUPPE_LABEL: Record<DienstplanGruppe, string> = {
 }
 
 /** Kommando wird nicht automatisch für Grundbesetzung vorgeschlagen/gezählt - Dienstführung schon. */
-export function istAutomatischEinteilbar(dienstnummer: string | null): boolean {
-  return dienstplanGruppe(dienstnummer) !== 'kommando'
+export function istAutomatischEinteilbar(dienstnummer: string | null, gruppeOverride?: DienstplanGruppe | null): boolean {
+  return dienstplanGruppe(dienstnummer, gruppeOverride) !== 'kommando'
 }
 
 const GRUPPEN_RANG: Record<DienstplanGruppe, number> = { kommando: 0, dienstfuehrung: 1, einsatz: 2 }
 
-/** Sortiert eine Personenliste so, dass Kommando und Dienstführung jeweils als eigener Block zusammenstehen (Rang). Innerhalb des Kommando-Blocks in der vom Kommandanten vorgegebenen festen Reihenfolge (KOMMANDO_DIENSTNUMMERN: Hans-Peter, Andreas, Martin), innerhalb der anderen Blöcke alphabetisch nach Nachname. */
-export function sortiereNachDienstplanGruppe<T extends { name: string; dienstnummer: string | null }>(personen: readonly T[]): T[] {
+/** Sortiert eine Personenliste so, dass Kommando und Dienstführung jeweils als eigener Block zusammenstehen (Rang, per gruppeOverride manuell versetzbar). Innerhalb des Kommando-Blocks in der vom Kommandanten vorgegebenen festen Reihenfolge (KOMMANDO_DIENSTNUMMERN: Hans-Peter, Andreas, Martin), innerhalb der anderen Blöcke alphabetisch nach Nachname. */
+export function sortiereNachDienstplanGruppe<T extends { name: string; dienstnummer: string | null; gruppeOverride?: DienstplanGruppe | null }>(personen: readonly T[]): T[] {
   return [...personen].sort((a, b) => {
-    const gruppeA = dienstplanGruppe(a.dienstnummer)
-    const gruppeB = dienstplanGruppe(b.dienstnummer)
+    const gruppeA = dienstplanGruppe(a.dienstnummer, a.gruppeOverride)
+    const gruppeB = dienstplanGruppe(b.dienstnummer, b.gruppeOverride)
     const rang = GRUPPEN_RANG[gruppeA] - GRUPPEN_RANG[gruppeB]
     if (rang !== 0) return rang
-    if (gruppeA === 'kommando') return KOMMANDO_DIENSTNUMMERN.indexOf(a.dienstnummer ?? '') - KOMMANDO_DIENSTNUMMERN.indexOf(b.dienstnummer ?? '')
+    if (gruppeA === 'kommando' && !a.gruppeOverride && !b.gruppeOverride) return KOMMANDO_DIENSTNUMMERN.indexOf(a.dienstnummer ?? '') - KOMMANDO_DIENSTNUMMERN.indexOf(b.dienstnummer ?? '')
     return nachnameVon(a.name).localeCompare(nachnameVon(b.name), 'de-AT')
   })
 }
