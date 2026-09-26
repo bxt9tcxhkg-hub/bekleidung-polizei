@@ -40,6 +40,11 @@ describe('absenzFarbe', () => {
     expect(absenzFarbe('krank')?.bg).toBe('bg-green-100')
     expect(absenzFarbe('karenz')?.bg).toBe('bg-pink-100')
   })
+  it('hat für die Nacht-Zeile eine kräftigere Nuance derselben Farbe (durchgehende Markierung mit Tag/Nacht-Unterschied)', () => {
+    expect(absenzFarbe('urlaub')?.bgNacht).toBe('bg-yellow-200')
+    expect(absenzFarbe('krank')?.bgNacht).toBe('bg-green-200')
+    expect(absenzFarbe('karenz')?.bgNacht).toBe('bg-pink-200')
+  })
   it('gibt für Dienst und Sonstiges keine Farbe zurück', () => {
     expect(absenzFarbe('dienst')).toBeNull()
     expect(absenzFarbe('sonstiges')).toBeNull()
