@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Loader2, NotebookPen, Plus, Trash2, X } from 'lucide-react'
+import { Check, Loader2, NotebookPen, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { inputClass, ErrorMessage } from './ZentraleEntryEditor'
@@ -24,6 +24,8 @@ export default function NotizenWidget({ bereich }: { bereich: NotizBereich }) {
   const [text, setText] = useState('')
   const [sichtbarkeit, setSichtbarkeit] = useState<NotizSichtbarkeit>('privat')
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
 
   const load = useCallback(async () => {
     const { data, error: loadError } = await supabase
@@ -86,6 +88,31 @@ export default function NotizenWidget({ bereich }: { bereich: NotizBereich }) {
     await load()
   }
 
+  function startEdit(item: ZentraleNotiz) {
+    setEditingId(item.id)
+    setEditText(item.text)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditText('')
+  }
+
+  async function saveEdit(item: ZentraleNotiz) {
+    const value = editText.trim()
+    if (!value) return
+    setSaving(true)
+    setError('')
+    const { error: updateError } = await supabase
+      .from('zentrale_notizen')
+      .update({ text: value })
+      .eq('id', item.id)
+    setSaving(false)
+    if (updateError) { setError(updateError.message); return }
+    cancelEdit()
+    await load()
+  }
+
   if (!open) {
     return (
       <button
@@ -135,22 +162,49 @@ export default function NotizenWidget({ bereich }: { bereich: NotizBereich }) {
       <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
         {loading ? <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
           : notizen.length === 0 ? <p className="px-4 py-6 text-sm text-gray-500 text-center">Keine Notizen vorhanden.</p>
-          : notizen.map(item => (
-            <div key={item.id} className="flex items-start gap-2.5 px-4 py-3">
-              <button type="button" onClick={() => void toggleErledigt(item)} aria-label={item.erledigt ? 'Als offen markieren' : 'Als erledigt markieren'} className={`mt-0.5 flex-none w-5 h-5 rounded-full border flex items-center justify-center ${item.erledigt ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300'}`}>
-                {item.erledigt ? <Check className="w-3 h-3" /> : null}
-              </button>
-              <div className="min-w-0 flex-1">
-                <p className={`text-sm whitespace-pre-wrap break-words ${item.erledigt ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.text}</p>
-                {item.sichtbarkeit === 'geteilt' ? <span className="inline-block mt-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Geteilt</span> : null}
-              </div>
-              {(item.autor_id === user?.id || item.sichtbarkeit === 'geteilt') && (
-                <button type="button" onClick={() => void remove(item)} aria-label="Notiz löschen" className="flex-none p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg">
-                  <Trash2 className="w-3.5 h-3.5" />
+          : notizen.map(item => {
+            const canEdit = item.autor_id === user?.id || item.sichtbarkeit === 'geteilt'
+            const isEditing = editingId === item.id
+            return (
+              <div key={item.id} className="flex items-start gap-2.5 px-4 py-3">
+                <button type="button" onClick={() => void toggleErledigt(item)} aria-label={item.erledigt ? 'Als offen markieren' : 'Als erledigt markieren'} className={`mt-0.5 flex-none w-5 h-5 rounded-full border flex items-center justify-center ${item.erledigt ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300'}`}>
+                  {item.erledigt ? <Check className="w-3 h-3" /> : null}
                 </button>
-              )}
-            </div>
-          ))}
+                <div className="min-w-0 flex-1">
+                  {isEditing ? (
+                    <div className="space-y-1.5">
+                      <textarea
+                        autoFocus
+                        className={`${inputClass} min-h-16 resize-y text-sm`}
+                        value={editText}
+                        onChange={event => setEditText(event.target.value)}
+                        onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) void saveEdit(item) }}
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button type="button" onClick={cancelEdit} className="text-xs px-2.5 py-1 border border-gray-300 rounded-lg">Abbrechen</button>
+                        <button type="button" disabled={saving || !editText.trim()} onClick={() => void saveEdit(item)} className="text-xs px-2.5 py-1 bg-blue-800 hover:bg-blue-900 text-white rounded-lg disabled:opacity-50">Speichern</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className={`text-sm whitespace-pre-wrap break-words ${item.erledigt ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.text}</p>
+                      {item.sichtbarkeit === 'geteilt' ? <span className="inline-block mt-1 text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Geteilt</span> : null}
+                    </>
+                  )}
+                </div>
+                {!isEditing && canEdit ? (
+                  <div className="flex-none flex items-center gap-0.5">
+                    <button type="button" onClick={() => startEdit(item)} aria-label="Notiz bearbeiten" className="p-1.5 text-gray-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button type="button" onClick={() => void remove(item)} aria-label="Notiz löschen" className="p-1.5 text-gray-400 hover:text-red-700 hover:bg-red-50 rounded-lg">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
       </div>
     </div>
   )
