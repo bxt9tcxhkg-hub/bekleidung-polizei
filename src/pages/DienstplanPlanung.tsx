@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CalendarDays, CalendarRange, CheckCircle2, Moon, Sparkles, Sun, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { isAustrianHoliday } from '../lib/austrianHolidays'
@@ -176,16 +176,27 @@ export default function DienstplanPlanung() {
   // Ruhezeit nach einem Nachtdienst) - wird am 1. rot markiert, siehe JSX.
   const [naechtlicherUebertrag, setNaechtlicherUebertrag] = useState<Set<string>>(new Set())
 
+  // Beim ersten Laden auf den vom Genehmiger hinterlegten "aktuellen
+  // Dienstplan" (dienstplan_regeln.aktueller_planungsmonat) springen, statt
+  // immer den Kalendermonat zu zeigen - danach bleibt die Monatsnavigation
+  // frei (siehe monatInput.onChange).
+  const standardMonatAngewandt = useRef(false)
+
   const load = useCallback(async () => {
     setLoading(true); setError(''); setVorschlaege(new Map())
     const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult, vorMonatNachtResult] = await Promise.all([
-      dienstplanSupabase.from('dienstplan_regeln').select('stunden_pro_werktag,mindestruhezeit_stunden').eq('id', 1).maybeSingle(),
+      dienstplanSupabase.from('dienstplan_regeln').select('stunden_pro_werktag,mindestruhezeit_stunden,aktueller_planungsmonat').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
       dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,von_zeit').eq('datum', vorherigerMonatLetzterTag(monat)).eq('kategorie', 'dienst'),
     ])
     if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monatResult.error || vorMonatNachtResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
+    if (!standardMonatAngewandt.current) {
+      standardMonatAngewandt.current = true
+      const standard = regelnResult.data?.aktueller_planungsmonat?.slice(0, 7)
+      if (standard && standard !== monat) { setMonat(standard); return }
+    }
     if (regelnResult.data) { setStundenProWerktag(regelnResult.data.stunden_pro_werktag); setMindestruhezeitStunden(regelnResult.data.mindestruhezeit_stunden) }
     setBeschaeftigungsgrade(new Map((einstellungenResult.data ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
     setNaechtlicherUebertrag(new Set((vorMonatNachtResult.data ?? []).filter(row => tagOderNacht(row.von_zeit) === 'nacht').map(row => row.beamter_id)))

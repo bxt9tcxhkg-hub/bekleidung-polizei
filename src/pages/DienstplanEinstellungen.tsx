@@ -35,7 +35,7 @@ export default function DienstplanEinstellungen() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const [regelForm, setRegelForm] = useState({ stundenProWerktag: '', mindestruhezeitStunden: '', wunschfristTage: '' })
+  const [regelForm, setRegelForm] = useState({ stundenProWerktag: '', mindestruhezeitStunden: '', wunschfristTage: '', offenerWunschMonat: '', aktuellerPlanungsmonat: '' })
   const [regelnSpeichern, setRegelnSpeichern] = useState(false)
 
   const [editId, setEditId] = useState<string | null>(null)
@@ -45,7 +45,7 @@ export default function DienstplanEinstellungen() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     const [regelnResult, mitarbeiterResult, einstellungenResult, monateResult] = await Promise.all([
-      dienstplanSupabase.from('dienstplan_regeln').select('id,stunden_pro_werktag,mindestruhezeit_stunden,wunschfrist_tage,updated_by,updated_at').eq('id', 1).maybeSingle(),
+      dienstplanSupabase.from('dienstplan_regeln').select('id,stunden_pro_werktag,mindestruhezeit_stunden,wunschfrist_tage,offener_wunsch_monat,aktueller_planungsmonat,updated_by,updated_at').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('monat'),
@@ -53,7 +53,13 @@ export default function DienstplanEinstellungen() {
     if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monateResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) {
       setRegeln(regelnResult.data)
-      setRegelForm({ stundenProWerktag: String(regelnResult.data.stunden_pro_werktag), mindestruhezeitStunden: String(regelnResult.data.mindestruhezeit_stunden), wunschfristTage: String(regelnResult.data.wunschfrist_tage) })
+      setRegelForm({
+        stundenProWerktag: String(regelnResult.data.stunden_pro_werktag),
+        mindestruhezeitStunden: String(regelnResult.data.mindestruhezeit_stunden),
+        wunschfristTage: String(regelnResult.data.wunschfrist_tage),
+        offenerWunschMonat: regelnResult.data.offener_wunsch_monat?.slice(0, 7) ?? '',
+        aktuellerPlanungsmonat: regelnResult.data.aktueller_planungsmonat?.slice(0, 7) ?? '',
+      })
     }
     const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
     setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
@@ -71,7 +77,14 @@ export default function DienstplanEinstellungen() {
       setError('Bitte gültige Werte eingeben.'); return
     }
     setRegelnSpeichern(true); setError(''); setNotice('')
-    const result = await dienstplanSupabase.from('dienstplan_regeln').update({ stunden_pro_werktag: stundenProWerktag, mindestruhezeit_stunden: mindestruhezeitStunden, wunschfrist_tage: wunschfristTage, updated_by: profile?.id ?? null }).eq('id', 1)
+    const result = await dienstplanSupabase.from('dienstplan_regeln').update({
+      stunden_pro_werktag: stundenProWerktag,
+      mindestruhezeit_stunden: mindestruhezeitStunden,
+      wunschfrist_tage: wunschfristTage,
+      offener_wunsch_monat: regelForm.offenerWunschMonat ? `${regelForm.offenerWunschMonat}-01` : null,
+      aktueller_planungsmonat: regelForm.aktuellerPlanungsmonat ? `${regelForm.aktuellerPlanungsmonat}-01` : null,
+      updated_by: profile?.id ?? null,
+    }).eq('id', 1)
     setRegelnSpeichern(false)
     if (result.error) { setError('Die Regeln konnten nicht gespeichert werden.'); return }
     setNotice('Regeln gespeichert.')
@@ -121,6 +134,19 @@ export default function DienstplanEinstellungen() {
           </label>
         </div>
         <p className="mt-3 text-xs text-gray-500">Sollstunden = Werktage im Monat (Montag-Freitag, ohne gesetzliche Feiertage) × Stunden pro Werktag × Beschäftigungsgrad. Wird nirgends fix gespeichert, sondern überall live berechnet.</p>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 border-t border-gray-100 pt-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-xs font-medium text-gray-600">Offener Monat für Freiplanungswünsche</span>
+            <input type="month" className={inputClass} value={regelForm.offenerWunschMonat} onChange={event => setRegelForm(form => ({ ...form, offenerWunschMonat: event.target.value }))} />
+            <span className="mt-1 block text-xs text-gray-400">Beamte können nur für diesen Monat Freiplanungswünsche einreichen. Leer = aktuell kein Monat offen.</span>
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-gray-600">Aktueller Dienstplan (Standard-Monat)</span>
+            <input type="month" className={inputClass} value={regelForm.aktuellerPlanungsmonat} onChange={event => setRegelForm(form => ({ ...form, aktuellerPlanungsmonat: event.target.value }))} />
+            <span className="mt-1 block text-xs text-gray-400">Monat, den Dienstplan-Planung/Dienststellenkalender/Meine Dienste beim Öffnen voreinstellen. Andere Monate bleiben frei wählbar.</span>
+          </label>
+        </div>
         <div className="mt-4 flex justify-end">
           <button type="button" disabled={regelnSpeichern} onClick={() => void speichereRegeln()} className="rounded-lg bg-blue-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{regelnSpeichern ? 'Speichern…' : 'Regeln speichern'}</button>
         </div>

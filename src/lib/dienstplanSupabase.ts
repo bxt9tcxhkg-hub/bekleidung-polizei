@@ -60,6 +60,10 @@ export type DienstplanRegelRow = {
   stunden_pro_werktag: number
   mindestruhezeit_stunden: number
   wunschfrist_tage: number
+  /** Vom Genehmiger freigegebener Monat für das Einreichen von Freiplanungswünschen ('YYYY-MM-01') - null heißt: aktuell kein Monat offen. */
+  offener_wunsch_monat: string | null
+  /** Standard-Monat, den Dienstplan-Planung/Dienststellenkalender/Meine Dienste beim Öffnen anzeigen - freie Navigation zu anderen Monaten bleibt möglich. */
+  aktueller_planungsmonat: string | null
   updated_by: string | null
   updated_at: string
 }
