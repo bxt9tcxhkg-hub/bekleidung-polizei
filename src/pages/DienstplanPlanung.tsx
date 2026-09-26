@@ -797,7 +797,7 @@ export default function DienstplanPlanung() {
                         onMouseDown={!istTouchGeraet ? () => dragStarten(person.id, datum) : undefined}
                         onMouseEnter={!istTouchGeraet ? () => dragBewegen(person.id, datum) : undefined}
                         title={titel}
-                        className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${spaltenBorderKlasse.get(person.id) ?? ''} ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzHintergrund ?? markierungHintergrund ?? ''}`}
+                        className={`min-w-20 cursor-pointer select-none whitespace-nowrap border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${spaltenBorderKlasse.get(person.id) ?? ''} ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzHintergrund ?? markierungHintergrund ?? ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           {/* uebertragWarnung-Icon bewusst in derselben Zeile wie das Kürzel (nicht als eigener Flex-Block darunter) - sonst wird nur die Tagzeile des 1. eines Monats durch die zusätzliche Zeile höher als alle anderen Tage. */}
