@@ -94,8 +94,9 @@ export default function InnendienstShell() {
     ])
     // Ohne user_id-Filter, damit bei einer Schichtübernahme sichtbar ist, dass
     // die Kasse bereits von der/dem Vorgängerin/Vorgänger abgerechnet wurde
-    // (RLS erlaubt das Lesen aller Zeilen der eigenen Tagesfunktion, siehe
-    // Migration 20260926120000).
+    // (RLS erlaubt zusätzlich zur eigenen Zeile das Lesen fremder Zeilen
+    // exakt für duty_date+shift der eigenen Innendienst-Diensteinteilung,
+    // siehe Migration 20260926120000).
     const taskResult = await supabase.from('innendienst_shift_tasks').select('*, profile:profiles!innendienst_shift_tasks_user_id_fkey(id,name)').eq('duty_date', dutyDate).eq('shift', shift)
     if (recordResult.error || entryResult.error) setError('Einige Informationen konnten nicht geladen werden.')
     else setError('')
