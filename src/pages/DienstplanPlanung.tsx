@@ -10,7 +10,7 @@ import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kateg
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
-import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
+import { formatDienstAnzeige, kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
 import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
@@ -84,7 +84,11 @@ const LEERE_ZEILE: ZeileForm = { code: '', vonZeit: '', bisZeit: '', markierungI
 
 function ZeileEditor({ titel, form, setForm, entfernen, markierungen }: { titel: string; form: ZeileForm; setForm: (form: ZeileForm) => void; entfernen?: () => void; markierungen: readonly DienstplanMarkierungRow[] }) {
   const kategorie = form.code ? kategorisiereRohtext(form.code) : null
-  const zeitRelevant = kategorie === 'dienst'
+  // Uhrzeit ist nicht nur bei einem echten Dienst sinnvoll, sondern auch bei
+  // Abwesenheiten (z. B. ein Urlaubs-Halbtag "U 08-13") - nur bei einer sonst
+  // leeren, rein farblich markierten Zelle (kein Kürzel, kategorie
+  // "sonstiges") ergibt eine Uhrzeit keinen Sinn.
+  const zeitRelevant = kategorie !== null
   return <div className="rounded-lg border border-gray-200 p-3">
     <div className="flex items-center justify-between">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{titel}</p>
@@ -100,7 +104,7 @@ function ZeileEditor({ titel, form, setForm, entfernen, markierungen }: { titel:
     {zeitRelevant ? <div className="mt-2">
       <div className="flex flex-wrap gap-1.5">
         <button type="button" onClick={() => setForm({ ...form, vonZeit: '08:00', bisZeit: '19:00' })} className="rounded-full border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50">Tag 08:00–19:00</button>
-        <button type="button" onClick={() => setForm({ ...form, vonZeit: '', bisZeit: '' })} className="rounded-full border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50">Ohne Zeit (Standard {NACHTDIENST_VON}–{NACHTDIENST_BIS})</button>
+        <button type="button" onClick={() => setForm({ ...form, vonZeit: '', bisZeit: '' })} className="rounded-full border border-gray-300 px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50">{kategorie === 'dienst' ? `Ohne Zeit (Standard ${NACHTDIENST_VON}–${NACHTDIENST_BIS})` : 'Ohne Zeit (ganztägig)'}</button>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
         <input type="time" className={`${inputClass} mt-0 w-auto`} value={form.vonZeit} onChange={event => setForm({ ...form, vonZeit: event.target.value })} />
@@ -436,8 +440,12 @@ export default function DienstplanPlanung() {
       // Abwesenheitstag, siehe zaehleDienstarten/persoenlicheStundenUebersicht/
       // verfuegbareStunden).
       const kategorie = code ? kategorisiereRohtext(code) : 'sonstiges'
-      const vonZeit = kategorie === 'dienst' ? form.vonZeit : ''
-      const bisZeit = kategorie === 'dienst' ? form.bisZeit : ''
+      // Uhrzeit ist bei jeder Kategorie mit Kürzel sinnvoll (auch bei
+      // Abwesenheiten, z. B. ein Urlaubs-Halbtag) - nur eine sonst leere,
+      // rein farblich markierte Zelle (kein Kürzel, kategorie "sonstiges")
+      // bekommt keine Uhrzeit.
+      const vonZeit = code ? form.vonZeit : ''
+      const bisZeit = code ? form.bisZeit : ''
       const markierungId = markierungIdOhneCode
       aufgaben.push(dienstplanSupabase.rpc('dienstplan_dienst_setzen', {
         p_monat_id: monatRow.id, p_beamter_id: bearbeitung.beamterId, p_datum: bearbeitung.datum, p_zeile: nummer,
@@ -794,7 +802,7 @@ export default function DienstplanPlanung() {
                         <div className="flex flex-col items-center gap-0.5">
                           {/* uebertragWarnung-Icon bewusst in derselben Zeile wie das Kürzel (nicht als eigener Flex-Block darunter) - sonst wird nur die Tagzeile des 1. eines Monats durch die zusätzliche Zeile höher als alle anderen Tage. */}
                           <div className="flex items-center gap-0.5">
-                            {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : markierungFarben ? markierungFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
+                            {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : markierungFarben ? markierungFarben.text : 'text-gray-800'}`}>{formatDienstAnzeige(zeile)}</span>)}
                             {uebertragWarnung ? <AlertTriangle className="h-3 w-3 shrink-0 text-red-600" /> : null}
                           </div>
                           {vorschlag ? <span className="rounded border border-dashed border-blue-400 px-1 font-medium text-blue-700">{vorschlag.code}</span> : null}

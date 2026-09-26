@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, grundbesetzungCode, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
+import { automatischeSpaltenZuordnung, baueDienstePayload, extrahiereSollstundenEintraege, formatDienstAnzeige, grundbesetzungCode, istSpalteAktiv, kategorisiereRohtext, kuerzelKlartext, parseDienstCode, parseDienstplanGrid, sollstundenFuerMonat, type DienstplanProfilOption, type DienstplanSpaltenZuordnung, type DienstplanZelle } from './dienstplanImport'
 
 describe('parseDienstCode', () => {
   it('trennt Code und Uhrzeit bei einem einfachen Dienst', () => {
@@ -19,6 +19,21 @@ describe('parseDienstCode', () => {
   it('entfernt einen abschließenden Punkt/Komma aus dem Code (auch ohne Uhrzeit)', () => {
     expect(parseDienstCode('JD.')).toEqual({ code: 'JD', vonZeit: null, bisZeit: null })
     expect(parseDienstCode('ID.')).toEqual({ code: 'ID', vonZeit: null, bisZeit: null })
+  })
+})
+
+describe('formatDienstAnzeige', () => {
+  it('zeigt Kürzel + Uhrzeit, wenn eine Uhrzeit angegeben wurde (z. B. Zusatzdienst mit abweichender Zeit)', () => {
+    expect(formatDienstAnzeige({ rohtext: 'VD', von_zeit: '14:00', bis_zeit: '19:00' })).toBe('VD 14-19')
+  })
+  it('zeigt Minuten, wenn sie ungleich :00 sind', () => {
+    expect(formatDienstAnzeige({ rohtext: 'SVE', von_zeit: '08:15', bis_zeit: '12:30' })).toBe('SVE 08:15-12:30')
+  })
+  it('zeigt nur das Kürzel, wenn keine Uhrzeit angegeben wurde (z. B. Nachtdienst mit Standardzeit)', () => {
+    expect(formatDienstAnzeige({ rohtext: 'JD', von_zeit: null, bis_zeit: null })).toBe('JD')
+  })
+  it('zeigt bei einem Urlaubs-Halbtag Kürzel + Uhrzeit', () => {
+    expect(formatDienstAnzeige({ rohtext: 'U', von_zeit: '08:00', bis_zeit: '13:00' })).toBe('U 08-13')
   })
 })
 

@@ -57,6 +57,26 @@ export function parseDienstCode(rohtext: string): { code: string; vonZeit: strin
   return { code: code || rohtext.trim().replace(/[.,]$/, ''), vonZeit: `${pad2(vonStunde)}:${pad2(Number(m1 ?? 0))}`, bisZeit: `${pad2(bisStunde)}:${pad2(Number(m2 ?? 0))}` }
 }
 
+/** "08:00" -> "08" (volle Stunde ohne Minuten), "08:15" -> "08:15" (Minuten bleiben, wenn ungleich 00). */
+function formatZeitKurz(zeitRoh: string): string {
+  const zeit = zeitRoh.slice(0, 5)
+  return zeit.endsWith(':00') ? zeit.slice(0, 2) : zeit
+}
+
+/**
+ * Kürzel + Uhrzeit für die Anzeige im Dienstplan (Planer-Grid/Druckansicht),
+ * z. B. "VD 14-19" - nur wenn für diese Zeile eine Uhrzeit angegeben wurde
+ * (von_zeit/bis_zeit gesetzt, z. B. bei einem Urlaubs-Halbtag oder einem
+ * Zusatzdienst mit abweichender Zeit). Ohne Uhrzeit (z. B. Nachtdienst mit
+ * Standardzeit) nur das Kürzel - siehe dienstZeitraumMitNachtdienstDefault
+ * in lib/dienstplanAuswertung.ts für die implizite Standardzeit.
+ */
+export function formatDienstAnzeige(zeile: { rohtext: string; von_zeit: string | null; bis_zeit: string | null }): string {
+  const { code } = parseDienstCode(zeile.rohtext)
+  if (!zeile.von_zeit || !zeile.bis_zeit) return code
+  return `${code} ${formatZeitKurz(zeile.von_zeit)}-${formatZeitKurz(zeile.bis_zeit)}`
+}
+
 /**
  * Kategorisiert anhand des Dienst-Kürzels (nach Abzug einer evtl. Uhrzeit,
  * siehe parseDienstCode) - Reihenfolge ist wichtig ("SoUrl" enthält nicht
