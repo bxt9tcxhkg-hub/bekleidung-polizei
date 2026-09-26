@@ -270,7 +270,7 @@ export default function App() {
           <Route path="/meine-dienste" element={<ProtectedRoute><PortalChrome wide><MeineDienste /></PortalChrome></ProtectedRoute>} />
           <Route path="/dienstplan/einstellungen" element={<ProtectedRoute genehmigerOnly><PortalChrome wide><DienstplanEinstellungen /></PortalChrome></ProtectedRoute>} />
           <Route path="/meine-dienstwuensche" element={<ProtectedRoute><PortalChrome wide><MeineDienstwuensche /></PortalChrome></ProtectedRoute>} />
-          <Route path="/dienstplan/planung" element={<ProtectedRoute genehmigerOnly><PortalChrome wide><DienstplanPlanung /></PortalChrome></ProtectedRoute>} />
+          <Route path="/dienstplan/planung" element={<ProtectedRoute genehmigerOnly><PortalChrome wide="full"><DienstplanPlanung /></PortalChrome></ProtectedRoute>} />
           <Route
             path="/profil"
             element={
