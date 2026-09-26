@@ -64,9 +64,15 @@ export function generiereGrundbesetzungsVorschlag(parameter: VorschlagParameter)
     }
   }
 
+  // Gerichtsverhandlung/Schulverkehrserziehung-Termin/Personalvertretung-
+  // Sitzung sind dienstliche Termine, keine Freiplanungswünsche - sie
+  // erzeugen laut Kommandant KEINEN Widerspruch (der Planer soll den
+  // tatsächlichen Dienst weiterhin frei gestalten können), nur
+  // frei_tag/frei_nacht/urlaub blockieren einen Vorschlag.
   const widerspruchsWunsch = new Set<string>() // `${beamterId}|${datum}|${abschnitt}`
   for (const wunsch of wuensche) {
     if (wunsch.wunsch === 'urlaub') { widerspruchsWunsch.add(`${wunsch.beamterId}|${wunsch.datum}|tag`); widerspruchsWunsch.add(`${wunsch.beamterId}|${wunsch.datum}|nacht`); continue }
+    if (wunsch.wunsch !== 'frei_tag' && wunsch.wunsch !== 'frei_nacht') continue
     widerspruchsWunsch.add(`${wunsch.beamterId}|${wunsch.datum}|${wunsch.wunsch === 'frei_tag' ? 'tag' : 'nacht'}`)
   }
 
