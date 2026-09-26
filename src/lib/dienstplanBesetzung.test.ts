@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fehlendeGrundbesetzung, istUrlaubsKuerzel, kachelRang, tagOderNacht } from './dienstplanBesetzung'
+import { abschnittFuerAnzeige, absenzFarbe, fehlendeGrundbesetzung, kachelRang, tagOderNacht } from './dienstplanBesetzung'
 
 describe('tagOderNacht', () => {
   it('ordnet eine Zeile ohne Uhrzeit der Nacht zu', () => {
@@ -23,11 +23,26 @@ describe('kachelRang', () => {
   })
 })
 
-describe('istUrlaubsKuerzel', () => {
-  it('erkennt nur das exakte Kürzel U, unabhängig von Groß-/Kleinschreibung', () => {
-    expect(istUrlaubsKuerzel('U')).toBe(true)
-    expect(istUrlaubsKuerzel('u')).toBe(true)
-    expect(istUrlaubsKuerzel('VD')).toBe(false)
+describe('abschnittFuerAnzeige', () => {
+  it('ordnet Dienst-Zeilen anhand der Uhrzeit ein, Abwesenheiten immer der Tag-Zeile', () => {
+    expect(abschnittFuerAnzeige({ kategorie: 'dienst', von_zeit: '08:00' })).toBe('tag')
+    expect(abschnittFuerAnzeige({ kategorie: 'dienst', von_zeit: '22:00' })).toBe('nacht')
+    expect(abschnittFuerAnzeige({ kategorie: 'urlaub', von_zeit: null })).toBe('tag')
+    expect(abschnittFuerAnzeige({ kategorie: 'krank', von_zeit: null })).toBe('tag')
+  })
+})
+
+describe('absenzFarbe', () => {
+  it('markiert Urlaub/Sonderurlaub/Stundenersatz gelb, Krank grün, Karenz rosa', () => {
+    expect(absenzFarbe('urlaub')?.bg).toBe('bg-yellow-100')
+    expect(absenzFarbe('sonderurlaub')?.bg).toBe('bg-yellow-100')
+    expect(absenzFarbe('stundenersatz')?.bg).toBe('bg-yellow-100')
+    expect(absenzFarbe('krank')?.bg).toBe('bg-green-100')
+    expect(absenzFarbe('karenz')?.bg).toBe('bg-pink-100')
+  })
+  it('gibt für Dienst und Sonstiges keine Farbe zurück', () => {
+    expect(absenzFarbe('dienst')).toBeNull()
+    expect(absenzFarbe('sonstiges')).toBeNull()
   })
 })
 

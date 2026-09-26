@@ -20,8 +20,27 @@ export function kachelRang(code: string): number {
   return index === -1 ? KACHEL_REIHENFOLGE.length : index
 }
 
-/** Das Kürzel "U" (Urlaub) bekommt laut Kommandant keine eigene Dienst-Kachel, sondern reiht sich wie krank/Urlaub/Sonderurlaub/Karenz in die einfache Auflistung ein. */
-export function istUrlaubsKuerzel(code: string): boolean { return code.toUpperCase() === 'U' }
+/** Ganztägige Abwesenheiten (alles außer "dienst") haben keine Uhrzeit und damit auch keinen Tag-/Nachtbezug - sie werden laut Kommandant immer in der Tag-Zeile angezeigt statt (wie ein zeitloser Dienst) fälschlich in der Nacht-Zeile zu landen. */
+export function abschnittFuerAnzeige(zeile: { kategorie: DienstplanKategorieDb; von_zeit: string | null }): 'tag' | 'nacht' {
+  if (zeile.kategorie !== 'dienst') return 'tag'
+  return tagOderNacht(zeile.von_zeit)
+}
+
+/** Farbe je Abwesenheits-Kategorie (vom Kommandanten vorgegeben) - "dienst"/"sonstiges" bekommen keine eigene Farbe. */
+export function absenzFarbe(kategorie: DienstplanKategorieDb): { bg: string; text: string } | null {
+  switch (kategorie) {
+    case 'urlaub':
+    case 'sonderurlaub':
+    case 'stundenersatz':
+      return { bg: 'bg-yellow-100', text: 'text-yellow-900' }
+    case 'krank':
+      return { bg: 'bg-green-100', text: 'text-green-900' }
+    case 'karenz':
+      return { bg: 'bg-pink-100', text: 'text-pink-900' }
+    default:
+      return null
+  }
+}
 
 interface DienstZeileMitCode { datum: string; rohtext: string; von_zeit: string | null; kategorie: DienstplanKategorieDb }
 
