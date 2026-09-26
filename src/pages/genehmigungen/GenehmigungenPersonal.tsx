@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Clock3, FileOutput, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { ArrowLeftRight, Clock3, FileOutput, HelpCircle, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { fetchAllPages, supabase } from '../../lib/supabase'
+import { dienstplanSupabase, type DienstplanTauschantragRow } from '../../lib/dienstplanSupabase'
 import type { UeberstundenMeldung } from '../../lib/types'
 import { logAudit } from '../../lib/audit'
 import { formatStunden, formatZeitraum, totalStunden } from '../../lib/ueberstunden'
 import { generateUeberstundenPdf } from '../../lib/ueberstundenPdf'
 import { officerPrintName } from '../../lib/printDocs'
-import { Empty, GenehmigungenBereichHeader } from '../../components/genehmigungenShared'
+import { Actions, Empty, GenehmigungenBereichHeader } from '../../components/genehmigungenShared'
+
+function formatTauschDatum(iso: string): string {
+  const [jahr, monat, tag] = iso.split('-')
+  return `${tag}.${monat}.${jahr}`
+}
 
 // Bereichsseite "Personal" (Überstundenmeldungen) - eine der vier gleich
 // behandelten Genehmigungen-Bereichsseiten (siehe GenehmigungenUebersicht.tsx).
@@ -31,6 +37,38 @@ export default function GenehmigungenPersonal() {
   const [processing, setProcessing] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
+
+  // Diensttausch-Anträge (Dienstplan-Planung, Phase 5): direkter Antrag
+  // ohne Zustimmungsschritt der Zielperson - der Genehmiger entscheidet
+  // binär (kein "Rückfrage"-Zwischenstatus wie bei Überstunden).
+  const [tauschItems, setTauschItems] = useState<DienstplanTauschantragRow[]>([])
+  const [tauschNamen, setTauschNamen] = useState<Map<string, string>>(new Map())
+  const [tauschError, setTauschError] = useState('')
+  const [tauschProcessing, setTauschProcessing] = useState<string | null>(null)
+
+  const ladeTauschantraege = useCallback(async () => {
+    const result = await dienstplanSupabase.from('dienstplan_tauschantraege').select('*').eq('status', 'offen').order('beantragt_at', { ascending: true })
+    if (result.error) { setTauschError('Diensttausch-Anträge konnten nicht geladen werden.'); setTauschItems([]); return }
+    setTauschItems(result.data ?? [])
+    const beamterIds = new Set(result.data?.flatMap(antrag => [antrag.ursprung_beamter_id, antrag.ziel_beamter_id]) ?? [])
+    if (beamterIds.size > 0) {
+      const namenResult = await supabase.from('profiles').select('id,name').in('id', Array.from(beamterIds))
+      if (!namenResult.error) setTauschNamen(new Map((namenResult.data ?? []).map(person => [person.id, person.name])))
+    }
+  }, [])
+  useEffect(() => { void ladeTauschantraege() }, [ladeTauschantraege])
+
+  async function entscheideTausch(antrag: DienstplanTauschantragRow, genehmigt: boolean) {
+    setTauschProcessing(antrag.id); setTauschError('')
+    const result = await dienstplanSupabase.rpc('dienstplan_tauschantrag_entscheiden', { p_id: antrag.id, p_genehmigt: genehmigt })
+    setTauschProcessing(null)
+    if (result.error) { setTauschError(result.error.message || 'Die Entscheidung konnte nicht gespeichert werden.'); return }
+    logAudit(
+      `Diensttausch ${genehmigt ? 'genehmigt' : 'abgelehnt'}`,
+      `${tauschNamen.get(antrag.ursprung_beamter_id) ?? '–'} (${formatTauschDatum(antrag.ursprung_datum)}) ↔ ${tauschNamen.get(antrag.ziel_beamter_id) ?? '–'} (${formatTauschDatum(antrag.ziel_datum)})`,
+    )
+    await ladeTauschantraege()
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -88,7 +126,7 @@ export default function GenehmigungenPersonal() {
 
   return (
     <div>
-      <GenehmigungenBereichHeader title="Personal" description="Überstundenmeldungen zur Entscheidung." />
+      <GenehmigungenBereichHeader title="Personal" description="Überstundenmeldungen und Diensttausch-Anträge zur Entscheidung." />
 
       {loadError && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{loadError}</div>}
       {error && !ueberstundenDeciding && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}
@@ -127,6 +165,33 @@ export default function GenehmigungenPersonal() {
           )}
         </div>
       )}
+
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2"><ArrowLeftRight className="w-4 h-4" /> Diensttausch-Anträge</h2>
+        {tauschError && <div className="mb-3 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{tauschError}</div>}
+        {tauschItems.length === 0 ? (
+          <Empty icon={ArrowLeftRight} title="Keine offenen Diensttausch-Anträge" />
+        ) : (
+          <div className="space-y-3">
+            {tauschItems.map(antrag => (
+              <div key={antrag.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900">{tauschNamen.get(antrag.ursprung_beamter_id) ?? '–'} ↔ {tauschNamen.get(antrag.ziel_beamter_id) ?? '–'}</p>
+                    <p className="text-sm text-gray-700 mt-1">
+                      {tauschNamen.get(antrag.ursprung_beamter_id) ?? '–'}: {formatTauschDatum(antrag.ursprung_datum)} (Zeile {antrag.ursprung_zeile})
+                      {' '}⇄{' '}
+                      {tauschNamen.get(antrag.ziel_beamter_id) ?? '–'}: {formatTauschDatum(antrag.ziel_datum)} (Zeile {antrag.ziel_zeile})
+                    </p>
+                    {antrag.notiz ? <p className="text-sm text-gray-500 mt-1">„{antrag.notiz}"</p> : null}
+                  </div>
+                  <Actions disabled={tauschProcessing === antrag.id} onApprove={() => void entscheideTausch(antrag, true)} onReject={() => void entscheideTausch(antrag, false)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {ueberstundenDeciding && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

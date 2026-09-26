@@ -88,6 +88,26 @@ export type DienstplanWunschRow = {
   erstellt_at: string
 }
 
+export type DienstplanTauschStatus = 'offen' | 'genehmigt' | 'abgelehnt' | 'zurueckgezogen'
+
+export type DienstplanTauschantragRow = {
+  id: string
+  dienstplan_monat_id: string
+  ursprung_beamter_id: string
+  ursprung_datum: string
+  ursprung_zeile: 1 | 2
+  ziel_beamter_id: string
+  ziel_datum: string
+  ziel_zeile: 1 | 2
+  status: DienstplanTauschStatus
+  notiz: string | null
+  beantragt_von: string
+  beantragt_at: string
+  entschieden_von: string | null
+  entschieden_at: string | null
+  entscheidung_notiz: string | null
+}
+
 type DienstplanDatabase = {
   public: {
     Tables: {
@@ -127,6 +147,12 @@ type DienstplanDatabase = {
         Update: Partial<Omit<DienstplanWunschRow, 'id'>>
         Relationships: []
       }
+      dienstplan_tauschantraege: {
+        Row: DienstplanTauschantragRow
+        Insert: Omit<DienstplanTauschantragRow, 'id' | 'beantragt_at'>
+        Update: Partial<Omit<DienstplanTauschantragRow, 'id'>>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -149,6 +175,12 @@ type DienstplanDatabase = {
       dienstplan_dienst_loeschen: { Args: { p_monat_id: string; p_beamter_id: string; p_datum: string; p_zeile: 1 | 2 }; Returns: undefined }
       dienstplan_wunsch_setzen: { Args: { p_monat: string; p_datum: string; p_wunsch: DienstplanWunschTyp; p_notiz?: string | null }; Returns: undefined }
       dienstplan_wunsch_loeschen: { Args: { p_monat: string; p_datum: string; p_wunsch: DienstplanWunschTyp }; Returns: undefined }
+      dienstplan_tauschantrag_erstellen: {
+        Args: { p_ursprung_datum: string; p_ursprung_zeile: 1 | 2; p_ziel_beamter_id: string; p_ziel_datum: string; p_ziel_zeile: 1 | 2; p_notiz?: string | null }
+        Returns: string
+      }
+      dienstplan_tauschantrag_zurueckziehen: { Args: { p_id: string }; Returns: undefined }
+      dienstplan_tauschantrag_entscheiden: { Args: { p_id: string; p_genehmigt: boolean; p_notiz?: string | null }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
