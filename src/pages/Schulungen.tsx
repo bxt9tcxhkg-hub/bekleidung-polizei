@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { canManageSchulungen } from '../lib/schulungen'
 import EinsatzMaterials from './EinsatzMaterials'
@@ -35,6 +36,9 @@ export default function Schulungen() {
 
   return (
     <div>
+      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4">
+        <ArrowLeft className="w-4 h-4" /> Zum Portal
+      </Link>
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">Schulungen</h1>
         <p className="text-gray-500 text-sm mt-1">
