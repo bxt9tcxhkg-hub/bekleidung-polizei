@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Building2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
+import BackLink from '../../components/BackLink'
 import { useAuth } from '../../contexts/AuthContext'
 import { logAudit } from '../../lib/audit'
 import { supabase } from '../../lib/supabase'
@@ -129,7 +130,7 @@ export default function StammdatenKontaktePage({ context }: { context?: Contextu
   }
 
   return <div>
-    <Link to={context?.backTo ?? '/stammdaten'} className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> {context?.backLabel ?? 'Zu Stammdaten'}</Link>
+    <BackLink to={context?.backTo ?? '/stammdaten'} label={context?.backLabel ?? 'Zu Stammdaten'} className="mb-4" />
     <div className="mb-5"><p className="text-xs font-bold uppercase tracking-wider text-blue-700">{context ? `${context.areaLabel} · Nachschlagewerk` : 'Stammdaten & Nachschlagewerke'}</p><h1 className="text-2xl font-bold text-gray-900 mt-1">Kontakte</h1><p className="text-sm text-gray-500 mt-1">Dienstlich notwendige Kontakte und Rufbereitschaften, ergänzt um aktive Benutzer und künftig synchronisierte Outlook-Kontakte. Outlook-Kontakte können hier nicht bearbeitet werden.</p></div>
     {!canManage ? <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">Nur Nachschlageansicht. Änderungen erfolgen ausschließlich im Bereich Stammdaten.</div> : null}
     {sichtbareFunktionen.length > 0 ? <section className="mb-5 rounded-xl border border-gray-200 bg-white overflow-hidden">

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
+import BackLink from '../components/BackLink'
 import { useAuth } from '../contexts/AuthContext'
 import { canManageSchulungen } from '../lib/schulungen'
 import EinsatzMaterials from './EinsatzMaterials'
@@ -35,6 +36,7 @@ export default function Schulungen() {
 
   return (
     <div>
+      <BackLink to="/" label="Zum Portal" className="mb-4" />
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">Schulungen</h1>
         <p className="text-gray-500 text-sm mt-1">

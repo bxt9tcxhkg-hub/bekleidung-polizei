@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
+import BackLink from '../../components/BackLink'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import { useAuth } from '../../contexts/AuthContext'
@@ -434,14 +435,7 @@ export default function TrainingProtokollPanel({ canManage }: { canManage: boole
     const askMunition = shouldAskGeschossen(selectedModule)
     return (
       <div>
-        <button
-          type="button"
-          onClick={() => { setSelectedId(null); setError('') }}
-          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Alle Trainingstage
-        </button>
+        <BackLink onClick={() => { setSelectedId(null); setError('') }} label="Alle Trainingstage" className="mb-4" />
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
             <h3 className="text-base font-semibold text-gray-900">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Bike, Car, CheckCircle2 } from 'lucide-react'
+import { Bike, Car, CheckCircle2 } from 'lucide-react'
 import { Link, Navigate } from 'react-router-dom'
+import BackLink from '../components/BackLink'
 import { useAuth } from '../contexts/AuthContext'
 import { canManageFuhrpark } from '../lib/fuhrpark'
 import { supabase } from '../lib/supabase'
@@ -75,7 +76,7 @@ export default function FleetOpenItems() {
 
   return (
     <div>
-      <Link to="/fuhrpark" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Fahrzeugübersicht</Link>
+      <BackLink to="/fuhrpark" label="Zur Fahrzeugübersicht" className="mb-4" />
       <div className="mb-6"><h1 className="text-2xl font-bold text-gray-900">Offene Punkte</h1><p className="text-gray-500 text-sm mt-1">Mängel, Pflege, Werkstatt und Fristen über den gesamten Fuhrpark.</p></div>
 
       {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">{error}</div>}

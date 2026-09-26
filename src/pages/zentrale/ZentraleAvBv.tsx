@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, CheckCircle2, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, CheckCircle2, MapPin, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Navigate, useSearchParams } from 'react-router-dom'
+import BackLink from '../../components/BackLink'
 import { useAuth } from '../../contexts/AuthContext'
 import LeafletMap from '../../components/LeafletMap'
 import { ObjectAddressAutocomplete, PersonNameAutocomplete } from '../../components/RegisterPickers'
@@ -255,7 +256,7 @@ export default function ZentraleAvBvPage() {
   }
 
   return <div className="space-y-5">
-    <div><Link to="/zentrale" className="inline-flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4"><ArrowLeft className="w-4 h-4" /> Zur Zentrale</Link><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">BV/AV & einstweilige Verfügungen</h1><p className="text-sm text-gray-500 mt-1">Schutzbereiche und einsatzrelevante Hinweise – ergänzend zum führenden PAD-Akt.</p></div>
+    <div><BackLink to="/zentrale" label="Zur Zentrale" className="mb-4" /><p className="text-xs font-bold uppercase tracking-wider text-blue-700">Operativer Bereich · Zentrale</p><h1 className="text-2xl font-bold text-gray-900 mt-1">BV/AV & einstweilige Verfügungen</h1><p className="text-sm text-gray-500 mt-1">Schutzbereiche und einsatzrelevante Hinweise – ergänzend zum führenden PAD-Akt.</p></div>
     {error && !showForm ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
     {notice ? <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">{notice}</div> : null}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

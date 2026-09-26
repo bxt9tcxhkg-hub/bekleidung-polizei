@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Check, Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
+import BackLink from '../../components/BackLink'
 import { supabase } from '../../lib/supabase'
 import { logAudit } from '../../lib/audit'
 import type { SchulungCompletion, SchulungModule, SchulungRegistration, SchulungSession } from '../../lib/types'
@@ -105,9 +106,7 @@ export default function SchulungenProtokollPanel({ canManage }: { canManage: boo
   if (selected) {
     return (
       <div>
-        <button type="button" onClick={() => setSelectedId(null)} className="flex items-center gap-1.5 text-sm text-blue-700 hover:underline mb-4">
-          <ArrowLeft className="w-4 h-4" /> Zurück zur Terminliste
-        </button>
+        <BackLink onClick={() => setSelectedId(null)} label="Zurück zur Terminliste" className="mb-4" />
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 mb-4">
           <p className="font-medium text-gray-900">{formatCompletedOn(selected.session_date)} · {selectedModule?.name ?? 'Modul'}</p>
           {selected.note && <p className="text-sm text-gray-500 mt-1">{selected.note}</p>}
