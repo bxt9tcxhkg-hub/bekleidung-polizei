@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CalendarDays, CalendarRange, CheckCircle2, Moon, Sparkles, Sun, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, CalendarRange, CheckCircle2, Moon, Printer, Sparkles, Sun, X } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { isAustrianHoliday } from '../lib/austrianHolidays'
+import { officerPrintName } from '../lib/printDocs'
+import { generateDienstplanDruckPdf } from '../lib/dienstplanDruckPdf'
 import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanWunschTyp } from '../lib/dienstplanSupabase'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
@@ -129,7 +132,14 @@ function ZeileEditor({ titel, form, setForm, entfernen }: { titel: string; form:
   </div>
 }
 
+const DE_MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+function monatLangLabel(monatIso: string): string {
+  const [jahr, monatNr] = monatIso.split('-').map(Number)
+  return `${DE_MONATE[monatNr - 1]} ${jahr}`
+}
+
 export default function DienstplanPlanung() {
+  const { profile } = useAuth()
   const [monat, setMonat] = useState(thisMonthLocal())
   const [monatRow, setMonatRow] = useState<{ id: string; status: string } | null>(null)
   const [mindestruhezeitStunden, setMindestruhezeitStunden] = useState(11)
@@ -320,6 +330,18 @@ export default function DienstplanPlanung() {
     if (result.error) { setError('Der Monat konnte nicht veröffentlicht werden.'); return }
     setNotice('Der Monat ist jetzt veröffentlicht.')
     setMonatRow(current => current ? { ...current, status: 'veroeffentlicht' } : current)
+  }
+
+  // Druck-/Exportansicht (Phase 6) - reine Darstellung der bereits
+  // geladenen Monatsdaten, kein zusätzlicher Datenbankzugriff nötig.
+  function druckAusgeben() {
+    generateDienstplanDruckPdf({
+      monatLabel: monatLangLabel(monat),
+      bearbeiterName: officerPrintName(profile),
+      personen: mitarbeiter,
+      tage,
+      dienste,
+    })
   }
 
   function zeileZuForm(zeile: DienstZeile | undefined): ZeileForm {
@@ -585,6 +607,7 @@ export default function DienstplanPlanung() {
             </> : <button type="button" onClick={vorschlagGenerieren} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><Sparkles className="h-3.5 w-3.5" /> Vorschlag generieren</button>}
             {istTouchGeraet ? <button type="button" onClick={() => { setZeitraumError(''); setZeitraumModal(true) }} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><CalendarRange className="h-3.5 w-3.5" /> Zeitraum eintragen</button> : null}
             {monatRow.status !== 'veroeffentlicht' ? <button type="button" disabled={veroeffentlichen} onClick={() => void monatVeroeffentlichen()} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 disabled:opacity-50"><CheckCircle2 className="h-3.5 w-3.5" /> {veroeffentlichen ? 'Wird veröffentlicht…' : 'Veröffentlichen'}</button> : null}
+            {monatRow.status === 'veroeffentlicht' ? <button type="button" onClick={druckAusgeben} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"><Printer className="h-3.5 w-3.5" /> Drucken/Exportieren</button> : null}
           </div>
         </div>
 
