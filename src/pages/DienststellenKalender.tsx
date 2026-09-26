@@ -6,7 +6,7 @@ import { inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal, todayLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON } from '../lib/dienstplanAuswertung'
 import { parseDienstCode } from '../lib/dienstplanImport'
-import { KACHEL_IMMER_SICHTBAR, fehlendeGrundbesetzung, istUrlaubsKuerzel, kachelRang, tagOderNacht } from '../lib/dienstplanBesetzung'
+import { KACHEL_IMMER_SICHTBAR, abschnittFuerAnzeige, absenzFarbe, fehlendeGrundbesetzung, kachelRang } from '../lib/dienstplanBesetzung'
 import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImport'
 
 // Dienststellenkalender: zeigt für den gewählten (veröffentlichten) Monat
@@ -18,25 +18,20 @@ import { MINDESTBESETZUNG, type GrundbesetzungCode } from '../lib/dienstplanImpo
 // Kommandant das Kürzel, keine ausgeschriebene Bezeichnung. Die
 // Grundbesetzung Z/ID/JD wird laut Kommandant fix vorne gereiht (siehe
 // KACHEL_REIHENFOLGE) und immer angezeigt (auch "nicht besetzt"), die
-// restlichen Kacheln alphabetisch danach. Das Kürzel "U" (Urlaub) sowie
-// bereits als krank/Urlaub/Sonderurlaub/Karenz kategorisierte Zeilen
-// bekommen laut Kommandant keine eigene Kachel, sondern bleiben eine
-// einfache Auflistung je Person. Für jede/n aktive/n Bediensteten sichtbar
-// (siehe Migration 20260925051510_dienstplan_dienststellenweit_lesen.sql),
-// keine eigene Bereichsberechtigung nötig - wer Dienst hat, ist
-// Basisinformation für die ganze Dienststelle. Rein lesend; Bearbeitung
-// passiert ausschließlich über den monatlichen Import.
+// restlichen Kacheln alphabetisch danach. Urlaub/Krank/Sonderurlaub/Karenz/
+// Stundenersatz bekommen laut Kommandant ebenfalls eine eigene Kachel (wie
+// jeder andere Dienst-Code) statt einer separaten Liste, landen aber wegen
+// fehlender Uhrzeit immer in der Tag-Zeile (siehe abschnittFuerAnzeige) und
+// werden farblich markiert wie im Planer-Grid (siehe absenzFarbe). Für
+// jede/n aktive/n Bediensteten sichtbar (siehe Migration
+// 20260925051510_dienstplan_dienststellenweit_lesen.sql), keine eigene
+// Bereichsberechtigung nötig - wer Dienst hat, ist Basisinformation für die
+// ganze Dienststelle. Rein lesend; Bearbeitung passiert ausschließlich über
+// den monatlichen Import.
 
 interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb }
 interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
 
-const KATEGORIE_BADGE: Partial<Record<DienstplanKategorieDb, string>> = {
-  krank: 'bg-red-100 text-red-700',
-  urlaub: 'bg-amber-100 text-amber-800',
-  sonderurlaub: 'bg-blue-100 text-blue-700',
-  karenz: 'bg-purple-100 text-purple-700',
-  stundenersatz: 'bg-amber-100 text-amber-800',
-}
 const KATEGORIE_LABEL: Partial<Record<DienstplanKategorieDb, string>> = {
   krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz', stundenersatz: 'Stundenersatz',
 }
@@ -68,21 +63,23 @@ function kalenderWochen(monatIso: string): (string | null)[][] {
   return wochen
 }
 
-interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null }
+interface KachelEintrag { beamterId: string; name: string; dienstnummer: string | null; vonZeit: string | null; bisZeit: string | null; kategorie: DienstplanKategorieDb }
 interface DienstKachelDaten { code: string; eintraege: KachelEintrag[] }
-interface AbwesenheitEintrag { beamterId: string; name: string; dienstnummer: string | null; texte: string[]; kategorie: DienstplanKategorieDb }
 interface ZeitabschnittUebersicht { kacheln: DienstKachelDaten[] }
-interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht; abwesenheiten: AbwesenheitEintrag[] }
+interface TagesUebersicht { datum: string; tag: ZeitabschnittUebersicht; nacht: ZeitabschnittUebersicht }
 
 function Kachel({ code, eintraege, erforderlich }: { code: string; eintraege: KachelEintrag[]; erforderlich: number }) {
   const unterbesetzt = eintraege.length < erforderlich
-  return <div className={`rounded-lg border p-2.5 ${unterbesetzt ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
-    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{code}{erforderlich > 1 ? ` (${eintraege.length}/${erforderlich})` : ''}</p>
+  const farbe = eintraege[0] ? absenzFarbe(eintraege[0].kategorie) : null
+  return <div className={`rounded-lg border p-2.5 ${farbe ? `border-transparent ${farbe.bg}` : unterbesetzt ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'}`}>
+    <p className={`text-xs font-semibold uppercase tracking-wide ${farbe ? farbe.text : 'text-gray-500'}`}>{code}{erforderlich > 1 ? ` (${eintraege.length}/${erforderlich})` : ''}</p>
     {unterbesetzt ? <p className="mt-1 flex items-center gap-1 text-sm font-medium text-red-700"><AlertTriangle className="h-3.5 w-3.5 flex-none" /> {eintraege.length === 0 ? 'nicht besetzt' : 'unterbesetzt'}</p> : null}
     {eintraege.length > 0 ? <div className="mt-1 space-y-0.5">
-      {eintraege.map(eintrag => <p key={eintrag.beamterId} className="text-sm font-medium text-gray-800">
+      {eintraege.map(eintrag => <p key={eintrag.beamterId} className={`text-sm font-medium ${farbe ? farbe.text : 'text-gray-800'}`}>
         {eintrag.name}
-        <span className="ml-1.5 font-mono text-xs font-normal text-gray-500">{eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`}</span>
+        <span className={`ml-1.5 font-mono text-xs font-normal ${farbe ? farbe.text : 'text-gray-500'}`}>
+          {eintrag.kategorie !== 'dienst' ? (KATEGORIE_LABEL[eintrag.kategorie] ?? '') : eintrag.vonZeit && eintrag.bisZeit ? `${eintrag.vonZeit}–${eintrag.bisZeit}` : `${NACHTDIENST_VON}–${NACHTDIENST_BIS}`}
+        </span>
       </p>)}
     </div> : null}
   </div>
@@ -156,58 +153,55 @@ export default function DienststellenKalender() {
   }
 
   // Jede Rohzeile einzeln (nicht mehr je Person zusammengefasst) zunächst
-  // nach Tagdienst/Nachtdienst (siehe tagOderNacht) und dann einer Kachel je
-  // Dienst-Kürzel zuordnen (kombinierte Codes wie "SVE/TD" bleiben eine
-  // Kachel). Das Kürzel "U" sowie krank/Urlaub/Sonderurlaub/Karenz bleiben
-  // eine einfache Liste je Person. Dieselbe Person mit zwei Rohzeilen an
-  // einem Tag (zeile 1/2, Bedeutung des Zusammenspiels noch nicht
-  // abschließend geklärt, siehe lib/dienstplanImport.ts) kann dadurch
-  // theoretisch in mehreren Kacheln auftauchen; in der Praxis trägt an einem
-  // Tag pro Code eine andere Person die jeweilige Rohzeile.
+  // nach Tagdienst/Nachtdienst (siehe abschnittFuerAnzeige) und dann einer
+  // Kachel je Dienst-Kürzel zuordnen (kombinierte Codes wie "SVE/TD" bleiben
+  // eine Kachel) - Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz bekommen
+  // dabei ganz genauso eine eigene Kachel wie jeder andere Dienst-Code.
+  // Dieselbe Person mit zwei Rohzeilen an einem Tag (zeile 1/2, Bedeutung
+  // des Zusammenspiels noch nicht abschließend geklärt, siehe
+  // lib/dienstplanImport.ts) kann dadurch theoretisch in mehreren Kacheln
+  // auftauchen; in der Praxis trägt an einem Tag pro Code eine andere
+  // Person die jeweilige Rohzeile.
   const tage = useMemo(() => {
-    const proTag = new Map<string, { tag: ReturnType<typeof neuerZeitabschnitt>; nacht: ReturnType<typeof neuerZeitabschnitt>; abwesenheitenMap: Map<string, AbwesenheitEintrag> }>()
+    const proTag = new Map<string, { tag: ReturnType<typeof neuerZeitabschnitt>; nacht: ReturnType<typeof neuerZeitabschnitt> }>()
     for (const zeile of dienste) {
       const person = mitarbeiterById.get(zeile.beamter_id)
       if (!person) continue
       let tagesEintrag = proTag.get(zeile.datum)
-      if (!tagesEintrag) { tagesEintrag = { tag: neuerZeitabschnitt(), nacht: neuerZeitabschnitt(), abwesenheitenMap: new Map() }; proTag.set(zeile.datum, tagesEintrag) }
+      if (!tagesEintrag) { tagesEintrag = { tag: neuerZeitabschnitt(), nacht: neuerZeitabschnitt() }; proTag.set(zeile.datum, tagesEintrag) }
 
-      if (zeile.kategorie === 'dienst') {
-        const { code } = parseDienstCode(zeile.rohtext)
-        if (!istUrlaubsKuerzel(code)) {
-          const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit }
-          const abschnitt = tagOderNacht(zeile.von_zeit) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
-          const schluessel = code.toUpperCase()
-          let kachel = abschnitt.get(schluessel)
-          if (!kachel) { kachel = { code, eintraege: [] }; abschnitt.set(schluessel, kachel) }
-          kachel.eintraege.push(kachelEintrag)
-          continue
-        }
-      }
-
-      let abwesenheit = tagesEintrag.abwesenheitenMap.get(zeile.beamter_id)
-      if (!abwesenheit) {
-        abwesenheit = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, texte: [], kategorie: zeile.kategorie === 'dienst' ? 'urlaub' : zeile.kategorie }
-        tagesEintrag.abwesenheitenMap.set(zeile.beamter_id, abwesenheit)
-      }
-      abwesenheit.texte.push(zeile.rohtext)
+      const { code } = parseDienstCode(zeile.rohtext)
+      const kachelEintrag: KachelEintrag = { beamterId: zeile.beamter_id, name: person.name, dienstnummer: person.dienstnummer, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie }
+      const abschnitt = abschnittFuerAnzeige(zeile) === 'tag' ? tagesEintrag.tag : tagesEintrag.nacht
+      const schluessel = code.toUpperCase()
+      let kachel = abschnitt.get(schluessel)
+      if (!kachel) { kachel = { code, eintraege: [] }; abschnitt.set(schluessel, kachel) }
+      kachel.eintraege.push(kachelEintrag)
     }
     const zuUebersicht = (abschnitt: ReturnType<typeof neuerZeitabschnitt>): ZeitabschnittUebersicht => ({
       kacheln: Array.from(abschnitt.values()).sort((a, b) => kachelRang(a.code) - kachelRang(b.code) || a.code.localeCompare(b.code, 'de-AT')),
     })
     return Array.from(proTag.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([datum, { tag, nacht, abwesenheitenMap }]): TagesUebersicht => ({
-        datum,
-        tag: zuUebersicht(tag),
-        nacht: zuUebersicht(nacht),
-        abwesenheiten: Array.from(abwesenheitenMap.values()).sort((a, b) => a.name.localeCompare(b.name, 'de-AT')),
-      }))
+      .map(([datum, { tag, nacht }]): TagesUebersicht => ({ datum, tag: zuUebersicht(tag), nacht: zuUebersicht(nacht) }))
   }, [dienste, mitarbeiterById])
 
   const tageMap = useMemo(() => new Map(tage.map(eintrag => [eintrag.datum, eintrag])), [tage])
   const alleTage = useMemo(() => tageImMonat(monat), [monat])
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, alleTage), [dienste, alleTage])
+  // Anzahl abwesender Personen je Tag (krank/Urlaub/Sonderurlaub/Karenz/
+  // Stundenersatz) für den kompakten Hinweis im Kalenderraster - unabhängig
+  // von den Kacheln, da eine Person pro Tag nur einmal zählen soll.
+  const abwesenheitenAnzahlProTag = useMemo(() => {
+    const proTag = new Map<string, Set<string>>()
+    for (const zeile of dienste) {
+      if (zeile.kategorie === 'dienst') continue
+      let personen = proTag.get(zeile.datum)
+      if (!personen) { personen = new Set(); proTag.set(zeile.datum, personen) }
+      personen.add(zeile.beamter_id)
+    }
+    return new Map(Array.from(proTag.entries()).map(([datum, personen]) => [datum, personen.size]))
+  }, [dienste])
   const wochen = useMemo(() => kalenderWochen(monat), [monat])
   const heute = todayLocal()
   const ausgewaehlteUebersicht = ausgewaehlterTag ? tageMap.get(ausgewaehlterTag) : undefined
@@ -232,7 +226,7 @@ export default function DienststellenKalender() {
               if (!datum) return <div key={`${wocheIndex}-${tagIndex}`} />
               const tagText = datum.slice(-2)
               const fehlend = fehlendeGrund.get(datum)
-              const abwesenheitenAnzahl = tageMap.get(datum)?.abwesenheiten.length ?? 0
+              const abwesenheitenAnzahl = abwesenheitenAnzahlProTag.get(datum) ?? 0
               const istHeute = datum === heute
               const istAusgewaehlt = datum === ausgewaehlterTag
               return <button key={datum} type="button" onClick={() => setAusgewaehlterTag(datum)}
@@ -259,12 +253,6 @@ export default function DienststellenKalender() {
                 <Zeitabschnitt titel="Tagdienste" daten={ausgewaehlteUebersicht.tag} />
                 <Zeitabschnitt titel="Nachtdienste" daten={ausgewaehlteUebersicht.nacht} />
               </div>
-              {ausgewaehlteUebersicht.abwesenheiten.length > 0 ? <div className="mt-3 space-y-1.5 border-t border-gray-100 pt-3">
-                {ausgewaehlteUebersicht.abwesenheiten.map(eintrag => <div key={eintrag.beamterId} className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="w-40 flex-none font-medium text-gray-800">{eintrag.name}{eintrag.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {eintrag.dienstnummer})</span> : null}</span>
-                  {KATEGORIE_LABEL[eintrag.kategorie] ? <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${KATEGORIE_BADGE[eintrag.kategorie]}`}>{KATEGORIE_LABEL[eintrag.kategorie]}</span> : null}
-                </div>)}
-              </div> : null}
             </div>}
         </div>
       </div>}

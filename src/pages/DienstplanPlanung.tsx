@@ -10,7 +10,7 @@ import { Modal, Actions, ErrorMessage, inputClass } from '../components/Zentrale
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
 import { kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
-import { fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
+import { abschnittFuerAnzeige, absenzFarbe, fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { berechneSollstunden, istWerktag, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
@@ -67,28 +67,6 @@ function datumAusIso(datumIso: string): Date {
 function wunschBetrifftAbschnitt(wunsch: DienstplanWunschTyp, abschnitt: 'tag' | 'nacht'): boolean {
   if (wunsch === 'urlaub') return true
   return wunsch === (abschnitt === 'tag' ? 'frei_tag' : 'frei_nacht')
-}
-
-/** Ganztägige Abwesenheiten (alles außer "dienst") haben keine Uhrzeit und damit auch keinen Tag-/Nachtbezug - sie werden laut Kommandant immer in der Tag-Zeile angezeigt statt (wie ein zeitloser Dienst) fälschlich in der Nacht-Zeile zu landen. */
-function abschnittFuerAnzeige(zeile: Pick<DienstZeile, 'kategorie' | 'von_zeit'>): 'tag' | 'nacht' {
-  if (zeile.kategorie !== 'dienst') return 'tag'
-  return tagOderNacht(zeile.von_zeit)
-}
-
-/** Farbe je Abwesenheits-Kategorie für die Zellen im Planer-Grid (vom Kommandanten vorgegeben) - "dienst"/"sonstiges" bekommen keine eigene Farbe. */
-function absenzFarbe(kategorie: DienstplanKategorieDb): { bg: string; text: string } | null {
-  switch (kategorie) {
-    case 'urlaub':
-    case 'sonderurlaub':
-    case 'stundenersatz':
-      return { bg: 'bg-yellow-100', text: 'text-yellow-900' }
-    case 'krank':
-      return { bg: 'bg-green-100', text: 'text-green-900' }
-    case 'karenz':
-      return { bg: 'bg-pink-100', text: 'text-pink-900' }
-    default:
-      return null
-  }
 }
 
 const QUICK_KUERZEL = ['Z', 'ID', 'JD', 'VD', 'TD', 'ET', 'SVE', 'RA', 'BHF', 'KFZ', 'MOT', 'PV', 'SCH', 'ZIV']
