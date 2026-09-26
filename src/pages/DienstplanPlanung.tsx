@@ -586,7 +586,7 @@ export default function DienstplanPlanung() {
           <button type="button" onClick={() => setAuswahl(new Set())} className="text-xs text-blue-800 hover:underline">Auswahl aufheben</button>
         </div> : null}
 
-        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="mt-4 max-h-[70vh] overflow-auto rounded-xl border border-gray-200 bg-white">
           <table className="text-xs">
             <thead>
               <tr>
