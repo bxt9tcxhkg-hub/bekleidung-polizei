@@ -13,7 +13,12 @@
 -- und Schichten lesen. Stattdessen korreliert die Policy direkt gegen
 -- duty_assignments: nur wer laut Diensteinteilung an genau diesem duty_date
 -- in genau dieser Schicht Innendienst hat, bekommt zusätzlich zur eigenen
--- Zeile auch die der/des Vorgängerin/Vorgängers zu sehen.
+-- Zeile auch die der/des Vorgängerin/Vorgängers zu sehen. duty_assignments
+-- bleibt als Diensteinteilungshistorie dauerhaft bestehen (kein Aufräumen
+-- alter Zeilen) - ohne zusätzliche Begrenzung auf den aktuellen Diensttag
+-- würde jede eigene vergangene Innendienst-Zuteilung dauerhaft als Schlüssel
+-- für die Kassenzeilen desselben Tages/derselben Schicht aller Kolleg/innen
+-- dienen, weit über die eigentliche Schichtübernahme hinaus.
 alter policy "Schichtaufgaben lesen" on public.innendienst_shift_tasks
  using (
    user_id=(select auth.uid())
@@ -22,6 +27,7 @@ alter policy "Schichtaufgaben lesen" on public.innendienst_shift_tasks
      select 1 from public.duty_assignments d
      where d.user_id=(select auth.uid())
        and d.function='innendienst'
+       and d.duty_date=public.operational_today()
        and d.duty_date=innendienst_shift_tasks.duty_date
        and d.shift=innendienst_shift_tasks.shift
    )
