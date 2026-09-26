@@ -9,7 +9,7 @@ import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanMarkieru
 import { besondererTagFarbe, besondererTagFarbKlassen, kategorieFarbenMap, kategorieFarbKlassen, markierungFarbKlassen } from '../lib/dienstplanMarkierungen'
 import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
-import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
+import { dienstZeitraum, NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht, zaehleDienstarten } from '../lib/dienstplanAuswertung'
 import { formatDienstAnzeige, kategorisiereRohtext, parseDienstCode } from '../lib/dienstplanImport'
 import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, tagOderNacht } from '../lib/dienstplanBesetzung'
 import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
@@ -341,8 +341,25 @@ export default function DienstplanPlanung() {
       const zeilen = dienstePerPerson.get(person.id) ?? []
       const grad = beschaeftigungsgrade.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
       const soll = berechneSollstunden(monat, stundenProWerktag, grad)
-      const abwesenheitsTage = new Set(zeilen.filter(zeile => zeile.kategorie !== 'dienst' && zeile.kategorie !== 'sonstiges' && istWerktag(datumAusIso(zeile.datum))).map(zeile => zeile.datum))
-      const geplant = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsTage.size * stundenProWerktag
+      // Eine Abwesenheit (Urlaub/Krank/...) an einem Werktag zieht Sollstunden
+      // ab - mit angegebener Uhrzeit (z. B. ein Urlaubs-Halbtag "U 14-19")
+      // nur die tatsächliche Dauer, ohne Uhrzeit weiterhin den vollen
+      // Tageswert (stundenProWerktag). Ganztägige Abwesenheiten desselben
+      // Tages werden über ein Set dedupliziert (zeile 1+2 desselben Tages
+      // sollen nicht doppelt den vollen Tageswert abziehen).
+      const ganztaegigeAbwesenheitsTage = new Set<string>()
+      let abwesenheitsStunden = 0
+      for (const zeile of zeilen) {
+        if (zeile.kategorie === 'dienst' || zeile.kategorie === 'sonstiges' || !istWerktag(datumAusIso(zeile.datum))) continue
+        if (zeile.von_zeit && zeile.bis_zeit) {
+          const zeitraum = dienstZeitraum({ datum: zeile.datum, von_zeit: zeile.von_zeit, bis_zeit: zeile.bis_zeit })
+          if (zeitraum) abwesenheitsStunden += (zeitraum.bis.getTime() - zeitraum.von.getTime()) / 3_600_000
+        } else {
+          ganztaegigeAbwesenheitsTage.add(zeile.datum)
+        }
+      }
+      abwesenheitsStunden += ganztaegigeAbwesenheitsTage.size * stundenProWerktag
+      const geplant = persoenlicheStundenUebersicht(zeilen).gesamt + abwesenheitsStunden
       ergebnis.set(person.id, soll - geplant)
     }
     return ergebnis
