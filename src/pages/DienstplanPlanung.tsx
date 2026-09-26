@@ -242,7 +242,7 @@ export default function DienstplanPlanung() {
     return map
   }, [dienste])
 
-  // Für die Kopfzeile: Kommando/Dienstführung/Übrige-Blöcke als
+  // Für die Kopfzeile: Kommando/Dienstführung/Beamte-Blöcke als
   // zusammenhängende Spaltengruppen (mitarbeiter ist bereits per
   // sortiereNachDienstplanGruppe geordnet, siehe load()).
   const personGruppenSpans = useMemo(() => {

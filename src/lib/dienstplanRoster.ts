@@ -26,7 +26,7 @@ export function dienstplanGruppe(dienstnummer: string | null): DienstplanGruppe 
 export const DIENSTPLAN_GRUPPE_LABEL: Record<DienstplanGruppe, string> = {
   kommando: 'Kommando',
   dienstfuehrung: 'Dienstführung',
-  einsatz: 'Übrige',
+  einsatz: 'Beamte',
 }
 
 /** Kommando wird nicht automatisch für Grundbesetzung vorgeschlagen/gezählt - Dienstführung schon. */
