@@ -200,7 +200,7 @@ export default function App() {
               <Route path="/aussendienst" element={<AussendienstUebersicht />} />
               <Route path="/aussendienst/einsaetze" element={<AussendienstEinsaetze />} />
               <Route path="/aussendienst/kontrollauftraege" element={<KontrollauftraegePage />} />
-              <Route path="/aussendienst/rsa-rsb" element={<RsaRsb />} />
+              <Route path="/aussendienst/rsa-rsb" element={<RsaRsb context={{ areaLabel: 'Außendienst', backTo: '/aussendienst', backLabel: 'Zum Außendienst' }} />} />
               <Route path="/aussendienst/hinweise" element={<AussendienstHinweise />} />
               <Route path="/aussendienst/fahrzeug" element={<AussendienstFahrzeug />} />
               <Route path="/aussendienst/kontrollbehelfe" element={<AussendienstKontrollbehelfe />} />
