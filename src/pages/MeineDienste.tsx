@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
+import { ArrowLeftRight, CalendarDays } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { dienstplanSupabase, type DienstplanKategorieDb } from '../lib/dienstplanSupabase'
-import { inputClass } from '../components/ZentraleEntryEditor'
+import { supabase } from '../lib/supabase'
+import { dienstplanSupabase, type DienstplanKategorieDb, type DienstplanTauschantragRow } from '../lib/dienstplanSupabase'
+import { Modal, Actions, ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { formatStunden, thisMonthLocal } from '../lib/ueberstunden'
 import { NACHTDIENST_BIS, NACHTDIENST_VON, persoenlicheStundenUebersicht } from '../lib/dienstplanAuswertung'
 import { kuerzelKlartext, parseDienstCode } from '../lib/dienstplanImport'
+import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // "Meine Dienste": eigene Diensteinträge des importierten Dienstplans für
 // einen gewählten Monat, plus eine automatisch aus den Uhrzeiten berechnete
@@ -30,6 +32,14 @@ const KATEGORIE_LABEL: Partial<Record<DienstplanKategorieDb, string>> = {
   krank: 'krank', urlaub: 'Urlaub', sonderurlaub: 'Sonderurlaub', karenz: 'Karenz', stundenersatz: 'Stundenersatz',
 }
 
+const TAUSCH_STATUS_LABEL: Record<DienstplanTauschantragRow['status'], string> = {
+  offen: 'Offen', genehmigt: 'Genehmigt', abgelehnt: 'Abgelehnt', zurueckgezogen: 'Zurückgezogen',
+}
+const TAUSCH_STATUS_FARBE: Record<DienstplanTauschantragRow['status'], string> = {
+  offen: 'bg-amber-100 text-amber-800', genehmigt: 'bg-green-100 text-green-800', abgelehnt: 'bg-red-100 text-red-700', zurueckgezogen: 'bg-gray-100 text-gray-600',
+}
+interface MitarbeiterOption { id: string; name: string }
+
 export default function MeineDienste() {
   const { profile } = useAuth()
   const profileId = profile?.id
@@ -39,6 +49,13 @@ export default function MeineDienste() {
   const [dienste, setDienste] = useState<DienstZeile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
+  const [meineAntraege, setMeineAntraege] = useState<DienstplanTauschantragRow[]>([])
+  const [tauschModal, setTauschModal] = useState<{ datum: string; zeile: 1 | 2 } | null>(null)
+  const [tauschForm, setTauschForm] = useState({ zielBeamterId: '', zielDatum: '', zielZeile: '1' as '1' | '2', notiz: '' })
+  const [tauschSpeichern, setTauschSpeichern] = useState(false)
+  const [tauschError, setTauschError] = useState('')
 
   const load = useCallback(async () => {
     if (!profileId) return
@@ -57,6 +74,19 @@ export default function MeineDienste() {
     setLoading(false)
   }, [monat, profileId])
   useEffect(() => { void load() }, [load])
+
+  const ladeAntraege = useCallback(async () => {
+    if (!profileId) return
+    const result = await dienstplanSupabase.from('dienstplan_tauschantraege').select('*').or(`beantragt_von.eq.${profileId},ziel_beamter_id.eq.${profileId}`).order('beantragt_at', { ascending: false })
+    if (!result.error) setMeineAntraege(result.data ?? [])
+  }, [profileId])
+  useEffect(() => { void ladeAntraege() }, [ladeAntraege])
+
+  useEffect(() => {
+    void supabase.from('profiles').select('id,name').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name').then(result => {
+      setMitarbeiter((result.data ?? []).filter(person => person.id !== profileId))
+    })
+  }, [profileId])
 
   // Beim ersten Laden auf den vom Genehmiger hinterlegten "aktuellen
   // Dienstplan" springen (dienstplan_regeln.aktueller_planungsmonat) - die
@@ -82,6 +112,33 @@ export default function MeineDienste() {
   }, [dienste])
 
   const uebersicht = useMemo(() => persoenlicheStundenUebersicht(dienste), [dienste])
+
+  function oeffneTauschModal(datum: string, zeile: 1 | 2) {
+    setTauschModal({ datum, zeile })
+    setTauschForm({ zielBeamterId: '', zielDatum: '', zielZeile: '1', notiz: '' })
+    setTauschError('')
+  }
+
+  async function tauschAbsenden() {
+    if (!tauschModal) return
+    if (!tauschForm.zielBeamterId) { setTauschError('Bitte eine Kollegin/einen Kollegen wählen.'); return }
+    if (!tauschForm.zielDatum) { setTauschError('Bitte ein Zieldatum wählen.'); return }
+    setTauschSpeichern(true); setTauschError('')
+    const result = await dienstplanSupabase.rpc('dienstplan_tauschantrag_erstellen', {
+      p_ursprung_datum: tauschModal.datum, p_ursprung_zeile: tauschModal.zeile,
+      p_ziel_beamter_id: tauschForm.zielBeamterId, p_ziel_datum: tauschForm.zielDatum, p_ziel_zeile: Number(tauschForm.zielZeile) as 1 | 2,
+      p_notiz: tauschForm.notiz.trim() || null,
+    })
+    setTauschSpeichern(false)
+    if (result.error) { setTauschError(result.error.message.includes('Kein') || result.error.message.includes('Tausch') ? result.error.message : 'Der Tauschantrag konnte nicht gestellt werden.'); return }
+    setTauschModal(null)
+    await ladeAntraege()
+  }
+
+  async function tauschZurueckziehen(id: string) {
+    const result = await dienstplanSupabase.rpc('dienstplan_tauschantrag_zurueckziehen', { p_id: id })
+    if (!result.error) await ladeAntraege()
+  }
 
   return <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -125,15 +182,59 @@ export default function MeineDienste() {
               {zeilen.map((zeile, index) => {
                 const nachtdienst = zeile.kategorie === 'dienst' && !zeile.von_zeit
                 const zeitAnzeige = zeile.von_zeit && zeile.bis_zeit ? `${zeile.von_zeit}–${zeile.bis_zeit}` : nachtdienst ? `${NACHTDIENST_VON}–${NACHTDIENST_BIS}` : null
-                return <span key={zeile.zeile} className="text-gray-600">
+                return <span key={zeile.zeile} className="inline-flex items-center gap-1.5 text-gray-600">
                   {index > 0 ? <span className="text-gray-300"> · </span> : null}
                   {zeitAnzeige ? <span className="font-mono text-xs text-gray-500">{zeitAnzeige} </span> : null}
                   {KATEGORIE_LABEL[zeile.kategorie] ?? kuerzelKlartext(parseDienstCode(zeile.rohtext).code)}
+                  {zeile.kategorie === 'dienst' ? <button type="button" onClick={() => oeffneTauschModal(datum, zeile.zeile)} title="Tausch beantragen" className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-blue-700"><ArrowLeftRight className="h-3 w-3" /></button> : null}
                 </span>
               })}
             </div>)}
           </div>}
         </section>
+
+        <section>
+          <h2 className="mb-3 font-semibold text-gray-900">Diensttausch-Anträge</h2>
+          {meineAntraege.length === 0 ? <p className="text-sm text-gray-500">Keine Diensttausch-Anträge vorhanden.</p> : <div className="space-y-2">
+            {meineAntraege.map(antrag => {
+              const istEigenerAntrag = antrag.beantragt_von === profileId
+              return <div key={antrag.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                <span className={`flex-none rounded-full px-2 py-0.5 text-xs font-semibold ${TAUSCH_STATUS_FARBE[antrag.status]}`}>{TAUSCH_STATUS_LABEL[antrag.status]}</span>
+                <span className="text-gray-700">
+                  {istEigenerAntrag
+                    ? <>Mein Dienst am {formatDatum(antrag.ursprung_datum)} gegen Dienst von {mitarbeiter.find(person => person.id === antrag.ziel_beamter_id)?.name ?? '–'} am {formatDatum(antrag.ziel_datum)}</>
+                    : <>{mitarbeiter.find(person => person.id === antrag.ursprung_beamter_id)?.name ?? '–'} möchte mit mir tauschen: dessen Dienst am {formatDatum(antrag.ursprung_datum)} gegen meinen am {formatDatum(antrag.ziel_datum)}</>}
+                </span>
+                {istEigenerAntrag && antrag.status === 'offen' ? <button type="button" onClick={() => void tauschZurueckziehen(antrag.id)} className="ml-auto flex-none text-xs font-medium text-red-700 hover:underline">Zurückziehen</button> : null}
+              </div>
+            })}
+          </div>}
+        </section>
       </div>}
+
+    {tauschModal ? <Modal title={`Tausch beantragen – ${formatDatum(tauschModal.datum)}`} close={() => setTauschModal(null)}>
+      <label className="block text-xs font-medium text-gray-600">Kollegin/Kollege
+        <select className={inputClass} value={tauschForm.zielBeamterId} onChange={event => setTauschForm(form => ({ ...form, zielBeamterId: event.target.value }))}>
+          <option value="">– wählen –</option>
+          {mitarbeiter.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}
+        </select>
+      </label>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="block text-xs font-medium text-gray-600">Zieldatum
+          <input type="date" className={inputClass} min={`${monat}-01`} value={tauschForm.zielDatum} onChange={event => setTauschForm(form => ({ ...form, zielDatum: event.target.value }))} />
+        </label>
+        <label className="block text-xs font-medium text-gray-600">Zeile
+          <select className={inputClass} value={tauschForm.zielZeile} onChange={event => setTauschForm(form => ({ ...form, zielZeile: event.target.value as '1' | '2' }))}>
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </label>
+      </div>
+      <label className="mt-2 block text-xs font-medium text-gray-600">Notiz (optional)
+        <textarea rows={2} className={inputClass} value={tauschForm.notiz} onChange={event => setTauschForm(form => ({ ...form, notiz: event.target.value }))} />
+      </label>
+      {tauschError ? <ErrorMessage text={tauschError} /> : null}
+      <Actions saving={tauschSpeichern} close={() => setTauschModal(null)} save={tauschAbsenden} />
+    </Modal> : null}
   </div>
 }

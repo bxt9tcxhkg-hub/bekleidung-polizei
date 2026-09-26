@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock3, GraduationCap, Shield, Shirt, type LucideIcon } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { dienstplanSupabase } from '../../lib/dienstplanSupabase'
 
 // Kachel-Übersicht für die Genehmigungen - Muster: StammdatenUebersicht.tsx
 // ("Stammdaten & Nachschlagewerke"). Eine Kachel pro organisatorischer
@@ -24,7 +25,7 @@ export default function GenehmigungenUebersicht() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const [training, schulung, orders, stock, refunds, personalEm, poolEm, ueberstunden] = await Promise.all([
+      const [training, schulung, orders, stock, refunds, personalEm, poolEm, ueberstunden, diensttausch] = await Promise.all([
         supabase.from('einsatz_training_assignments').select('id', { count: 'exact', head: true }).eq('status', 'vorschlag'),
         supabase.from('schulungen_assignments').select('id', { count: 'exact', head: true }).eq('status', 'vorschlag'),
         supabase.from('orders').select('id', { count: 'exact', head: true }).eq('status', 'pending_approval'),
@@ -33,13 +34,14 @@ export default function GenehmigungenUebersicht() {
         supabase.from('personal_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('pool_einsatzmittel_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('ueberstunden_meldungen').select('id', { count: 'exact', head: true }).eq('status', 'eingereicht'),
+        dienstplanSupabase.from('dienstplan_tauschantraege').select('id', { count: 'exact', head: true }).eq('status', 'offen'),
       ])
       if (cancelled) return
       setCounts({
         '/genehmigungen/ausbildung': training.error || schulung.error ? null : (training.count ?? 0) + (schulung.count ?? 0),
         '/genehmigungen/bekleidung': orders.error || stock.error || refunds.error ? null : (orders.count ?? 0) + (stock.count ?? 0) + (refunds.count ?? 0),
         '/genehmigungen/einsatzmittel': personalEm.error || poolEm.error ? null : (personalEm.count ?? 0) + (poolEm.count ?? 0),
-        '/genehmigungen/personal': ueberstunden.error ? null : (ueberstunden.count ?? 0),
+        '/genehmigungen/personal': ueberstunden.error || diensttausch.error ? null : (ueberstunden.count ?? 0) + (diensttausch.count ?? 0),
       })
     }
     void load()
