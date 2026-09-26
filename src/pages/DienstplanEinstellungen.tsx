@@ -7,7 +7,7 @@ import { ErrorMessage, inputClass } from '../components/ZentraleEntryEditor'
 import { thisMonthLocal } from '../lib/ueberstunden'
 import { berechneSollstunden, naechsterPlanbarerMonat, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { monatsKontingent } from '../lib/dienstplanWunsch'
-import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, sortiereNachDienstplanGruppe } from '../lib/dienstplanRoster'
+import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, sortiereNachDienstplanGruppe, type DienstplanGruppe, type DienstplanPersonZusatz } from '../lib/dienstplanRoster'
 import { markierungFarbKlassen, MARKIERUNG_FARBEN, MARKIERUNG_FARBE_LABEL, type DienstplanMarkierungFarbe } from '../lib/dienstplanMarkierungen'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
@@ -23,14 +23,20 @@ import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 // nicht abbilden. Nur Admin/Genehmiger (siehe ProtectedRoute genehmigerOnly
 // in App.tsx) erreichen diese Seite.
 
-interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
-type PersonEinstellungRow = Pick<DienstplanPersonEinstellungenRow, 'beamter_id' | 'beschaeftigungsgrad'>
+interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null; gruppeOverride: DienstplanGruppe | null }
+type PersonEinstellungRow = Pick<DienstplanPersonEinstellungenRow, 'beamter_id' | 'beschaeftigungsgrad' | 'zusatz'>
 
 export default function DienstplanEinstellungen() {
   const { profile } = useAuth()
   const [regeln, setRegeln] = useState<DienstplanRegelRow | null>(null)
   const [mitarbeiter, setMitarbeiter] = useState<MitarbeiterOption[]>([])
   const [einstellungen, setEinstellungen] = useState<Map<string, number>>(new Map())
+  // Gruppen-Override (Kommando/Dienstführung/Beamte manuell versetzen) und
+  // "aus dem Dienstplan ausgeblendet" (Person nicht löschen, aber aus
+  // Planer-Grid/Druckansicht/automatischen Vorschlägen herausnehmen) - siehe
+  // lib/dienstplanRoster.ts::DienstplanPersonZusatz.
+  const [zusatzById, setZusatzById] = useState<Map<string, DienstplanPersonZusatz>>(new Map())
+  const [zusatzSpeichern, setZusatzSpeichern] = useState<string | null>(null)
   const [vorhandeneMonate, setVorhandeneMonate] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -60,7 +66,7 @@ export default function DienstplanEinstellungen() {
     const [regelnResult, mitarbeiterResult, einstellungenResult, monateResult, markierungenResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('id,stunden_pro_werktag,mindestruhezeit_stunden,wunschfrist_tage,offener_wunsch_monat,aktueller_planungsmonat,updated_by,updated_at').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
-      dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
+      dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad,zusatz'),
       dienstplanSupabase.from('dienstplan_monate').select('monat'),
       dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,kategorie,reihenfolge,updated_by,updated_at').order('kategorie', { ascending: true, nullsFirst: false }).order('reihenfolge').order('name'),
     ])
@@ -75,9 +81,13 @@ export default function DienstplanEinstellungen() {
         aktuellerPlanungsmonat: regelnResult.data.aktueller_planungsmonat?.slice(0, 7) ?? '',
       })
     }
-    const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
+    const zusatzMap = new Map((einstellungenResult.data as PersonEinstellungRow[] ?? []).map(row => [row.beamter_id, (row.zusatz ?? {}) as DienstplanPersonZusatz]))
+    const einteilbar = (mitarbeiterResult.data ?? [])
+      .filter(person => !istAdminProfil(person.roles))
+      .map(person => ({ ...person, gruppeOverride: zusatzMap.get(person.id)?.gruppe ?? null }))
     setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setEinstellungen(new Map((einstellungenResult.data as PersonEinstellungRow[] ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
+    setZusatzById(zusatzMap)
     setVorhandeneMonate((monateResult.data ?? []).map(row => row.monat))
     setMarkierungen(markierungenResult.data ?? [])
     setLoading(false)
@@ -164,6 +174,16 @@ export default function DienstplanEinstellungen() {
     await load()
   }
 
+  /** Gruppen-Override und "aus dem Dienstplan ausgeblendet" - beides im selben zusatz-jsonb-Feld, direktes Speichern ohne separaten Bearbeiten-Modus (wie systemFarbeAendern bei den Farbmarkierungen). Zusammenführen mit dem bestehenden zusatz-Objekt, damit ein Patch das andere Feld nicht überschreibt. */
+  async function speicherePersonZusatz(beamterId: string, patch: Partial<DienstplanPersonZusatz>) {
+    setZusatzSpeichern(beamterId); setError('')
+    const neuesZusatz: DienstplanPersonZusatz = { ...zusatzById.get(beamterId), ...patch }
+    const result = await dienstplanSupabase.from('dienstplan_person_einstellungen').upsert({ beamter_id: beamterId, zusatz: neuesZusatz, updated_by: profile?.id ?? null }, { onConflict: 'beamter_id' })
+    setZusatzSpeichern(null)
+    if (result.error) { setError('Die Einstellung konnte nicht gespeichert werden.'); return }
+    await load()
+  }
+
   const aktuellerMonat = useMemo(() => naechsterPlanbarerMonat(vorhandeneMonate, thisMonthLocal()), [vorhandeneMonate])
   const stundenProWerktagVorschau = useMemo(() => Number(regelForm.stundenProWerktag.replace(',', '.')) || regeln?.stunden_pro_werktag || 0, [regelForm.stundenProWerktag, regeln])
 
@@ -212,12 +232,14 @@ export default function DienstplanEinstellungen() {
 
       <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="font-semibold text-gray-900">Beschäftigungsgrad je Person</h2>
-        <p className="mt-1 text-xs text-gray-500">{VOLLZEIT_BESCHAEFTIGUNGSGRAD} = Vollzeit. Sollstunden-Vorschau für {aktuellerMonat} sowie das monatliche Freiplanungswunsch-Kontingent (18 bei Vollzeit) bei aktuell hinterlegtem Grad.</p>
+        <p className="mt-1 text-xs text-gray-500">{VOLLZEIT_BESCHAEFTIGUNGSGRAD} = Vollzeit. Sollstunden-Vorschau für {aktuellerMonat} sowie das monatliche Freiplanungswunsch-Kontingent (18 bei Vollzeit) bei aktuell hinterlegtem Grad. "Gruppe" verschiebt eine Person abweichend von der Dienstnummer zwischen Kommando/Dienstführung/Beamte (Blöcke im Planer-Grid). "Im Dienstplan" nimmt eine Person aus der Dienstplan-Planung (Grid, Druckansicht, automatische Vorschläge) heraus, ohne das Profil zu löschen - sie bleibt im übrigen Portal unverändert nutzbar.</p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="px-3 py-2 text-left font-semibold text-gray-600">Person</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-600">Gruppe</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-600">Im Dienstplan</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Beschäftigungsgrad</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Sollstunden ({aktuellerMonat})</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-600">Freiplanungswünsche/Monat</th>
@@ -229,12 +251,28 @@ export default function DienstplanEinstellungen() {
                 const grad = einstellungen.get(person.id) ?? VOLLZEIT_BESCHAEFTIGUNGSGRAD
                 const editing = editId === person.id
                 const angezeigterGrad = editing ? (Number(editGrad.replace(',', '.')) || 0) : grad
-                const gruppe = dienstplanGruppe(person.dienstnummer)
-                const vorherigeGruppe = index > 0 ? dienstplanGruppe(mitarbeiter[index - 1].dienstnummer) : null
+                const gruppe = dienstplanGruppe(person.dienstnummer, person.gruppeOverride)
+                const vorherigeGruppe = index > 0 ? dienstplanGruppe(mitarbeiter[index - 1].dienstnummer, mitarbeiter[index - 1].gruppeOverride) : null
+                const ausgeblendet = zusatzById.get(person.id)?.dienstplanAusgeblendet ?? false
+                const zusatzSpeichernAktiv = zusatzSpeichern === person.id
                 return <Fragment key={person.id}>
-                  {gruppe !== vorherigeGruppe ? <tr><td colSpan={5} className="bg-gray-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</td></tr> : null}
-                  <tr>
+                  {gruppe !== vorherigeGruppe ? <tr><td colSpan={7} className="bg-gray-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</td></tr> : null}
+                  <tr className={ausgeblendet ? 'opacity-50' : ''}>
                     <td className="px-3 py-2 font-medium text-gray-900">{person.name}{person.dienstnummer ? <span className="text-xs text-gray-400"> (DNr. {person.dienstnummer})</span> : null}</td>
+                    <td className="px-3 py-2">
+                      <select disabled={zusatzSpeichernAktiv} className="rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                        value={person.gruppeOverride ?? ''}
+                        onChange={event => void speicherePersonZusatz(person.id, { gruppe: (event.target.value || undefined) as DienstplanGruppe | undefined })}>
+                        <option value="">Automatisch (DNr.)</option>
+                        <option value="kommando">{DIENSTPLAN_GRUPPE_LABEL.kommando}</option>
+                        <option value="dienstfuehrung">{DIENSTPLAN_GRUPPE_LABEL.dienstfuehrung}</option>
+                        <option value="einsatz">{DIENSTPLAN_GRUPPE_LABEL.einsatz}</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <input type="checkbox" disabled={zusatzSpeichernAktiv} checked={!ausgeblendet} title="Im Dienstplan berücksichtigt - abwählen, um die Person ohne zu löschen aus der Planung zu nehmen"
+                        onChange={event => void speicherePersonZusatz(person.id, { dienstplanAusgeblendet: !event.target.checked })} />
+                    </td>
                     <td className="px-3 py-2 text-right">
                       {editing ? <input type="text" inputMode="decimal" autoFocus className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         value={editGrad} onChange={event => setEditGrad(event.target.value)}

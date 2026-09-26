@@ -16,7 +16,7 @@ import { ruhezeitVerletzungen } from '../lib/dienstplanRegelpruefung'
 import { generiereGrundbesetzungsVorschlag, type VorschlagEintrag } from '../lib/dienstplanVorschlag'
 import { berechneSollstunden, istWerktag, VOLLZEIT_BESCHAEFTIGUNGSGRAD } from '../lib/dienstplanSollstunden'
 import { WUNSCH_LABEL } from '../lib/dienstplanWunsch'
-import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, kurznamen, sortiereNachDienstplanGruppe, type DienstplanGruppe } from '../lib/dienstplanRoster'
+import { DIENSTPLAN_GRUPPE_LABEL, dienstplanGruppe, istAdminProfil, istAutomatischEinteilbar, kurznamen, sortiereNachDienstplanGruppe, type DienstplanGruppe, type DienstplanPersonZusatz } from '../lib/dienstplanRoster'
 import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 
 // Planer-Grid für die Dienstplan-Planung im Portal (siehe
@@ -39,7 +39,7 @@ import { ET_ROSTER_ORGANISATION } from '../lib/usersSeed'
 // genehmigerOnly in App.tsx).
 
 interface DienstZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; von_zeit: string | null; bis_zeit: string | null; kategorie: DienstplanKategorieDb; markierung_id: string | null }
-interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null }
+interface MitarbeiterOption { id: string; name: string; dienstnummer: string | null; gruppeOverride: DienstplanGruppe | null }
 interface WunschEintrag { wunsch: DienstplanWunschTyp; notiz: string | null; vonZeit: string | null; bisZeit: string | null }
 
 const WOCHENTAG_LABEL: Record<number, string> = { 0: 'So', 1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa' }
@@ -187,7 +187,7 @@ export default function DienstplanPlanung() {
     const [regelnResult, mitarbeiterResult, einstellungenResult, monatResult, vorMonatNachtResult, markierungenResult] = await Promise.all([
       dienstplanSupabase.from('dienstplan_regeln').select('stunden_pro_werktag,mindestruhezeit_stunden,aktueller_planungsmonat').eq('id', 1).maybeSingle(),
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
-      dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
+      dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad,zusatz'),
       dienstplanSupabase.from('dienstplan_monate').select('id,status').eq('monat', `${monat}-01`).maybeSingle(),
       dienstplanSupabase.from('dienstplan_dienste').select('beamter_id,von_zeit').eq('datum', vorherigerMonatLetzterTag(monat)).eq('kategorie', 'dienst'),
       dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,kategorie,reihenfolge,updated_by,updated_at').order('reihenfolge').order('name'),
@@ -202,10 +202,16 @@ export default function DienstplanPlanung() {
     if (regelnResult.data) { setStundenProWerktag(regelnResult.data.stunden_pro_werktag); setMindestruhezeitStunden(regelnResult.data.mindestruhezeit_stunden) }
     setBeschaeftigungsgrade(new Map((einstellungenResult.data ?? []).map(row => [row.beamter_id, row.beschaeftigungsgrad])))
     setNaechtlicherUebertrag(new Set((vorMonatNachtResult.data ?? []).filter(row => tagOderNacht(row.von_zeit) === 'nacht').map(row => row.beamter_id)))
+    const zusatzById = new Map((einstellungenResult.data ?? []).map(row => [row.beamter_id, (row.zusatz ?? {}) as DienstplanPersonZusatz]))
     // Admin-Konten sind laut Kommandant nie Teil der einteilbaren Beamten;
-    // Kommando/Dienstführung sollen als eigene Blöcke zusammenstehen (siehe
-    // lib/dienstplanRoster.ts).
-    const einteilbar = (mitarbeiterResult.data ?? []).filter(person => !istAdminProfil(person.roles))
+    // Kommando/Dienstführung sollen als eigene Blöcke zusammenstehen, ein
+    // manueller Gruppen-Override sowie eine "aus dem Dienstplan
+    // ausgeblendet"-Markierung kommen aus den Zusatz-Einstellungen (siehe
+    // lib/dienstplanRoster.ts::DienstplanPersonZusatz, editierbar unter
+    // Dienstplan-Einstellungen).
+    const einteilbar = (mitarbeiterResult.data ?? [])
+      .filter(person => !istAdminProfil(person.roles) && !zusatzById.get(person.id)?.dienstplanAusgeblendet)
+      .map(person => ({ ...person, gruppeOverride: zusatzById.get(person.id)?.gruppe ?? null }))
     setMitarbeiter(sortiereNachDienstplanGruppe(einteilbar))
     setMonatRow(monatResult.data)
 
@@ -290,7 +296,7 @@ export default function DienstplanPlanung() {
   const personGruppenSpans = useMemo(() => {
     const spans: { gruppe: DienstplanGruppe; span: number }[] = []
     for (const person of mitarbeiter) {
-      const gruppe = dienstplanGruppe(person.dienstnummer)
+      const gruppe = dienstplanGruppe(person.dienstnummer, person.gruppeOverride)
       const letzter = spans[spans.length - 1]
       if (letzter && letzter.gruppe === gruppe) letzter.span++
       else spans.push({ gruppe, span: 1 })
@@ -415,7 +421,7 @@ export default function DienstplanPlanung() {
     generateDienstplanDruckPdf({
       monatLabel: monatLangLabel(monat),
       bearbeiterName: officerPrintName(profile),
-      personen: mitarbeiter.map(person => ({ ...person, kurzname: kurznamenMap.get(person.id) ?? person.name, gruppe: dienstplanGruppe(person.dienstnummer) })),
+      personen: mitarbeiter.map(person => ({ ...person, kurzname: kurznamenMap.get(person.id) ?? person.name, gruppe: dienstplanGruppe(person.dienstnummer, person.gruppeOverride) })),
       tage,
       dienste,
       markierungen,
@@ -649,7 +655,7 @@ export default function DienstplanPlanung() {
     // Kommando ist nicht Teil der automatischen Grundbesetzungs-Zuteilung
     // (siehe lib/dienstplanRoster.ts) - kann aber weiterhin manuell über die
     // Zelle im Grid eingeteilt werden.
-    const einteilbareMitarbeiter = mitarbeiter.filter(person => istAutomatischEinteilbar(person.dienstnummer))
+    const einteilbareMitarbeiter = mitarbeiter.filter(person => istAutomatischEinteilbar(person.dienstnummer, person.gruppeOverride))
     const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einteilbareMitarbeiter, tage, bestehendeDienste: [...eingabeDienste, ...luecken, ...uebertragEintraege], wuensche: eingabeWuensche, mindestruhezeitStunden })
     setVorschlaege(new Map(ergebnis.map(eintrag => [`${eintrag.beamterId}|${eintrag.datum}|${eintrag.abschnitt}`, eintrag])))
     setNotice(ergebnis.length > 0 ? `${ergebnis.length} Vorschläge generiert - bitte prüfen und übernehmen.` : 'Es gibt aktuell nichts vorzuschlagen (alles besetzt oder niemand verfügbar).')

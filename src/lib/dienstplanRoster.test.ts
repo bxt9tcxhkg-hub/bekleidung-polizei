@@ -19,6 +19,12 @@ describe('dienstplanGruppe', () => {
     expect(dienstplanGruppe('29')).toBe('einsatz') // Schwendinger Dietmar - anderer Vorname, nicht Kommando
     expect(dienstplanGruppe(null)).toBe('einsatz')
   })
+
+  it('bevorzugt einen manuellen Gruppen-Override gegenüber der Dienstnummer-Regel', () => {
+    expect(dienstplanGruppe('1', 'einsatz')).toBe('einsatz') // eigentlich Kommando, manuell nach Beamte verschoben
+    expect(dienstplanGruppe('99', 'kommando')).toBe('kommando') // eigentlich Beamte, manuell nach Kommando verschoben
+    expect(dienstplanGruppe('1', null)).toBe('kommando') // kein Override (null) - Dienstnummer-Regel greift weiterhin
+  })
 })
 
 describe('istAutomatischEinteilbar', () => {
@@ -29,6 +35,11 @@ describe('istAutomatischEinteilbar', () => {
   it('ist true für Dienstführung und alle übrigen', () => {
     expect(istAutomatischEinteilbar('25')).toBe(true)
     expect(istAutomatischEinteilbar('99')).toBe(true)
+  })
+
+  it('berücksichtigt einen manuellen Gruppen-Override', () => {
+    expect(istAutomatischEinteilbar('1', 'einsatz')).toBe(true) // eigentlich Kommando, manuell herausgenommen
+    expect(istAutomatischEinteilbar('99', 'kommando')).toBe(false) // eigentlich Beamte, manuell nach Kommando verschoben
   })
 })
 
@@ -72,6 +83,16 @@ describe('sortiereNachDienstplanGruppe', () => {
     const original = [...personen]
     sortiereNachDienstplanGruppe(personen)
     expect(personen).toEqual(original)
+  })
+
+  it('berücksichtigt einen manuellen Gruppen-Override je Person', () => {
+    const personen = [
+      { name: 'Anna Zerbst', dienstnummer: '99', gruppeOverride: null }, // Beamte, bleibt Beamte
+      { name: 'Silvano Aukenthaler', dienstnummer: '25', gruppeOverride: 'einsatz' as const }, // eigentlich Dienstführung, manuell nach Beamte verschoben
+      { name: 'Bernd Meier', dienstnummer: '80', gruppeOverride: 'dienstfuehrung' as const }, // eigentlich Beamte, manuell nach Dienstführung verschoben
+    ]
+    const sortiert = sortiereNachDienstplanGruppe(personen).map(person => person.name)
+    expect(sortiert).toEqual(['Bernd Meier', 'Silvano Aukenthaler', 'Anna Zerbst'])
   })
 })
 
