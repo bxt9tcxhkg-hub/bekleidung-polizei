@@ -16,11 +16,11 @@ export default function PortalChrome({
 }: {
   children: React.ReactNode
   actions?: React.ReactNode
-  wide?: boolean
+  wide?: boolean | 'full'
 }) {
   const { profile, mustChangePassword, mustSetUsername, signOut } = useAuth()
   const location = useLocation()
-  const width = wide ? 'max-w-[90rem]' : 'max-w-4xl'
+  const width = wide === 'full' ? 'max-w-none' : wide ? 'max-w-[90rem]' : 'max-w-4xl'
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
