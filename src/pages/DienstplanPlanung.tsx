@@ -378,9 +378,10 @@ export default function DienstplanPlanung() {
     generateDienstplanDruckPdf({
       monatLabel: monatLangLabel(monat),
       bearbeiterName: officerPrintName(profile),
-      personen: mitarbeiter.map(person => ({ ...person, gruppe: dienstplanGruppe(person.dienstnummer) })),
+      personen: mitarbeiter.map(person => ({ ...person, kurzname: kurznamenMap.get(person.id) ?? person.name, gruppe: dienstplanGruppe(person.dienstnummer) })),
       tage,
       dienste,
+      markierungen,
     })
   }
 
