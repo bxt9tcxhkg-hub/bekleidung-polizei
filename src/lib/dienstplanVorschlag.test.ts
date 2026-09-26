@@ -100,6 +100,14 @@ describe('generiereGrundbesetzungsVorschlag', () => {
     expect(ergebnis.some(e => e.abschnitt === 'tag')).toBe(false)
   })
 
+  it('schlägt eine Person nicht vor (weder Tag noch Nacht), wenn die Zelle rein farblich markiert ist (kategorie "sonstiges", kein echter Dienst)', () => {
+    const fuenfPersonen: VorschlagPerson[] = [...MITARBEITER, { id: 'd', name: 'Doris' }, { id: 'e', name: 'Erik' }]
+    // Anna hat an diesem Tag nur eine leere, farblich markierte Zelle (z. B. nachträglich als "Krank" markiertes Wochenende) - kein Kürzel, kategorie "sonstiges".
+    const bestehendeDienste: VorschlagBestehenderDienst[] = [{ beamterId: 'a', datum: '2026-10-05', vonZeit: null, bisZeit: null, kategorie: 'sonstiges', code: '' }]
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: fuenfPersonen, tage: ['2026-10-05'], bestehendeDienste, wuensche: [], mindestruhezeitStunden: 11 })
+    expect(ergebnis.some(e => e.beamterId === 'a')).toBe(false)
+  })
+
   it('liefert ein leeres Ergebnis ohne Mitarbeiter oder Tage', () => {
     expect(generiereGrundbesetzungsVorschlag({ mitarbeiter: [], tage: ['2026-10-05'], bestehendeDienste: [], wuensche: [], mindestruhezeitStunden: 11 })).toEqual([])
     expect(generiereGrundbesetzungsVorschlag({ mitarbeiter: MITARBEITER, tage: [], bestehendeDienste: [], wuensche: [], mindestruhezeitStunden: 11 })).toEqual([])
