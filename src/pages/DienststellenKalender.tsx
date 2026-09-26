@@ -138,8 +138,8 @@ export default function DienststellenKalender() {
     return () => { aktiv = false }
   }, [])
 
-  // Monatsansicht: ausgewählter Tag für die Detailanzeige unterhalb des
-  // Kalenderrasters - Standard ist der heutige Tag, wenn er im angezeigten
+  // Monatsansicht: ausgewählter Tag für die Detailanzeige neben dem
+  // Kalenderraster - Standard ist der heutige Tag, wenn er im angezeigten
   // Monat liegt, sonst keine Auswahl. Wechselt der Monat, wird neu
   // ausgewählt (siehe Abhängigkeit [monat]) - innerhalb desselben Monats
   // bleibt eine manuelle Auswahl bestehen.
@@ -212,7 +212,7 @@ export default function DienststellenKalender() {
   const heute = todayLocal()
   const ausgewaehlteUebersicht = ausgewaehlterTag ? tageMap.get(ausgewaehlterTag) : undefined
 
-  return <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+  return <div className="mx-auto max-w-full px-4 py-6 sm:px-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold text-gray-900">Dienststellenkalender</h1><p className="mt-1 text-sm text-gray-500">Monatsansicht, heutiger Tag blau hervorgehoben - Tag antippen für Tag-/Nachtdienste je Dienst-Kürzel und Abwesenheiten. Rotes Warnsymbol: fehlende Grundbesetzung, Zahl: Anzahl Abwesenheiten.</p></div>
       <input type="month" value={monat} onChange={event => setMonat(event.target.value)} className={`${inputClass} mt-0 w-auto`} />
@@ -222,33 +222,35 @@ export default function DienststellenKalender() {
 
     {loading ? <div className="mt-8 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-800" /></div>
       : monatVeroeffentlicht === false ? <div className="mt-8 rounded-2xl border border-gray-200 bg-white px-5 py-10 text-center"><CalendarDays className="mx-auto mb-2 h-8 w-8 text-gray-300" /><p className="text-sm text-gray-500">Für diesen Monat wurde noch kein Dienstplan veröffentlicht.</p></div>
-      : <div className="mt-6">
-        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-wide text-gray-400 sm:gap-1.5">
-          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(label => <div key={label} className="pb-1">{label}</div>)}
-        </div>
-        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
-          {wochen.flatMap((woche, wocheIndex) => woche.map((datum, tagIndex) => {
-            if (!datum) return <div key={`${wocheIndex}-${tagIndex}`} />
-            const tagText = datum.slice(-2)
-            const fehlend = fehlendeGrund.get(datum)
-            const abwesenheitenAnzahl = tageMap.get(datum)?.abwesenheiten.length ?? 0
-            const istHeute = datum === heute
-            const istAusgewaehlt = datum === ausgewaehlterTag
-            return <button key={datum} type="button" onClick={() => setAusgewaehlterTag(datum)}
-              className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg border p-1 text-sm transition-colors ${
-                istAusgewaehlt ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-200' : istHeute ? 'border-blue-400 bg-blue-50/60' : 'border-gray-200 bg-white hover:bg-gray-50'
-              }`}
-            >
-              <span className={`font-semibold ${istHeute ? 'text-blue-800' : 'text-gray-800'}`}>{tagText}</span>
-              <div className="flex h-3 items-center gap-1">
-                {fehlend && fehlend.length > 0 ? <AlertTriangle className="h-3 w-3 flex-none text-red-600" /> : null}
-                {abwesenheitenAnzahl > 0 ? <span className="text-[0.65rem] leading-none text-amber-700">{abwesenheitenAnzahl}</span> : null}
-              </div>
-            </button>
-          }))}
+      : <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="lg:w-[26rem] lg:flex-none">
+          <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-wide text-gray-400 sm:gap-1.5">
+            {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(label => <div key={label} className="pb-1">{label}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+            {wochen.flatMap((woche, wocheIndex) => woche.map((datum, tagIndex) => {
+              if (!datum) return <div key={`${wocheIndex}-${tagIndex}`} />
+              const tagText = datum.slice(-2)
+              const fehlend = fehlendeGrund.get(datum)
+              const abwesenheitenAnzahl = tageMap.get(datum)?.abwesenheiten.length ?? 0
+              const istHeute = datum === heute
+              const istAusgewaehlt = datum === ausgewaehlterTag
+              return <button key={datum} type="button" onClick={() => setAusgewaehlterTag(datum)}
+                className={`flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg border p-1 text-sm transition-colors ${
+                  istAusgewaehlt ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-200' : istHeute ? 'border-blue-400 bg-blue-50/60' : 'border-gray-200 bg-white hover:bg-gray-50'
+                }`}
+              >
+                <span className={`font-semibold ${istHeute ? 'text-blue-800' : 'text-gray-800'}`}>{tagText}</span>
+                <div className="flex h-3 items-center gap-1">
+                  {fehlend && fehlend.length > 0 ? <AlertTriangle className="h-3 w-3 flex-none text-red-600" /> : null}
+                  {abwesenheitenAnzahl > 0 ? <span className="text-[0.65rem] leading-none text-amber-700">{abwesenheitenAnzahl}</span> : null}
+                </div>
+              </button>
+            }))}
+          </div>
         </div>
 
-        <div className="mt-6">
+        <div className="min-w-0 flex-1">
           {!ausgewaehlterTag ? <p className="text-sm text-gray-500">Tag im Kalender auswählen, um Details zu sehen.</p>
             : !ausgewaehlteUebersicht ? <div className="rounded-xl border border-gray-200 bg-white p-4 text-center text-sm text-gray-500">{formatDatum(ausgewaehlterTag)} – keine Diensteinträge vorhanden.</div>
             : <div className="rounded-xl border border-gray-200 bg-white p-4">
