@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { sidebarRoleLabels } from '../lib/authRoles'
 import { isAreaManager } from '../lib/portalEntitlements'
 import { genehmigerSection, meinBereichSection, type NavSection } from '../lib/sidebarSections'
+import NotizenWidget from './NotizenWidget'
 import { PortalSidebarShell } from './PortalSidebar'
 
 export default function ZentraleLayout() {
@@ -36,5 +37,5 @@ export default function ZentraleLayout() {
     profile?.dienstnummer ? `DNr. ${profile.dienstnummer}` : null,
   ].filter(Boolean).join(' · ')
 
-  return <PortalSidebarShell areaTagline="Zentrale" mobileTitle="Zentrale" sections={sections} footerLine={footerLine} />
+  return <><PortalSidebarShell areaTagline="Zentrale" mobileTitle="Zentrale" sections={sections} footerLine={footerLine} /><NotizenWidget bereich="zentrale" /></>
 }

@@ -89,6 +89,13 @@ nächstliegenden Vorlage.
   stellt `Modal`, `Actions`, `ErrorMessage`, `Empty`, `inputClass` u. a. für
   alle Zentrale-Formulare/-Modals bereit. Vor einem neuen Modal/Formular
   immer zuerst dort nachsehen.
+- Schwebendes Widget über der Arbeitsfläche (nicht blockierend, bleibt beim
+  Navigieren innerhalb eines Bereichs erhalten): Muster in
+  `src/components/NotizenWidget.tsx` (`fixed bottom-5 right-5 z-40`,
+  Auf-/Zuklappen über `localStorage`, in `ZentraleLayout.tsx`/
+  `InnendienstLayout.tsx` neben `PortalSidebarShell` gemountet statt pro
+  Seite). Vor einem neuen schwebenden Element dort nachsehen statt eigenes
+  Overlay-Muster zu erfinden.
 - **RLS-Fehler nie still verschlucken.** `.update()`/`.insert()` ohne
   `.select()` liefert bei einer RLS-blockierten Zeile *keinen* SQL-Fehler
   (0 betroffene Zeilen sieht aus wie Erfolg) und die UI zeigt fälschlich
