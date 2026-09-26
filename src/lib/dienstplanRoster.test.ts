@@ -33,17 +33,27 @@ describe('istAutomatischEinteilbar', () => {
 })
 
 describe('sortiereNachDienstplanGruppe', () => {
-  it('stellt Kommando voran, dann Dienstführung, dann den Rest - je Block alphabetisch', () => {
+  it('stellt Kommando voran, dann Dienstführung, dann den Rest - Dienstführung/Rest je Block alphabetisch, Kommando in fester Reihenfolge (Hans-Peter, Andreas, Martin)', () => {
     const personen = [
       { name: 'Zerbst', dienstnummer: '99' },
       { name: 'Nenning', dienstnummer: '35' },
-      { name: 'Feurstein', dienstnummer: '3' },
+      { name: 'Feurstein Martin', dienstnummer: '3' },
       { name: 'Aukenthaler', dienstnummer: '25' },
-      { name: 'Gisinger', dienstnummer: '2' },
+      { name: 'Gisinger Andreas', dienstnummer: '2' },
+      { name: 'Schwendinger Hans-Peter', dienstnummer: '1' },
       { name: 'Anders', dienstnummer: '50' },
     ]
     const sortiert = sortiereNachDienstplanGruppe(personen).map(person => person.name)
-    expect(sortiert).toEqual(['Feurstein', 'Gisinger', 'Aukenthaler', 'Nenning', 'Anders', 'Zerbst'])
+    expect(sortiert).toEqual(['Schwendinger Hans-Peter', 'Gisinger Andreas', 'Feurstein Martin', 'Aukenthaler', 'Nenning', 'Anders', 'Zerbst'])
+  })
+
+  it('sortiert Kommando nach fester Dienstnummer-Reihenfolge, auch wenn nicht alle drei vorhanden sind', () => {
+    const personen = [
+      { name: 'Feurstein Martin', dienstnummer: '3' },
+      { name: 'Schwendinger Hans-Peter', dienstnummer: '1' },
+    ]
+    const sortiert = sortiereNachDienstplanGruppe(personen).map(person => person.name)
+    expect(sortiert).toEqual(['Schwendinger Hans-Peter', 'Feurstein Martin'])
   })
 
   it('verändert die übergebene Liste nicht', () => {
