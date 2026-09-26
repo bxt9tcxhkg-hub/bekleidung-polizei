@@ -328,7 +328,7 @@ export default function ZentraleShell() {
         : await withTimeout(supabase.from('incident_reports').insert({ ...payload, created_by: profile.id }).select('id').single())
       if (result.error || !result.data) { setError('Die Meldung konnte nicht gespeichert werden. Bitte heutige Funktion „Zentrale“ wählen.'); return }
       logAudit(editingIncident ? 'Einsatzmeldung bearbeitet' : 'Einsatzmeldung angelegt', `${DISPOSITION_LABEL[incident.disposition]} · ${incident.location.trim() || 'ohne Ortsangabe'}`)
-      setEditingIncident(null); setShowIncidentForm(false); navigate('/zentrale/einsaetze'); setNotice(editingIncident ? 'Meldung wurde aktualisiert.' : 'Meldung wurde gespeichert.'); await load()
+      setEditingIncident(null); setShowIncidentForm(false); setNotice(editingIncident ? 'Meldung wurde aktualisiert.' : 'Meldung wurde gespeichert.'); await load()
     } catch (err) {
       setError(loadErrorMessage(err, 'Die Meldung konnte nicht gespeichert werden.'))
     } finally {
