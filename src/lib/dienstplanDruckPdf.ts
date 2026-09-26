@@ -11,7 +11,7 @@ import { LETTERHEAD_CSS, escHtml, letterheadBlock, openPrintHtml, referenceLineB
 import { parseDienstCode } from './dienstplanImport'
 import type { DienstplanKategorieDb } from './dienstplanSupabase'
 
-export interface DienstplanDruckPerson { id: string; name: string; dienstnummer: string | null }
+export interface DienstplanDruckPerson { id: string; name: string; dienstnummer: string | null; gruppe: string }
 export interface DienstplanDruckZeile { beamter_id: string; datum: string; zeile: 1 | 2; rohtext: string; kategorie: DienstplanKategorieDb }
 
 export interface DienstplanDruckInput {
@@ -40,13 +40,18 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
     return `<th class="${wochenende ? 'we' : ''}">${WOCHENTAG_LABEL[wochentag]}<br>${tagText}</th>`
   }).join('')
 
-  const zeilen = input.personen.map(person => {
+  // Dicke Trennlinie zwischen Personen-Gruppen (Kommando/Dienstführung/
+  // Beamte, siehe lib/dienstplanRoster.ts - personen ist bereits danach
+  // sortiert), dünne zwischen einzelnen Beamten-Zeilen (Standard-Rahmen von
+  // table.plan td/th greift dafür bereits).
+  const zeilen = input.personen.map((person, index) => {
     const zellen = input.tage.map(datum => {
       const eintraege = (zellenProPersonUndTag.get(`${person.id}|${datum}`) ?? []).slice().sort((a, b) => a.zeile - b.zeile)
       const text = eintraege.map(zeile => escHtml(parseDienstCode(zeile.rohtext).code)).join('<br>')
       return `<td>${text}</td>`
     }).join('')
-    return `<tr><td class="name">${escHtml(person.name)}${person.dienstnummer ? ` <span class="klein">(${escHtml(person.dienstnummer)})</span>` : ''}</td>${zellen}</tr>`
+    const gruppenende = index < input.personen.length - 1 && input.personen[index + 1].gruppe !== person.gruppe
+    return `<tr${gruppenende ? ' class="gruppenende"' : ''}><td class="name">${escHtml(person.name)}${person.dienstnummer ? ` <span class="klein">(${escHtml(person.dienstnummer)})</span>` : ''}</td>${zellen}</tr>`
   }).join('')
 
   return `<!DOCTYPE html>
@@ -60,6 +65,7 @@ export function buildDienstplanDruckHtml(input: DienstplanDruckInput): string {
   table.plan th, table.plan td { border: 1px solid #999; padding: 0.8mm 0.5mm; text-align: center; overflow: hidden; }
   table.plan th { background: #f2f2f2; font-weight: bold; }
   table.plan th.we, table.plan td.we { background: #fdf3e0; }
+  table.plan tr.gruppenende td { border-bottom: 1.5pt solid #333; }
   table.plan td.name { text-align: left; font-weight: bold; white-space: nowrap; width: 32mm; }
   .klein { font-weight: normal; font-size: 6pt; color: #555; }
   .foot { margin-top: 6mm; font-size: 7pt; color: #444; display: flex; justify-content: space-between; }

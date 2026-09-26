@@ -6,7 +6,7 @@ describe('buildDienstplanDruckHtml', () => {
     const html = buildDienstplanDruckHtml({
       monatLabel: 'Oktober 2026',
       bearbeiterName: 'Max Mustermann',
-      personen: [{ id: 'a', name: 'Anna Beispiel', dienstnummer: '12' }],
+      personen: [{ id: 'a', name: 'Anna Beispiel', dienstnummer: '12', gruppe: 'einsatz' }],
       tage: ['2026-10-01', '2026-10-02'],
       dienste: [
         { beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'Z 08-19', kategorie: 'dienst' },
@@ -24,7 +24,7 @@ describe('buildDienstplanDruckHtml', () => {
     const html = buildDienstplanDruckHtml({
       monatLabel: 'Oktober 2026',
       bearbeiterName: 'Max Mustermann',
-      personen: [{ id: 'a', name: 'Anna Beispiel', dienstnummer: null }],
+      personen: [{ id: 'a', name: 'Anna Beispiel', dienstnummer: null, gruppe: 'einsatz' }],
       tage: ['2026-10-01'],
       dienste: [
         { beamter_id: 'a', datum: '2026-10-01', zeile: 1, rohtext: 'Z 08-19', kategorie: 'dienst' },
@@ -43,5 +43,22 @@ describe('buildDienstplanDruckHtml', () => {
     // 2026-10-03 ist ein Samstag.
     const html = buildDienstplanDruckHtml({ monatLabel: 'Oktober 2026', bearbeiterName: 'Max Mustermann', personen: [], tage: ['2026-10-03'], dienste: [] })
     expect(html).toContain('<th class="we">Sa<br>03</th>')
+  })
+
+  it('markiert die letzte Zeile einer Personen-Gruppe mit der Klasse "gruppenende" (dicke Trennlinie), nicht aber Zeilen innerhalb derselben Gruppe', () => {
+    const html = buildDienstplanDruckHtml({
+      monatLabel: 'Oktober 2026',
+      bearbeiterName: 'Max Mustermann',
+      personen: [
+        { id: 'a', name: 'Anna Beispiel', dienstnummer: null, gruppe: 'kommando' },
+        { id: 'b', name: 'Bernd Beispiel', dienstnummer: null, gruppe: 'einsatz' },
+        { id: 'c', name: 'Clara Beispiel', dienstnummer: null, gruppe: 'einsatz' },
+      ],
+      tage: ['2026-10-01'],
+      dienste: [],
+    })
+    expect(html).toContain('<tr class="gruppenende"><td class="name">Anna Beispiel')
+    expect(html).toContain('<tr><td class="name">Bernd Beispiel')
+    expect(html).not.toContain('<tr class="gruppenende"><td class="name">Clara Beispiel')
   })
 })
