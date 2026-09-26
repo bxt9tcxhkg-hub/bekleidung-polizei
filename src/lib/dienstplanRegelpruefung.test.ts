@@ -37,6 +37,14 @@ describe('ruhezeitVerletzungen', () => {
     expect(ruhezeitVerletzungen(dienste, 11).size).toBe(0)
   })
 
+  it('meldet keine Verletzung für zwei direkt anschließende Zeilen desselben Tages (durchgehender Arbeitsblock, keine getrennten Dienste)', () => {
+    const dienste = [
+      { beamterId: 'a', datum: '2026-10-05', vonZeit: '08:00', bisZeit: '19:00', kategorie: 'dienst' as const },
+      { beamterId: 'a', datum: '2026-10-05', vonZeit: '19:00', bisZeit: '20:00', kategorie: 'dienst' as const },
+    ]
+    expect(ruhezeitVerletzungen(dienste, 11).size).toBe(0)
+  })
+
   it('berücksichtigt Nachtdienste ohne Uhrzeit (Standard 19:00-08:00)', () => {
     const dienste = [
       { beamterId: 'a', datum: '2026-10-05', vonZeit: null, bisZeit: null, kategorie: 'dienst' as const },

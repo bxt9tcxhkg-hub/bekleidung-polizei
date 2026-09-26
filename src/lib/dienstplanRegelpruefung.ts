@@ -34,6 +34,11 @@ export function ruhezeitVerletzungen(dienste: readonly DienstFuerRuhezeitpruefun
       .sort((a, b) => a.zeitraum.von.getTime() - b.zeitraum.von.getTime())
 
     for (let index = 1; index < zeitraeume.length; index++) {
+      // Zwei Zeilen desselben Tages (z. B. Z 08-19 gefolgt von einem direkt
+      // anschließenden Zusatzdienst) sind ein durchgehender Arbeitsblock,
+      // keine getrennten Dienste mit Ruhezeit dazwischen - nur der Abstand
+      // zwischen unterschiedlichen Tagen wird geprüft.
+      if (zeitraeume[index].eintrag.datum === zeitraeume[index - 1].eintrag.datum) continue
       const ruheStunden = (zeitraeume[index].zeitraum.von.getTime() - zeitraeume[index - 1].zeitraum.bis.getTime()) / 3_600_000
       if (ruheStunden < mindestruhezeitStunden) verletzungen.add(`${zeitraeume[index].eintrag.beamterId}|${zeitraeume[index].eintrag.datum}`)
     }

@@ -86,10 +86,18 @@ describe('generiereGrundbesetzungsVorschlag', () => {
 
   it('vergibt keinen Slot, der die Mindestruhezeit verletzen würde, wenn niemand anders verfügbar ist', () => {
     const einePerson: VorschlagPerson[] = [{ id: 'a', name: 'Anna' }]
-    // Anna hat bereits einen Tagdienst 08-19 am 05.10. - ein Nachtdienst (19-08) direkt im Anschluss hat 0 Stunden Ruhezeit.
+    // Anna hat bereits einen Nachtdienst 19-08 in der Nacht auf den 06.10. - ein Tagdienst direkt im Anschluss am 06.10. hat 0 Stunden Ruhezeit.
+    const bestehendeDienste: VorschlagBestehenderDienst[] = [{ beamterId: 'a', datum: '2026-10-05', vonZeit: '19:00', bisZeit: '08:00', kategorie: 'dienst', code: 'JD' }]
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einePerson, tage: ['2026-10-06'], bestehendeDienste, wuensche: [], mindestruhezeitStunden: 11 })
+    expect(ergebnis.some(e => e.abschnitt === 'tag')).toBe(false)
+  })
+
+  it('vergibt trotzdem einen direkt anschließenden Slot am selben Tag (kein Ruhezeitverstoss zwischen zwei Zeilen desselben Tages)', () => {
+    const einePerson: VorschlagPerson[] = [{ id: 'a', name: 'Anna' }]
+    // Anna hat bereits einen Tagdienst 08-19 am 05.10. - ein direkt anschließender Zusatzdienst am selben Tag ist kein Ruhezeitverstoss, sondern ein durchgehender Arbeitsblock.
     const bestehendeDienste: VorschlagBestehenderDienst[] = [{ beamterId: 'a', datum: '2026-10-05', vonZeit: '08:00', bisZeit: '19:00', kategorie: 'dienst', code: 'Z' }]
     const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einePerson, tage: ['2026-10-05'], bestehendeDienste, wuensche: [], mindestruhezeitStunden: 11 })
-    expect(ergebnis.some(e => e.abschnitt === 'nacht')).toBe(false)
+    expect(ergebnis.some(e => e.abschnitt === 'nacht')).toBe(true)
   })
 
   it('vergibt keinen Tagdienst am 1., wenn ein Nachtdienst am letzten Tag des Vormonats (nicht Teil von "tage") die Ruhezeit verletzen würde', () => {
