@@ -255,6 +255,25 @@ export default function DienstplanPlanung() {
     return spans
   }, [mitarbeiter])
 
+  // Spalten-Trennlinien: dicke Linie zwischen Personen-Gruppen, dünne
+  // zwischen einzelnen Beamten-Spalten - die letzte Spalte insgesamt
+  // bekommt keine (Tabellenrand). Auf jede Personen-Spalte angewendet
+  // (Kopf- und Datenzellen), damit beide Zeilen konsistent aussehen.
+  const spaltenBorderKlasse = useMemo(() => {
+    const klasse = new Map<string, string>()
+    let index = 0
+    for (const { span } of personGruppenSpans) {
+      for (let i = 0; i < span; i++) {
+        const person = mitarbeiter[index]
+        const istLetzteSpalte = index === mitarbeiter.length - 1
+        const istGruppenEnde = i === span - 1
+        klasse.set(person.id, istLetzteSpalte ? '' : istGruppenEnde ? 'border-r-2 border-r-gray-400' : 'border-r border-r-gray-200')
+        index++
+      }
+    }
+    return klasse
+  }, [personGruppenSpans, mitarbeiter])
+
   const kurznamenMap = useMemo(() => kurznamen(mitarbeiter), [mitarbeiter])
 
   // Verfügbare Stunden je Person für die Kopfzeile: Sollstunden (aus
@@ -316,7 +335,7 @@ export default function DienstplanPlanung() {
     generateDienstplanDruckPdf({
       monatLabel: monatLangLabel(monat),
       bearbeiterName: officerPrintName(profile),
-      personen: mitarbeiter,
+      personen: mitarbeiter.map(person => ({ ...person, gruppe: dienstplanGruppe(person.dienstnummer) })),
       tage,
       dienste,
     })
@@ -604,12 +623,12 @@ export default function DienstplanPlanung() {
               <tr>
                 <th rowSpan={2} className="sticky left-0 z-20 w-[6rem] min-w-[6rem] max-w-[6rem] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-3 py-2 text-left font-semibold text-gray-600">Datum</th>
                 <th rowSpan={2} className="sticky left-[6rem] z-20 w-[5.75rem] min-w-[5.75rem] max-w-[5.75rem] whitespace-nowrap border-b border-r border-gray-200 bg-gray-50 px-2 py-2 text-left font-semibold text-gray-600"></th>
-                {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className="border-b border-r border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
+                {personGruppenSpans.map(({ gruppe, span }, index) => <th key={index} colSpan={span} className={`border-b border-gray-200 bg-gray-100 px-2 py-1 text-center text-[0.65rem] font-bold uppercase tracking-wide text-gray-500 ${index < personGruppenSpans.length - 1 ? 'border-r-2 border-r-gray-400' : ''}`}>{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</th>)}
               </tr>
               <tr>
                 {mitarbeiter.map(person => {
                   const verfuegbar = verfuegbareStunden.get(person.id) ?? 0
-                  return <th key={person.id} title={person.name} className="min-w-20 whitespace-nowrap border-b border-gray-200 px-1.5 py-2 text-center font-semibold text-gray-600">
+                  return <th key={person.id} title={person.name} className={`min-w-20 whitespace-nowrap border-b border-gray-200 px-1.5 py-2 text-center font-semibold text-gray-600 ${spaltenBorderKlasse.get(person.id) ?? ''}`}>
                     {kurznamenMap.get(person.id) ?? person.name}
                     <span className={`block text-[0.6rem] font-normal normal-case tracking-normal ${verfuegbar < 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatStunden(verfuegbar)} Std. frei</span>
                   </th>
@@ -647,8 +666,14 @@ export default function DienstplanPlanung() {
                       const vorschlag = vorschlaege.get(`${person.id}|${datum}|${abschnitt}`)
                       const ausgewaehlt = angezeigteAuswahl.has(`${person.id}|${datum}`)
                       const uebertragWarnung = abschnitt === 'tag' && datum === tage[0] && naechtlicherUebertrag.has(person.id)
-                      const absenz = zeilen.find(zeile => zeile.kategorie !== 'dienst')
+                      // Eine Abwesenheit gilt ganztägig, ist aber nur als EINE Rohzeile
+                      // in der Tag-Zeile gespeichert (siehe abschnittFuerAnzeige) - über
+                      // dienstByKey (alle Zeilen des Tages, unabhängig vom Abschnitt)
+                      // nachschlagen, damit die Farbmarkierung durchgehend über Tag UND
+                      // Nacht sichtbar ist, mit einer kräftigeren Nuance für die Nacht.
+                      const absenz = (dienstByKey.get(`${person.id}|${datum}`) ?? []).find(zeile => zeile.kategorie !== 'dienst')
                       const absenzFarben = absenz ? absenzFarbe(absenz.kategorie) : null
+                      const absenzHintergrund = absenzFarben ? (abschnitt === 'tag' ? absenzFarben.bg : absenzFarben.bgNacht) : null
                       const titel = [
                         wuenscheHeute.length > 0 ? `Wunsch: ${wuenscheHeute.map(eintrag => `${WUNSCH_LABEL[eintrag.wunsch]}${eintrag.vonZeit && eintrag.bisZeit ? ` ${eintrag.vonZeit.slice(0, 5)}–${eintrag.bisZeit.slice(0, 5)}` : ''}${eintrag.notiz ? ` – ${eintrag.notiz}` : ''}`).join(', ')}` : null,
                         uebertragWarnung ? 'Nachtdienst am letzten Tag des Vormonats - heute laut Ruhezeit (24 Std.) kein Tagdienst möglich' : null,
@@ -658,7 +683,7 @@ export default function DienstplanPlanung() {
                         onMouseDown={!istTouchGeraet ? () => dragStarten(person.id, datum) : undefined}
                         onMouseEnter={!istTouchGeraet ? () => dragBewegen(person.id, datum) : undefined}
                         title={titel}
-                        className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzFarben ? absenzFarben.bg : ''}`}
+                        className={`min-w-20 cursor-pointer select-none border-b border-gray-100 px-1 py-1.5 text-center hover:bg-blue-50 ${spaltenBorderKlasse.get(person.id) ?? ''} ${ausgewaehlt ? 'bg-blue-100 ring-2 ring-inset ring-blue-600' : ruheVerletzung || uebertragWarnung ? 'bg-red-50' : absenzHintergrund ?? ''}`}
                       >
                         <div className="flex flex-col items-center gap-0.5">
                           {zeilen.map(zeile => <span key={zeile.zeile} className={`rounded px-1 font-medium ${ruheVerletzung || uebertragWarnung ? 'text-red-700' : absenzFarben ? absenzFarben.text : 'text-gray-800'}`}>{parseDienstCode(zeile.rohtext).code}</span>)}
