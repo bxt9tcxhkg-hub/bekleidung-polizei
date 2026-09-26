@@ -62,7 +62,7 @@ export default function DienstplanEinstellungen() {
       supabase.from('profiles').select('id,name,dienstnummer,roles').eq('active', true).eq('organisation', ET_ROSTER_ORGANISATION).order('name'),
       dienstplanSupabase.from('dienstplan_person_einstellungen').select('beamter_id,beschaeftigungsgrad'),
       dienstplanSupabase.from('dienstplan_monate').select('monat'),
-      dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,reihenfolge,updated_by,updated_at').order('reihenfolge').order('name'),
+      dienstplanSupabase.from('dienstplan_markierungen').select('id,name,farbe,kategorie,reihenfolge,updated_by,updated_at').order('kategorie', { ascending: true, nullsFirst: false }).order('reihenfolge').order('name'),
     ])
     if (regelnResult.error || mitarbeiterResult.error || einstellungenResult.error || monateResult.error || markierungenResult.error) { setError('Grunddaten konnten nicht geladen werden.'); setLoading(false); return }
     if (regelnResult.data) {
@@ -115,6 +115,15 @@ export default function DienstplanEinstellungen() {
     const result = await dienstplanSupabase.from('dienstplan_markierungen').delete().eq('id', id)
     setMarkierungSpeichern(false)
     if (result.error) { setError('Die Markierung konnte nicht gelöscht werden.'); return }
+    await load()
+  }
+
+  /** Für die fünf System-Markierungen (Urlaub/Krank/Sonderurlaub/Karenz/Stundenersatz, kategorie gesetzt): Name/Bedeutung bleiben fix, nur die Farbe lässt sich direkt ändern - kein separater Bearbeiten-Modus nötig. */
+  async function systemFarbeAendern(id: string, farbe: DienstplanMarkierungFarbe) {
+    setMarkierungSpeichern(true); setError('')
+    const result = await dienstplanSupabase.from('dienstplan_markierungen').update({ farbe, updated_by: profile?.id ?? null }).eq('id', id)
+    setMarkierungSpeichern(false)
+    if (result.error) { setError('Die Farbe konnte nicht gespeichert werden.'); return }
     await load()
   }
 
@@ -250,11 +259,21 @@ export default function DienstplanEinstellungen() {
 
       <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="font-semibold text-gray-900">Farbmarkierungen</h2>
-        <p className="mt-1 text-xs text-gray-500">Frei definierbare Markierungen für einzelne Diensteinträge im Planer-Grid (Dienstplan-Planung), z. B. "Überstunden" blau - rein visuell, unabhängig vom Dienst-Kürzel.</p>
+        <p className="mt-1 text-xs text-gray-500">Frei definierbare Markierungen für einzelne Diensteinträge im Planer-Grid (Dienstplan-Planung), z. B. "Überstunden" blau - rein visuell, unabhängig vom Dienst-Kürzel, auch auf sonst leere Zellen anwendbar. Die fünf System-Markierungen (Urlaub, Sonderurlaub, Stundenersatz, Krank, Karenz) sind die Farben, mit denen diese Abwesenheiten überall im Portal dargestellt werden - nur die Farbe ist dort änderbar.</p>
         <div className="mt-3 space-y-2">
           {markierungen.map(markierung => {
             const editing = editMarkierungId === markierung.id
             const farben = markierungFarbKlassen(editing ? editMarkierungFarbe : markierung.farbe)
+            if (markierung.kategorie) {
+              // System-Markierung (Abwesenheitskategorie) - Name/Bedeutung fix, nur die Farbe ist änderbar, kein Löschen.
+              return <div key={markierung.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${farben.bg} ${farben.text}`}>{markierung.name}</span>
+                <span className="text-xs text-gray-400">System-Markierung</span>
+                <select className="ml-auto rounded-lg border border-gray-300 px-2 py-1 text-sm" disabled={markierungSpeichern} value={markierung.farbe} onChange={event => void systemFarbeAendern(markierung.id, event.target.value as DienstplanMarkierungFarbe)}>
+                  {MARKIERUNG_FARBEN.map(farbe => <option key={farbe} value={farbe}>{MARKIERUNG_FARBE_LABEL[farbe]}</option>)}
+                </select>
+              </div>
+            }
             return <div key={markierung.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2">
               {editing ? <>
                 <input type="text" autoFocus className="w-40 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

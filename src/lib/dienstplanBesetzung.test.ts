@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { abschnittFuerAnzeige, absenzFarbe, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, kachelRang, tagOderNacht } from './dienstplanBesetzung'
+import { abschnittFuerAnzeige, effektiveAbwesenheitJeTag, fehlendeGrundbesetzung, kachelRang, tagOderNacht } from './dienstplanBesetzung'
 
 describe('tagOderNacht', () => {
   it('ordnet eine Zeile ohne Uhrzeit der Nacht zu', () => {
@@ -29,25 +29,6 @@ describe('abschnittFuerAnzeige', () => {
     expect(abschnittFuerAnzeige({ kategorie: 'dienst', von_zeit: '22:00' })).toBe('nacht')
     expect(abschnittFuerAnzeige({ kategorie: 'urlaub', von_zeit: null })).toBe('tag')
     expect(abschnittFuerAnzeige({ kategorie: 'krank', von_zeit: null })).toBe('tag')
-  })
-})
-
-describe('absenzFarbe', () => {
-  it('markiert Urlaub/Sonderurlaub/Stundenersatz gelb, Krank grün, Karenz rosa', () => {
-    expect(absenzFarbe('urlaub')?.bg).toBe('bg-yellow-100')
-    expect(absenzFarbe('sonderurlaub')?.bg).toBe('bg-yellow-100')
-    expect(absenzFarbe('stundenersatz')?.bg).toBe('bg-yellow-100')
-    expect(absenzFarbe('krank')?.bg).toBe('bg-green-100')
-    expect(absenzFarbe('karenz')?.bg).toBe('bg-pink-100')
-  })
-  it('hat für die Nacht-Zeile eine kräftigere Nuance derselben Farbe (durchgehende Markierung mit Tag/Nacht-Unterschied)', () => {
-    expect(absenzFarbe('urlaub')?.bgNacht).toBe('bg-yellow-200')
-    expect(absenzFarbe('krank')?.bgNacht).toBe('bg-green-200')
-    expect(absenzFarbe('karenz')?.bgNacht).toBe('bg-pink-200')
-  })
-  it('gibt für Dienst und Sonstiges keine Farbe zurück', () => {
-    expect(absenzFarbe('dienst')).toBeNull()
-    expect(absenzFarbe('sonstiges')).toBeNull()
   })
 })
 
