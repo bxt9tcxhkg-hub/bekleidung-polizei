@@ -138,8 +138,12 @@ export default function InnendienstShell() {
   // expected_revenue != null wie im eigenen Zweig (Zeile mit
   // kasse_confirmed_at, aber ohne Kassensturz erfasst, gilt dort ebenfalls
   // als unvollständig) - sonst würde eine fremde unvollständige Zeile
-  // fälschlich als "bereits abgerechnet" angezeigt.
-  const otherConfirmedTasks = useMemo(() => shiftTasksToday.filter(item => item.user_id !== userId && item.kasse_confirmed_at && item.expected_revenue != null), [shiftTasksToday, userId])
+  // fälschlich als "bereits abgerechnet" angezeigt. Nach kasse_confirmed_at
+  // absteigend sortiert, damit bei mehreren Vorgängerinnen/Vorgängern in
+  // derselben Schicht deterministisch die jüngste Abrechnung angezeigt wird.
+  const otherConfirmedTasks = useMemo(() => shiftTasksToday
+    .filter(item => item.user_id !== userId && item.kasse_confirmed_at && item.expected_revenue != null)
+    .sort((a, b) => (b.kasse_confirmed_at as string).localeCompare(a.kasse_confirmed_at as string)), [shiftTasksToday, userId])
 
   function openKasseWizard() {
     setExpectedRevenueInput(ownTask?.expected_revenue != null ? String(ownTask.expected_revenue) : '')
