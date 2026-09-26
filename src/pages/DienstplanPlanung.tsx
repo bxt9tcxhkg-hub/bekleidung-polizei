@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CalendarDays, CalendarRange, CheckCircle2, Moon, Printer, Sparkles, Sun, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -328,21 +328,24 @@ export default function DienstplanPlanung() {
     return ergebnis
   }, [dienste, mitarbeiter, beschaeftigungsgrade, monat, stundenProWerktag])
 
-  // Auswertung unterhalb des Planer-Grids: Stunden sowie Anzahl/Art der
-  // Dienste je Person (Grund- vs. Zusatzdienst, Tag- vs. Nachtdienst -
-  // siehe lib/dienstplanAuswertung.ts::zaehleDienstarten). Reine
-  // Anzeige, keine Auswirkung auf verfuegbareStunden/das Grid selbst.
-  const auswertungProPerson = useMemo(() => {
+  // Auswertung unterhalb des Planer-Grids (als zusätzliche Fußzeilen
+  // derselben Tabelle, je Person in ihrer eigenen Spalte - nicht als
+  // separate Tabelle mit Personen als Zeilen, da die Personen schon die
+  // Spaltenköpfe des Grids sind): Stunden sowie Anzahl/Art der Dienste je
+  // Person (Grund- vs. Zusatzdienst, Tag- vs. Nachtdienst - siehe
+  // lib/dienstplanAuswertung.ts::zaehleDienstarten). Reine Anzeige, keine
+  // Auswirkung auf verfuegbareStunden/das Grid selbst.
+  const auswertungByPersonId = useMemo(() => {
     const dienstePerPerson = new Map<string, DienstZeile[]>()
     for (const zeile of dienste) {
       const liste = dienstePerPerson.get(zeile.beamter_id) ?? []
       liste.push(zeile)
       dienstePerPerson.set(zeile.beamter_id, liste)
     }
-    return mitarbeiter.map(person => {
+    return new Map(mitarbeiter.map(person => {
       const zeilen = dienstePerPerson.get(person.id) ?? []
-      return { person, stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen) }
-    })
+      return [person.id, { stunden: persoenlicheStundenUebersicht(zeilen).gesamt, arten: zaehleDienstarten(zeilen) }] as const
+    }))
   }, [dienste, mitarbeiter])
 
   const fehlendeGrund = useMemo(() => fehlendeGrundbesetzung(dienste, tage), [dienste, tage])
@@ -569,6 +572,14 @@ export default function DienstplanPlanung() {
   // Läufe hinweg, um Altdaten nicht unbemerkt stehen zu lassen).
   function vorschlagGenerieren() {
     const eingabeDienste = dienste.map(zeile => ({ beamterId: zeile.beamter_id, datum: zeile.datum, vonZeit: zeile.von_zeit, bisZeit: zeile.bis_zeit, kategorie: zeile.kategorie, code: parseDienstCode(zeile.rohtext).code }))
+    // Wer über ein Wochenende/Feiertag hinweg durchgehend abwesend ist
+    // (siehe effektiveAbwesenheit oben), muss dem Algorithmus auch für
+    // diese Tage als abwesend übergeben werden - sonst schlägt er die
+    // Person dort fälschlich vor, weil dafür keine echte Zeile existiert.
+    const luecken = Array.from(effektiveAbwesenheit.entries()).map(([schluessel, kategorie]) => {
+      const [beamterId, datum] = schluessel.split('|')
+      return { beamterId, datum, vonZeit: null, bisZeit: null, kategorie, code: '' }
+    })
     const eingabeWuensche = Array.from(wuensche.entries()).flatMap(([schluessel, liste]) => {
       const [beamterId, datum] = schluessel.split('|')
       return liste.map(eintrag => ({ beamterId, datum, wunsch: eintrag.wunsch }))
@@ -577,7 +588,7 @@ export default function DienstplanPlanung() {
     // (siehe lib/dienstplanRoster.ts) - kann aber weiterhin manuell über die
     // Zelle im Grid eingeteilt werden.
     const einteilbareMitarbeiter = mitarbeiter.filter(person => istAutomatischEinteilbar(person.dienstnummer))
-    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einteilbareMitarbeiter, tage, bestehendeDienste: eingabeDienste, wuensche: eingabeWuensche, mindestruhezeitStunden })
+    const ergebnis = generiereGrundbesetzungsVorschlag({ mitarbeiter: einteilbareMitarbeiter, tage, bestehendeDienste: [...eingabeDienste, ...luecken], wuensche: eingabeWuensche, mindestruhezeitStunden })
     setVorschlaege(new Map(ergebnis.map(eintrag => [`${eintrag.beamterId}|${eintrag.datum}|${eintrag.abschnitt}`, eintrag])))
     setNotice(ergebnis.length > 0 ? `${ergebnis.length} Vorschläge generiert - bitte prüfen und übernehmen.` : 'Es gibt aktuell nichts vorzuschlagen (alles besetzt oder niemand verfügbar).')
     setError('')
@@ -750,50 +761,28 @@ export default function DienstplanPlanung() {
                 })
               })}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={2 + mitarbeiter.length} className="border-t-2 border-gray-400 bg-gray-100 px-3 py-1.5 text-left text-[0.65rem] font-bold uppercase tracking-wide text-gray-500">Auswertung ({monatLangLabel(monat)})</td>
+              </tr>
+              {[
+                { label: 'Stunden', wert: (personId: string) => formatStunden(auswertungByPersonId.get(personId)?.stunden ?? 0) },
+                { label: 'Grunddienste Tag', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.grundTag ?? 0 },
+                { label: 'Grunddienste Nacht', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.grundNacht ?? 0 },
+                { label: 'Zusatzdienste Tag', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.zusatzTag ?? 0 },
+                { label: 'Zusatzdienste Nacht', wert: (personId: string) => auswertungByPersonId.get(personId)?.arten.zusatzNacht ?? 0 },
+                {
+                  label: 'Gesamt Dienste', wert: (personId: string) => {
+                    const arten = auswertungByPersonId.get(personId)?.arten
+                    return arten ? arten.grundTag + arten.grundNacht + arten.zusatzTag + arten.zusatzNacht : 0
+                  },
+                },
+              ].map(({ label, wert }) => <tr key={label} className="bg-gray-50">
+                <td colSpan={2} className="sticky left-0 z-10 w-[11.75rem] min-w-[11.75rem] max-w-[11.75rem] whitespace-nowrap border-r border-gray-200 bg-gray-50 px-3 py-1 text-left text-gray-600">{label}</td>
+                {mitarbeiter.map(person => <td key={person.id} className={`whitespace-nowrap px-1.5 py-1 text-center tabular-nums text-gray-700 ${spaltenBorderKlasse.get(person.id) ?? ''}`}>{wert(person.id)}</td>)}
+              </tr>)}
+            </tfoot>
           </table>
-        </div>
-
-        <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="font-semibold text-gray-900">Auswertung</h2>
-          <p className="mt-1 text-xs text-gray-500">Stunden sowie Anzahl der Dienste je Person für {monatLangLabel(monat)}, gegliedert in Grund- (Z/ID/JD) und Zusatzdienste sowie Tag- und Nachtdienste.</p>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th rowSpan={2} className="px-3 py-2 text-left align-bottom font-semibold text-gray-600">Person</th>
-                  <th rowSpan={2} className="px-3 py-2 text-right align-bottom font-semibold text-gray-600">Stunden</th>
-                  <th colSpan={2} className="border-l border-gray-200 px-3 py-1 text-center font-semibold text-gray-600">Grunddienste</th>
-                  <th colSpan={2} className="border-l border-gray-200 px-3 py-1 text-center font-semibold text-gray-600">Zusatzdienste</th>
-                  <th rowSpan={2} className="border-l border-gray-200 px-3 py-2 text-right align-bottom font-semibold text-gray-600">Gesamt</th>
-                </tr>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="border-l border-gray-200 px-3 py-1 text-right font-normal text-gray-500">Tag</th>
-                  <th className="px-3 py-1 text-right font-normal text-gray-500">Nacht</th>
-                  <th className="border-l border-gray-200 px-3 py-1 text-right font-normal text-gray-500">Tag</th>
-                  <th className="px-3 py-1 text-right font-normal text-gray-500">Nacht</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {auswertungProPerson.map(({ person, stunden, arten }, index) => {
-                  const gruppe = dienstplanGruppe(person.dienstnummer)
-                  const vorherigeGruppe = index > 0 ? dienstplanGruppe(mitarbeiter[index - 1].dienstnummer) : null
-                  const gesamtDienste = arten.grundTag + arten.grundNacht + arten.zusatzTag + arten.zusatzNacht
-                  return <Fragment key={person.id}>
-                    {gruppe !== vorherigeGruppe ? <tr><td colSpan={7} className="bg-gray-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-gray-500">{DIENSTPLAN_GRUPPE_LABEL[gruppe]}</td></tr> : null}
-                    <tr>
-                      <td className="px-3 py-2 font-medium text-gray-900">{person.name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700">{formatStunden(stunden)}</td>
-                      <td className="border-l border-gray-100 px-3 py-2 text-right tabular-nums text-gray-700">{arten.grundTag}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700">{arten.grundNacht}</td>
-                      <td className="border-l border-gray-100 px-3 py-2 text-right tabular-nums text-gray-700">{arten.zusatzTag}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700">{arten.zusatzNacht}</td>
-                      <td className="border-l border-gray-100 px-3 py-2 text-right font-medium tabular-nums text-gray-900">{gesamtDienste}</td>
-                    </tr>
-                  </Fragment>
-                })}
-              </tbody>
-            </table>
-          </div>
         </div>
       </>}
 
